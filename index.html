@@ -508,6 +508,8 @@ function homeTab(){
   todayCard.appendChild(tcTop);
   var tcVal=div();tcVal.style.fontSize="38px";tcVal.style.fontWeight="700";tcVal.style.lineHeight="1";tcVal.style.letterSpacing="1px";tcVal.className=clr(tPnl);tcVal.textContent=dol(tPnl);todayCard.appendChild(tcVal);
   var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+t.pts},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
+  var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;";
+  tcWr.textContent="WIN RATE  "+s.wr+"%";todayCard.appendChild(tcWr);
   heroRow.appendChild(todayCard);
   // Total P&L — big
   var totalCard=div("card");totalCard.style.background="var(--panel2)";totalCard.style.borderLeft=(s.total>=0?"4px solid #00e67660":"4px solid #ff444460");
@@ -522,9 +524,13 @@ function homeTab(){
   var g4=div("g4");
   var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+tW+'</span><span class="m"> / </span><span class="r fw7">'+tL+'</span>';
   g4.appendChild(makeChip("W / L TODAY",wlDiv,"","today"));
-  g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac","all time"));
   g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));
   g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));
+  // Mindset chip — last
+  var msChecked=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
+  msChipVal.innerHTML='<span class="'+(msChecked===3?"g":"m")+'">'+msChecked+'</span><span style="color:var(--border3);font-size:14px"> / 3</span>';
+  g4.appendChild(makeChip("MINDSET",msChipVal,"","checked"));
   el.appendChild(g4);
 
   // Equity + Levels
