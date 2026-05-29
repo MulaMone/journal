@@ -152,11 +152,114 @@ svg text{font-family:'Courier New',monospace}
     <div class="brand-name">BILLION$</div>
     <div id="topbar-stats"></div>
   </div>
+  <div id="sync-bar" style="background:#071428;border-bottom:1px solid #1a3260;padding:4px 18px;display:flex;align-items:center;gap:14px;font-family:'Courier New',monospace;font-size:9px;flex-shrink:0"></div>
   <div id="tabs"></div>
   <div id="content"></div>
 </div>
 
 <script>
+// ─── SUPABASE SYNC (direct REST) ──────────────────────────────────
+var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
+var SUPA_KEY="sb_publishable_iT3naKNfVfmGAii0LGgMHA_qfV9LR6P";
+var SYNC_ID_KEY="edge_sync_id";
+var supaClient=true; // flag — using direct REST, no client needed
+
+function initSupabase(){ /* no-op — using direct fetch */ }
+
+function supaFetch(method,path,body){
+  var headers={
+    "apikey":SUPA_KEY,
+    "Authorization":"Bearer "+SUPA_KEY,
+    "Content-Type":"application/json"
+  };
+  if(method==="POST"||method==="PATCH") headers["Prefer"]="resolution=merge-duplicates,return=minimal";
+  return fetch(SUPA_URL+"/rest/v1/"+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined});
+}
+
+function getSyncId(){
+  var id=localStorage.getItem(SYNC_ID_KEY);
+  if(!id){id="edge_"+Math.random().toString(36).slice(2,10);localStorage.setItem(SYNC_ID_KEY,id);}
+  return id;
+}
+
+function syncToCloud(){
+  var id=getSyncId();
+  var payload={
+    user_id:id,
+    trades:State.trades,
+    levels:State.levels,
+    week_levels:State.weekLevels,
+    settings:{
+      note:State.note,wkGoal:State.wkGoal,moGoal:State.moGoal,
+      mindsetChecks:State.mindsetChecks,mindsetChecksDate:State.mindsetChecksDate,
+      mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
+      levelChecksDate:State.levelChecksDate,newsChecks:State.newsChecks,
+      newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
+      focusImprove:State.focusImprove,mantraNotes:State.mantraNotes
+    },
+    updated_at:new Date().toISOString()
+  };
+  supaFetch("POST","edge_data",payload)
+  .then(function(r){
+    if(r.ok||r.status===201||r.status===204) updateSyncStatus("synced");
+    else updateSyncStatus("error");
+  })
+  .catch(function(){updateSyncStatus("error");});
+}
+
+function loadFromCloud(syncId,callback){
+  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(syncId)+"&select=*")
+  .then(function(r){return r.json();})
+  .then(function(data){
+    if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
+    var d=data[0];
+    if(d.trades) State.trades=d.trades;
+    if(d.levels) State.levels=d.levels;
+    if(d.week_levels) State.weekLevels=d.week_levels;
+    if(d.settings){
+      var s=d.settings;
+      if(s.note) State.note=s.note;
+      if(s.wkGoal) State.wkGoal=s.wkGoal;
+      if(s.moGoal) State.moGoal=s.moGoal;
+      if(s.mindsetChecks) State.mindsetChecks=s.mindsetChecks;
+      if(s.mindsetChecksDate) State.mindsetChecksDate=s.mindsetChecksDate;
+      if(s.mindsetNote) State.mindsetNote=s.mindsetNote;
+      if(s.levelChecks) State.levelChecks=s.levelChecks;
+      if(s.levelChecksDate) State.levelChecksDate=s.levelChecksDate;
+      if(s.newsChecks) State.newsChecks=s.newsChecks;
+      if(s.newsChecksDate) State.newsChecksDate=s.newsChecksDate;
+      if(s.newsOther) State.newsOther=s.newsOther;
+      if(s.focusImprove) State.focusImprove=s.focusImprove;
+      if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
+    }
+    ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
+    if(callback) callback(true);
+  })
+  .catch(function(){if(callback) callback(false);});
+}
+
+function updateSyncStatus(status){
+  var el=document.getElementById("sync-status");
+  if(!el) return;
+  if(status==="synced"){el.textContent="✓ SYNCED";el.style.color="var(--green)";}
+  else if(status==="syncing"){el.textContent="↻ SYNCING";el.style.color="var(--amber)";}
+  else if(status==="error"){el.textContent="✗ SYNC ERR";el.style.color="var(--red)";}
+  else if(status==="offline"){el.textContent="⊘ OFFLINE";el.style.color="var(--text3)";}
+}
+
+// Auto-sync on every ss() call — wrap the original
+var _ss_orig=null;
+function initAutoSync(){
+  _ss_orig=ss;
+  // Debounced sync — wait 1.5s after last save before pushing to cloud
+  var syncTimer=null;
+  window._syncToCloud=function(){
+    updateSyncStatus("syncing");
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(syncToCloud,1500);
+  };
+}
+
 // ─── DATA ───────────────────────────────────────────────────────────
 var QUOTES=[
   {t:"Trade what you see, not what you think.",a:"— Unknown"},
@@ -191,7 +294,7 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
-function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v))}catch(e){}}
+function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){}}
 
 var State={
   tab:"home",
@@ -2137,6 +2240,56 @@ function render(){
   content.innerHTML="";
   content.appendChild(VIEWS[State.tab]());
 }
+
+// ─── INIT ─────────────────────────────────────────────────────────
+initSupabase();
+initAutoSync();
+
+// Render sync bar
+(function(){
+  var bar=document.getElementById("sync-bar");
+  if(!bar) return;
+  var idLabel=document.createElement("span");idLabel.style.color="#c9a84c";idLabel.textContent="SYNC ID:";bar.appendChild(idLabel);
+  var idVal=document.createElement("span");idVal.id="sync-id-val";idVal.style.cssText="color:#00d4d4;letter-spacing:1px;cursor:pointer;";
+  var currentId=getSyncId();idVal.textContent=currentId;
+  idVal.title="Click to copy";
+  idVal.addEventListener("click",function(){navigator.clipboard&&navigator.clipboard.writeText(currentId);idVal.textContent="COPIED!";setTimeout(function(){idVal.textContent=currentId;},1500);});
+  bar.appendChild(idVal);
+
+  var sep=document.createElement("span");sep.style.color="#1a3260";sep.textContent="|";bar.appendChild(sep);
+
+  var loadLabel=document.createElement("span");loadLabel.style.color="#c9a84c";loadLabel.textContent="LOAD FROM ANOTHER DEVICE:";bar.appendChild(loadLabel);
+  var loadInp=document.createElement("input");
+  loadInp.placeholder="paste sync ID here...";
+  loadInp.style.cssText="background:#0d1e38;border:1px solid #1a3260;color:#e8f0ff;font-family:'Courier New',monospace;font-size:9px;padding:3px 7px;border-radius:2px;width:180px;outline:none;margin:0 6px;";
+  bar.appendChild(loadInp);
+  var loadBtn=document.createElement("button");
+  loadBtn.textContent="LOAD";
+  loadBtn.style.cssText="background:transparent;border:1px solid #00d4d4;color:#00d4d4;font-family:'Courier New',monospace;font-size:9px;padding:3px 9px;border-radius:2px;cursor:pointer;";
+  loadBtn.addEventListener("click",function(){
+    var id=loadInp.value.trim();
+    if(!id) return;
+    localStorage.setItem("edge_sync_id",id);
+    updateSyncStatus("syncing");
+    loadFromCloud(id,function(ok){
+      if(ok){render();updateSyncStatus("synced");}
+      else updateSyncStatus("error");
+    });
+  });
+  bar.appendChild(loadBtn);
+
+  var sep2=document.createElement("span");sep2.style.color="#1a3260";sep2.textContent="|";bar.appendChild(sep2);
+  var statusEl=document.createElement("span");statusEl.id="sync-status";statusEl.style.cssText="font-weight:700;letter-spacing:1px;";statusEl.textContent="OFFLINE";statusEl.style.color="var(--text3)";bar.appendChild(statusEl);
+
+  // Try initial load from cloud
+  if(supaClient){
+    updateSyncStatus("syncing");
+    loadFromCloud(currentId,function(ok){
+      if(ok){render();updateSyncStatus("synced");}
+      else{updateSyncStatus("offline");syncToCloud();}
+    });
+  }
+})();
 
 render();
 </script>
