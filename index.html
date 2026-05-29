@@ -325,24 +325,26 @@ function equitySVG(trades,w,h2){
   var mn=Math.min.apply(null,eq),mx=Math.max.apply(null,eq);
   var rng=mx-mn||1;
   var finalVal=eq[eq.length-1];
-  var lineCol=finalVal>=0?"#00e676":"#ff4444";
-  // Dynamic left pad based on longest label
   var longestLbl=fmtAxisDollar(Math.abs(mn)>Math.abs(mx)?mn:mx);
-  var pad2=Math.max(52, longestLbl.length*8);
-  var padR=50,padB=18,padT=12;
+  var pad2=Math.max(52,longestLbl.length*8);
+  var padR=58,padB=18,padT=12;
   var W=w-pad2-padR,H=h2-padB-padT;
   function px(i){return pad2+(i/(eq.length-1))*W}
   function py(v){return padT+H-(v-mn)/rng*H}
-  var pts=eq.map(function(v,i){return px(i).toFixed(1)+","+py(v).toFixed(1)}).join(" ");
-  var fillPts=pad2+","+py(mn).toFixed(1)+" "+pts+" "+px(eq.length-1).toFixed(1)+","+py(mn).toFixed(1);
   var zero=py(0);
-  var gradId="eg"+w+h2;
+  var gG="egG"+w+h2,gR="egR"+w+h2,cA="cA"+w+h2,cB="cB"+w+h2;
+
   var svg='<svg width="100%" viewBox="0 0 '+w+' '+h2+'" xmlns="http://www.w3.org/2000/svg">';
-  svg+='<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">';
-  svg+='<stop offset="0%" stop-color="'+lineCol+'" stop-opacity="0.28"/>';
-  svg+='<stop offset="100%" stop-color="'+lineCol+'" stop-opacity="0"/>';
-  svg+='</linearGradient></defs>';
-  // 5 horizontal grid lines with $ labels
+  svg+='<defs>';
+  svg+='<linearGradient id="'+gG+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e676" stop-opacity="0.25"/><stop offset="100%" stop-color="#00e676" stop-opacity="0"/></linearGradient>';
+  svg+='<linearGradient id="'+gR+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4444" stop-opacity="0"/><stop offset="100%" stop-color="#ff4444" stop-opacity="0.25"/></linearGradient>';
+  var aboveH=Math.max(0,Math.min(zero,padT+H)-padT);
+  svg+='<clipPath id="'+cA+'"><rect x="0" y="'+padT+'" width="'+w+'" height="'+aboveH+'"/></clipPath>';
+  var belowY=Math.max(padT,zero);var belowH=padT+H-belowY;
+  svg+='<clipPath id="'+cB+'"><rect x="0" y="'+belowY+'" width="'+w+'" height="'+Math.max(0,belowH)+'"/></clipPath>';
+  svg+='</defs>';
+
+  // Grid + labels
   for(var s=0;s<=4;s++){
     var frac=s/4;
     var yg=(padT+H*(1-frac)).toFixed(1);
@@ -352,21 +354,34 @@ function equitySVG(trades,w,h2){
     var lblCol=vg>0.5?"#00e676":vg<-0.5?"#ff4444":"#c9a84c";
     svg+='<text x="'+(pad2-6)+'" y="'+(parseFloat(yg)+4)+'" text-anchor="end" font-size="10" font-weight="600" font-family="Courier New,monospace" fill="'+lblCol+'">'+lbl+'</text>';
   }
-  // Zero line
+
+  // Zero line + $0 label
   if(zero>=padT&&zero<=padT+H){
     svg+='<line x1="'+pad2+'" y1="'+zero.toFixed(1)+'" x2="'+(pad2+W)+'" y2="'+zero.toFixed(1)+'" stroke="#2a5099" stroke-width="1.5" stroke-dasharray="4 3"/>';
-    svg+='<text x="'+(pad2-6)+'" y="'+(zero+4).toFixed(1)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#2a5099">$0</text>';
+    svg+='<text x="'+(pad2-6)+'" y="'+(zero+4).toFixed(1)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#4d7ab8">$0</text>';
   }
-  // Fill + line
-  svg+='<polygon points="'+fillPts+'" fill="url(#'+gradId+')"/>';
-  svg+='<polyline points="'+pts+'" fill="none" stroke="'+lineCol+'" stroke-width="2.5"/>';
-  // End dot
-  var lastX=px(eq.length-1).toFixed(1);
-  var lastY=py(finalVal).toFixed(1);
-  svg+='<circle cx="'+lastX+'" cy="'+lastY+'" r="4" fill="'+lineCol+'" stroke="var(--panel)" stroke-width="1.5"/>';
-  // End value label
+
+  // Points string
+  var pts=eq.map(function(v,i){return px(i).toFixed(1)+","+py(v).toFixed(1)}).join(" ");
+  var zeroLine=pad2+","+zero.toFixed(1)+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1);
+
+  // Green fill above zero
+  svg+='<polygon points="'+pts+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1)+" "+pad2+","+zero.toFixed(1)+'" fill="url(#'+gG+')" clip-path="url(#'+cA+')"/>';
+  // Red fill below zero
+  svg+='<polygon points="'+pts+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1)+" "+pad2+","+zero.toFixed(1)+'" fill="url(#'+gR+')" clip-path="url(#'+cB+')"/>';
+
+  // Full polyline clipped green (above zero)
+  svg+='<polyline points="'+pts+'" fill="none" stroke="#00e676" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#'+cA+')"/>';
+  // Full polyline clipped red (below zero)
+  svg+='<polyline points="'+pts+'" fill="none" stroke="#ff4444" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#'+cB+')"/>';
+
+  // End dot + label
+  var lastX=parseFloat(px(eq.length-1).toFixed(1));
+  var lastY=parseFloat(py(finalVal).toFixed(1));
+  var dotCol=finalVal>=0?"#00e676":"#ff4444";
+  svg+='<circle cx="'+lastX+'" cy="'+lastY+'" r="4" fill="'+dotCol+'" stroke="#0d1e38" stroke-width="1.5"/>';
   var endLbl=(finalVal>=0?"+":"")+fmtAxisDollar(finalVal);
-  svg+='<text x="'+(parseFloat(lastX)+8)+'" y="'+(parseFloat(lastY)+4)+'" text-anchor="start" font-size="11" font-weight="700" font-family="Courier New,monospace" fill="'+lineCol+'">'+endLbl+'</text>';
+  svg+='<text x="'+(lastX+8)+'" y="'+(lastY+4)+'" text-anchor="start" font-size="11" font-weight="700" font-family="Courier New,monospace" fill="'+dotCol+'">'+endLbl+'</text>';
   svg+='</svg>';
   var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
 }
@@ -548,7 +563,7 @@ function homeTab(){
   // Hero P&L row
   var heroRow=div("g2 mb12");
   // Today P&L — big
-  var todayCard=div("card");todayCard.style.background="var(--panel2)";todayCard.style.borderColor=(tPnl>=0?"#00e67640":"#ff444440)");todayCard.style.borderLeft=(tPnl>=0?"4px solid #00e676":"4px solid #ff4444");
+  var todayCard=div("card");todayCard.style.background="var(--panel2)";todayCard.style.borderColor=(tPnl>=0?"#00e67640":"#ff444440");todayCard.style.borderLeft=(tPnl>=0?"4px solid #00e676":"4px solid #ff4444");
   var tcTop=div("rjb mb8");var tcL=div("card-t");tcL.textContent="TODAY P&L";tcTop.appendChild(tcL);
   var tcBadge=div("xs m");
   tcBadge.innerHTML=todayTrades.length+' trades &nbsp;&bull;&nbsp; <span style="color:var(--green);font-weight:700">'+tW+'W</span> / <span style="color:var(--red);font-weight:700">'+tL+'L</span>';
