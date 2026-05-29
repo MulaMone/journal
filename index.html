@@ -1020,8 +1020,14 @@ function logTab(){
     tr.appendChild(h("td",{className:"fw7"},[t.inst]));
     var dtd=h("td");dtd.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));tr.appendChild(dtd);
     tr.appendChild(h("td",{},[t.entry]));tr.appendChild(h("td",{},[t.exit]));tr.appendChild(h("td",{className:"m"},[t.ctr]));
-    var ptd=h("td",{className:clr(t.pts)});ptd.textContent=(t.pts>0?"+":"")+t.pts.toFixed(2);tr.appendChild(ptd);
-    var dtd2=h("td",{className:"fw7 "+clr(t.d)});dtd2.textContent=dol(t.d);tr.appendChild(dtd2);
+    var ptd=h("td",{className:clr(t.pts)});
+    ptd.textContent=(t.pts>0?"+":"")+t.pts.toFixed(2);
+    ptd.style.fontWeight="600";
+    tr.appendChild(ptd);
+    var dtd2=h("td",{className:"fw7 "+clr(t.d)});
+    dtd2.textContent=dol(t.d);
+    dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":"background:#ff444430;border-radius:3px;padding:7px 10px";
+    tr.appendChild(dtd2);
     var std=h("td",{className:"m xs"});std.style.maxWidth="110px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";std.textContent=t.setup;tr.appendChild(std);
     var ssd=h("td");ssd.appendChild(makeBadge("bw xs",t.sess));tr.appendChild(ssd);
     var exd=h("td");exd.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));tr.appendChild(exd);
@@ -1192,7 +1198,47 @@ function analyticsTab(){
   bhCard.appendChild(barSVG(byHour,380,200));g2.appendChild(bhCard);
   el.appendChild(g2);
 
-  var sessCard=div("card");var sessH=div("card-h");var sessT=div("card-t");sessT.textContent="P&L by Session";sessH.appendChild(sessT);sessCard.appendChild(sessH);
+  // P&L by Day of Week
+  var DOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
+  var dowData=DOWS.map(function(d,di){
+    var ts=State.trades.filter(function(t){
+      if(!t.date) return false;
+      var p=t.date.split("/");if(p.length!==3)return false;
+      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+      return dt.getDay()===di; // Sun=0...Sat=6
+    });
+    return{l:d,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};
+  });
+  var dowCard=div("card mt12");var dowH=div("card-h");var dowT=div("card-t");dowT.textContent="P&L by Day of Week";dowH.appendChild(dowT);dowCard.appendChild(dowH);
+  dowCard.appendChild(barSVG(dowData,760,200));
+
+  // Day of week table
+  var dowTbl=h("table",{className:"tbl"});var dowThead=h("thead");var dowHr=h("tr");
+  ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){dowHr.appendChild(h("th",{},[hd]));});
+  dowThead.appendChild(dowHr);dowTbl.appendChild(dowThead);
+  var dowTbody=h("tbody");
+  dowData.forEach(function(d){
+    var ts=State.trades.filter(function(t){
+      if(!t.date) return false;
+      var p=t.date.split("/");if(p.length!==3)return false;
+      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+      return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(d.l)===dt.getDay();
+    });
+    var wins=ts.filter(function(t){return t.d>0}).length;
+    var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";
+    var avg=ts.length?(d.v/ts.length).toFixed(0):0;
+    var dr=h("tr");
+    dr.appendChild(h("td",{className:"fw7"},[d.l]));
+    dr.appendChild(h("td",{className:"m"},[ts.length]));
+    dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));
+    var dptd=h("td",{className:"fw7 "+clr(d.v)});dptd.textContent=dol(d.v);dr.appendChild(dptd);
+    var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);dr.appendChild(aptd);
+    dowTbody.appendChild(dr);
+  });
+  dowTbl.appendChild(dowTbody);dowCard.appendChild(dowTbl);
+  el.appendChild(dowCard);
+
+  var sessCard=div("card mt12");var sessH=div("card-h");var sessT=div("card-t");sessT.textContent="P&L by Session";sessH.appendChild(sessT);sessCard.appendChild(sessH);
   var stbl=h("table",{className:"tbl"});var sthead=h("thead");var shr=h("tr");
   ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){shr.appendChild(h("th",{},[hd]));});sthead.appendChild(shr);stbl.appendChild(sthead);
   var stbody=h("tbody");
