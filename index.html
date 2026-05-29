@@ -187,7 +187,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:""},{l:"PDH/PDL",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"ONH/ONL",imp:"low",sess:"Overnight"},{l:"OPEN",imp:"low",sess:""}];
+var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
@@ -246,17 +246,13 @@ var State={
     changed=true;
   }
   if(changed){State.levels=lvls;ss("levels",lvls);}
-  // Add BIZZ and OPEN if not present
-  var hasBIZZ=State.levels.some(function(l){return l.l==="BIZZ";});
-  var hasOPEN=State.levels.some(function(l){return l.l==="OPEN";});
-  if(!hasBIZZ){State.levels.push({l:"BIZZ",imp:"medium",sess:""});ss("levels",State.levels);}
-  if(!hasOPEN){State.levels.push({l:"OPEN",imp:"low",sess:""});ss("levels",State.levels);}
-  var hasONH=State.levels.some(function(l){return l.l==="ONH/ONL";});
-  if(!hasONH){State.levels.push({l:"ONH/ONL",imp:"low",sess:"Overnight"});ss("levels",State.levels);}
+
   // Update importances and rename VAH/VAL → VAH/VAL POC, remove POC
+  var BUILTIN_NAMES=["VAH/VAL/POC","PDH/PDL","VWAP","BIZZ","ONH/ONL","OPEN"];
   State.levels.forEach(function(l){
     if(l.l==="VAH/VAL"||l.l==="VAH/VAL POC"||l.l==="VAH/VAL/POC"){l.l="VAH/VAL/POC";l.imp="high";}
     if(l.l==="VWAP") l.imp="medium";
+    if(BUILTIN_NAMES.indexOf(l.l)>-1) l.builtin=true;
   });
   State.levels=State.levels.filter(function(l){return l.l!=="POC";});
   // Put VAH/VAL/POC first
@@ -265,6 +261,8 @@ var State={
   // Put OPEN last
   var openIdx=State.levels.findIndex(function(l){return l.l==="OPEN";});
   if(openIdx>-1&&openIdx!==State.levels.length-1){var openLvl=State.levels.splice(openIdx,1)[0];State.levels.push(openLvl);}
+  // Update OPEN session tag
+  State.levels.forEach(function(l){if(l.l==="OPEN"&&!l.sess) l.sess="RTH Open";});
   ss("levels",State.levels);
 })();
 
@@ -899,9 +897,12 @@ function prepTab(){
     row.appendChild(left);
 
     var right=div("row gap8");
-    var del=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});del.textContent="✕";
-    del.addEventListener("click",function(){State.levels.splice(i,1);ss("levels",State.levels);render();});
-    right.appendChild(del);row.appendChild(right);
+    if(!l.builtin){
+      var del=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});del.textContent="✕";
+      del.addEventListener("click",function(){State.levels.splice(i,1);ss("levels",State.levels);render();});
+      right.appendChild(del);
+    }
+    row.appendChild(right);
     lvCard.appendChild(row);
   });
 
