@@ -187,7 +187,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
+var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
@@ -201,7 +201,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"high",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"high",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   pb_adding:false,
@@ -253,6 +253,7 @@ var State={
     if(l.l==="VAH/VAL"||l.l==="VAH/VAL POC"||l.l==="VAH/VAL/POC"){l.l="VAH/VAL/POC";l.imp="high";}
     if(l.l==="VWAP") l.imp="medium";
     if(BUILTIN_NAMES.indexOf(l.l)>-1) l.builtin=true;
+    if(l.l==="BIZZ"&&!l.sess) l.sess="Full RTH";
   });
   State.levels=State.levels.filter(function(l){return l.l!=="POC";});
   // Put VAH/VAL/POC first
@@ -264,6 +265,11 @@ var State={
   // Update OPEN session tag
   State.levels.forEach(function(l){if(l.l==="OPEN"&&!l.sess) l.sess="RTH Open";});
   ss("levels",State.levels);
+  // Mark builtin week levels
+  var WK_BUILTIN=["Weekly VAH/VAL/POC","Weekly Open","Weekly VWAP","Weekly Naked POC","Daily Naked POC","4hr Naked POC"];
+  var wkChanged=false;
+  State.weekLevels.forEach(function(l){if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}});
+  if(wkChanged) ss("weekLevels",State.weekLevels);
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
@@ -957,13 +963,16 @@ function prepTab(){
     var wleft=div("row gap8");wleft.appendChild(arrows);wleft.appendChild(wrank);
     wleft.appendChild(impBadge(l.imp||"medium"));
     var wln=span("sm fw7");wln.textContent=l.l;wleft.appendChild(wln);
-    if(l.sess){var wst=span("xs m");wst.style.cssText="background:var(--panel3);border:1px solid var(--border);border-radius:2px;padding:1px 6px;";wst.textContent=l.sess;wleft.appendChild(wst);}
+    // session tag hidden for week levels
     row.appendChild(wleft);
 
     var wright=div("row gap8");
-    var wdel=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});wdel.textContent="✕";
-    (function(idx){wdel.addEventListener("click",function(){State.weekLevels.splice(idx,1);ss("weekLevels",State.weekLevels);render();});})(i);
-    wright.appendChild(wdel);row.appendChild(wright);
+    if(!l.builtin){
+      var wdel=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});wdel.textContent="✕";
+      (function(idx){wdel.addEventListener("click",function(){State.weekLevels.splice(idx,1);ss("weekLevels",State.weekLevels);render();});})(i);
+      wright.appendChild(wdel);
+    }
+    row.appendChild(wright);
     wkCard.appendChild(row);
   });
 
@@ -979,15 +988,12 @@ function prepTab(){
   [{v:"high",l:"●●● HIGH — Must watch"},{v:"medium",l:"●●○ MEDIUM — Key level"},{v:"low",l:"●○○ LOW — Nice to know"}].forEach(function(o){wts.appendChild(h("option",{value:o.v},[o.l]));});
   wlt.appendChild(wts);wfg.appendChild(wlt);
 
-  var wlse=div();wlse.appendChild(h("label",{},"Session"));
-  var wselinp=h("select",{id:"wl_sess"});
-  [{v:"",l:"Any"},{v:"Overnight",l:"Overnight"},{v:"London",l:"London"},{v:"RTH Open",l:"RTH Open"},{v:"Full RTH",l:"Full RTH"},{v:"Post-Market",l:"Post-Market"}].forEach(function(o){wselinp.appendChild(h("option",{value:o.v},[o.l]));});
-  wlse.appendChild(wselinp);wfg.appendChild(wlse);
+  // session field removed from week levels
 
   var wla=div();wla.style.display="flex";wla.style.alignItems="flex-end";
   var wab=h("button",{className:"btn btn-g",style:"width:100%"});wab.textContent="+ ADD";
   wab.addEventListener("click",function(){
-    var lv=wli.value.trim(),tv=wts.value,sv=wselinp.value;
+    var lv=wli.value.trim(),tv=wts.value,sv="";
     if(!lv){alert("Label is required");return;}
     State.weekLevels.push({l:lv,imp:tv,sess:sv});
     ss("weekLevels",State.weekLevels);render();
