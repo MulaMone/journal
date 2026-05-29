@@ -187,7 +187,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:""},{l:"PDH/PDL",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"OPEN",imp:"low",sess:""},{l:"ONH/ONL",imp:"low",sess:"Overnight"}];
+var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:""},{l:"PDH/PDL",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"ONH/ONL",imp:"low",sess:"Overnight"},{l:"OPEN",imp:"low",sess:""}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
@@ -262,6 +262,9 @@ var State={
   // Put VAH/VAL/POC first
   var vahIdx=State.levels.findIndex(function(l){return l.l==="VAH/VAL/POC";});
   if(vahIdx>0){var vah=State.levels.splice(vahIdx,1)[0];State.levels.unshift(vah);}
+  // Put OPEN last
+  var openIdx=State.levels.findIndex(function(l){return l.l==="OPEN";});
+  if(openIdx>-1&&openIdx!==State.levels.length-1){var openLvl=State.levels.splice(openIdx,1)[0];State.levels.push(openLvl);}
   ss("levels",State.levels);
 })();
 
@@ -766,6 +769,48 @@ function homeTab(){
     combCard.appendChild(sr);
   });
   el.appendChild(combCard);
+  // Monthly Scoreboard
+  var moNow=new Date();
+  var moTrades=State.trades.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
+  });
+  var moS=calcStats(moTrades);
+  var MNAMES2=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var moCard=div("card mt12");
+  var moH=div("card-h");
+  var moT=div("card-t");moT.textContent="Monthly Scoreboard";moH.appendChild(moT);
+  var moDate=span("xs m");moDate.textContent=MNAMES2[moNow.getMonth()]+" "+moNow.getFullYear();moH.appendChild(moDate);
+  moCard.appendChild(moH);
+
+  // 4 chips
+  var moG4=div("g4 mb12");
+  moG4.appendChild(makeChip("MONTH P&L",dol(moS.total),clr(moS.total)));
+  var moWL=div();moWL.innerHTML='<span class="fw7 g" style="font-size:20px">'+moS.wins.length+'</span><span class="m"> / </span><span class="fw7 r" style="font-size:20px">'+moS.losses.length+'</span>';
+  moG4.appendChild(makeChip("W / L",moWL));
+  moG4.appendChild(makeChip("WIN RATE",moS.wr+"%","ac"));
+  moG4.appendChild(makeChip("TRADES",moTrades.length));
+  moCard.appendChild(moG4);
+
+  // Monthly goal progress bar
+  var moGoalAmt=State.moGoal?parseFloat(State.moGoal.replace(/[^0-9.]/g,"")):8000;
+  var moPct=moGoalAmt?Math.min(100,Math.round(Math.max(0,moS.total)/moGoalAmt*100)):0;
+  var moGoalBar=div();
+  var moGoalRow=div("rjb mb8");
+  var moGoalLeft=div("row gap8");
+  var moGoalLbl=span("xs m");moGoalLbl.style.letterSpacing="1px";moGoalLbl.textContent="MONTHLY GOAL";moGoalLeft.appendChild(moGoalLbl);
+  var moGoalCurr=span("fw7 g");moGoalCurr.style.fontSize="12px";moGoalCurr.textContent=dol(moS.total).replace("+","");moGoalLeft.appendChild(moGoalCurr);
+  var moGoalSlash=span("xs m");moGoalSlash.textContent="/";moGoalLeft.appendChild(moGoalSlash);
+  var moGoalTarget=span("xs m");moGoalTarget.style.fontSize="12px";moGoalTarget.textContent="$"+Math.round(moGoalAmt);moGoalLeft.appendChild(moGoalTarget);
+  moGoalRow.appendChild(moGoalLeft);
+  var moPctEl=span("xs fw7 g");moPctEl.textContent=moPct+"%";moGoalRow.appendChild(moPctEl);
+  moGoalBar.appendChild(moGoalRow);
+  var moBarBg=div();moBarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
+  var moBarFill=div();moBarFill.style.cssText="background:var(--green);width:"+moPct+"%;height:100%;border-radius:3px;";
+  moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
+  moCard.appendChild(moGoalBar);
+  el.appendChild(moCard);
+
   return el;
 }
 
