@@ -60,7 +60,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courie
 .cal-nav button{background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;width:22px;height:22px;font-size:11px;line-height:1}
 .cal-nav button:hover{border-color:var(--ca);color:var(--ca)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-.cal-dh{font-size:12px;text-align:center;color:var(--text3);padding:5px 0;letter-spacing:1px;font-weight:600}
+.cal-dh{font-size:15px;text-align:center;color:var(--text3);padding:6px 0;letter-spacing:1px;font-weight:700}
 .cal-day{font-size:13px;text-align:center;padding:6px 3px;border-radius:3px;cursor:pointer;color:var(--text2)}
 .cal-day:hover{background:var(--panel3);color:var(--text)}
 .cal-day.today{border:1px solid var(--ca);color:var(--ca)}
@@ -1294,7 +1294,7 @@ function reviewTab(){
     var grid=div();grid.style.display="grid";grid.style.gridTemplateColumns="repeat(7,1fr)";grid.style.gap="4px";
     DNAMES.forEach(function(d,di){
       var isSat=(di===6);var isSun=(di===0);
-      var dh=div();dh.style.cssText="text-align:center;font-size:8px;letter-spacing:1px;padding:4px 0;color:"+(isSat?"#ff6b3d":isSun?"var(--text3)":"var(--text3)")+";font-weight:"+(isSat?"700":"400")+";";dh.textContent=d;grid.appendChild(dh);
+      var dh=div();dh.style.cssText="text-align:center;font-size:16px;letter-spacing:2px;padding:8px 0;color:"+(isSat?"#ff6b3d":"var(--text3)")+";font-weight:700;";dh.textContent=d;grid.appendChild(dh);
     });
 
     // First day of month
