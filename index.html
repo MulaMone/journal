@@ -1114,8 +1114,9 @@ function reviewTab(){
     // Day headers
     var DNAMES=["SUN","MON","TUE","WED","THU","FRI","SAT"];
     var grid=div();grid.style.display="grid";grid.style.gridTemplateColumns="repeat(7,1fr)";grid.style.gap="4px";
-    DNAMES.forEach(function(d){
-      var dh=div();dh.style.cssText="text-align:center;font-size:8px;letter-spacing:1px;color:var(--text3);padding:4px 0;";dh.textContent=d;grid.appendChild(dh);
+    DNAMES.forEach(function(d,di){
+      var isSat=(di===6);var isSun=(di===0);
+      var dh=div();dh.style.cssText="text-align:center;font-size:8px;letter-spacing:1px;padding:4px 0;color:"+(isSat?"#ff6b3d":isSun?"var(--text3)":"var(--text3)")+";font-weight:"+(isSat?"700":"400")+";";dh.textContent=d;grid.appendChild(dh);
     });
 
     // First day of month
@@ -1131,14 +1132,20 @@ function reviewTab(){
     for(var d=1;d<=daysInMonth;d++){
       (function(day){
         var cell=div();
+        var dow=(firstDay+day-1)%7; // 0=Sun,6=Sat
+        var isSat=dow===6;
+        var isSun=dow===0;
         var isToday=isCurrentMonth&&todayObj.getDate()===day;
         var data=dayMap[day];
-        var bg="var(--panel2)";var border="1px solid var(--border)";var pnlCol="";
-        if(data){bg=data.pnl>0?"#00e67612":"#ff444412";border=data.pnl>0?"1px solid #00e67640":"1px solid #ff444440";pnlCol=data.pnl>0?"#00e676":"#ff4444";}
+        var bg=isSat?"#1a0e06":"var(--panel2)";
+        var border=isSat?"1px solid #ff6b3d30":"1px solid var(--border)";
+        var pnlCol="";
+        if(data){bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";pnlCol=data.pnl>0?"#00e676":"#ff4444";}
         if(isToday){border="2px solid var(--ca)";}
         cell.style.cssText="background:"+bg+";border:"+border+";border-radius:3px;padding:5px 4px;min-height:54px;cursor:"+(data?"pointer":"default")+";position:relative;";
 
-        var dnum=div();dnum.style.cssText="font-size:10px;font-weight:700;color:"+(isToday?"var(--ca)":"var(--text2)")+";margin-bottom:3px;";dnum.textContent=day;cell.appendChild(dnum);
+        var dnum=div();dnum.style.cssText="font-size:10px;font-weight:700;color:"+(isToday?"var(--ca)":isSat?"#ff6b3d":"var(--text2)")+";margin-bottom:3px;";dnum.textContent=day;cell.appendChild(dnum);
+        if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:7px;color:#ff6b3d50;letter-spacing:1px;margin-top:2px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
         if(data){
           var dpnl=div();dpnl.style.cssText="font-size:9px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
           var dct=div();dct.style.cssText="font-size:8px;color:var(--text3);margin-top:2px;";dct.textContent=data.count+(data.count===1?" trade":" trades");cell.appendChild(dct);
@@ -1156,7 +1163,7 @@ function reviewTab(){
 
     // Legend
     var leg=div("row gap12 mt12");leg.style.justifyContent="flex-end";
-    [{col:"#00e676",lbl:"Profitable day"},{col:"#ff4444",lbl:"Loss day"},{col:"var(--border)",lbl:"No trades"}].forEach(function(l){
+    [{col:"#00e676",lbl:"Profitable day"},{col:"#ff4444",lbl:"Loss day"},{col:"var(--border)",lbl:"No trades"},{col:"#ff6b3d",lbl:"Market closed (Sat)"}].forEach(function(l){
       var li=div("row gap8");var dot=div();dot.style.cssText="width:10px;height:10px;border-radius:2px;background:"+l.col+"20;border:1px solid "+l.col+"60;flex-shrink:0;";var lt=span("xs m");lt.textContent=l.lbl;li.appendChild(dot);li.appendChild(lt);leg.appendChild(li);
     });
     calCard.appendChild(leg);
