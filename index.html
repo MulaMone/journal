@@ -10,8 +10,9 @@
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;overflow:hidden}
 #app{display:flex;flex-direction:column;height:100vh}
 /* TOPBAR */
-#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:46px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:46px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
 .logo{font-size:17px;font-weight:700;letter-spacing:4px;color:var(--accent)}
+.brand-name{font-family:'Cinzel',serif;font-size:20px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase}
 .logo small{color:var(--text3);font-size:10px;font-weight:400;margin-left:8px;letter-spacing:2px}
 #topbar-stats{display:flex;gap:18px;font-size:11px}
 #topbar-stats span{color:var(--text3)}
@@ -136,7 +137,8 @@ label{font-size:9px;letter-spacing:1.5px;color:var(--text3);display:block;margin
 .xs{font-size:9px}.sm{font-size:10px}.fw7{font-weight:700}
 .mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mt8{margin-top:8px}.mt12{margin-top:12px}
 .row{display:flex;align-items:center}.rjb{display:flex;align-items:center;justify-content:space-between}.gap8{gap:8px}.gap12{gap:12px}
-.pbc{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:13px;margin-bottom:9px}
+.pbc{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:9px}
+.setup-title{font-size:14px;font-weight:700;letter-spacing:.5px;color:var(--text);font-family:'Arial','Helvetica',sans-serif}
 .opp{background:linear-gradient(135deg,var(--panel2),var(--panel3));border:1px solid #1e3d73;border-radius:4px;padding:14px;margin-bottom:10px}
 /* SVG CHART */
 .chart-wrap{overflow:hidden;margin-top:6px}
@@ -147,6 +149,7 @@ svg text{font-family:'Courier New',monospace}
 <div id="app">
   <div id="topbar">
     <div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div>
+    <div class="brand-name">BILLION$</div>
     <div id="topbar-stats"></div>
   </div>
   <div id="tabs"></div>
@@ -182,7 +185,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"PDH/PDL",imp:"high",sess:""},{l:"VAH/VAL",imp:"high",sess:""},{l:"POC",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"OPEN",imp:"low",sess:""}];
+var DEFAULT_LEVELS=[{l:"PDH/PDL",imp:"high",sess:""},{l:"VAH/VAL",imp:"high",sess:""},{l:"POC",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"OPEN",imp:"low",sess:""},{l:"ONH/ONL",imp:"low",sess:"Overnight"}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
@@ -243,6 +246,8 @@ var State={
   var hasOPEN=State.levels.some(function(l){return l.l==="OPEN";});
   if(!hasBIZZ){State.levels.push({l:"BIZZ",imp:"medium",sess:""});ss("levels",State.levels);}
   if(!hasOPEN){State.levels.push({l:"OPEN",imp:"low",sess:""});ss("levels",State.levels);}
+  var hasONH=State.levels.some(function(l){return l.l==="ONH/ONL";});
+  if(!hasONH){State.levels.push({l:"ONH/ONL",imp:"low",sess:"Overnight"});ss("levels",State.levels);}
   // Update importances to new values
   State.levels.forEach(function(l){
     if(l.l==="VAH/VAL") l.imp="high";
@@ -420,7 +425,7 @@ function impBadge(imp){
   var c=cfg[imp]||cfg.medium;
   var b=h("span",{className:"badge "+c.cls});
   b.style.letterSpacing="3px";b.style.fontSize="8px";b.title=c.label+" importance";
-  b.textContent=c.icon+" "+c.label;return b;
+  b.textContent=c.icon;return b;
 }
 
 // ─── TABS ─────────────────────────────────────────────────────────────
@@ -449,7 +454,7 @@ function renderTabs(){
   el.appendChild(tabsWrap);
   // Clock on right side
   var clk=div();clk.id="tab-clock";
-  clk.style.cssText="font-family:'Courier New',monospace;font-size:11px;font-weight:700;color:var(--ca);padding:0 16px;display:flex;align-items:center;white-space:nowrap;letter-spacing:1px;flex-shrink:0;";
+  clk.style.cssText="font-family:'Courier New',monospace;font-size:11px;font-weight:700;color:#ffffff;padding:0 16px;display:flex;align-items:center;white-space:nowrap;letter-spacing:1px;flex-shrink:0;";
   el.appendChild(clk);
   startClock();
 }
@@ -551,8 +556,10 @@ function homeTab(){
     var key="lv_"+i;
     var isChecked=!!State.levelChecks[key];
     var row=div("lvrow"+(isChecked?" checked":""));
+    // 3-column grid: [checkbox fixed] [label centered] [badge fixed same width]
+    row.style.cssText="display:grid;grid-template-columns:22px 1fr 22px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:6px;";
 
-    // Checkbox
+    // Col 1: Checkbox
     var chk=div("lv-check"+(isChecked?" on":""));
     chk.addEventListener("click",function(e){
       e.stopPropagation();
@@ -562,14 +569,14 @@ function homeTab(){
     });
     row.appendChild(chk);
 
-    // Label
-    var lbl=span("sm fw7 lv-label");lbl.textContent=l.l;
-    if(isChecked) lbl.style.color="var(--text3)";
+    // Col 2: Label — truly centered
+    var lbl=span("lv-label");
+    lbl.style.cssText="font-size:11px;font-weight:700;letter-spacing:1px;text-align:center;"+(isChecked?"text-decoration:line-through;color:var(--text3);":"color:var(--text);");
+    lbl.textContent=l.l;
     row.appendChild(lbl);
 
-    // Right side: session + importance
-    var right2=div("row gap8 lv-badge");
-    if(l.sess){var lsb=span("xs m");lsb.style.cssText="background:var(--panel3);border:1px solid var(--border);border-radius:2px;padding:1px 6px;";lsb.textContent=l.sess;right2.appendChild(lsb);}
+    // Col 3: Importance badge — right aligned, fixed slot
+    var right2=div("lv-badge");right2.style.cssText="display:flex;justify-content:flex-end;align-items:center;";
     right2.appendChild(impBadge(l.imp||"medium"));
     row.appendChild(right2);
     lvCard.appendChild(row);
@@ -1050,7 +1057,7 @@ function playbookTab(){
     } else {
       // View mode
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=span("fw7 sm");nm.textContent=entry.name;left.appendChild(nm);
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;left.appendChild(nm);
       hrow.appendChild(left);
       var right=div("row gap8");
       if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
@@ -1097,6 +1104,25 @@ function analyticsTab(){
   var stbody=h("tbody");
   SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"g":"m"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);str.appendChild(sptd);stbody.appendChild(str);});
   stbl.appendChild(stbody);sessCard.appendChild(stbl);el.appendChild(sessCard);
+
+  // Setup P&L Breakdown (moved from Review/Stats)
+  var sbCard2=div("card mt12");var sbH2=div("card-h");var sbT2=div("card-t");sbT2.textContent="Setup P&L Breakdown";sbH2.appendChild(sbT2);sbCard2.appendChild(sbH2);
+  var allSetups2=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
+  var bySetup2=allSetups2.map(function(sv){var sts=State.trades.filter(function(t){return t.setup===sv});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
+  if(!bySetup2.length){var nsm3=span("xs m");nsm3.textContent="No tagged setups yet — tag trades in the log to see breakdown.";sbCard2.appendChild(nsm3);}
+  bySetup2.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){
+    var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";
+    var sl=div();var st2=div("xs fw7");st2.style.color="var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);
+    var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);
+    var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);
+    sbCard2.appendChild(sr);
+  });
+  el.appendChild(sbCard2);
+
+  // Monthly Goal
+  var goalCard2=div("card mt12");var goalH2=div("card-h");var goalT2=div("card-t");goalT2.textContent="Monthly Goal";goalH2.appendChild(goalT2);goalCard2.appendChild(goalH2);
+  var mta3=h("textarea",{rows:"3"});mta3.style.resize="none";mta3.value=State.moGoal;mta3.addEventListener("input",function(){State.moGoal=mta3.value;ss("moGoal",State.moGoal);});goalCard2.appendChild(mta3);
+  el.appendChild(goalCard2);
   return el;
 }
 
@@ -1117,7 +1143,7 @@ function reviewTab(){
   var topRow=div("rjb mb12");
   var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Review";topRow.appendChild(sh);
   var toggles=div("row gap8");
-  ["month","week","stats"].forEach(function(v){
+  ["month","week"].forEach(function(v){
     var b=h("button",{className:"btn"+(viewMode===v?" btn-active":""),style:"padding:4px 12px;font-size:9px"+(viewMode===v?";border-color:#00d4d4;color:#00d4d4;background:#00d4d418":"")});
     b.textContent=v.toUpperCase();
     b.addEventListener("click",function(){State.rv_view=v;render();});
@@ -1311,25 +1337,7 @@ function reviewTab(){
   }
 
   // ── STATS VIEW ──
-  if(viewMode==="stats"){
-    // Full all-time breakdown
-    var eqCard2=div("card mb12");var eqH2=div("card-h");var eqT2=div("card-t");eqT2.textContent="All-Time Equity Curve";eqH2.appendChild(eqT2);eqCard2.appendChild(eqH2);eqCard2.appendChild(equitySVG(State.trades,760,190));el.appendChild(eqCard2);
 
-    var sg2=div("g2 mb12");
-    var sbCard=div("card");var sbH=div("card-h");var sbT=div("card-t");sbT.textContent="Setup P&L Breakdown";sbH.appendChild(sbT);sbCard.appendChild(sbH);
-    var allSetups=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
-    var bySetup=allSetups.map(function(sv){var sts=State.trades.filter(function(t){return t.setup===sv});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
-    if(!bySetup.length){var nsm2=span("xs m");nsm2.textContent="No tagged setups yet.";sbCard.appendChild(nsm2);}
-    bySetup.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){var sr=div("rjb");sr.style.padding="7px 0";sr.style.borderBottom="1px solid var(--border)";var sl=div();var st2=div("xs fw7");st2.style.color="#e0c97a";st2.textContent=s2.full;sl.appendChild(st2);var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);sbCard.appendChild(sr);});
-    sg2.appendChild(sbCard);
-
-    var sessCard=div("card");var sessH=div("card-h");var sessT2=div("card-t");sessT2.textContent="Session Breakdown";sessH.appendChild(sessT2);sessCard.appendChild(sessH);
-    SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var sr=div("rjb");sr.style.padding="6px 0";sr.style.borderBottom="1px solid var(--border)";var sl=span("xs");sl.style.color="#e0c97a";sl.textContent=sess;sr.appendChild(sl);var sp=span("xs fw7 "+clr(spnl));sp.textContent=dol(spnl)+" ("+sts.length+")";sr.appendChild(sp);sessCard.appendChild(sr);});
-    var sep3=div("sep");sessCard.appendChild(sep3);
-    var ml2=h("label",{},"Monthly Goal");sessCard.appendChild(ml2);
-    var mta2=h("textarea",{rows:"4"});mta2.style.resize="none";mta2.value=State.moGoal;mta2.addEventListener("input",function(){State.moGoal=mta2.value;ss("moGoal",State.moGoal);});sessCard.appendChild(mta2);
-    sg2.appendChild(sessCard);el.appendChild(sg2);
-  }
 
   return el;
 }
