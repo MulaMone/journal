@@ -182,7 +182,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"PDH/PDL",imp:"high",sess:""},{l:"VWAP",imp:"high",sess:""},{l:"POC",imp:"medium",sess:""},{l:"VAH/VAL",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"OPEN",imp:"low",sess:""}];
+var DEFAULT_LEVELS=[{l:"PDH/PDL",imp:"high",sess:""},{l:"VAH/VAL",imp:"high",sess:""},{l:"POC",imp:"high",sess:""},{l:"VWAP",imp:"medium",sess:""},{l:"BIZZ",imp:"medium",sess:""},{l:"OPEN",imp:"low",sess:""}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
@@ -243,6 +243,13 @@ var State={
   var hasOPEN=State.levels.some(function(l){return l.l==="OPEN";});
   if(!hasBIZZ){State.levels.push({l:"BIZZ",imp:"medium",sess:""});ss("levels",State.levels);}
   if(!hasOPEN){State.levels.push({l:"OPEN",imp:"low",sess:""});ss("levels",State.levels);}
+  // Update importances to new values
+  State.levels.forEach(function(l){
+    if(l.l==="VAH/VAL") l.imp="high";
+    if(l.l==="POC") l.imp="high";
+    if(l.l==="VWAP") l.imp="medium";
+  });
+  ss("levels",State.levels);
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
@@ -421,7 +428,7 @@ var TABS=[
   {id:"home",icon:"⌂",label:"HOME"},
   {id:"prep",icon:"◎",label:"PREP"},
   {id:"log",icon:"≡",label:"TRADE LOG"},
-  {id:"opps",icon:"★",label:"BEST OPPS"},
+  {id:"opps",icon:"★",label:"BEST LICKS"},
   {id:"playbook",icon:"◈",label:"PLAYS"},
   {id:"analytics",icon:"⟁",label:"STATS"},
   {id:"review",icon:"◫",label:"REVIEW"},
@@ -431,12 +438,36 @@ var TABS=[
 function renderTabs(){
   var el=document.getElementById("tabs");
   el.innerHTML="";
+  el.style.justifyContent="space-between";
+  var tabsWrap=div("row");tabsWrap.style.gap="1px";
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
     tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
     tab.addEventListener("click",function(){State.tab=t.id;State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;if(t.id!=="review"){State.rv_selected_day=null;}render();});
-    el.appendChild(tab);
+    tabsWrap.appendChild(tab);
   });
+  el.appendChild(tabsWrap);
+  // Clock on right side
+  var clk=div();clk.id="tab-clock";
+  clk.style.cssText="font-family:'Courier New',monospace;font-size:11px;font-weight:700;color:var(--ca);padding:0 16px;display:flex;align-items:center;white-space:nowrap;letter-spacing:1px;flex-shrink:0;";
+  el.appendChild(clk);
+  startClock();
+}
+
+var _clockInterval=null;
+function startClock(){
+  if(_clockInterval) clearInterval(_clockInterval);
+  function tick(){
+    var el=document.getElementById("tab-clock");
+    if(!el) return;
+    var now=new Date();
+    var hh=now.getHours(),mm=now.getMinutes(),ss2=now.getSeconds();
+    var ampm=hh>=12?"PM":"AM";
+    hh=hh%12||12;
+    el.textContent=(hh<10?"0":"")+hh+":"+(mm<10?"0":"")+mm+":"+(ss2<10?"0":"")+ss2+" "+ampm;
+  }
+  tick();
+  _clockInterval=setInterval(tick,1000);
 }
 
 function renderTopbar(){
