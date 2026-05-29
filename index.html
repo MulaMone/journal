@@ -1232,7 +1232,13 @@ function reviewTab(){
         if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:7px;color:#ff6b3d50;letter-spacing:1px;margin-top:2px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
         if(data){
           var dpnl=div();dpnl.style.cssText="font-size:9px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
-          var dct=div();dct.style.cssText="font-size:8px;color:var(--text3);margin-top:2px;";dct.textContent=data.count+(data.count===1?" trade":" trades");cell.appendChild(dct);
+          var wins=data.trades.filter(function(t){return t.d>0}).length;
+          var losses=data.trades.filter(function(t){return t.d<0}).length;
+          var wlRow=div();wlRow.style.cssText="display:flex;gap:4px;margin-top:2px;align-items:center;";
+          if(wins>0){var wEl=span();wEl.style.cssText="font-size:9px;font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
+          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:8px;color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
+          if(losses>0){var lEl=span();lEl.style.cssText="font-size:9px;font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
+          cell.appendChild(wlRow);
         }
         // Click to show day trades
         if(data){
