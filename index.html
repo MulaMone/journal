@@ -799,14 +799,14 @@ function homeTab(){
   var moGoalRow=div("rjb mb8");
   var moGoalLeft=div("row gap8");
   var moGoalLbl=span("xs m");moGoalLbl.style.letterSpacing="1px";moGoalLbl.textContent="MONTHLY GOAL";moGoalLeft.appendChild(moGoalLbl);
-  var moGoalCurr=span("fw7 g");moGoalCurr.style.fontSize="12px";moGoalCurr.textContent=dol(moS.total).replace("+","");moGoalLeft.appendChild(moGoalCurr);
+  var moGoalCurr=span("fw7 b");moGoalCurr.style.fontSize="12px";moGoalCurr.textContent=dol(moS.total).replace("+","");moGoalLeft.appendChild(moGoalCurr);
   var moGoalSlash=span("xs m");moGoalSlash.textContent="/";moGoalLeft.appendChild(moGoalSlash);
   var moGoalTarget=span("xs m");moGoalTarget.style.fontSize="12px";moGoalTarget.textContent="$"+Math.round(moGoalAmt);moGoalLeft.appendChild(moGoalTarget);
   moGoalRow.appendChild(moGoalLeft);
-  var moPctEl=span("xs fw7 g");moPctEl.textContent=moPct+"%";moGoalRow.appendChild(moPctEl);
+  var moPctEl=span("xs fw7 b");moPctEl.textContent=moPct+"%";moGoalRow.appendChild(moPctEl);
   moGoalBar.appendChild(moGoalRow);
   var moBarBg=div();moBarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
-  var moBarFill=div();moBarFill.style.cssText="background:var(--green);width:"+moPct+"%;height:100%;border-radius:3px;";
+  var moBarFill=div();moBarFill.style.cssText="background:var(--ca);width:"+moPct+"%;height:100%;border-radius:3px;";
   moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
   moCard.appendChild(moGoalBar);
   el.appendChild(moCard);
