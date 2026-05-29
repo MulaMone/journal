@@ -543,7 +543,9 @@ function homeTab(){
   // Today P&L — big
   var todayCard=div("card");todayCard.style.background="var(--panel2)";todayCard.style.borderColor=(tPnl>=0?"#00e67640":"#ff444440)");todayCard.style.borderLeft=(tPnl>=0?"4px solid #00e676":"4px solid #ff4444");
   var tcTop=div("rjb mb8");var tcL=div("card-t");tcL.textContent="TODAY P&L";tcTop.appendChild(tcL);
-  var tcBadge=div("xs m");tcBadge.textContent=todayTrades.length+" trades  •  "+tW+"W / "+tL+"L";tcTop.appendChild(tcBadge);
+  var tcBadge=div("xs m");
+  tcBadge.innerHTML=todayTrades.length+' trades &nbsp;&bull;&nbsp; <span style="color:var(--green);font-weight:700">'+tW+'W</span> / <span style="color:var(--red);font-weight:700">'+tL+'L</span>';
+  tcTop.appendChild(tcBadge);
   todayCard.appendChild(tcTop);
   var tcVal=div();tcVal.style.fontSize="38px";tcVal.style.fontWeight="700";tcVal.style.lineHeight="1";tcVal.style.letterSpacing="1px";tcVal.className=clr(tPnl);tcVal.textContent=dol(tPnl);todayCard.appendChild(tcVal);
   var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+t.pts},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
@@ -563,8 +565,14 @@ function homeTab(){
   el.appendChild(heroRow);
   // Sub chips
   var g4=div("g4");
-  var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+tW+'</span><span class="m"> / </span><span class="r fw7">'+tL+'</span>';
-  g4.appendChild(makeChip("W / L TODAY",wlDiv,"","today"));
+  // RTH Rules chip
+  var rthDiv=div();rthDiv.style.cssText="font-size:13px;display:flex;justify-content:space-between;gap:12px;";
+  var rthLeft=div();rthLeft.style.cssText="display:flex;flex-direction:column;gap:5px;";
+  rthLeft.innerHTML='<div style="color:var(--text2)">2–3 trades daily</div><div style="color:#b06aff">Mark 30min &amp; 1hr POC</div>';
+  var rthRight=div();rthRight.style.cssText="display:flex;flex-direction:column;gap:5px;text-align:right;";
+  rthRight.innerHTML='<div style="color:var(--green)">9:30–12pm &nbsp;Hi R:R</div><div style="color:var(--amber)">After 12pm &nbsp;Lo R:R</div>';
+  rthDiv.appendChild(rthLeft);rthDiv.appendChild(rthRight);
+  g4.appendChild(makeChip("RTH RULES",rthDiv,"",""));
   // Current streak
   var streak=0;var streakType="";
   if(State.trades.length){
@@ -577,9 +585,13 @@ function homeTab(){
   var streakVal=div();
   streakVal.innerHTML=streak>0?'<span class="'+(streakType==="W"?"g":"r")+'" style="font-size:22px;font-weight:700">'+streak+streakType+'</span>':'<span class="m" style="font-size:22px;font-weight:700">—</span>';
   g4.appendChild(makeChip("STREAK",streakVal,"","current"));
-  // R:R ratio
-  var rrVal=(s.avgL&&s.avgW)?Math.abs(s.avgW/s.avgL).toFixed(2):"—";
-  g4.appendChild(makeChip("R:R RATIO",rrVal+"R","ac","all time"));
+  // Max Drawdown
+  var eq2=[0];
+  State.trades.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
+  var peak=0,maxDD=0;
+  eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
+  var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
+  g4.appendChild(makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time"));
   // Mindset chip — last
   var msChecked=Object.values(State.mindsetChecks).filter(Boolean).length;
   var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
