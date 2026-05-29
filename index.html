@@ -556,15 +556,30 @@ function homeTab(){
   var ttBadge=div("xs m");ttBadge.textContent=State.trades.length+" total trades";ttTop.appendChild(ttBadge);
   totalCard.appendChild(ttTop);
   var ttVal=div();ttVal.style.fontSize="38px";ttVal.style.fontWeight="700";ttVal.style.lineHeight="1";ttVal.style.letterSpacing="1px";ttVal.className=clr(s.total);ttVal.textContent=dol(s.total);totalCard.appendChild(ttVal);
-  var ttWr=div("xs m mt8");ttWr.textContent="Win rate: "+s.wr+"% — Avg W: "+dol(s.avgW)+" / Avg L: "+dol(s.avgL);totalCard.appendChild(ttWr);
+  var ttWr=div("mt8");ttWr.style.fontSize="12px";
+  ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: '+dol(s.avgW)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: '+dol(s.avgL)+'</span>';
+  totalCard.appendChild(ttWr);
   heroRow.appendChild(totalCard);
   el.appendChild(heroRow);
   // Sub chips
   var g4=div("g4");
   var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+tW+'</span><span class="m"> / </span><span class="r fw7">'+tL+'</span>';
   g4.appendChild(makeChip("W / L TODAY",wlDiv,"","today"));
-  g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));
-  g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));
+  // Current streak
+  var streak=0;var streakType="";
+  if(State.trades.length){
+    var first=State.trades[0];streakType=first.d>0?"W":"L";
+    for(var si=0;si<State.trades.length;si++){
+      if((State.trades[si].d>0&&streakType==="W")||(State.trades[si].d<0&&streakType==="L")) streak++;
+      else break;
+    }
+  }
+  var streakVal=div();
+  streakVal.innerHTML=streak>0?'<span class="'+(streakType==="W"?"g":"r")+'" style="font-size:22px;font-weight:700">'+streak+streakType+'</span>':'<span class="m" style="font-size:22px;font-weight:700">—</span>';
+  g4.appendChild(makeChip("STREAK",streakVal,"","current"));
+  // R:R ratio
+  var rrVal=(s.avgL&&s.avgW)?Math.abs(s.avgW/s.avgL).toFixed(2):"—";
+  g4.appendChild(makeChip("R:R RATIO",rrVal+"R","ac","all time"));
   // Mindset chip — last
   var msChecked=Object.values(State.mindsetChecks).filter(Boolean).length;
   var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
