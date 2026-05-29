@@ -11,7 +11,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courie
 #app{display:flex;flex-direction:column;height:100vh}
 /* TOPBAR */
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:54px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
-.logo{font-size:20px;font-weight:700;letter-spacing:4px;color:var(--accent)}
+.logo{font-size:26px;font-weight:700;letter-spacing:4px;color:var(--accent)}
 .brand-name{font-family:'Cinzel',serif;font-size:24px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase}
 .logo small{color:var(--text3);font-size:14px;font-weight:400;margin-left:10px;letter-spacing:2px}
 #topbar-stats{display:flex;gap:18px;font-size:14px}
@@ -455,10 +455,13 @@ function renderTabs(){
     tabsWrap.appendChild(tab);
   });
   el.appendChild(tabsWrap);
-  // Clock on right side
-  var clk=div();clk.id="tab-clock";
-  clk.style.cssText="font-family:'Courier New',monospace;font-size:11px;font-weight:700;color:#ffffff;padding:0 16px;display:flex;align-items:center;white-space:nowrap;letter-spacing:1px;flex-shrink:0;";
-  el.appendChild(clk);
+  // Clock + countdown on right side
+  var clkWrap=div();clkWrap.id="tab-clock";
+  clkWrap.style.cssText="font-family:'Courier New',monospace;padding:0 16px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;white-space:nowrap;flex-shrink:0;gap:2px;";
+  var clkTime=div();clkTime.id="clk-time";clkTime.style.cssText="font-size:15px;font-weight:700;color:#ffffff;letter-spacing:2px;";
+  var clkCd=div();clkCd.id="clk-countdown";clkCd.style.cssText="font-size:11px;font-weight:700;color:#ff4444;letter-spacing:1px;";
+  clkWrap.appendChild(clkTime);clkWrap.appendChild(clkCd);
+  el.appendChild(clkWrap);
   startClock();
 }
 
@@ -466,13 +469,44 @@ var _clockInterval=null;
 function startClock(){
   if(_clockInterval) clearInterval(_clockInterval);
   function tick(){
-    var el=document.getElementById("tab-clock");
-    if(!el) return;
+    var tEl=document.getElementById("clk-time");
+    var cdEl=document.getElementById("clk-countdown");
+    if(!tEl||!cdEl) return;
     var now=new Date();
     var hh=now.getHours(),mm=now.getMinutes(),ss2=now.getSeconds();
     var ampm=hh>=12?"PM":"AM";
-    hh=hh%12||12;
-    el.textContent=(hh<10?"0":"")+hh+":"+(mm<10?"0":"")+mm+":"+(ss2<10?"0":"")+ss2+" "+ampm;
+    var hh12=hh%12||12;
+    tEl.textContent=(hh12<10?"0":"")+hh12+":"+(mm<10?"0":"")+mm+":"+(ss2<10?"0":"")+ss2+" "+ampm;
+
+    // Get ET time for market countdown
+    var etStr=new Date().toLocaleString("en-US",{timeZone:"America/New_York",hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    var etParts=etStr.split(":");
+    var etH=parseInt(etParts[0]),etM=parseInt(etParts[1]),etS=parseInt(etParts[2]);
+    // Market close: 16:15 ET
+    var closeH=16,closeM=15,closeS=0;
+    var nowSecs=etH*3600+etM*60+etS;
+    var closeSecs=closeH*3600+closeM*60+closeS;
+    var openSecs=9*3600+30*60; // 9:30 AM ET open
+    var day=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",weekday:"short"});
+    var isWeekend=(day==="Sat"||day==="Sun");
+
+    if(isWeekend){
+      cdEl.style.color="#ff4444";cdEl.textContent="MARKET CLOSED";
+    } else if(nowSecs<openSecs){
+      // Pre-market countdown to open
+      var diff=openSecs-nowSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#ffab00";
+      cdEl.textContent="OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+    } else if(nowSecs<closeSecs){
+      // Countdown to close
+      var diff2=closeSecs-nowSecs;
+      var ch2=Math.floor(diff2/3600),cm2=Math.floor((diff2%3600)/60),cs2=diff2%60;
+      cdEl.style.color="#ff4444";
+      cdEl.textContent="CLOSE IN "+(ch2>0?ch2+"h ":"")+(cm2<10?"0":"")+cm2+":"+(cs2<10?"0":"")+cs2;
+    } else {
+      cdEl.style.color="#8fadd4";cdEl.textContent="MARKET CLOSED 4:15 PM";
+    }
   }
   tick();
   _clockInterval=setInterval(tick,1000);
