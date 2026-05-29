@@ -152,7 +152,6 @@ svg text{font-family:'Courier New',monospace}
     <div class="brand-name">BILLION$</div>
     <div id="topbar-stats"></div>
   </div>
-  <div id="sync-bar" style="background:#071428;border-bottom:1px solid #1a3260;padding:4px 18px;display:flex;align-items:center;gap:14px;font-family:'Courier New',monospace;font-size:9px;flex-shrink:0"></div>
   <div id="tabs"></div>
   <div id="content"></div>
 </div>
@@ -322,6 +321,8 @@ var State={
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
   sync_tab:"tradovate",
+  chart_symbol:"ES1!",
+  chart_interval:"5",
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
@@ -575,7 +576,8 @@ var TABS=[
   {id:"playbook",icon:"◈",label:"PLAYS"},
   {id:"analytics",icon:"⟁",label:"STATS"},
   {id:"review",icon:"◫",label:"REVIEW"},
-  {id:"import",icon:"⬆",label:"IMPORT"}
+  {id:"import",icon:"⬆",label:"IMPORT"},
+  {id:"chart",icon:"◰",label:"CHART"}
 ];
 
 function renderTabs(){
@@ -2231,13 +2233,119 @@ function loadNTFile(){
   });
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab};
+function chartTab(){
+  var el=div();
+  var hrow=div("rjb mb8");hrow.style.padding="12px 16px 0";var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Live Chart";hrow.appendChild(sh);
+
+  // Instrument + interval selectors
+  var ctrlRow=div("row gap8");
+  var SYMBOLS=[
+    {l:"ES",s:"ES1!"},
+    {l:"NQ",s:"NQ1!"},
+    {l:"MES",s:"MES1!"},
+    {l:"MNQ",s:"MNQ1!"}
+  ];
+  var INTERVALS=[{l:"1m",v:"1"},{l:"2m",v:"2"},{l:"3m",v:"3"},{l:"5m",v:"5"},{l:"15m",v:"15"},{l:"30m",v:"30"},{l:"1h",v:"60"},{l:"4h",v:"240"},{l:"D",v:"D"}];
+
+  SYMBOLS.forEach(function(sym){
+    var b=h("button",{className:"btn chart-sym-btn"+(State.chart_symbol===sym.s?" btn-active":"")});
+    b.dataset.sym=sym.s;
+    if(State.chart_symbol===sym.s){b.style.cssText="border-color:var(--ca);color:var(--ca);background:var(--caglow);font-weight:700;";}
+    b.textContent=sym.l;
+    b.addEventListener("click",function(){State.chart_symbol=sym.s;updateTVWidget();});
+    ctrlRow.appendChild(b);
+  });
+
+  var divEl=h("span");divEl.style.cssText="width:1px;background:var(--border);margin:0 4px;align-self:stretch;";ctrlRow.appendChild(divEl);
+
+  INTERVALS.forEach(function(iv){
+    var b2=h("button",{className:"btn chart-iv-btn"+(State.chart_interval===iv.v?" btn-active":"")});
+    b2.dataset.iv=iv.v;
+    b2.style.padding="6px 10px";
+    if(State.chart_interval===iv.v){b2.style.cssText="border-color:var(--accent);color:var(--accent);background:var(--accentglow);font-size:12px;padding:6px 10px;";}
+    b2.textContent=iv.l;
+    b2.addEventListener("click",function(){State.chart_interval=iv.v;updateTVWidget();});
+    ctrlRow.appendChild(b2);
+  });
+
+  hrow.appendChild(ctrlRow);
+  el.appendChild(hrow);
+
+  // Chart container
+  var chartWrap=div();chartWrap.id="tv_chart_wrap";chartWrap.style.cssText="background:#040d1a;overflow:hidden;";
+  var chartDiv=div();chartDiv.id="tv_chart_container";chartDiv.style.height="800px";
+  chartWrap.appendChild(chartDiv);
+  el.appendChild(chartWrap);
+
+  el.style.padding="12px 16px 0";
+  hrow.style.marginBottom="8px";
+
+  // Load TradingView widget after DOM is ready
+  setTimeout(function(){loadTVWidget();},100);
+
+  return el;
+}
+
+function loadTVWidget(){
+  var container=document.getElementById("tv_chart_container");
+  if(!container) return;
+  container.innerHTML="";
+  function initWidget(){
+    if(!window.TradingView) return;
+    var h=800;
+    new window.TradingView.widget({
+      container_id:"tv_chart_container",
+      autosize:false,
+      width:"100%",
+      height:Math.max(h,500),
+      symbol:State.chart_symbol,
+      interval:State.chart_interval,
+      timezone:"America/New_York",
+      theme:"dark",style:"1",locale:"en",
+      toolbar_bg:"#040d1a",
+      backgroundColor:"rgba(4,13,26,1)",
+      enable_publishing:false,
+      allow_symbol_change:true,
+      hide_side_toolbar:false,
+      studies:["MASimple@tv-basicstudies","VWAP@tv-basicstudies"],
+      show_popup_button:true
+    });
+  }
+  if(window.TradingView){initWidget();}
+  else{
+    var s=document.createElement("script");
+    s.src="https://s3.tradingview.com/tv.js";
+    s.onload=initWidget;
+    document.head.appendChild(s);
+  }
+}
+
+function updateTVWidget(){
+  // Update active button styles
+  var symBtns=document.querySelectorAll(".chart-sym-btn");
+  symBtns.forEach(function(b){
+    if(b.dataset.sym===State.chart_symbol){b.style.cssText="border-color:var(--ca);color:var(--ca);background:var(--caglow);font-weight:700;";}
+    else{b.style.cssText="";}
+  });
+  var ivBtns=document.querySelectorAll(".chart-iv-btn");
+  ivBtns.forEach(function(b){
+    if(b.dataset.iv===State.chart_interval){b.style.cssText="border-color:var(--accent);color:var(--accent);background:var(--accentglow);";}
+    else{b.style.cssText="";}
+  });
+  loadTVWidget();
+}
+
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,chart:chartTab};
 
 function render(){
   renderTabs();
   renderTopbar();
   var content=document.getElementById("content");
   content.innerHTML="";
+  // No padding on chart tab so it fills edge to edge
+  content.style.padding="0";
+  content.style.overflow=State.tab==="chart"?"hidden":"auto";
+  content.style.padding="16px";content.style.overflow="auto";content.style.display="block";
   content.appendChild(VIEWS[State.tab]());
 }
 
@@ -2245,48 +2353,13 @@ function render(){
 initSupabase();
 initAutoSync();
 
-// Render sync bar
+// Silent sync on load
 (function(){
-  var bar=document.getElementById("sync-bar");
-  if(!bar) return;
-  var idLabel=document.createElement("span");idLabel.style.color="#c9a84c";idLabel.textContent="SYNC ID:";bar.appendChild(idLabel);
-  var idVal=document.createElement("span");idVal.id="sync-id-val";idVal.style.cssText="color:#00d4d4;letter-spacing:1px;cursor:pointer;";
-  var currentId=getSyncId();idVal.textContent=currentId;
-  idVal.title="Click to copy";
-  idVal.addEventListener("click",function(){navigator.clipboard&&navigator.clipboard.writeText(currentId);idVal.textContent="COPIED!";setTimeout(function(){idVal.textContent=currentId;},1500);});
-  bar.appendChild(idVal);
-
-  var sep=document.createElement("span");sep.style.color="#1a3260";sep.textContent="|";bar.appendChild(sep);
-
-  var loadLabel=document.createElement("span");loadLabel.style.color="#c9a84c";loadLabel.textContent="LOAD FROM ANOTHER DEVICE:";bar.appendChild(loadLabel);
-  var loadInp=document.createElement("input");
-  loadInp.placeholder="paste sync ID here...";
-  loadInp.style.cssText="background:#0d1e38;border:1px solid #1a3260;color:#e8f0ff;font-family:'Courier New',monospace;font-size:9px;padding:3px 7px;border-radius:2px;width:180px;outline:none;margin:0 6px;";
-  bar.appendChild(loadInp);
-  var loadBtn=document.createElement("button");
-  loadBtn.textContent="LOAD";
-  loadBtn.style.cssText="background:transparent;border:1px solid #00d4d4;color:#00d4d4;font-family:'Courier New',monospace;font-size:9px;padding:3px 9px;border-radius:2px;cursor:pointer;";
-  loadBtn.addEventListener("click",function(){
-    var id=loadInp.value.trim();
-    if(!id) return;
-    localStorage.setItem("edge_sync_id",id);
-    updateSyncStatus("syncing");
-    loadFromCloud(id,function(ok){
-      if(ok){render();updateSyncStatus("synced");}
-      else updateSyncStatus("error");
-    });
-  });
-  bar.appendChild(loadBtn);
-
-  var sep2=document.createElement("span");sep2.style.color="#1a3260";sep2.textContent="|";bar.appendChild(sep2);
-  var statusEl=document.createElement("span");statusEl.id="sync-status";statusEl.style.cssText="font-weight:700;letter-spacing:1px;";statusEl.textContent="OFFLINE";statusEl.style.color="var(--text3)";bar.appendChild(statusEl);
-
-  // Try initial load from cloud
+  var currentId=getSyncId();
   if(supaClient){
-    updateSyncStatus("syncing");
     loadFromCloud(currentId,function(ok){
-      if(ok){render();updateSyncStatus("synced");}
-      else{updateSyncStatus("offline");syncToCloud();}
+      if(ok) render();
+      else syncToCloud();
     });
   }
 })();
