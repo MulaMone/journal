@@ -222,6 +222,11 @@ var State={
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
+  newsChecks:ls("newsChecks",{}),
+  newsChecksDate:ls("newsChecksDate",""),
+  newsOther:ls("newsOther",""),
+  focusImprove:ls("focusImprove",""),
+  mantraNotes:ls("mantraNotes",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
   moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup.")
 };
@@ -1016,6 +1021,61 @@ function prepTab(){
   wkCard.appendChild(wfg);
   g2.appendChild(wkCard);
   el.appendChild(g2);
+
+  // ── Key News & Events ──────────────────────────────────────────────
+  var NEWS_EVENTS=[
+    {l:"FOMC Meeting / Fed Decision"},
+    {l:"CPI / Inflation Data"},
+    {l:"NFP / Non-Farm Payrolls"},
+    {l:"PCE Price Index"},
+    {l:"GDP Report"},
+    {l:"Initial Jobless Claims"},
+    {l:"Retail Sales"}
+  ];
+  var newsToday=today();
+  if(State.newsChecksDate!==newsToday){State.newsChecks={};State.newsChecksDate=newsToday;State.newsOther="";ss("newsChecks",{});ss("newsChecksDate",newsToday);ss("newsOther","");}
+  var newsCard=div("card mt12");
+  var newsH=div("card-h");var newsT=div("card-t");newsT.textContent="Key News & Events Today";newsH.appendChild(newsT);
+  var newsReset=span("xs m");newsReset.textContent="resets daily";newsH.appendChild(newsReset);
+  newsCard.appendChild(newsH);
+  NEWS_EVENTS.forEach(function(ev,ni){
+    var key="news_"+ni;
+    var isChecked=!!State.newsChecks[key];
+    var row=div("row gap8 mb8");row.style.cssText="cursor:pointer;padding:6px 8px;border-radius:3px;background:var(--panel2);align-items:center;";
+    row.addEventListener("click",function(){State.newsChecks[key]=!State.newsChecks[key];ss("newsChecks",State.newsChecks);render();});
+    var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";row.appendChild(chk);
+    var lbl=span("sm");lbl.style.cssText="flex:1;color:"+(isChecked?"var(--text3)":"var(--text2)")+";font-size:12px;"+(isChecked?"text-decoration:line-through;":"");lbl.textContent=ev.l;row.appendChild(lbl);
+    var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
+    newsCard.appendChild(row);
+  });
+  var newsOtherL=h("label",{},"Other Events / Notes");newsCard.appendChild(newsOtherL);
+  var newsOtherI=h("input",{placeholder:"e.g. Fed speech 2pm, Earnings after close, OPEX..."});newsOtherI.value=State.newsOther;
+  newsOtherI.addEventListener("input",function(){State.newsOther=newsOtherI.value;ss("newsOther",State.newsOther);});newsCard.appendChild(newsOtherI);
+  el.appendChild(newsCard);
+
+  // ── One Thing to Improve ──────────────────────────────────────────
+  var focusCard=div("card mt12");
+  var focusH=div("card-h");var focusT=div("card-t");focusT.textContent="One Thing to Improve Today";focusH.appendChild(focusT);
+  var focusSub=span("xs m");focusSub.textContent="carries over until changed";focusH.appendChild(focusSub);
+  focusCard.appendChild(focusH);
+  var focusTA=h("textarea",{rows:"2",placeholder:"e.g. Wait for confirmation before entering. Don't chase..."});
+  focusTA.style.cssText="resize:none;line-height:1.6;font-size:12px;";
+  focusTA.value=State.focusImprove;
+  focusTA.addEventListener("input",function(){State.focusImprove=focusTA.value;ss("focusImprove",State.focusImprove);});
+  focusCard.appendChild(focusTA);
+  el.appendChild(focusCard);
+
+  // ── Notes to Self / Mantra ────────────────────────────────────────
+  var mantraCard=div("card mt12");mantraCard.style.borderColor="#b06aff40";
+  var mantraH=div("card-h");var mantraT=div("card-t");mantraT.style.color="#b06aff";mantraT.textContent="Notes to Self — Mantra";mantraH.appendChild(mantraT);
+  var mantraSub=span("xs m");mantraSub.textContent="saved permanently";mantraH.appendChild(mantraSub);
+  mantraCard.appendChild(mantraH);
+  var mantraTA=h("textarea",{rows:"3",placeholder:"e.g. Trust the process. Size down when uncertain. Let winners run..."});
+  mantraTA.style.cssText="resize:none;line-height:1.7;font-size:12px;color:var(--text2);font-style:italic;";
+  mantraTA.value=State.mantraNotes;
+  mantraTA.addEventListener("input",function(){State.mantraNotes=mantraTA.value;ss("mantraNotes",State.mantraNotes);});
+  mantraCard.appendChild(mantraTA);
+  el.appendChild(mantraCard);
 
   return el;
 }
