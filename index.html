@@ -59,9 +59,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courie
 .cal-nav b{font-size:11px;letter-spacing:1px;color:var(--text2)}
 .cal-nav button{background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;width:22px;height:22px;font-size:11px;line-height:1}
 .cal-nav button:hover{border-color:var(--ca);color:var(--ca)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.cal-dh{font-size:8px;text-align:center;color:var(--text3);padding:2px 0;letter-spacing:.5px}
-.cal-day{font-size:10px;text-align:center;padding:4px 2px;border-radius:3px;cursor:pointer;color:var(--text2)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-dh{font-size:12px;text-align:center;color:var(--text3);padding:5px 0;letter-spacing:1px;font-weight:600}
+.cal-day{font-size:13px;text-align:center;padding:6px 3px;border-radius:3px;cursor:pointer;color:var(--text2)}
 .cal-day:hover{background:var(--panel3);color:var(--text)}
 .cal-day.today{border:1px solid var(--ca);color:var(--ca)}
 .cal-day.selected{background:var(--ca);color:#fff;font-weight:700}
@@ -1238,7 +1238,7 @@ function reviewTab(){
   var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Review";topRow.appendChild(sh);
   var toggles=div("row gap8");
   ["month","week"].forEach(function(v){
-    var b=h("button",{className:"btn"+(viewMode===v?" btn-active":""),style:"padding:4px 12px;font-size:9px"+(viewMode===v?";border-color:#00d4d4;color:#00d4d4;background:#00d4d418":"")});
+    var b=h("button",{className:"btn"+(viewMode===v?" btn-active":""),style:"padding:9px 22px;font-size:13px;letter-spacing:1px;font-weight:700"+(viewMode===v?";border-color:#00d4d4;color:#00d4d4;background:#00d4d418":"")});
     b.textContent=v.toUpperCase();
     b.addEventListener("click",function(){State.rv_view=v;render();});
     toggles.appendChild(b);
@@ -1267,7 +1267,7 @@ function reviewTab(){
       State.rv_month=m;State.rv_year=y;render();
     });
     var MNAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
-    var calTitle=div("fw7 sm");calTitle.textContent=MNAMES[calMonth]+" "+calYear;
+    var calTitle=div("fw7");calTitle.style.cssText="font-size:15px;letter-spacing:1px;";calTitle.textContent=MNAMES[calMonth]+" "+calYear;
     var nextBtn=h("button",{className:"btn",style:"padding:4px 12px"});nextBtn.textContent="▶";
     nextBtn.addEventListener("click",function(){
       var m=calMonth+1;var y=calYear;if(m>11){m=0;y++;}
@@ -1320,18 +1320,18 @@ function reviewTab(){
         var pnlCol="";
         if(data){bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";pnlCol=data.pnl>0?"#00e676":"#ff4444";}
         if(isToday){border="2px solid var(--ca)";}
-        cell.style.cssText="background:"+bg+";border:"+border+";border-radius:3px;padding:5px 4px;min-height:54px;cursor:"+(data?"pointer":"default")+";position:relative;";
+        cell.style.cssText="background:"+bg+";border:"+border+";border-radius:4px;padding:8px 6px;min-height:72px;cursor:"+(data?"pointer":"default")+";position:relative;";
 
-        var dnum=div();dnum.style.cssText="font-size:10px;font-weight:700;color:"+(isToday?"var(--ca)":isSat?"#ff6b3d":"var(--text2)")+";margin-bottom:3px;";dnum.textContent=day;cell.appendChild(dnum);
-        if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:7px;color:#ff6b3d50;letter-spacing:1px;margin-top:2px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
+        var dnum=div();dnum.style.cssText="font-size:14px;font-weight:700;color:"+(isToday?"var(--ca)":isSat?"#ff6b3d":"var(--text2)")+";margin-bottom:4px;";dnum.textContent=day;cell.appendChild(dnum);
+        if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:9px;color:#ff6b3d50;letter-spacing:1px;margin-top:3px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
         if(data){
-          var dpnl=div();dpnl.style.cssText="font-size:9px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
+          var dpnl=div();dpnl.style.cssText="font-size:12px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
           var wins=data.trades.filter(function(t){return t.d>0}).length;
           var losses=data.trades.filter(function(t){return t.d<0}).length;
           var wlRow=div();wlRow.style.cssText="display:flex;gap:4px;margin-top:2px;align-items:center;";
-          if(wins>0){var wEl=span();wEl.style.cssText="font-size:9px;font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
-          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:8px;color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
-          if(losses>0){var lEl=span();lEl.style.cssText="font-size:9px;font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
+          if(wins>0){var wEl=span();wEl.style.cssText="font-size:11px;font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
+          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:10px;color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
+          if(losses>0){var lEl=span();lEl.style.cssText="font-size:11px;font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
           cell.appendChild(wlRow);
         }
         // Click to show day trades
