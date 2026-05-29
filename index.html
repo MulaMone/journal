@@ -561,6 +561,9 @@ function homeTab(){
   var ttWr=div("mt8");ttWr.style.fontSize="12px";
   ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: '+dol(s.avgW)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: '+dol(s.avgL)+'</span>';
   totalCard.appendChild(ttWr);
+  var ttRR=div("mt8");ttRR.style.cssText="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;";
+  ttRR.textContent="R:R  "+(s.avgL&&s.avgW?Math.abs(s.avgW/s.avgL).toFixed(2):"—");
+  totalCard.appendChild(ttRR);
   heroRow.appendChild(totalCard);
   el.appendChild(heroRow);
   // Sub chips
