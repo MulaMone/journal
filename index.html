@@ -1165,7 +1165,7 @@ function logTab(){
     tr.appendChild(ptd);
     var dtd2=h("td",{className:"fw7 "+clr(t.d)});
     dtd2.textContent=dol(t.d);
-    dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":"background:#ff444430;border-radius:3px;padding:7px 10px";
+    dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":t.d<0?"background:#ff444430;border-radius:3px;padding:7px 10px":"padding:7px 10px";
     tr.appendChild(dtd2);
     var std=h("td",{className:"m xs"});std.style.maxWidth="110px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";std.textContent=t.setup;tr.appendChild(std);
     var ssd=h("td");ssd.appendChild(makeBadge("bw xs",t.sess));tr.appendChild(ssd);
@@ -1370,8 +1370,12 @@ function analyticsTab(){
     dr.appendChild(h("td",{className:"fw7"},[d.l]));
     dr.appendChild(h("td",{className:"m"},[ts.length]));
     dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));
-    var dptd=h("td",{className:"fw7 "+clr(d.v)});dptd.textContent=dol(d.v);dr.appendChild(dptd);
-    var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);dr.appendChild(aptd);
+    var dptd=h("td",{className:"fw7 "+clr(d.v)});dptd.textContent=dol(d.v);
+    dptd.style.cssText=d.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":d.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    dr.appendChild(dptd);
+    var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);
+    aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    dr.appendChild(aptd);
     dowTbody.appendChild(dr);
   });
   dowTbl.appendChild(dowTbody);dowCard.appendChild(dowTbl);
@@ -1381,7 +1385,9 @@ function analyticsTab(){
   var stbl=h("table",{className:"tbl"});var sthead=h("thead");var shr=h("tr");
   ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){shr.appendChild(h("th",{},[hd]));});sthead.appendChild(shr);stbl.appendChild(sthead);
   var stbody=h("tbody");
-  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);str.appendChild(sptd);stbody.appendChild(str);});
+  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);
+    sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    str.appendChild(sptd);stbody.appendChild(str);});
   stbl.appendChild(stbody);sessCard.appendChild(stbl);el.appendChild(sessCard);
 
   // Setup P&L Breakdown (moved from Review/Stats)
