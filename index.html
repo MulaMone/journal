@@ -41,7 +41,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courie
 .chip .cv{font-size:19px;font-weight:700}
 .chip .cs{font-size:9px;color:var(--text3);margin-top:2px}
 /* COLORS */
-.g{color:var(--green)}.r{color:var(--red)}.a{color:var(--amber)}.b{color:var(--ca)}.m{color:var(--text3)}
+.g{color:var(--green)}.r{color:var(--red)}.a{color:var(--amber)}.b{color:var(--ca)}.m{color:var(--text3)}.ac{color:var(--accent)}
 /* BADGE */
 .badge{display:inline-block;padding:2px 8px;border-radius:2px;font-size:9px;font-weight:600}
 .bg{background:#00e67615;color:var(--green);border:1px solid #00e67635}
@@ -217,6 +217,9 @@ var State={
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
   sync_tab:"tradovate",
+  mindsetChecks:ls("mindsetChecks",{}),
+  mindsetChecksDate:ls("mindsetChecksDate",""),
+  mindsetNote:ls("mindsetNote",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
   moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup.")
 };
@@ -519,7 +522,7 @@ function homeTab(){
   var g4=div("g4");
   var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+tW+'</span><span class="m"> / </span><span class="r fw7">'+tL+'</span>';
   g4.appendChild(makeChip("W / L TODAY",wlDiv,"","today"));
-  g4.appendChild(makeChip("WIN RATE",s.wr+"%","b","all time"));
+  g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac","all time"));
   g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));
   g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));
   el.appendChild(g4);
@@ -633,7 +636,7 @@ function homeTab(){
   var wlg=div("g4");
   wlg.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));
   wlg.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));
-  wlg.appendChild(makeChip("REWARD RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","b"));
+  wlg.appendChild(makeChip("REWARD RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","ac"));
   wlg.appendChild(makeChip("TOTAL TRADES",State.trades.length));
   wlCard.appendChild(wlg);el.appendChild(wlCard);
   return el;
@@ -643,6 +646,55 @@ function homeTab(){
 function prepTab(){
   var el=div();
   var sh=div("sh");sh.innerHTML="Pre-Session Prep — "+today();el.appendChild(sh);
+
+  // ── Mindset Check + Feeling Notes ────────────────────────────────
+  var msCard=div("card mb12");
+  var msH=div("card-h");
+  var msT=div("card-t");msT.textContent="Mindset Check — Daily Reset";msH.appendChild(msT);
+
+  // Reset if new day
+  var msToday=today();
+  if(State.mindsetChecksDate!==msToday){
+    State.mindsetChecks={};State.mindsetChecksDate=msToday;
+    State.mindsetNote="";
+    ss("mindsetChecks",{});ss("mindsetChecksDate",msToday);ss("mindsetNote","");
+  }
+
+  var checkedMs=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var msCount=div("xs m");msCount.style.textAlign="right";
+  msCount.innerHTML='<span class="'+(checkedMs===3?"g":"m")+'">'+checkedMs+' / 3 checked</span>';
+  msH.appendChild(msCount);
+  msCard.appendChild(msH);
+
+  var msGrid=div("g3 mb12");
+  var msItems=["Meditate","Good night's sleep","Mind clear"];
+  msItems.forEach(function(item,i){
+    var key="ms_"+i;
+    var isChecked=!!State.mindsetChecks[key];
+    var box=div("chip");
+    box.style.cssText="cursor:pointer;border:1px solid "+(isChecked?"var(--green)":"var(--border)")+";background:"+(isChecked?"#00e67612":"var(--panel2)")+";display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:4px;user-select:none;";
+    box.addEventListener("click",function(){
+      State.mindsetChecks[key]=!State.mindsetChecks[key];
+      ss("mindsetChecks",State.mindsetChecks);render();
+    });
+    var chk=div();
+    chk.style.cssText="width:18px;height:18px;border-radius:3px;border:1px solid "+(isChecked?"var(--green)":"var(--border2)")+";background:"+(isChecked?"var(--green)":"var(--panel3)")+";display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;color:var(--bg);font-weight:700;";
+    chk.textContent=isChecked?"✓":"";
+    box.appendChild(chk);
+    var lbl=span("sm fw7");lbl.style.color=isChecked?"var(--green)":"var(--text)";lbl.textContent=item;
+    box.appendChild(lbl);
+    msGrid.appendChild(box);
+  });
+  msCard.appendChild(msGrid);
+
+  var fnL=h("label",{},"How am I feeling today?");msCard.appendChild(fnL);
+  var fnTA=h("textarea",{rows:"4",placeholder:"Write how you are feeling, your mindset, energy level, focus..."});
+  fnTA.style.resize="none";fnTA.style.lineHeight="1.7";
+  fnTA.value=State.mindsetNote;
+  fnTA.addEventListener("input",function(){State.mindsetNote=fnTA.value;ss("mindsetNote",State.mindsetNote);});
+  msCard.appendChild(fnTA);
+  el.appendChild(msCard);
+
   var g2=div("g2");
 
   // Levels card — no price, reorderable
@@ -769,7 +821,9 @@ function prepTab(){
   });wla.appendChild(wab);wfg.appendChild(wla);
   wkCard.appendChild(wfg);
   g2.appendChild(wkCard);
-  el.appendChild(g2);return el;
+  el.appendChild(g2);
+
+  return el;
 }
 
 // ─── ADD TRADE FORM ───────────────────────────────────────────────────
@@ -1085,8 +1139,8 @@ function analyticsTab(){
   var el=div();var sh=div("sh");sh.textContent="Analytics";el.appendChild(sh);
   var s=calcStats(State.trades);
   var g4=div("g4");
-  g4.appendChild(makeChip("WIN RATE",s.wr+"%","b"));g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total)));
-  g4.appendChild(makeChip("TOTAL TRADES",State.trades.length));g4.appendChild(makeChip("WINS",s.wins.length,"g"));g4.appendChild(makeChip("LOSSES",s.losses.length,"r"));g4.appendChild(makeChip("R:R RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","b"));
+  g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac"));g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total)));
+  g4.appendChild(makeChip("TOTAL TRADES",State.trades.length));g4.appendChild(makeChip("WINS",s.wins.length,"g"));g4.appendChild(makeChip("LOSSES",s.losses.length,"r"));g4.appendChild(makeChip("R:R RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","ac"));
   el.appendChild(g4);
 
   var g2=div("g2");
@@ -1102,7 +1156,7 @@ function analyticsTab(){
   var stbl=h("table",{className:"tbl"});var sthead=h("thead");var shr=h("tr");
   ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){shr.appendChild(h("th",{},[hd]));});sthead.appendChild(shr);stbl.appendChild(sthead);
   var stbody=h("tbody");
-  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"g":"m"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);str.appendChild(sptd);stbody.appendChild(str);});
+  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);str.appendChild(sptd);stbody.appendChild(str);});
   stbl.appendChild(stbody);sessCard.appendChild(stbl);el.appendChild(sessCard);
 
   // Setup P&L Breakdown (moved from Review/Stats)
