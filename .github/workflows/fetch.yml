@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - run: pip install yfinance "supabase==2.7.4"
+      - run: pip install yfinance "supabase==2.7.4" schedule
       - run: python fetch_data.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
