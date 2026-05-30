@@ -2237,121 +2237,73 @@ function chartTab(){
   var el=div();
   el.style.padding="16px";
 
-  // Simple test
-  var test=div();
-  test.style.cssText="color:var(--green);font-size:14px;margin-bottom:12px;";
-  test.textContent="CHART TAB LOADED";
-  el.appendChild(test);
-
-  // Symbol buttons
+  // Header
   var hrow=div("rjb mb12");
   var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Live Chart";hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
-  [{l:"ES",s:"ES=F"},{l:"NQ",s:"NQ=F"},{l:"MES",s:"MES=F"},{l:"MNQ",s:"MNQ=F"}].forEach(function(sym){
-    var b=h("button",{className:"btn"+(State.chart_symbol===sym.s?" btn-active":"")});
+
+  // Symbols — Barchart uses *0 for front month continuous
+  var SYMS=[
+    {l:"ES",s:"ES*0",n:"E-mini S&P 500"},
+    {l:"NQ",s:"NQ*0",n:"E-mini Nasdaq"},
+    {l:"MES",s:"MES*0",n:"Micro E-mini S&P"},
+    {l:"MNQ",s:"MNQ*0",n:"Micro E-mini NQ"}
+  ];
+  var IVS=[{l:"1m",v:"1"},{l:"3m",v:"3"},{l:"5m",v:"5"},{l:"15m",v:"15"},{l:"30m",v:"30"},{l:"1h",v:"60"},{l:"1d",v:"daily"}];
+
+  SYMS.forEach(function(sym){
+    var b=h("button",{className:"btn"});
     if(State.chart_symbol===sym.s) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
-    b.textContent=sym.l;
+    b.textContent=sym.l;b.title=sym.n;
     b.addEventListener("click",function(){State.chart_symbol=sym.s;render();});
     ctrlRow.appendChild(b);
   });
-  [{l:"5m",v:"5m"},{l:"15m",v:"15m"},{l:"1h",v:"60m"},{l:"1d",v:"1d"}].forEach(function(iv){
-    var b=h("button",{className:"btn"+(State.chart_interval===iv.v?" btn-active":"")});
+
+  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
+
+  IVS.forEach(function(iv){
+    var b=h("button",{className:"btn"});
     b.style.padding="6px 10px";
     if(State.chart_interval===iv.v) b.style.cssText="border-color:var(--accent);color:var(--accent);padding:6px 10px;";
     b.textContent=iv.l;
     b.addEventListener("click",function(){State.chart_interval=iv.v;render();});
     ctrlRow.appendChild(b);
   });
-  hrow.appendChild(ctrlRow);
-  el.appendChild(hrow);
 
-  // Price display
-  var priceEl=div();
-  priceEl.id="chart-price-info";
-  priceEl.style.cssText="font-size:13px;color:var(--text2);margin-bottom:8px;padding:8px;background:var(--panel2);border-radius:3px;";
-  priceEl.textContent="Loading "+State.chart_symbol+"...";
-  el.appendChild(priceEl);
+  hrow.appendChild(ctrlRow);el.appendChild(hrow);
 
-  // Chart div
-  var chartDiv=div();
-  chartDiv.id="lw-chart-container";
-  chartDiv.style.cssText="width:100%;height:600px;background:var(--panel);border:1px solid var(--border);border-radius:4px;";
-  el.appendChild(chartDiv);
+  // Barchart interactive chart via iframe
+  var sym=State.chart_symbol||"ES*0";
+  var period=State.chart_interval||"5";
+  var isDark=true;
 
-  // Load chart after render
-  setTimeout(function(){
-    initLWChart();
-  },500);
+  var iframeWrap=div();
+  iframeWrap.style.cssText="border:1px solid var(--border);border-radius:4px;overflow:hidden;";
+
+  var iframe=document.createElement("iframe");
+  var src="https://www.barchart.com/tools/chart-library/chart?symbol="+encodeURIComponent(sym)+"&chartType=BAR&period="+period+"&timeFrameInterval=1&timeFrame=4D&volumeUnderlayBarType=vertical_line&theme=dark&templateKey=BarchartFuturesCMP_Standard&chartStyle=candlestick&width=1200&height=700&hideBranding=1";
+  iframe.src=src;
+  iframe.style.cssText="width:100%;height:700px;border:none;display:block;background:#040d1a;";
+  iframe.allowFullscreen=true;
+
+  iframeWrap.appendChild(iframe);
+  el.appendChild(iframeWrap);
+
+  var note=div("xs m mt8");
+  note.style.textAlign="right";
+  note.textContent="Powered by Barchart.com • Real-time futures data";
+  el.appendChild(note);
 
   return el;
 }
 
+function buildChart(){}
+function loadLWChart(){}
+function loadTVWidget(){render();}
+function fetchChartData(){}
+function loadChartData(){}
+function updateTVWidget(){render();}
 
-
-var _lwChart=null;
-var _lwSeries=null;
-
-function initLWChart(){
-  var container=document.getElementById("lw-chart-container");
-  if(!container){console.error("Chart container not found");return;}
-
-  function createChart(){
-    if(!window.LightweightCharts){console.error("LW Charts not loaded");return;}
-    if(_lwChart){try{_lwChart.remove();}catch(e){} _lwChart=null;}
-    container.innerHTML="";
-
-    _lwChart=window.LightweightCharts.createChart(container,{
-      width:container.offsetWidth||800,
-      height:600,
-      layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
-      grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
-      rightPriceScale:{borderColor:"#1a3260"},
-      timeScale:{borderColor:"#1a3260",timeVisible:true}
-    });
-
-    _lwSeries=_lwChart.addCandlestickSeries({
-      upColor:"#00e676",downColor:"#ff4444",
-      borderUpColor:"#00e676",borderDownColor:"#ff4444",
-      wickUpColor:"#00e676",wickDownColor:"#ff4444"
-    });
-
-    window.addEventListener("resize",function(){
-      if(_lwChart&&container) _lwChart.resize(container.offsetWidth,600);
-    });
-
-    setTimeout(function(){fetchChartData();},50);
-  }
-
-  if(window.LightweightCharts){
-    createChart();
-  } else {
-    var s=document.createElement("script");
-    s.src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js";
-    s.onload=function(){console.log("LW Charts loaded");createChart();};
-    s.onerror=function(){console.error("Failed to load LW Charts");};
-    document.head.appendChild(s);
-  }
-}
-
-function loadLWChart(){initLWChart();}
-
-
-function loadTVWidget(){loadLWChart();}
-
-function updateTVWidget(){
-  var symBtns=document.querySelectorAll(".chart-sym-btn");
-  symBtns.forEach(function(b){
-    if(b.dataset.sym===State.chart_symbol){b.style.cssText="border-color:var(--ca);color:var(--ca);background:var(--caglow);font-weight:700;";}
-    else{b.style.cssText="";}
-  });
-  var ivBtns=document.querySelectorAll(".chart-iv-btn");
-  ivBtns.forEach(function(b){
-    if(b.dataset.iv===State.chart_interval){b.style.cssText="border-color:var(--accent);color:var(--accent);background:var(--accentglow);";}
-    else{b.style.cssText="";}
-  });
-  if(document.getElementById("lw-chart-wrap")) loadLWChart();
-  else loadTVWidget();
-}
 
 var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,chart:chartTab};
 
