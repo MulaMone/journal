@@ -3,13 +3,9 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 import schedule, time
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_URL = "SUPABASE_URL"
+SUPABASE_KEY = "SUPABASE_KEY"
 
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
