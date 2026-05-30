@@ -321,7 +321,7 @@ var State={
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
   sync_tab:"tradovate",
-  chart_symbol:"CME_MINI:ES1!",
+  chart_symbol:"ES=F",
   chart_interval:"5",
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
@@ -2235,96 +2235,110 @@ function loadNTFile(){
 
 function chartTab(){
   var el=div();
-  var hrow=div("rjb mb8");hrow.style.padding="12px 16px 0";var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Live Chart";hrow.appendChild(sh);
+  el.style.padding="16px";
 
-  // Instrument + interval selectors
+  // Simple test
+  var test=div();
+  test.style.cssText="color:var(--green);font-size:14px;margin-bottom:12px;";
+  test.textContent="CHART TAB LOADED";
+  el.appendChild(test);
+
+  // Symbol buttons
+  var hrow=div("rjb mb12");
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Live Chart";hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
-  var SYMBOLS=[
-    {l:"ES",s:"CME_MINI:ES1!"},
-    {l:"NQ",s:"CME_MINI:NQ1!"},
-    {l:"MES",s:"CME_MICRO:MES1!"},
-    {l:"MNQ",s:"CME_MICRO:MNQ1!"}
-  ];
-  var INTERVALS=[{l:"1m",v:"1"},{l:"2m",v:"2"},{l:"3m",v:"3"},{l:"5m",v:"5"},{l:"15m",v:"15"},{l:"30m",v:"30"},{l:"1h",v:"60"},{l:"4h",v:"240"},{l:"D",v:"D"}];
-
-  SYMBOLS.forEach(function(sym){
-    var b=h("button",{className:"btn chart-sym-btn"+(State.chart_symbol===sym.s?" btn-active":"")});
-    b.dataset.sym=sym.s;
-    if(State.chart_symbol===sym.s){b.style.cssText="border-color:var(--ca);color:var(--ca);background:var(--caglow);font-weight:700;";}
+  [{l:"ES",s:"ES=F"},{l:"NQ",s:"NQ=F"},{l:"MES",s:"MES=F"},{l:"MNQ",s:"MNQ=F"}].forEach(function(sym){
+    var b=h("button",{className:"btn"+(State.chart_symbol===sym.s?" btn-active":"")});
+    if(State.chart_symbol===sym.s) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
     b.textContent=sym.l;
-    b.addEventListener("click",function(){State.chart_symbol=sym.s;updateTVWidget();});
+    b.addEventListener("click",function(){State.chart_symbol=sym.s;render();});
     ctrlRow.appendChild(b);
   });
-
-  var divEl=h("span");divEl.style.cssText="width:1px;background:var(--border);margin:0 4px;align-self:stretch;";ctrlRow.appendChild(divEl);
-
-  INTERVALS.forEach(function(iv){
-    var b2=h("button",{className:"btn chart-iv-btn"+(State.chart_interval===iv.v?" btn-active":"")});
-    b2.dataset.iv=iv.v;
-    b2.style.padding="6px 10px";
-    if(State.chart_interval===iv.v){b2.style.cssText="border-color:var(--accent);color:var(--accent);background:var(--accentglow);font-size:12px;padding:6px 10px;";}
-    b2.textContent=iv.l;
-    b2.addEventListener("click",function(){State.chart_interval=iv.v;updateTVWidget();});
-    ctrlRow.appendChild(b2);
+  [{l:"5m",v:"5m"},{l:"15m",v:"15m"},{l:"1h",v:"60m"},{l:"1d",v:"1d"}].forEach(function(iv){
+    var b=h("button",{className:"btn"+(State.chart_interval===iv.v?" btn-active":"")});
+    b.style.padding="6px 10px";
+    if(State.chart_interval===iv.v) b.style.cssText="border-color:var(--accent);color:var(--accent);padding:6px 10px;";
+    b.textContent=iv.l;
+    b.addEventListener("click",function(){State.chart_interval=iv.v;render();});
+    ctrlRow.appendChild(b);
   });
-
   hrow.appendChild(ctrlRow);
   el.appendChild(hrow);
 
-  // Chart container
-  var chartWrap=div();chartWrap.id="tv_chart_wrap";chartWrap.style.cssText="background:#040d1a;overflow:hidden;";
-  var chartDiv=div();chartDiv.id="tv_chart_container";chartDiv.style.height="800px";
-  chartWrap.appendChild(chartDiv);
-  el.appendChild(chartWrap);
+  // Price display
+  var priceEl=div();
+  priceEl.id="chart-price-info";
+  priceEl.style.cssText="font-size:13px;color:var(--text2);margin-bottom:8px;padding:8px;background:var(--panel2);border-radius:3px;";
+  priceEl.textContent="Loading "+State.chart_symbol+"...";
+  el.appendChild(priceEl);
 
-  el.style.padding="12px 16px 0";
-  hrow.style.marginBottom="8px";
+  // Chart div
+  var chartDiv=div();
+  chartDiv.id="lw-chart-container";
+  chartDiv.style.cssText="width:100%;height:600px;background:var(--panel);border:1px solid var(--border);border-radius:4px;";
+  el.appendChild(chartDiv);
 
-  // Load TradingView widget after DOM is ready
-  setTimeout(function(){loadTVWidget();},100);
+  // Load chart after render
+  setTimeout(function(){
+    initLWChart();
+  },500);
 
   return el;
 }
 
-function loadTVWidget(){
-  var container=document.getElementById("tv_chart_container");
-  if(!container) return;
-  container.innerHTML="";
-  function initWidget(){
-    if(!window.TradingView) return;
-    new window.TradingView.widget({
-      container_id:"tv_chart_container",
-      autosize:true,
-      symbol:State.chart_symbol,
-      interval:State.chart_interval,
-      timezone:"America/New_York",
-      theme:"dark",
-      style:"1",
-      locale:"en",
-      toolbar_bg:"#040d1a",
-      backgroundColor:"rgba(4,13,26,1)",
-      gridColor:"rgba(26,50,96,0.3)",
-      enable_publishing:false,
-      allow_symbol_change:true,
-      hide_side_toolbar:false,
-      withdateranges:true,
-      save_image:false,
-      height:800,
-      width:"100%",
-      studies:["VWAP@tv-basicstudies","MASimple@tv-basicstudies"]
+
+
+var _lwChart=null;
+var _lwSeries=null;
+
+function initLWChart(){
+  var container=document.getElementById("lw-chart-container");
+  if(!container){console.error("Chart container not found");return;}
+
+  function createChart(){
+    if(!window.LightweightCharts){console.error("LW Charts not loaded");return;}
+    if(_lwChart){try{_lwChart.remove();}catch(e){} _lwChart=null;}
+    container.innerHTML="";
+
+    _lwChart=window.LightweightCharts.createChart(container,{
+      width:container.offsetWidth||800,
+      height:600,
+      layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
+      grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
+      rightPriceScale:{borderColor:"#1a3260"},
+      timeScale:{borderColor:"#1a3260",timeVisible:true}
     });
+
+    _lwSeries=_lwChart.addCandlestickSeries({
+      upColor:"#00e676",downColor:"#ff4444",
+      borderUpColor:"#00e676",borderDownColor:"#ff4444",
+      wickUpColor:"#00e676",wickDownColor:"#ff4444"
+    });
+
+    window.addEventListener("resize",function(){
+      if(_lwChart&&container) _lwChart.resize(container.offsetWidth,600);
+    });
+
+    fetchChartData();
   }
-  if(window.TradingView){initWidget();}
-  else{
+
+  if(window.LightweightCharts){
+    createChart();
+  } else {
     var s=document.createElement("script");
-    s.src="https://s3.tradingview.com/tv.js";
-    s.onload=initWidget;
+    s.src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js";
+    s.onload=function(){console.log("LW Charts loaded");createChart();};
+    s.onerror=function(){console.error("Failed to load LW Charts");};
     document.head.appendChild(s);
   }
 }
 
+function loadLWChart(){initLWChart();}
+
+
+function loadTVWidget(){loadLWChart();}
+
 function updateTVWidget(){
-  // Update active button styles
   var symBtns=document.querySelectorAll(".chart-sym-btn");
   symBtns.forEach(function(b){
     if(b.dataset.sym===State.chart_symbol){b.style.cssText="border-color:var(--ca);color:var(--ca);background:var(--caglow);font-weight:700;";}
@@ -2335,7 +2349,8 @@ function updateTVWidget(){
     if(b.dataset.iv===State.chart_interval){b.style.cssText="border-color:var(--accent);color:var(--accent);background:var(--accentglow);";}
     else{b.style.cssText="";}
   });
-  loadTVWidget();
+  if(document.getElementById("lw-chart-wrap")) loadLWChart();
+  else loadTVWidget();
 }
 
 var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,chart:chartTab};
