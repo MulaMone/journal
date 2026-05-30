@@ -14,6 +14,12 @@ except ImportError:
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+print(f"DEBUG - SUPABASE_URL: {SUPABASE_URL}")
+if SUPABASE_KEY:
+    print(f"DEBUG - SUPABASE_KEY Length: {len(SUPABASE_KEY)}")
+    print(f"DEBUG - SUPABASE_KEY Starts with: {SUPABASE_KEY[:10]}... (ends with: ...{SUPABASE_KEY[-5:]})")
+else:
+    print("DEBUG - SUPABASE_KEY is None")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
