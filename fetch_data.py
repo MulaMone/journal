@@ -3,13 +3,17 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 import schedule, time
-from dotenv import load_dotenv
 import os
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -40,9 +44,6 @@ def fetch_and_push():
                 if df.empty:
                     print(f"✗ {sym_name} {tf_name} — no data returned")
                     continue
-
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.droplevel(1)
 
                 rows = []
                 for ts, row in df.iterrows():
