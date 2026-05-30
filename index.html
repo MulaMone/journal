@@ -2319,7 +2319,7 @@ function initLWChart(){
       if(_lwChart&&container) _lwChart.resize(container.offsetWidth,600);
     });
 
-    fetchChartData();
+    setTimeout(function(){fetchChartData();},50);
   }
 
   if(window.LightweightCharts){
