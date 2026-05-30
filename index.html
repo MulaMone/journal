@@ -2364,6 +2364,69 @@ initAutoSync();
   }
 })();
 
+// ── Poll tv_trades table every 5 seconds for new TradingView trades ──
+function pollTVTrades(){
+  var userId=getSyncId();
+  supaFetch("GET","tv_trades?user_id=eq."+encodeURIComponent(userId)+"&processed=eq.false&select=*")
+  .then(function(r){return r.json();})
+  .then(function(rows){
+    if(!Array.isArray(rows)||!rows.length) return;
+    var added=0;
+    rows.forEach(function(row){
+      // Convert to dashboard trade format
+      var inst=detectInstrument(row.instrument||"ES");
+      var tv2=TICK[inst]||1;
+      var newTrade={
+        id:Date.now()+Math.random(),
+        date:fmtImportDate((row.time||"").split("T")[0]),
+        time:fmtImportTime(row.time||""),
+        inst:inst,
+        dir:row.direction||"Long",
+        entry:(row.entry||0).toString(),
+        exit:"",
+        ctr:"1",
+        setup:"",
+        sess:row.session||"RTH Open",
+        conf:"",post:"",
+        ex:"B",ru:"B",emo:3,
+        right:"",wrong:"",
+        pts:0,d:0,hl:false,
+        tv_id:row.id
+      };
+      // Check not already imported
+      var exists=State.trades.some(function(t){return t.tv_id===row.id;});
+      if(!exists){
+        State.trades.unshift(newTrade);
+        added++;
+      }
+    });
+    if(added>0){
+      ss("trades",State.trades);
+      // Mark as processed
+      var ids=rows.map(function(r){return r.id;}).join(",");
+      supaFetch("PATCH","tv_trades?id=in.("+ids+")",{processed:true});
+      render();
+      // Show notification
+      showTVNotification(added);
+    }
+  })
+  .catch(function(){});
+}
+
+function showTVNotification(count){
+  var existing=document.getElementById("tv-notify");
+  if(existing) existing.remove();
+  var n=document.createElement("div");
+  n.id="tv-notify";
+  n.style.cssText="position:fixed;bottom:20px;right:20px;background:#112444;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:12px;padding:10px 16px;border-radius:4px;z-index:9999;box-shadow:0 4px 20px #00000060;";
+  n.textContent="⬆ "+count+" new trade"+(count>1?"s":"")+" from TradingView";
+  document.body.appendChild(n);
+  setTimeout(function(){if(n.parentNode) n.remove();},4000);
+}
+
+// Start polling every 5 seconds
+setInterval(pollTVTrades,5000);
+
 render();
 </script>
 </body>
