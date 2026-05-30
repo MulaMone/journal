@@ -1,12 +1,13 @@
 import yfinance as yf
 import pandas as pd
 from supabase import create_client
-from datetime import datetime
-import schedule, time
+import schedule, time, os
 
-SUPABASE_URL = "SUPABASE_URL"
-SUPABASE_KEY = "SUPABASE_KEY"
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+print("URL:", SUPABASE_URL)
+print("KEY:", SUPABASE_KEY[:10] if SUPABASE_KEY else "None")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
