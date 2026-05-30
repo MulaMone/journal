@@ -321,7 +321,7 @@ var State={
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
   sync_tab:"tradovate",
-  chart_symbol:"ES1!",
+  chart_symbol:"CME_MINI:ES1!",
   chart_interval:"5",
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
@@ -2240,10 +2240,10 @@ function chartTab(){
   // Instrument + interval selectors
   var ctrlRow=div("row gap8");
   var SYMBOLS=[
-    {l:"ES",s:"ES1!"},
-    {l:"NQ",s:"NQ1!"},
-    {l:"MES",s:"MES1!"},
-    {l:"MNQ",s:"MNQ1!"}
+    {l:"ES",s:"CME_MINI:ES1!"},
+    {l:"NQ",s:"CME_MINI:NQ1!"},
+    {l:"MES",s:"CME_MICRO:MES1!"},
+    {l:"MNQ",s:"CME_MICRO:MNQ1!"}
   ];
   var INTERVALS=[{l:"1m",v:"1"},{l:"2m",v:"2"},{l:"3m",v:"3"},{l:"5m",v:"5"},{l:"15m",v:"15"},{l:"30m",v:"30"},{l:"1h",v:"60"},{l:"4h",v:"240"},{l:"D",v:"D"}];
 
@@ -2292,23 +2292,26 @@ function loadTVWidget(){
   container.innerHTML="";
   function initWidget(){
     if(!window.TradingView) return;
-    var h=800;
     new window.TradingView.widget({
       container_id:"tv_chart_container",
-      autosize:false,
-      width:"100%",
-      height:Math.max(h,500),
+      autosize:true,
       symbol:State.chart_symbol,
       interval:State.chart_interval,
       timezone:"America/New_York",
-      theme:"dark",style:"1",locale:"en",
+      theme:"dark",
+      style:"1",
+      locale:"en",
       toolbar_bg:"#040d1a",
       backgroundColor:"rgba(4,13,26,1)",
+      gridColor:"rgba(26,50,96,0.3)",
       enable_publishing:false,
       allow_symbol_change:true,
       hide_side_toolbar:false,
-      studies:["MASimple@tv-basicstudies","VWAP@tv-basicstudies"],
-      show_popup_button:true
+      withdateranges:true,
+      save_image:false,
+      height:800,
+      width:"100%",
+      studies:["VWAP@tv-basicstudies","MASimple@tv-basicstudies"]
     });
   }
   if(window.TradingView){initWidget();}
