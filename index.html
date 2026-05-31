@@ -1307,14 +1307,26 @@ function prepTab(){
     {l:"Initial Jobless Claims"},
     {l:"Retail Sales"}
   ];
+  var MACRO_EVENTS=[
+    {l:"ADP Non-Farm Employment"},
+    {l:"ISM Manufacturing PMI"},
+    {l:"ISM Services PMI"},
+    {l:"PPI (Producer Price Index)"},
+    {l:"JOLTS Job Openings"},
+    {l:"Consumer Confidence"},
+    {l:"Durable Goods Orders"},
+    {l:"10-Yr Treasury Auction"},
+    {l:"Michigan Consumer Sentiment"},
+    {l:"Unemployment Rate"}
+  ];
+
   var newsToday=today();
   if(State.newsChecksDate!==newsToday){State.newsChecks={};State.newsChecksDate=newsToday;State.newsOther="";ss("newsChecks",{});ss("newsChecksDate",newsToday);ss("newsOther","");}
-  // Reset newsSelected if new day
   if(State.newsSelectedDate!==newsToday){State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);}
 
   var newsCard=div("card mt12");
-  var newsH=div("card-h");var newsT=div("card-t");newsT.textContent="Key News & Events";newsH.appendChild(newsT);
-  // Reset button only shows if anything is checked or flagged
+  var newsH=div("card-h");
+  var newsT=div("card-t");newsT.textContent="Key News & Events";newsH.appendChild(newsT);
   var anyChecked=Object.values(State.newsChecks).filter(Boolean).length>0;
   var anyFlagged=State.newsSelected&&State.newsSelected.length>0;
   if(anyChecked||anyFlagged){
@@ -1328,33 +1340,39 @@ function prepTab(){
   }
   newsCard.appendChild(newsH);
 
-  // 2-column grid wrapper for news items
-  var newsGrid=div();newsGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;";
-
-  NEWS_EVENTS.forEach(function(ev,ni){
-    var key="news_"+ni;
+  // helper to build a news row
+  function makeNewsRow(ev,key,bgDefault){
     var isChecked=!!State.newsChecks[key];
     var isSelected=State.newsSelected.indexOf(ev.l)>-1;
+    var isMacro=key.indexOf("macro_")===0;
     var row=div("row gap8");
-    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":"var(--panel2)")+";align-items:center;border:1px solid "+(isSelected?"var(--ca)":"transparent")+";transition:all .15s;";
-    // Checkbox — marks reviewed only, no strikethrough
+    var borderCol=isSelected?"var(--ca)":(isMacro?"#b06aff40":"transparent");
+    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":bgDefault)+";align-items:center;border:1px solid "+borderCol+";transition:all .15s;";
     var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
-    chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[key]=!State.newsChecks[key];ss("newsChecks",State.newsChecks);render();});
+    (function(k){chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[k]=!State.newsChecks[k];ss("newsChecks",State.newsChecks);render();});})(key);
     row.appendChild(chk);
     var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=ev.l;row.appendChild(lbl);
     var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
-    // Flag indicator
     if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
-    // Click the row (not checkbox) to toggle in Today's News panel
-    row.addEventListener("click",function(){
-      var idx=State.newsSelected.indexOf(ev.l);
+    (function(name){row.addEventListener("click",function(){
+      var idx=State.newsSelected.indexOf(name);
       if(idx>-1) State.newsSelected.splice(idx,1);
-      else State.newsSelected.push(ev.l);
+      else State.newsSelected.push(name);
       ss("newsSelected",State.newsSelected);ss("newsSelectedDate",newsToday);render();
-    });
-    newsGrid.appendChild(row);
-  });
-  newsCard.appendChild(newsGrid);
+    });})(ev.l);
+    return row;
+  }
+
+  // ── Your Originals ──
+  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;margin-top:8px;";
+  NEWS_EVENTS.forEach(function(ev,ni){origGrid.appendChild(makeNewsRow(ev,"news_"+ni,"var(--panel2)"));});
+  newsCard.appendChild(origGrid);
+
+  // ── Macro Calendar ──
+  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
+  MACRO_EVENTS.forEach(function(ev,mi){macroGrid.appendChild(makeNewsRow(ev,"macro_"+mi,"#1d1040"));});
+  newsCard.appendChild(macroGrid);
+
   var newsOtherL=h("label",{},"Other Events / Notes");newsCard.appendChild(newsOtherL);
   var newsOtherI=h("input",{placeholder:"e.g. Fed speech 2pm, Earnings after close, OPEX..."});newsOtherI.value=State.newsOther;
   newsOtherI.addEventListener("input",function(){State.newsOther=newsOtherI.value;ss("newsOther",State.newsOther);});newsCard.appendChild(newsOtherI);
