@@ -216,10 +216,11 @@ function loadFromCloud(syncId,callback){
     if(d.trades) State.trades=d.trades;
     if(d.levels) State.levels=d.levels;
     if(d.week_levels) State.weekLevels=d.week_levels;
-    // Re-apply migration after cloud load — force Weekly VWAP and 4hr Naked POC to medium
+    // Re-apply migration after cloud load
     if(State.weekLevels&&State.weekLevels.forEach){
       State.weekLevels.forEach(function(l){
-        if(l.l==="Weekly VWAP"||l.l==="4hr Naked POC") l.imp="medium";
+        if(l.l==="Weekly VWAP") l.imp="medium";
+        if(l.l==="4hr Naked POC") l.imp="low";
       });
     }
     if(d.settings){
@@ -312,7 +313,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"medium",builtin:true}]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"low",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   pb_adding:false,
@@ -331,7 +332,7 @@ var State={
   nt_fileHandle:null,
   sync_tab:"tradovate",
   chart_symbol:"ES",
-  chart_interval:"5m",
+  chart_interval:"1h",
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
@@ -390,7 +391,8 @@ var State={
   var wkChanged=false;
   State.weekLevels.forEach(function(l){
     if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
-    if((l.l==="Weekly VWAP"||l.l==="4hr Naked POC")&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
+    if(l.l==="Weekly VWAP"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
+    if(l.l==="4hr Naked POC"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
   });
   if(wkChanged) ss("weekLevels",State.weekLevels);
 })();
@@ -1039,7 +1041,7 @@ function prepTab(){
   // Levels card — no price, reorderable
   var lvCard=div("card");
   var lvH=div("card-h");
-  var lvT=div("card-t");lvT.textContent="Key Levels — Drag to Reorder";lvH.appendChild(lvT);
+  var lvT=div("card-t");lvT.textContent="Key Levels";lvH.appendChild(lvT);
   lvCard.appendChild(lvH);
 
   // Render level rows with up/down arrows
@@ -2306,7 +2308,7 @@ function chartTab(){
   el.style.padding="16px";
 
   var sym    = State.chart_symbol  || "ES";
-  var tf     = State.chart_interval|| "5m";
+  var tf     = State.chart_interval|| "1h";
 
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
