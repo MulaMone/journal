@@ -194,6 +194,7 @@ function syncToCloud(){
       mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
       levelChecksDate:State.levelChecksDate,newsChecks:State.newsChecks,
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
+      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
       focusImprove:State.focusImprove,mantraNotes:State.mantraNotes
     },
     updated_at:new Date().toISOString()
@@ -228,6 +229,8 @@ function loadFromCloud(syncId,callback){
       if(s.newsChecks) State.newsChecks=s.newsChecks;
       if(s.newsChecksDate) State.newsChecksDate=s.newsChecksDate;
       if(s.newsOther) State.newsOther=s.newsOther;
+      if(s.newsSelected) State.newsSelected=s.newsSelected;
+      if(s.newsSelectedDate) State.newsSelectedDate=s.newsSelectedDate;
       if(s.focusImprove) State.focusImprove=s.focusImprove;
       if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
     }
@@ -303,7 +306,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"high",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"high",builtin:true}]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"medium",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   pb_adding:false,
@@ -329,6 +332,8 @@ var State={
   newsChecks:ls("newsChecks",{}),
   newsChecksDate:ls("newsChecksDate",""),
   newsOther:ls("newsOther",""),
+  newsSelected:ls("newsSelected",[]),
+  newsSelectedDate:ls("newsSelectedDate",""),
   focusImprove:ls("focusImprove",""),
   mantraNotes:ls("mantraNotes",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
@@ -377,7 +382,10 @@ var State={
   // Mark builtin week levels
   var WK_BUILTIN=["Weekly VAH/VAL/POC","Weekly Open","Weekly VWAP","Weekly Naked POC","Daily Naked POC","4hr Naked POC"];
   var wkChanged=false;
-  State.weekLevels.forEach(function(l){if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}});
+  State.weekLevels.forEach(function(l){
+    if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
+    if((l.l==="Weekly VWAP"||l.l==="4hr Naked POC")&&l.imp==="high"){l.imp="medium";wkChanged=true;}
+  });
   if(wkChanged) ss("weekLevels",State.weekLevels);
 })();
 
@@ -670,8 +678,11 @@ function homeTab(){
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
   var s=calcStats(State.trades);
 
-  // Hero P&L row
-  var heroRow=div("g2 mb12");
+  // Hero P&L row — 3-col if news selected, else 2-col
+  var tdNews=today();
+  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
+  var heroRow=div((hasNews?"":"g2 ")+"mb12");
+  if(hasNews) heroRow.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:12px;";
   // Today P&L — big
   var todayCard=div("card");todayCard.style.background="var(--panel2)";todayCard.style.borderColor=(tPnl>=0?"#00e67640":"#ff444440");todayCard.style.borderLeft=(tPnl>=0?"4px solid #00e676":"4px solid #ff4444");
   var tcTop=div("rjb mb8");var tcL=div("card-t");tcL.textContent="TODAY P&L";tcTop.appendChild(tcL);
@@ -684,6 +695,27 @@ function homeTab(){
   var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;";
   tcWr.textContent="WIN RATE  "+s.wr+"%";todayCard.appendChild(tcWr);
   heroRow.appendChild(todayCard);
+  // News panel — only shown when news items are flagged
+  if(hasNews){
+    var newsPanel=div("card");newsPanel.style.cssText="background:var(--panel2);border-color:#ff8c0040;border-left:4px solid var(--ca);";
+    var npTop=div("rjb mb8");var npL=div("card-t");npL.textContent="TODAY'S NEWS";npL.style.color="var(--ca)";npTop.appendChild(npL);
+    var npBadge=div("xs b");npBadge.style.cssText="color:var(--ca);font-size:10px;font-weight:700;letter-spacing:1px;";npBadge.textContent="⚠ "+State.newsSelected.length+" EVENT"+(State.newsSelected.length>1?"S":"");npTop.appendChild(npBadge);
+    newsPanel.appendChild(npTop);
+    var npSep=div("sep");npSep.style.margin="0 0 10px 0";newsPanel.appendChild(npSep);
+    State.newsSelected.forEach(function(evName){
+      var npRow=div("row gap8 mb8");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--ca15);border:1px solid var(--ca30);";
+      var npIcon=span();npIcon.style.cssText="color:var(--ca);font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      newsPanel.appendChild(npRow);
+    });
+    if(State.newsOther&&State.newsOther.trim()){
+      var npOtherRow=div("row gap8 mt4");npOtherRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--panel3);border:1px solid var(--border);margin-top:4px;";
+      var npOtherIcon=span();npOtherIcon.style.cssText="color:var(--text3);font-size:11px;flex-shrink:0;";npOtherIcon.textContent="◇";npOtherRow.appendChild(npOtherIcon);
+      var npOtherLbl=span("xs");npOtherLbl.style.cssText="color:var(--text3);font-size:11px;font-style:italic;";npOtherLbl.textContent=State.newsOther;npOtherRow.appendChild(npOtherLbl);
+      newsPanel.appendChild(npOtherRow);
+    }
+    heroRow.appendChild(newsPanel);
+  }
   // Total P&L — big
   var totalCard=div("card");totalCard.style.background="var(--panel2)";totalCard.style.borderLeft=(s.total>=0?"4px solid #00e67660":"4px solid #ff444460");
   var ttTop=div("rjb mb8");var ttL=div("card-t");ttL.textContent="ALL-TIME P&L";ttTop.appendChild(ttL);
@@ -1130,6 +1162,8 @@ function prepTab(){
   // ── Key News & Events ──────────────────────────────────────────────
   var NEWS_EVENTS=[
     {l:"FOMC Meeting / Fed Decision"},
+    {l:"Powell Speech"},
+    {l:"Fed Speakers"},
     {l:"CPI / Inflation Data"},
     {l:"NFP / Non-Farm Payrolls"},
     {l:"PCE Price Index"},
@@ -1139,18 +1173,46 @@ function prepTab(){
   ];
   var newsToday=today();
   if(State.newsChecksDate!==newsToday){State.newsChecks={};State.newsChecksDate=newsToday;State.newsOther="";ss("newsChecks",{});ss("newsChecksDate",newsToday);ss("newsOther","");}
+  // Reset newsSelected if new day
+  if(State.newsSelectedDate!==newsToday){State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);}
+
   var newsCard=div("card mt12");
-  var newsH=div("card-h");var newsT=div("card-t");newsT.textContent="Key News & Events Today";newsH.appendChild(newsT);
-  var newsReset=span("xs m");newsReset.textContent="resets daily";newsH.appendChild(newsReset);
+  var newsH=div("card-h");var newsT=div("card-t");newsT.textContent="Key News & Events";newsH.appendChild(newsT);
+  // Reset button only shows if anything is checked or flagged
+  var anyChecked=Object.values(State.newsChecks).filter(Boolean).length>0;
+  var anyFlagged=State.newsSelected&&State.newsSelected.length>0;
+  if(anyChecked||anyFlagged){
+    var newsResetBtn=h("button",{className:"btn btn-r"});newsResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";newsResetBtn.textContent="RESET";
+    newsResetBtn.addEventListener("click",function(){
+      State.newsChecks={};ss("newsChecks",{});
+      State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);
+      render();
+    });
+    newsH.appendChild(newsResetBtn);
+  }
   newsCard.appendChild(newsH);
+
   NEWS_EVENTS.forEach(function(ev,ni){
     var key="news_"+ni;
     var isChecked=!!State.newsChecks[key];
-    var row=div("row gap8 mb8");row.style.cssText="cursor:pointer;padding:6px 8px;border-radius:3px;background:var(--panel2);align-items:center;";
-    row.addEventListener("click",function(){State.newsChecks[key]=!State.newsChecks[key];ss("newsChecks",State.newsChecks);render();});
-    var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";row.appendChild(chk);
-    var lbl=span("sm");lbl.style.cssText="flex:1;color:"+(isChecked?"var(--text3)":"var(--text2)")+";font-size:12px;"+(isChecked?"text-decoration:line-through;":"");lbl.textContent=ev.l;row.appendChild(lbl);
+    var isSelected=State.newsSelected.indexOf(ev.l)>-1;
+    var row=div("row gap8 mb8");
+    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":"var(--panel2)")+";align-items:center;border:1px solid "+(isSelected?"var(--ca)":"transparent")+";transition:all .15s;";
+    // Checkbox — marks reviewed only, no strikethrough
+    var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
+    chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[key]=!State.newsChecks[key];ss("newsChecks",State.newsChecks);render();});
+    row.appendChild(chk);
+    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=ev.l;row.appendChild(lbl);
     var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
+    // Flag indicator
+    if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
+    // Click the row (not checkbox) to toggle in Today's News panel
+    row.addEventListener("click",function(){
+      var idx=State.newsSelected.indexOf(ev.l);
+      if(idx>-1) State.newsSelected.splice(idx,1);
+      else State.newsSelected.push(ev.l);
+      ss("newsSelected",State.newsSelected);ss("newsSelectedDate",newsToday);render();
+    });
     newsCard.appendChild(row);
   });
   var newsOtherL=h("label",{},"Other Events / Notes");newsCard.appendChild(newsOtherL);
