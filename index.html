@@ -192,7 +192,7 @@ function syncToCloud(){
       note:State.note,wkGoal:State.wkGoal,moGoal:State.moGoal,
       mindsetChecks:State.mindsetChecks,mindsetChecksDate:State.mindsetChecksDate,
       mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
-      levelChecksDate:State.levelChecksDate,newsChecks:State.newsChecks,
+      levelChecksDate:State.levelChecksDate,weekLevelChecks:State.weekLevelChecks,newsChecks:State.newsChecks,
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
       newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
       focusImprove:State.focusImprove,mantraNotes:State.mantraNotes
@@ -241,6 +241,7 @@ function loadFromCloud(syncId,callback){
       if(s.mindsetNote) State.mindsetNote=s.mindsetNote;
       if(s.levelChecks) State.levelChecks=s.levelChecks;
       if(s.levelChecksDate) State.levelChecksDate=s.levelChecksDate;
+      if(s.weekLevelChecks) State.weekLevelChecks=s.weekLevelChecks;
       if(s.newsChecks) State.newsChecks=s.newsChecks;
       if(s.newsChecksDate) State.newsChecksDate=s.newsChecksDate;
       if(s.newsOther) State.newsOther=s.newsOther;
@@ -323,6 +324,7 @@ var State={
   weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"low",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
+  weekLevelChecks:ls("weekLevelChecks",{}),
   pb_adding:false,
   pb_editing:undefined,
   rv_view:"month",
@@ -1179,11 +1181,27 @@ function prepTab(){
   var wkCard=div("card");
   var wkH=div("card-h");
   var wkT=div("card-t");wkT.textContent="Pre-Week Key Levels";wkH.appendChild(wkT);
+  // Reset button only shows if anything is checked
+  var anyWkChecked=Object.values(State.weekLevelChecks).filter(Boolean).length>0;
+  if(anyWkChecked){
+    var wkResetBtn=h("button",{className:"btn btn-r"});wkResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";wkResetBtn.textContent="RESET";
+    wkResetBtn.addEventListener("click",function(){
+      State.weekLevelChecks={};ss("weekLevelChecks",{});render();
+    });
+    wkH.appendChild(wkResetBtn);
+  }
   wkCard.appendChild(wkH);
 
   // Render week levels
   State.weekLevels.forEach(function(l,i){
-    var row=div("rjb");row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);align-items:center;";
+    var wkKey="wl_"+i;
+    var wkChecked=!!State.weekLevelChecks[wkKey];
+    var row=div("rjb"+(wkChecked?" checked":""));row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);align-items:center;";
+
+    // Checkbox
+    var chk=div("lv-check"+(wkChecked?" on":""));chk.style.cssText="margin-right:8px;flex-shrink:0;";
+    (function(key){chk.addEventListener("click",function(e){e.stopPropagation();State.weekLevelChecks[key]=!State.weekLevelChecks[key];ss("weekLevelChecks",State.weekLevelChecks);render();});})(wkKey);
+
     var arrows=div("row gap8");arrows.style.marginRight="8px";
     var wup=h("button",{className:"btn",style:"padding:2px 7px;font-size:11px;line-height:1"});wup.textContent="▲";
     wup.addEventListener("click",function(){if(i>0){var tmp=State.weekLevels[i-1];State.weekLevels[i-1]=State.weekLevels[i];State.weekLevels[i]=tmp;ss("weekLevels",State.weekLevels);render();}});
@@ -1195,9 +1213,10 @@ function prepTab(){
 
     var wrank=div("xs m");wrank.style.cssText="min-width:16px;text-align:center;font-weight:700;color:var(--ca);";wrank.textContent="#"+(i+1);
 
-    var wleft=div("row gap8");wleft.appendChild(arrows);wleft.appendChild(wrank);
+    var wleft=div("row gap8");wleft.appendChild(chk);wleft.appendChild(arrows);wleft.appendChild(wrank);
     wleft.appendChild(impBadge(l.imp||"medium"));
-    var wln=span("sm fw7");wln.textContent=l.l;wleft.appendChild(wln);
+    var wln=span("sm fw7");
+    wln.textContent=l.l;wleft.appendChild(wln);
     // session tag hidden for week levels
     row.appendChild(wleft);
 
