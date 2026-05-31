@@ -1177,7 +1177,6 @@ function prepTab(){
   // ── Key News & Events ──────────────────────────────────────────────
   var NEWS_EVENTS=[
     {l:"FOMC Meeting / Fed Decision"},
-    {l:"Powell Speech"},
     {l:"Fed Speakers"},
     {l:"CPI / Inflation Data"},
     {l:"NFP / Non-Farm Payrolls"},
@@ -1207,11 +1206,14 @@ function prepTab(){
   }
   newsCard.appendChild(newsH);
 
+  // 2-column grid wrapper for news items
+  var newsGrid=div();newsGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;";
+
   NEWS_EVENTS.forEach(function(ev,ni){
     var key="news_"+ni;
     var isChecked=!!State.newsChecks[key];
     var isSelected=State.newsSelected.indexOf(ev.l)>-1;
-    var row=div("row gap8 mb8");
+    var row=div("row gap8");
     row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":"var(--panel2)")+";align-items:center;border:1px solid "+(isSelected?"var(--ca)":"transparent")+";transition:all .15s;";
     // Checkbox — marks reviewed only, no strikethrough
     var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
@@ -1228,8 +1230,9 @@ function prepTab(){
       else State.newsSelected.push(ev.l);
       ss("newsSelected",State.newsSelected);ss("newsSelectedDate",newsToday);render();
     });
-    newsCard.appendChild(row);
+    newsGrid.appendChild(row);
   });
+  newsCard.appendChild(newsGrid);
   var newsOtherL=h("label",{},"Other Events / Notes");newsCard.appendChild(newsOtherL);
   var newsOtherI=h("input",{placeholder:"e.g. Fed speech 2pm, Earnings after close, OPEX..."});newsOtherI.value=State.newsOther;
   newsOtherI.addEventListener("input",function(){State.newsOther=newsOtherI.value;ss("newsOther",State.newsOther);});newsCard.appendChild(newsOtherI);
