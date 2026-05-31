@@ -299,7 +299,7 @@ function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse
 function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){}}
 
 var State={
-  tab:"home",
+  tab:ls("tab","home"),
   trades:ls("trades",DEFAULT_TRADES),
   levels:ls("levels",DEFAULT_LEVELS),
   note:ls("note","Focus on RTH open momentum. Wait for clear structure above VWAP before entering."),
@@ -596,7 +596,7 @@ function renderTabs(){
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
     tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
-    tab.addEventListener("click",function(){State.tab=t.id;State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;if(t.id!=="review"){State.rv_selected_day=null;}render();});
+    tab.addEventListener("click",function(){State.tab=t.id;ss("tab",t.id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;if(t.id!=="review"){State.rv_selected_day=null;}render();var c=document.getElementById("content");if(c) c.scrollTop=0;});
     tabsWrap.appendChild(tab);
   });
   el.appendChild(tabsWrap);
