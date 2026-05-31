@@ -1556,7 +1556,7 @@ function playbookTab(){
     } else {
       // View mode
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";left.appendChild(nm);
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="Mean Reversion — VWAP Fade") nm.style.color="#b06aff";left.appendChild(nm);
       hrow.appendChild(left);
       var right=div("row gap8");
       if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
