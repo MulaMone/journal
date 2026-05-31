@@ -216,6 +216,12 @@ function loadFromCloud(syncId,callback){
     if(d.trades) State.trades=d.trades;
     if(d.levels) State.levels=d.levels;
     if(d.week_levels) State.weekLevels=d.week_levels;
+    // Re-apply migration after cloud load — force Weekly VWAP and 4hr Naked POC to medium
+    if(State.weekLevels&&State.weekLevels.forEach){
+      State.weekLevels.forEach(function(l){
+        if(l.l==="Weekly VWAP"||l.l==="4hr Naked POC") l.imp="medium";
+      });
+    }
     if(d.settings){
       var s=d.settings;
       if(s.note) State.note=s.note;
@@ -384,7 +390,7 @@ var State={
   var wkChanged=false;
   State.weekLevels.forEach(function(l){
     if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
-    if((l.l==="Weekly VWAP"||l.l==="4hr Naked POC")&&l.imp==="high"){l.imp="medium";wkChanged=true;}
+    if((l.l==="Weekly VWAP"||l.l==="4hr Naked POC")&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
   });
   if(wkChanged) ss("weekLevels",State.weekLevels);
 })();
