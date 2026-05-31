@@ -303,6 +303,9 @@ var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:10,GC:10,Other:1};
 var EMO=["","😖","😟","😐","😊","🔥"];
 var QI=Math.floor(Math.random()*QUOTES.length);
 
+var MACRO_NEWS_NAMES=["ADP Non-Farm Employment","ISM Manufacturing PMI","ISM Services PMI","PPI (Producer Price Index)","JOLTS Job Openings","Consumer Confidence","Durable Goods Orders","10-Yr Treasury Auction","Michigan Consumer Sentiment","Unemployment Rate"];
+function isMacroNews(name){return MACRO_NEWS_NAMES.indexOf(name)>-1;}
+
 // US market holidays (NYSE/NASDAQ) — date key matches trade date format "MM/DD/YY"
 var MARKET_HOLIDAYS={
   // 2026 full closures
@@ -817,17 +820,39 @@ function homeTab(){
   heroRow.appendChild(todayCard);
   // News panel — only shown when news items are flagged
   if(hasNews){
-    var newsPanel=div("card");newsPanel.style.cssText="background:var(--panel2);border-color:#ff8c0040;border-left:4px solid var(--ca);";
-    var npTop=div("rjb mb8");var npL=div("card-t");npL.textContent="TODAY'S NEWS";npL.style.color="var(--ca)";npTop.appendChild(npL);
-    var npBadge=div("xs b");npBadge.style.cssText="color:var(--ca);font-size:10px;font-weight:700;letter-spacing:1px;";npBadge.textContent="⚠ "+State.newsSelected.length+" EVENT"+(State.newsSelected.length>1?"S":"");npTop.appendChild(npBadge);
+    var keyEvents=State.newsSelected.filter(function(n){return !isMacroNews(n);});
+    var macroEvents=State.newsSelected.filter(function(n){return isMacroNews(n);});
+    var panelAccent=keyEvents.length>0?"var(--ca)":"#b06aff";
+    var newsPanel=div("card");newsPanel.style.cssText="background:var(--panel2);border-color:"+(keyEvents.length>0?"#ff8c0040":"#b06aff40")+";border-left:4px solid "+panelAccent+";";
+    var npTop=div("rjb mb8");var npL=div("card-t");npL.textContent="TODAY'S NEWS";npL.style.color=panelAccent;npTop.appendChild(npL);
+    var npBadge=div("xs b");npBadge.style.cssText="color:"+panelAccent+";font-size:10px;font-weight:700;letter-spacing:1px;";npBadge.textContent="⚠ "+State.newsSelected.length+" EVENT"+(State.newsSelected.length>1?"S":"");npTop.appendChild(npBadge);
     newsPanel.appendChild(npTop);
     var npSep=div("sep");npSep.style.margin="0 0 10px 0";newsPanel.appendChild(npSep);
-    State.newsSelected.forEach(function(evName){
-      var npRow=div("row gap8 mb8");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--ca15);border:1px solid var(--ca30);";
+
+    // Original (key) events — orange
+    keyEvents.forEach(function(evName){
+      var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#ff8c0015;border:1px solid #ff8c0040;border-left:3px solid var(--ca);";
       var npIcon=span();npIcon.style.cssText="color:var(--ca);font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
-      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npBadge2=span();npBadge2.style.cssText="background:#ff8c0020;color:var(--ca);border:1px solid #ff8c0050;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge2.textContent="KEY";npRow.appendChild(npBadge2);
       newsPanel.appendChild(npRow);
     });
+
+    // Macro events — purple
+    macroEvents.forEach(function(evName){
+      var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#b06aff15;border:1px solid #b06aff40;border-left:3px solid #b06aff;";
+      var npIcon=span();npIcon.style.cssText="color:#b06aff;font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npBadge3=span();npBadge3.style.cssText="background:#b06aff20;color:#b06aff;border:1px solid #b06aff50;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge3.textContent="MACRO";npRow.appendChild(npBadge3);
+      newsPanel.appendChild(npRow);
+    });
+
+    // Footer count when both types present
+    if(keyEvents.length>0&&macroEvents.length>0){
+      var npFoot=div("xs m");npFoot.style.cssText="font-size:9px;color:var(--text3);letter-spacing:.5px;border-top:1px solid var(--border);padding-top:7px;margin-top:4px;";
+      npFoot.textContent=keyEvents.length+" key · "+macroEvents.length+" macro";newsPanel.appendChild(npFoot);
+    }
+
     if(State.newsOther&&State.newsOther.trim()){
       var npOtherRow=div("row gap8 mt4");npOtherRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--panel3);border:1px solid var(--border);margin-top:4px;";
       var npOtherIcon=span();npOtherIcon.style.cssText="color:var(--text3);font-size:11px;flex-shrink:0;";npOtherIcon.textContent="◇";npOtherRow.appendChild(npOtherIcon);
