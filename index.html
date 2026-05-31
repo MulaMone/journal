@@ -394,6 +394,14 @@ var State={
     if(l.l==="4hr Naked POC"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
   });
   if(wkChanged) ss("weekLevels",State.weekLevels);
+
+  // Clean up "Opening Range" from custom playbook if it was saved there
+  try {
+    var pbCustom=ls("playbook_custom",[]);
+    var beforeLen=pbCustom.length;
+    pbCustom=pbCustom.filter(function(e){return e.name!=="Opening Range";});
+    if(pbCustom.length!==beforeLen) ss("playbook_custom",pbCustom);
+  } catch(e){}
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
@@ -1545,7 +1553,7 @@ function playbookTab(){
     } else {
       // View mode
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;left.appendChild(nm);
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";left.appendChild(nm);
       hrow.appendChild(left);
       var right=div("row gap8");
       if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
