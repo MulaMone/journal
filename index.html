@@ -228,6 +228,7 @@ function loadFromCloud(syncId,callback){
     if(State.weekLevels&&State.weekLevels.forEach){
       State.weekLevels.forEach(function(l){
         if(l.l==="Weekly VWAP") l.imp="medium";
+        if(l.l==="Daily Naked POC") l.imp="medium";
         if(l.l==="4hr Naked POC") l.imp="low";
       });
     }
@@ -356,7 +357,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"high",builtin:true},{l:"4hr Naked POC",imp:"low",builtin:true}]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"4hr Naked POC",imp:"low",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   weekLevelChecks:ls("weekLevelChecks",{}),
@@ -436,6 +437,7 @@ var State={
   State.weekLevels.forEach(function(l){
     if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
     if(l.l==="Weekly VWAP"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
+    if(l.l==="Daily Naked POC"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
     if(l.l==="4hr Naked POC"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
   });
   if(wkChanged) ss("weekLevels",State.weekLevels);
