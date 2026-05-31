@@ -216,6 +216,14 @@ function loadFromCloud(syncId,callback){
     if(d.trades) State.trades=d.trades;
     if(d.levels) State.levels=d.levels;
     if(d.week_levels) State.weekLevels=d.week_levels;
+    // Migrate renamed setups in cloud-loaded trades
+    if(State.trades&&State.trades.forEach){
+      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade"};
+      State.trades.forEach(function(t){
+        if(t.setup&&RN[t.setup]) t.setup=RN[t.setup];
+        if(Array.isArray(t.setups)) t.setups=t.setups.map(function(s){return RN[s]||s;});
+      });
+    }
     // Re-apply migration after cloud load
     if(State.weekLevels&&State.weekLevels.forEach){
       State.weekLevels.forEach(function(l){
@@ -279,13 +287,13 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["Volume Profile — VAH/VAL","Volume Profile — POC","Momentum — Trend Continuation","Mean Reversion — VWAP Fade","Mean Reversion — Extension Fade","2min POC","MA Pullback"];
+var SETUPS=["Volume Profile — VAH/VAL","Volume Profile — POC","Momentum — Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback"];
 var SDESC={
   "Volume Profile — VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "Volume Profile — POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
   "Momentum — Trend Continuation":"Enter in direction of established trend after a pullback or consolidation. Confirm with price structure.",
-  "Mean Reversion — VWAP Fade":"Fade extended moves away from VWAP. Best used when price is 1–2 standard deviations extended with divergence.",
-  "Mean Reversion — Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
+  "VWAP Fade":"Fade extended moves away from VWAP. Best used when price is 1–2 standard deviations extended with divergence.",
+  "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
   "2min POC":"Naked 2min POC with confluences.",
   "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma."
 };
@@ -295,7 +303,7 @@ var QI=Math.floor(Math.random()*QUOTES.length);
 
 var DEFAULT_TRADES=[
   {id:1,date:"05/28/26",time:"09:42",inst:"ES",dir:"Long",entry:"5280.50",exit:"5291.25",ctr:"2",setup:"Momentum — Trend Continuation",sess:"RTH Open",conf:"Gap fill above VWAP, strong buyer activity at POC",post:"Clean entry, held through retest, exited at target",ex:"A",ru:"A",emo:5,right:"Patient on entry, trusted the level",wrong:"Could have held longer",pts:10.75,d:1075,hl:true},
-  {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"Mean Reversion — VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
+  {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
 var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
@@ -402,6 +410,29 @@ var State={
     pbCustom=pbCustom.filter(function(e){return e.name!=="Opening Range";});
     if(pbCustom.length!==beforeLen) ss("playbook_custom",pbCustom);
   } catch(e){}
+
+  // Migrate setup name renames in existing trades
+  (function(){
+    var RENAMES={
+      "Mean Reversion — VWAP Fade":"VWAP Fade",
+      "Mean Reversion — Extension Fade":"Extension Fade"
+    };
+    var tradesChanged=false;
+    State.trades.forEach(function(t){
+      if(t.setup&&RENAMES[t.setup]){t.setup=RENAMES[t.setup];tradesChanged=true;}
+      if(Array.isArray(t.setups)){
+        t.setups=t.setups.map(function(s){if(RENAMES[s]){tradesChanged=true;return RENAMES[s];}return s;});
+      }
+    });
+    if(tradesChanged) ss("trades",State.trades);
+    // Also rename in custom playbook
+    try {
+      var pb=ls("playbook_custom",[]);
+      var pbChanged=false;
+      pb.forEach(function(e){if(RENAMES[e.name]){e.name=RENAMES[e.name];pbChanged=true;}});
+      if(pbChanged) ss("playbook_custom",pb);
+    } catch(e){}
+  })();
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
@@ -410,6 +441,22 @@ function clr(n){return (n||0)>=0?"g":"r"}
 function grc(g){return "gr"+g}
 function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
 function pad(n){return n<10?"0"+n:n}
+
+// ─── SETUP HELPERS (multi-setup support) ─────────────────────────────
+var SETUP_COLORS={
+  "2min POC":"#a5ff32",
+  "VWAP Fade":"#b06aff",
+  "Volume Profile — POC":"#ffd700",
+  "Volume Profile — VAH/VAL":"#40e0d0"
+};
+function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
+function getSetups(t){
+  if(t&&Array.isArray(t.setups)&&t.setups.length) return t.setups;
+  if(t&&t.setup) return [t.setup];
+  return [];
+}
+function setupString(t){return getSetups(t).join(", ");}
+function tradeHasSetup(t,name){return getSetups(t).indexOf(name)>-1;}
 function h(tag,attrs,children){
   var el=document.createElement(tag);
   if(attrs) Object.keys(attrs).forEach(function(k){
@@ -862,7 +909,7 @@ function homeTab(){
     var left=div("row gap8");left.appendChild(makeBadge(best.dir==="Long"?"bg":"br",best.dir));var bn=span("fw7");bn.textContent=best.inst;left.appendChild(bn);var bt2=span("xs m");bt2.textContent=best.time;left.appendChild(bt2);brow.appendChild(left);
     var bpnl=span("fw7 "+clr(best.d));bpnl.textContent=dol(best.d);brow.appendChild(bpnl);
     btCard.appendChild(brow);
-    var bsu=span("xs m mb8");bsu.style.display="block";bsu.textContent=best.setup;btCard.appendChild(bsu);
+    var bsu=span("xs m mb8");bsu.style.display="block";bsu.textContent=setupString(best);btCard.appendChild(bsu);
     var bn2=div("xs mb8");bn2.style.color="#e0c97a";bn2.style.lineHeight="1.6";bn2.textContent=best.post;btCard.appendChild(bn2);
     var bgrow=div("row gap8 mt8");
     bgrow.appendChild(h("span",{className:"gr "+grc(best.ex)},[best.ex]));var gla=span("xs m");gla.style.lineHeight="21px";gla.textContent="Exec";bgrow.appendChild(gla);
@@ -1357,9 +1404,43 @@ function tradeForm(existing){
   setTimeout(function(){var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");if(e2)e2.addEventListener("input",updatePreview);if(ex)ex.addEventListener("input",updatePreview);if(ct)ct.addEventListener("input",updatePreview);},0);
 
   var customSU=ls("playbook_custom",[]);
-  var allSU=[{v:"",l:"Select setup..."}].concat(SETUPS.map(function(s){return{v:s,l:s}})).concat(customSU.map(function(e){return{v:e.name,l:e.name}}));
-  var setupOpts=allSU;
-  var su=fs("setup","Setup",setupOpts,"s2");fg.appendChild(su);
+  var allSetupNames=SETUPS.concat(customSU.map(function(e){return e.name;}));
+
+  // Multi-select setup chips — spans full width (s4)
+  var suWrap=div("s4");
+  suWrap.appendChild(h("label",{},"Setup(s) — Tap to toggle"));
+  var existingSetups=existing?getSetups(existing):[];
+  var selectedSetups=existingSetups.slice(); // copy
+  var chipsBox=div();chipsBox.id="f_setup_chips";chipsBox.style.cssText="display:flex;flex-wrap:wrap;gap:7px;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var counterEl=div();counterEl.style.cssText="font-size:10px;color:var(--text3);margin-top:5px;letter-spacing:.5px;";
+  function renderChips(){
+    chipsBox.innerHTML="";
+    allSetupNames.forEach(function(name){
+      var on=selectedSetups.indexOf(name)>-1;
+      var col=setupColor(name);
+      var chip=h("span");
+      var bg=on?(col+"15"):"var(--panel3)";
+      var bd=on?(col+"80"):"var(--border)";
+      var fg2=on?col:"var(--text2)";
+      chip.style.cssText="padding:6px 12px;border:1px solid "+bd+";background:"+bg+";color:"+fg2+";border-radius:3px;font-size:11px;letter-spacing:.5px;cursor:pointer;font-weight:"+(on?"500":"400")+";user-select:none;transition:all .12s;";
+      chip.textContent=(on?"✓ ":"")+name;
+      chip.addEventListener("click",function(){
+        var idx=selectedSetups.indexOf(name);
+        if(idx>-1) selectedSetups.splice(idx,1);
+        else selectedSetups.push(name);
+        renderChips();
+      });
+      chipsBox.appendChild(chip);
+    });
+    counterEl.textContent=selectedSetups.length===0?"No setups selected":(selectedSetups.length+" setup"+(selectedSetups.length>1?"s":"")+" selected"+(selectedSetups.length>1?" — confluence":""));
+  }
+  renderChips();
+  suWrap.appendChild(chipsBox);
+  suWrap.appendChild(counterEl);
+  fg.appendChild(suWrap);
+  // Expose selection for save handler
+  suWrap._getSelected=function(){return selectedSetups;};
+
   fg.appendChild(fs("sess","Session",SESSIONS));
   fg.appendChild(fs("ex","Exec Grade",["A","B","C"]));
   fg.appendChild(fs("ru","Rule Grade",["A","B","C"]));
@@ -1379,7 +1460,9 @@ function tradeForm(existing){
     if(!entry||!exit){alert("Entry and exit are required.");return;}
     var inst=gv("inst"),dir=gv("dir"),ctr=gv("ctr")||"1";
     var tv=TICK[inst]||1;var pts=(parseFloat(exit)-parseFloat(entry))*(dir==="Long"?1:-1);
-    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:gv("setup"),sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:Math.round(pts*tv*parseFloat(ctr)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
+    var setupsArr=suWrap._getSelected();
+    var setupStr=setupsArr.join(", ");
+    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:Math.round(pts*tv*parseFloat(ctr)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
     if(isEdit){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
@@ -1427,7 +1510,11 @@ function logTab(){
     dtd2.textContent=dol(t.d);
     dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":t.d<0?"background:#ff444430;border-radius:3px;padding:7px 10px":"padding:7px 10px";
     tr.appendChild(dtd2);
-    var std=h("td",{className:"m xs"});std.style.maxWidth="110px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";std.textContent=t.setup;tr.appendChild(std);
+    var std=h("td",{className:"m xs"});std.style.maxWidth="130px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";
+    var stSetups=getSetups(t);
+    if(stSetups.length<=1){std.textContent=stSetups[0]||"";}
+    else{std.innerHTML='<span style="color:var(--text2)">'+stSetups[0]+'</span> <span style="background:var(--ca15);color:var(--ca);border:1px solid var(--ca30);border-radius:2px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:3px">+'+(stSetups.length-1)+'</span>';}
+    tr.appendChild(std);
     var ssd=h("td");ssd.appendChild(makeBadge("bw xs",t.sess));tr.appendChild(ssd);
     var exd=h("td");exd.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));tr.appendChild(exd);
     var rud=h("td");rud.appendChild(h("span",{className:"gr "+grc(t.ru)},[t.ru]));tr.appendChild(rud);
@@ -1437,7 +1524,7 @@ function logTab(){
     if(State.expanded===t.id){
       var exRow=h("tr");var exTd=h("td",{colspan:"14"});exTd.colSpan=14;exTd.style.padding="0";
       var exDiv=div("exp");
-      var eg2=div("g2");
+      var eg2=div();eg2.style.cssText="display:grid;grid-template-columns:1.3fr 1.3fr 1fr;gap:18px;padding:14px;";
       var l=div();
       var c1=div("xs m mb8");c1.textContent="CONFLUENCES";l.appendChild(c1);var c2=div("xs mb8");c2.style.color="#e0c97a";c2.style.lineHeight="1.7";c2.textContent=t.conf||"—";l.appendChild(c2);
       var p1=div("xs m mt8 mb8");p1.textContent="POST-TRADE NOTES";l.appendChild(p1);var p2=div("xs");p2.style.color="#e0c97a";p2.style.lineHeight="1.7";p2.textContent=t.post||"—";l.appendChild(p2);
@@ -1451,7 +1538,29 @@ function logTab(){
       var delBtn=h("button",{className:"btn btn-r",style:"padding:4px 10px;font-size:9px"});delBtn.textContent="DELETE";
       delBtn.addEventListener("click",function(e){e.stopPropagation();if(confirm("Delete this trade?")){State.trades=State.trades.filter(function(x){return x.id!==t.id});ss("trades",State.trades);State.expanded=null;State.editing=null;render();}});
       btnRow.appendChild(delBtn);r.appendChild(btnRow);
-      eg2.appendChild(l);eg2.appendChild(r);exDiv.appendChild(eg2);
+
+      // Setups column on the right
+      var sp=div();sp.style.cssText="border-left:1px solid var(--border);padding-left:14px;";
+      var sph=div("xs m mb8");sph.textContent="SETUPS";sp.appendChild(sph);
+      var tSetups=getSetups(t);
+      if(tSetups.length){
+        var stList=div();stList.style.cssText="display:flex;flex-direction:column;gap:6px;";
+        tSetups.forEach(function(name){
+          var col=setupColor(name);
+          var badge=div();
+          badge.style.cssText="padding:6px 10px;background:"+col+"12;border:1px solid "+col+"40;border-left:3px solid "+col+";border-radius:0 3px 3px 0;color:"+col+";font-size:11px;font-weight:700;letter-spacing:.5px;";
+          badge.textContent=name;
+          stList.appendChild(badge);
+        });
+        sp.appendChild(stList);
+        var foot=div("xs m");foot.style.cssText="margin-top:10px;letter-spacing:1px;text-transform:uppercase;opacity:.7;font-size:9px;";
+        foot.textContent=tSetups.length+" setup"+(tSetups.length>1?"s · confluence":"");
+        sp.appendChild(foot);
+      } else {
+        var none=div("xs m");none.style.fontStyle="italic";none.textContent="No setups tagged";sp.appendChild(none);
+      }
+
+      eg2.appendChild(l);eg2.appendChild(r);eg2.appendChild(sp);exDiv.appendChild(eg2);
       exTd.appendChild(exDiv);exRow.appendChild(exTd);tbody.appendChild(exRow);
     }
   });
@@ -1470,7 +1579,7 @@ function oppsTab(){
     var op=span("fw7 "+clr(t.d));op.style.fontSize="19px";op.textContent=dol(t.d);om.appendChild(op);
     om.appendChild(makeBadge("bb",t.pts.toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
     var sep=div("sep");opp.appendChild(sep);
-    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";sv2.textContent=t.setup;opp.appendChild(sv2);
+    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";sv2.textContent=setupString(t)||"—";opp.appendChild(sv2);
     var wl=div("xs m mb8");wl.textContent="WHY IT WORKED";opp.appendChild(wl);var wv=div("xs");wv.style.color="#e0c97a";wv.style.lineHeight="1.7";wv.textContent=t.post||t.conf||"—";opp.appendChild(wv);
     var gr2=div("row gap8 mt8");gr2.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var gl=span("xs m");gl.style.lineHeight="21px";gl.textContent="Exec";gr2.appendChild(gl);var gs=h("span",{className:"gr "+grc(t.ru)},[t.ru]);gs.style.marginLeft="6px";gr2.appendChild(gs);var gl2=span("xs m");gl2.style.lineHeight="21px";gl2.textContent="Rules";gr2.appendChild(gl2);opp.appendChild(gr2);
     el.appendChild(opp);
@@ -1517,7 +1626,7 @@ function playbookTab(){
 
   // Render all entries
   allEntries.forEach(function(entry,idx){
-    var ts=State.trades.filter(function(t){return t.setup===entry.name});
+    var ts=State.trades.filter(function(t){return tradeHasSetup(t,entry.name)});
     var pnl=ts.reduce(function(a,t){return a+t.d},0);
     var w=ts.filter(function(t){return t.d>0}).length;
     var isEditing=(editingIdx===idx);
@@ -1556,7 +1665,7 @@ function playbookTab(){
     } else {
       // View mode
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="Mean Reversion — VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="Volume Profile — POC") nm.style.color="#ffd700";else if(entry.name==="Volume Profile — VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="Volume Profile — POC") nm.style.color="#ffd700";else if(entry.name==="Volume Profile — VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
       hrow.appendChild(left);
       var right=div("row gap8");
       if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
@@ -1653,7 +1762,7 @@ function analyticsTab(){
   // Setup P&L Breakdown (moved from Review/Stats)
   var sbCard2=div("card mt12");var sbH2=div("card-h");var sbT2=div("card-t");sbT2.textContent="Setup P&L Breakdown";sbH2.appendChild(sbT2);sbCard2.appendChild(sbH2);
   var allSetups2=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
-  var bySetup2=allSetups2.map(function(sv){var sts=State.trades.filter(function(t){return t.setup===sv});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
+  var bySetup2=allSetups2.map(function(sv){var sts=State.trades.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
   if(!bySetup2.length){var nsm3=span("xs m");nsm3.textContent="No tagged setups yet — tag trades in the log to see breakdown.";sbCard2.appendChild(nsm3);}
   bySetup2.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){
     var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";
@@ -1813,7 +1922,7 @@ function reviewTab(){
       detCard.appendChild(detH);
       dd.trades.forEach(function(t){
         var tr=div();tr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;";
-        var tl=div("row gap8");tl.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var tn=span("fw7 sm");tn.textContent=t.inst;tl.appendChild(tn);var tt=span("xs m");tt.textContent=t.time;tl.appendChild(tt);var ts2=span("xs m");ts2.style.maxWidth="160px";ts2.style.overflow="hidden";ts2.style.whiteSpace="nowrap";ts2.style.textOverflow="ellipsis";ts2.textContent=t.setup;tl.appendChild(ts2);tr.appendChild(tl);
+        var tl=div("row gap8");tl.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var tn=span("fw7 sm");tn.textContent=t.inst;tl.appendChild(tn);var tt=span("xs m");tt.textContent=t.time;tl.appendChild(tt);var ts2=span("xs m");ts2.style.maxWidth="160px";ts2.style.overflow="hidden";ts2.style.whiteSpace="nowrap";ts2.style.textOverflow="ellipsis";ts2.textContent=setupString(t);tl.appendChild(ts2);tr.appendChild(tl);
         var tv=div("row gap8");tv.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var tp=span("fw7 "+clr(t.d));tp.textContent=dol(t.d);tv.appendChild(tp);tr.appendChild(tv);
         detCard.appendChild(tr);
       });
@@ -1854,8 +1963,8 @@ function reviewTab(){
     // Best/worst
     var bwCard=div("card");var bwH=div("card-h");var bwT=div("card-t");bwT.textContent="Best & Worst This Week";bwH.appendChild(bwT);bwCard.appendChild(bwH);
     var wb=wkTrades.slice().sort(function(a,b){return b.d-a.d})[0];var ww=wkTrades.slice().sort(function(a,b){return a.d-b.d})[0];
-    if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.textContent=wb.inst+" "+wb.dir+" — "+(wb.setup||"Untagged");bwCard.appendChild(bd2);}
-    if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.textContent=ww.inst+" "+ww.dir+" — "+(ww.setup||"Untagged");bwCard.appendChild(wd2);}
+    if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.textContent=wb.inst+" "+wb.dir+" — "+(setupString(wb)||"Untagged");bwCard.appendChild(bd2);}
+    if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.textContent=ww.inst+" "+ww.dir+" — "+(setupString(ww)||"Untagged");bwCard.appendChild(wd2);}
     if(!wkTrades.length){var nm2=span("xs m");nm2.textContent="No trades this week.";bwCard.appendChild(nm2);}
     wg2.appendChild(bwCard);
     // Emotional trend
@@ -1869,7 +1978,7 @@ function reviewTab(){
     var spCard=div("card mb12");var spH=div("card-h");var spT2=div("card-t");spT2.textContent="Setup Performance This Week";spH.appendChild(spT2);spCard.appendChild(spH);
     var hasSetup=false;
     SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;})).forEach(function(sv){
-      var sts=wkTrades.filter(function(t){return t.setup===sv});if(!sts.length)return;hasSetup=true;
+      var sts=wkTrades.filter(function(t){return tradeHasSetup(t,sv)});if(!sts.length)return;hasSetup=true;
       var spnl=sts.reduce(function(a,t){return a+t.d},0);
       var sr=div("rjb");sr.style.padding="6px 0";sr.style.borderBottom="1px solid var(--border)";
       var sl=span("xs");sl.style.color="#e0c97a";sl.style.maxWidth="260px";sl.style.overflow="hidden";sl.style.textOverflow="ellipsis";sl.style.whiteSpace="nowrap";sl.textContent=sv;sr.appendChild(sl);
