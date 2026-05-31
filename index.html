@@ -302,6 +302,41 @@ var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:10,GC:10,Other:1};
 var EMO=["","😖","😟","😐","😊","🔥"];
 var QI=Math.floor(Math.random()*QUOTES.length);
 
+// US market holidays (NYSE/NASDAQ) — date key matches trade date format "MM/DD/YY"
+var MARKET_HOLIDAYS={
+  // 2026 full closures
+  "01/01/26":{type:"closed",name:"New Year's"},
+  "01/19/26":{type:"closed",name:"MLK Day"},
+  "02/16/26":{type:"closed",name:"Presidents'"},
+  "04/03/26":{type:"closed",name:"Good Friday"},
+  "05/25/26":{type:"closed",name:"Memorial"},
+  "06/19/26":{type:"closed",name:"Juneteenth"},
+  "07/03/26":{type:"closed",name:"Independence"},
+  "09/07/26":{type:"closed",name:"Labor Day"},
+  "11/26/26":{type:"closed",name:"Thanksgiving"},
+  "12/25/26":{type:"closed",name:"Christmas"},
+  // 2026 early closes 1pm ET
+  "11/27/26":{type:"early",name:"Black Friday"},
+  "12/24/26":{type:"early",name:"Xmas Eve"},
+  // 2027 full closures
+  "01/01/27":{type:"closed",name:"New Year's"},
+  "01/18/27":{type:"closed",name:"MLK Day"},
+  "02/15/27":{type:"closed",name:"Presidents'"},
+  "03/26/27":{type:"closed",name:"Good Friday"},
+  "05/31/27":{type:"closed",name:"Memorial"},
+  "06/18/27":{type:"closed",name:"Juneteenth"},
+  "07/05/27":{type:"closed",name:"Independence"},
+  "09/06/27":{type:"closed",name:"Labor Day"},
+  "11/25/27":{type:"closed",name:"Thanksgiving"},
+  "12/24/27":{type:"closed",name:"Christmas"},
+  // 2027 early closes
+  "11/26/27":{type:"early",name:"Black Friday"}
+};
+function getMarketHoliday(mo,day,yr){
+  var key=pad(mo+1)+"/"+pad(day)+"/"+String(yr).slice(2);
+  return MARKET_HOLIDAYS[key]||null;
+}
+
 var DEFAULT_TRADES=[
   {id:1,date:"05/28/26",time:"09:42",inst:"ES",dir:"Long",entry:"5280.50",exit:"5291.25",ctr:"2",setup:"Momentum — Trend Continuation",sess:"RTH Open",conf:"Gap fill above VWAP, strong buyer activity at POC",post:"Clean entry, held through retest, exited at target",ex:"A",ru:"A",emo:5,right:"Patient on entry, trusted the level",wrong:"Could have held longer",pts:10.75,d:1075,hl:true},
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
@@ -1925,15 +1960,26 @@ function reviewTab(){
         var isSun=dow===0;
         var isToday=isCurrentMonth&&todayObj.getDate()===day;
         var data=dayMap[day];
+        var holiday=(!isSat&&!isSun)?getMarketHoliday(calMonth,day,calYear):null;
         var bg=isSat?"#1a0e06":"var(--panel2)";
         var border=isSat?"1px solid #ff6b3d30":"1px solid var(--border)";
         var pnlCol="";
+        if(holiday&&!data){
+          if(holiday.type==="closed"){bg="#2b1f02";border="1px solid #ffd70060";}
+          else{bg="#2b220a";border="1px solid #ffab0060";}
+        }
         if(data){bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";pnlCol=data.pnl>0?"#00e676":"#ff4444";}
         if(isToday){border="2px solid var(--ca)";}
         cell.style.cssText="background:"+bg+";border:"+border+";border-radius:4px;padding:8px 6px;min-height:72px;cursor:"+(data?"pointer":"default")+";position:relative;";
 
-        var dnum=div();dnum.style.cssText="font-size:14px;font-weight:700;color:"+(isToday?"var(--ca)":isSat?"#ff6b3d":"var(--text2)")+";margin-bottom:4px;";dnum.textContent=day;cell.appendChild(dnum);
+        var dnumColor=isToday?"var(--ca)":isSat?"#ff6b3d":(holiday&&!data?(holiday.type==="closed"?"#ffd700":"#ffab00"):"var(--text2)");
+        var dnum=div();dnum.style.cssText="font-size:14px;font-weight:700;color:"+dnumColor+";margin-bottom:4px;";dnum.textContent=day;cell.appendChild(dnum);
         if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:9px;color:#ff6b3d50;letter-spacing:1px;margin-top:3px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
+        if(holiday&&!data){
+          var holCol=holiday.type==="closed"?"#ffd700":"#ffab00";
+          var holLbl=div();holLbl.style.cssText="font-size:9px;color:"+holCol+";letter-spacing:1px;margin-top:3px;font-weight:700;";holLbl.textContent=holiday.type==="closed"?"CLOSED":"EARLY 1PM";cell.appendChild(holLbl);
+          var holName=div();holName.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:2px;line-height:1.2;";holName.textContent=holiday.name;cell.appendChild(holName);
+        }
         if(data){
           var dpnl=div();dpnl.style.cssText="font-size:12px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
           var wins=data.trades.filter(function(t){return t.d>0}).length;
@@ -1956,8 +2002,8 @@ function reviewTab(){
     calCard.appendChild(grid);
 
     // Legend
-    var leg=div("row gap12 mt12");leg.style.justifyContent="flex-end";
-    [{col:"#00e676",lbl:"Profitable day"},{col:"#ff4444",lbl:"Loss day"},{col:"var(--border)",lbl:"No trades"},{col:"#ff6b3d",lbl:"Market closed (Sat)"}].forEach(function(l){
+    var leg=div("row gap12 mt12");leg.style.justifyContent="flex-end";leg.style.flexWrap="wrap";
+    [{col:"#00e676",lbl:"Profit"},{col:"#ff4444",lbl:"Loss"},{col:"var(--border)",lbl:"No trades"},{col:"#ff6b3d",lbl:"Weekend"},{col:"#ffd700",lbl:"Holiday close"},{col:"#ffab00",lbl:"Early close 1pm"}].forEach(function(l){
       var li=div("row gap8");var dot=div();dot.style.cssText="width:10px;height:10px;border-radius:2px;background:"+l.col+"20;border:1px solid "+l.col+"60;flex-shrink:0;";var lt=span("xs m");lt.textContent=l.lbl;li.appendChild(dot);li.appendChild(lt);leg.appendChild(li);
     });
     calCard.appendChild(leg);
