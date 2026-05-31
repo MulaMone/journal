@@ -218,7 +218,7 @@ function loadFromCloud(syncId,callback){
     if(d.week_levels) State.weekLevels=d.week_levels;
     // Migrate renamed setups in cloud-loaded trades
     if(State.trades&&State.trades.forEach){
-      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade"};
+      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation"};
       State.trades.forEach(function(t){
         if(t.setup&&RN[t.setup]) t.setup=RN[t.setup];
         if(Array.isArray(t.setups)) t.setups=t.setups.map(function(s){return RN[s]||s;});
@@ -289,11 +289,11 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["Volume Profile — VAH/VAL","Volume Profile — POC","Momentum — Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback"];
 var SDESC={
-  "Volume Profile — VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
-  "Volume Profile — POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
-  "Momentum — Trend Continuation":"Enter in direction of established trend after a pullback or consolidation. Confirm with price structure.",
+  "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
+  "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
+  "Trend Continuation":"Enter in direction of established trend after a pullback or consolidation. Confirm with price structure.",
   "VWAP Fade":"Fade extended moves away from VWAP. Best used when price is 1–2 standard deviations extended with divergence.",
   "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
   "2min POC":"Naked 2min POC with confluences.",
@@ -339,9 +339,9 @@ function getMarketHoliday(mo,day,yr){
 }
 
 var DEFAULT_TRADES=[
-  {id:1,date:"05/28/26",time:"09:42",inst:"ES",dir:"Long",entry:"5280.50",exit:"5291.25",ctr:"2",setup:"Momentum — Trend Continuation",sess:"RTH Open",conf:"Gap fill above VWAP, strong buyer activity at POC",post:"Clean entry, held through retest, exited at target",ex:"A",ru:"A",emo:5,right:"Patient on entry, trusted the level",wrong:"Could have held longer",pts:10.75,d:1075,hl:true},
+  {id:1,date:"05/28/26",time:"09:42",inst:"ES",dir:"Long",entry:"5280.50",exit:"5291.25",ctr:"2",setup:"Trend Continuation",sess:"RTH Open",conf:"Gap fill above VWAP, strong buyer activity at POC",post:"Clean entry, held through retest, exited at target",ex:"A",ru:"A",emo:5,right:"Patient on entry, trusted the level",wrong:"Could have held longer",pts:10.75,d:1075,hl:true},
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
-  {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"Volume Profile — POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
+  {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
 var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
 
@@ -454,7 +454,10 @@ var State={
   (function(){
     var RENAMES={
       "Mean Reversion — VWAP Fade":"VWAP Fade",
-      "Mean Reversion — Extension Fade":"Extension Fade"
+      "Mean Reversion — Extension Fade":"Extension Fade",
+      "Volume Profile — VAH/VAL":"VAH/VAL",
+      "Volume Profile — POC":"POC",
+      "Momentum — Trend Continuation":"Trend Continuation"
     };
     var tradesChanged=false;
     State.trades.forEach(function(t){
@@ -485,8 +488,8 @@ function pad(n){return n<10?"0"+n:n}
 var SETUP_COLORS={
   "2min POC":"#a5ff32",
   "VWAP Fade":"#b06aff",
-  "Volume Profile — POC":"#ffd700",
-  "Volume Profile — VAH/VAL":"#40e0d0"
+  "POC":"#ffd700",
+  "VAH/VAL":"#40e0d0"
 };
 function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
 function getSetups(t){
@@ -1752,7 +1755,7 @@ function playbookTab(){
     } else {
       // View mode
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="Volume Profile — POC") nm.style.color="#ffd700";else if(entry.name==="Volume Profile — VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="POC") nm.style.color="#ffd700";else if(entry.name==="VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
       hrow.appendChild(left);
       var right=div("row gap8");
       if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
