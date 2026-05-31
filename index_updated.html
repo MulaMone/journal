@@ -1,0 +1,2849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDGE — Trading Terminal</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px}
+#app{min-height:100vh;display:flex;flex-direction:column}
+/* TOPBAR */
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:54px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+.logo{font-size:26px;font-weight:700;letter-spacing:4px;color:var(--accent)}
+.brand-name{font-family:'Cinzel',serif;font-size:24px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase}
+.logo small{color:var(--text3);font-size:14px;font-weight:400;margin-left:10px;letter-spacing:2px}
+#topbar-stats{display:flex;gap:18px;font-size:14px}
+#topbar-stats span{color:var(--text3)}
+#topbar-stats b{font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* TABS */
+#tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:sticky;top:0;z-index:200}
+.tab{padding:0 14px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
+.tab:hover{color:var(--text2)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* CONTENT */
+#content{padding:20px;-webkit-overflow-scrolling:touch}
+::-webkit-scrollbar{width:5px;height:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:12px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:11px;margin-bottom:12px}
+/* CARD */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:18px}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.card-t{font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase}
+/* CHIP */
+.chip{background:var(--panel2);border:1px solid var(--border);border-radius:3px;padding:13px 16px}
+.chip .cl{font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:5px}
+.chip .cv{font-size:22px;font-weight:700}
+.chip .cs{font-size:11px;color:var(--text3);margin-top:3px}
+/* COLORS */
+.g{color:var(--green)}.r{color:var(--red)}.a{color:var(--amber)}.b{color:var(--ca)}.m{color:var(--text3)}.ac{color:var(--accent)}
+/* BADGE */
+.badge{display:inline-block;padding:3px 9px;border-radius:2px;font-size:10px;font-weight:600}
+.bg{background:#00e67615;color:var(--green);border:1px solid #00e67635}
+.br{background:#ff444415;color:var(--red);border:1px solid #ff444435}
+.bb{background:var(--ca15);color:var(--ca);border:1px solid var(--ca30)}
+.ba{background:#ffab0015;color:var(--amber);border:1px solid #ffab0035}
+.bw{background:var(--panel3);color:var(--text2);border:1px solid var(--border)}
+/* Importance levels */
+.imp-high{background:#ff444418;color:#ff6b6b;border:1px solid #ff444450;font-weight:700}
+.imp-med{background:#ffab0018;color:#ffcc44;border:1px solid #ffab0050;font-weight:700}
+.imp-low{background:#00d4d415;color:#00d4d4;border:1px solid #00d4d440;font-weight:700}
+/* Mini calendar */
+.cal-popup{position:absolute;z-index:99;background:var(--panel2);border:1px solid var(--border2);border-radius:5px;padding:10px;box-shadow:0 8px 32px #00000060;width:224px;margin-top:2px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cal-nav b{font-size:11px;letter-spacing:1px;color:var(--text2)}
+.cal-nav button{background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;width:22px;height:22px;font-size:11px;line-height:1}
+.cal-nav button:hover{border-color:var(--ca);color:var(--ca)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-dh{font-size:15px;text-align:center;color:var(--text3);padding:6px 0;letter-spacing:1px;font-weight:700}
+.cal-day{font-size:13px;text-align:center;padding:6px 3px;border-radius:3px;cursor:pointer;color:var(--text2)}
+.cal-day:hover{background:var(--panel3);color:var(--text)}
+.cal-day.today{border:1px solid var(--ca);color:var(--ca)}
+.cal-day.selected{background:var(--ca);color:#fff;font-weight:700}
+.cal-day.empty{cursor:default}
+/* Import */
+.drop-zone{border:2px dashed var(--border2);border-radius:5px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--panel2)}
+.drop-zone:hover,.drop-zone.over{border-color:var(--ca);background:var(--panel3)}
+.drop-zone input[type=file]{display:none}
+.drop-icon{font-size:28px;margin-bottom:8px;opacity:.5}
+.preview-tbl{width:100%;border-collapse:collapse;font-size:10px;margin-top:8px}
+.preview-tbl th{padding:6px 8px;text-align:left;color:var(--text3);font-size:11px;letter-spacing:1px;border-bottom:1px solid var(--border)}
+.preview-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);font-size:12px}
+.imp-msg{padding:10px 14px;border-radius:4px;font-size:11px;margin-bottom:12px;font-family:'Courier New',monospace}
+.imp-ok{background:#00e67615;border:1px solid #00e67640;color:var(--green)}
+.imp-err{background:#ff444415;border:1px solid #ff444440;color:var(--red)}
+.imp-info{background:var(--ca15);border:1px solid var(--ca30);color:var(--ca)}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:10px;padding:8px 12px;border-radius:3px;background:var(--panel3);border:1px solid var(--border);font-family:"Courier New",monospace}
+.sync-dot-on{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
+.sync-dot-off{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.field-group{margin-bottom:10px}
+.field-group label{font-size:11px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:5px;text-transform:uppercase}
+.plt-btn{padding:7px 16px;border:1px solid var(--border2);background:var(--panel2);color:var(--text2);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;border-radius:3px;cursor:pointer;transition:all .15s}
+.plt-btn.sel{border-color:var(--ca);color:var(--ca);background:var(--ca15)}
+.plt-btn:hover{border-color:var(--ca);color:var(--ca)}
+/* +/- spinner */
+.ctr-wrap{display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:3px;overflow:hidden;background:var(--panel2)}
+.ctr-wrap input{border:none;border-radius:0;border-left:1px solid var(--border);border-right:1px solid var(--border);text-align:center;width:100%;min-width:0}
+.ctr-btn{background:var(--panel3);border:none;color:var(--text2);font-size:15px;cursor:pointer;width:30px;height:32px;flex-shrink:0;line-height:1}
+.ctr-btn:hover{background:var(--border2);color:var(--text)}
+/* GRADE */
+.gr{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:2px;font-size:12px;font-weight:700}
+.grA{background:#00e67618;color:var(--green);border:1px solid #00e67638}
+.grB{background:var(--ca15);color:var(--ca);border:1px solid var(--ca30)}
+.grC{background:#ffab0018;color:var(--amber);border:1px solid #ffab0038}
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{padding:8px 10px;text-align:left;color:var(--text3);font-size:11px;letter-spacing:1px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);font-size:13px}
+.tbl tr.tr-click:hover td{background:var(--panel2);cursor:pointer}
+.tbl tr.exp-open td{background:var(--panel2)}
+/* SECTION HEADER */
+.sh{font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.sh:before{content:'';width:3px;height:13px;background:var(--ca);display:inline-block}
+/* LEVEL ROW */
+.lvrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.lvrow.checked .lv-label{text-decoration:line-through;opacity:0.38}
+.lvrow.checked .lv-badge{opacity:0.35}
+.lv-check{width:18px;height:18px;border-radius:3px;border:1px solid var(--border2);background:var(--panel3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.lv-check:hover{border-color:var(--ca)}
+.lv-check.on{background:var(--ca15);border-color:var(--ca40)}
+.lv-check.on::after{content:"✓";font-size:11px;color:var(--ca);font-weight:700}
+.lvrow:last-child{border-bottom:none}
+/* QUOTE */
+.qblock{background:var(--panel2);border-left:3px solid var(--ca);padding:11px 14px;border-radius:0 4px 4px 0;margin-bottom:12px}
+.qtext{font-size:13px;color:var(--text2);font-style:italic;line-height:1.7}
+.qauth{font-size:11px;color:var(--text3);margin-top:5px;letter-spacing:1px}
+/* FORM */
+.fg{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:10px}
+.fg .s2{grid-column:span 2}.fg .s4{grid-column:span 4}
+input,select,textarea{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:3px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--ca)}
+select option{background:var(--panel2)}
+label{font-size:11px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:5px;text-transform:uppercase}
+/* BTN */
+.btn{padding:7px 16px;border:1px solid var(--ca);background:transparent;color:var(--ca);font-family:'Courier New',monospace;font-size:12px;letter-spacing:1px;border-radius:3px;cursor:pointer}
+.btn:hover{background:var(--caglow)}
+.btn-g{border-color:var(--green);color:var(--green)}
+.btn-g:hover{background:#00e67610}
+.btn-r{border-color:var(--red);color:var(--red)}
+.btn-r:hover{background:#ff444410}
+/* MISC */
+.sep{height:1px;background:var(--border);margin:12px 0}
+.xs{font-size:12px}.sm{font-size:13px}.fw7{font-weight:700}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mt8{margin-top:8px}.mt12{margin-top:12px}
+.row{display:flex;align-items:center}.rjb{display:flex;align-items:center;justify-content:space-between}.gap8{gap:8px}.gap12{gap:12px}
+.pbc{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:9px}
+.setup-title{font-size:16px;font-weight:700;letter-spacing:.5px;color:var(--text);font-family:'Arial','Helvetica',sans-serif}
+.opp{background:linear-gradient(135deg,var(--panel2),var(--panel3));border:1px solid #1e3d73;border-radius:4px;padding:14px;margin-bottom:10px}
+/* SVG CHART */
+.chart-wrap{overflow:hidden;margin-top:6px}
+svg text{font-family:'Courier New',monospace}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div>
+    <div class="brand-name">BILLION$</div>
+    <div id="topbar-stats"></div>
+  </div>
+  <div id="tabs"></div>
+  <div id="content"></div>
+</div>
+
+<script>
+// ─── SUPABASE SYNC (direct REST) ──────────────────────────────────
+var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
+var SUPA_KEY="sb_publishable_iT3naKNfVfmGAii0LGgMHA_qfV9LR6P";
+var SYNC_ID_KEY="edge_sync_id";
+var supaClient=true; // flag — using direct REST, no client needed
+
+function initSupabase(){ /* no-op — using direct fetch */ }
+
+function supaFetch(method,path,body){
+  var headers={
+    "apikey":SUPA_KEY,
+    "Authorization":"Bearer "+SUPA_KEY,
+    "Content-Type":"application/json"
+  };
+  if(method==="POST"||method==="PATCH") headers["Prefer"]="resolution=merge-duplicates,return=minimal";
+  return fetch(SUPA_URL+"/rest/v1/"+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined});
+}
+
+function getSyncId(){
+  var id=localStorage.getItem(SYNC_ID_KEY);
+  if(!id){id="edge_"+Math.random().toString(36).slice(2,10);localStorage.setItem(SYNC_ID_KEY,id);}
+  return id;
+}
+
+function syncToCloud(){
+  var id=getSyncId();
+  var payload={
+    user_id:id,
+    trades:State.trades,
+    levels:State.levels,
+    week_levels:State.weekLevels,
+    settings:{
+      note:State.note,wkGoal:State.wkGoal,moGoal:State.moGoal,
+      mindsetChecks:State.mindsetChecks,mindsetChecksDate:State.mindsetChecksDate,
+      mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
+      levelChecksDate:State.levelChecksDate,weekLevelChecks:State.weekLevelChecks,newsChecks:State.newsChecks,
+      newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
+      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
+      focusImprove:State.focusImprove,mantraNotes:State.mantraNotes
+    },
+    updated_at:new Date().toISOString()
+  };
+  supaFetch("POST","edge_data",payload)
+  .then(function(r){
+    if(r.ok||r.status===201||r.status===204) updateSyncStatus("synced");
+    else updateSyncStatus("error");
+  })
+  .catch(function(){updateSyncStatus("error");});
+}
+
+function loadFromCloud(syncId,callback){
+  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(syncId)+"&select=*")
+  .then(function(r){return r.json();})
+  .then(function(data){
+    if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
+    var d=data[0];
+    if(d.trades) State.trades=d.trades;
+    if(d.levels) State.levels=d.levels;
+    if(d.week_levels) State.weekLevels=d.week_levels;
+    // Migrate renamed setups in cloud-loaded trades
+    if(State.trades&&State.trades.forEach){
+      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation"};
+      State.trades.forEach(function(t){
+        if(t.setup&&RN[t.setup]) t.setup=RN[t.setup];
+        if(Array.isArray(t.setups)) t.setups=t.setups.map(function(s){return RN[s]||s;});
+      });
+    }
+    // Re-apply migration after cloud load
+    if(State.weekLevels&&State.weekLevels.forEach){
+      State.weekLevels.forEach(function(l){
+        if(l.l==="Weekly VWAP") l.imp="medium";
+        if(l.l==="Daily Naked POC") l.imp="medium";
+        if(l.l==="4hr Naked POC") l.imp="low";
+      });
+    }
+    if(d.settings){
+      var s=d.settings;
+      if(s.note) State.note=s.note;
+      if(s.wkGoal) State.wkGoal=s.wkGoal;
+      if(s.moGoal) State.moGoal=s.moGoal;
+      if(s.mindsetChecks) State.mindsetChecks=s.mindsetChecks;
+      if(s.mindsetChecksDate) State.mindsetChecksDate=s.mindsetChecksDate;
+      if(s.mindsetNote) State.mindsetNote=s.mindsetNote;
+      if(s.levelChecks) State.levelChecks=s.levelChecks;
+      if(s.levelChecksDate) State.levelChecksDate=s.levelChecksDate;
+      if(s.weekLevelChecks) State.weekLevelChecks=s.weekLevelChecks;
+      if(s.newsChecks) State.newsChecks=s.newsChecks;
+      if(s.newsChecksDate) State.newsChecksDate=s.newsChecksDate;
+      if(s.newsOther) State.newsOther=s.newsOther;
+      if(s.newsSelected) State.newsSelected=s.newsSelected;
+      if(s.newsSelectedDate) State.newsSelectedDate=s.newsSelectedDate;
+      if(s.focusImprove) State.focusImprove=s.focusImprove;
+      if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
+    }
+    ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
+    if(callback) callback(true);
+  })
+  .catch(function(){if(callback) callback(false);});
+}
+
+function updateSyncStatus(status){
+  var el=document.getElementById("sync-status");
+  if(!el) return;
+  if(status==="synced"){el.textContent="✓ SYNCED";el.style.color="var(--green)";}
+  else if(status==="syncing"){el.textContent="↻ SYNCING";el.style.color="var(--amber)";}
+  else if(status==="error"){el.textContent="✗ SYNC ERR";el.style.color="var(--red)";}
+  else if(status==="offline"){el.textContent="⊘ OFFLINE";el.style.color="var(--text3)";}
+}
+
+// Auto-sync on every ss() call — wrap the original
+var _ss_orig=null;
+function initAutoSync(){
+  _ss_orig=ss;
+  // Debounced sync — wait 1.5s after last save before pushing to cloud
+  var syncTimer=null;
+  window._syncToCloud=function(){
+    updateSyncStatus("syncing");
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(syncToCloud,1500);
+  };
+}
+
+// ─── DATA ───────────────────────────────────────────────────────────
+var QUOTES=[
+  {t:"Trade what you see, not what you think.",a:"— Unknown"},
+  {t:"It's not whether you're right or wrong, but how much you make when right and lose when wrong.",a:"— George Soros"},
+  {t:"The goal of a successful trader is to make the best trades. Money is secondary.",a:"— Alexander Elder"},
+  {t:"Risk comes from not knowing what you're doing.",a:"— Warren Buffett"},
+  {t:"The market can stay irrational longer than you can stay solvent.",a:"— J.M. Keynes"}
+];
+var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
+var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback"];
+var SDESC={
+  "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
+  "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
+  "Trend Continuation":"Enter in direction of established trend after a pullback or consolidation. Confirm with price structure.",
+  "VWAP Fade":"Fade extended moves away from VWAP. Best used when price is 1–2 standard deviations extended with divergence.",
+  "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
+  "2min POC":"Naked 2min POC with confluences.",
+  "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma."
+};
+var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:10,GC:10,Other:1};
+var EMO=["","😖","😟","😐","😊","🔥"];
+var QI=Math.floor(Math.random()*QUOTES.length);
+
+var MACRO_NEWS_NAMES=["ADP Non-Farm Employment","ISM Manufacturing PMI","ISM Services PMI","PPI (Producer Price Index)","JOLTS Job Openings","Consumer Confidence","Durable Goods Orders","10-Yr Treasury Auction","Michigan Consumer Sentiment","Unemployment Rate"];
+function isMacroNews(name){return MACRO_NEWS_NAMES.indexOf(name)>-1;}
+
+// US market holidays (NYSE/NASDAQ) — date key matches trade date format "MM/DD/YY"
+var MARKET_HOLIDAYS={
+  // 2026 full closures
+  "01/01/26":{type:"closed",name:"New Year's"},
+  "01/19/26":{type:"closed",name:"MLK Day"},
+  "02/16/26":{type:"closed",name:"Presidents'"},
+  "04/03/26":{type:"closed",name:"Good Friday"},
+  "05/25/26":{type:"closed",name:"Memorial"},
+  "06/19/26":{type:"closed",name:"Juneteenth"},
+  "07/03/26":{type:"closed",name:"Independence"},
+  "09/07/26":{type:"closed",name:"Labor Day"},
+  "11/26/26":{type:"closed",name:"Thanksgiving"},
+  "12/25/26":{type:"closed",name:"Christmas"},
+  // 2026 early closes 1pm ET
+  "11/27/26":{type:"early",name:"Black Friday"},
+  "12/24/26":{type:"early",name:"Xmas Eve"},
+  // 2027 full closures
+  "01/01/27":{type:"closed",name:"New Year's"},
+  "01/18/27":{type:"closed",name:"MLK Day"},
+  "02/15/27":{type:"closed",name:"Presidents'"},
+  "03/26/27":{type:"closed",name:"Good Friday"},
+  "05/31/27":{type:"closed",name:"Memorial"},
+  "06/18/27":{type:"closed",name:"Juneteenth"},
+  "07/05/27":{type:"closed",name:"Independence"},
+  "09/06/27":{type:"closed",name:"Labor Day"},
+  "11/25/27":{type:"closed",name:"Thanksgiving"},
+  "12/24/27":{type:"closed",name:"Christmas"},
+  // 2027 early closes
+  "11/26/27":{type:"early",name:"Black Friday"}
+};
+function getMarketHoliday(mo,day,yr){
+  var key=pad(mo+1)+"/"+pad(day)+"/"+String(yr).slice(2);
+  return MARKET_HOLIDAYS[key]||null;
+}
+
+var DEFAULT_TRADES=[
+  {id:1,date:"05/28/26",time:"09:42",inst:"ES",dir:"Long",entry:"5280.50",exit:"5291.25",ctr:"2",setup:"Trend Continuation",sess:"RTH Open",conf:"Gap fill above VWAP, strong buyer activity at POC",post:"Clean entry, held through retest, exited at target",ex:"A",ru:"A",emo:5,right:"Patient on entry, trusted the level",wrong:"Could have held longer",pts:10.75,d:1075,hl:true},
+  {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
+  {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
+];
+var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
+
+// ─── STATE ───────────────────────────────────────────────────────────
+function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
+function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){}}
+
+var State={
+  tab:ls("tab","home"),
+  trades:ls("trades",DEFAULT_TRADES),
+  levels:ls("levels",DEFAULT_LEVELS),
+  note:ls("note","Focus on RTH open momentum. Wait for clear structure above VWAP before entering."),
+  expanded:null,
+  adding:false,
+  editing:null,
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"4hr Naked POC",imp:"low",builtin:true}]),
+  levelChecks:ls("levelChecks",{}),
+  levelChecksDate:ls("levelChecksDate",""),
+  weekLevelChecks:ls("weekLevelChecks",{}),
+  pb_adding:false,
+  pb_editing:undefined,
+  rv_view:"month",
+  rv_year:undefined,
+  rv_month:undefined,
+  rv_selected_day:null,
+  imp_platform:"tradovate",
+  imp_preview:null,
+  imp_msg:"",
+  tv_creds:ls("tv_creds",{user:"",pass:"",cid:"",sec:"",env:"live"}),
+  tv_token:ls("tv_token",null),
+  tv_lastSync:ls("tv_lastSync",""),
+  nt_lastSync:ls("nt_lastSync",""),
+  nt_fileHandle:null,
+  sync_tab:"tradovate",
+  chart_symbol:"ES",
+  chart_interval:"1h",
+  mindsetChecks:ls("mindsetChecks",{}),
+  mindsetChecksDate:ls("mindsetChecksDate",""),
+  mindsetNote:ls("mindsetNote",""),
+  newsChecks:ls("newsChecks",{}),
+  newsChecksDate:ls("newsChecksDate",""),
+  newsOther:ls("newsOther",""),
+  newsSelected:ls("newsSelected",[]),
+  newsSelectedDate:ls("newsSelectedDate",""),
+  focusImprove:ls("focusImprove",""),
+  mantraNotes:ls("mantraNotes",""),
+  wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
+  moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup.")
+};
+// Migrate old PDH/PDL split levels to combined
+(function(){
+  var lvls=State.levels;
+  var hasPDH=lvls.some(function(l){return l.l==="PDH";});
+  var hasPDL=lvls.some(function(l){return l.l==="PDL";});
+  var hasVAH=lvls.some(function(l){return l.l==="VAH";});
+  var hasVAL=lvls.some(function(l){return l.l==="VAL";});
+  var changed=false;
+  if(hasPDH||hasPDL){
+    lvls=lvls.filter(function(l){return l.l!=="PDH"&&l.l!=="PDL";});
+    lvls.unshift({l:"PDH/PDL",imp:"high",sess:""});
+    changed=true;
+  }
+  if(hasVAH||hasVAL){
+    lvls=lvls.filter(function(l){return l.l!=="VAH"&&l.l!=="VAL";});
+    var pocIdx=lvls.findIndex?lvls.findIndex(function(l){return l.l==="POC";}):2;
+    if(pocIdx>-1) lvls.splice(pocIdx+1,0,{l:"VAH/VAL/POC",imp:"high",sess:""});
+    else lvls.push({l:"VAH/VAL/POC",imp:"high",sess:""});
+    changed=true;
+  }
+  if(changed){State.levels=lvls;ss("levels",lvls);}
+
+  // Update importances and rename VAH/VAL → VAH/VAL POC, remove POC
+  var BUILTIN_NAMES=["VAH/VAL/POC","PDH/PDL","VWAP","BIZZ","ONH/ONL","OPEN"];
+  State.levels.forEach(function(l){
+    if(l.l==="VAH/VAL"||l.l==="VAH/VAL POC"||l.l==="VAH/VAL/POC"){l.l="VAH/VAL/POC";l.imp="high";}
+    if(l.l==="VWAP") l.imp="medium";
+    if(BUILTIN_NAMES.indexOf(l.l)>-1) l.builtin=true;
+    if(l.l==="BIZZ"&&!l.sess) l.sess="Full RTH";
+  });
+  State.levels=State.levels.filter(function(l){return l.l!=="POC";});
+  // Put VAH/VAL/POC first
+  var vahIdx=State.levels.findIndex(function(l){return l.l==="VAH/VAL/POC";});
+  if(vahIdx>0){var vah=State.levels.splice(vahIdx,1)[0];State.levels.unshift(vah);}
+  // Put OPEN last
+  var openIdx=State.levels.findIndex(function(l){return l.l==="OPEN";});
+  if(openIdx>-1&&openIdx!==State.levels.length-1){var openLvl=State.levels.splice(openIdx,1)[0];State.levels.push(openLvl);}
+  // Update OPEN session tag
+  State.levels.forEach(function(l){if(l.l==="OPEN"&&!l.sess) l.sess="RTH Open";});
+  ss("levels",State.levels);
+  // Mark builtin week levels
+  var WK_BUILTIN=["Weekly VAH/VAL/POC","Weekly Open","Weekly VWAP","Weekly Naked POC","Daily Naked POC","4hr Naked POC"];
+  var wkChanged=false;
+  State.weekLevels.forEach(function(l){
+    if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
+    if(l.l==="Weekly VWAP"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
+    if(l.l==="Daily Naked POC"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
+    if(l.l==="4hr Naked POC"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
+  });
+  if(wkChanged) ss("weekLevels",State.weekLevels);
+
+  // Clean up "Opening Range" from custom playbook if it was saved there
+  try {
+    var pbCustom=ls("playbook_custom",[]);
+    var beforeLen=pbCustom.length;
+    pbCustom=pbCustom.filter(function(e){return e.name!=="Opening Range";});
+    if(pbCustom.length!==beforeLen) ss("playbook_custom",pbCustom);
+  } catch(e){}
+
+  // Migrate setup name renames in existing trades
+  (function(){
+    var RENAMES={
+      "Mean Reversion — VWAP Fade":"VWAP Fade",
+      "Mean Reversion — Extension Fade":"Extension Fade",
+      "Volume Profile — VAH/VAL":"VAH/VAL",
+      "Volume Profile — POC":"POC",
+      "Momentum — Trend Continuation":"Trend Continuation"
+    };
+    var tradesChanged=false;
+    State.trades.forEach(function(t){
+      if(t.setup&&RENAMES[t.setup]){t.setup=RENAMES[t.setup];tradesChanged=true;}
+      if(Array.isArray(t.setups)){
+        t.setups=t.setups.map(function(s){if(RENAMES[s]){tradesChanged=true;return RENAMES[s];}return s;});
+      }
+    });
+    if(tradesChanged) ss("trades",State.trades);
+    // Also rename in custom playbook
+    try {
+      var pb=ls("playbook_custom",[]);
+      var pbChanged=false;
+      pb.forEach(function(e){if(RENAMES[e.name]){e.name=RENAMES[e.name];pbChanged=true;}});
+      if(pbChanged) ss("playbook_custom",pb);
+    } catch(e){}
+  })();
+})();
+
+// ─── HELPERS ─────────────────────────────────────────────────────────
+function dol(n){n=n||0;return(n>=0?"+":"")+"$"+Math.abs(n).toFixed(0)}
+function clr(n){return (n||0)>=0?"g":"r"}
+function grc(g){return "gr"+g}
+function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
+function pad(n){return n<10?"0"+n:n}
+
+// ─── SETUP HELPERS (multi-setup support) ─────────────────────────────
+var SETUP_COLORS={
+  "2min POC":"#a5ff32",
+  "VWAP Fade":"#b06aff",
+  "POC":"#ffd700",
+  "VAH/VAL":"#40e0d0"
+};
+function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
+function getSetups(t){
+  if(t&&Array.isArray(t.setups)&&t.setups.length) return t.setups;
+  if(t&&t.setup) return [t.setup];
+  return [];
+}
+function setupString(t){return getSetups(t).join(", ");}
+function tradeHasSetup(t,name){return getSetups(t).indexOf(name)>-1;}
+// Returns a DOM span with each setup colored per SETUP_COLORS theme.
+// Setups not in the color map get default inherited color.
+function setupColoredEl(t){
+  var s=getSetups(t);
+  var wrap=h("span");
+  if(!s.length) return wrap;
+  s.forEach(function(name,i){
+    var sp=h("span");sp.textContent=name;
+    if(SETUP_COLORS[name]){sp.style.color=SETUP_COLORS[name];sp.style.fontWeight="700";}
+    wrap.appendChild(sp);
+    if(i<s.length-1){
+      var sep=h("span");sep.textContent=", ";sep.style.color="var(--text3)";wrap.appendChild(sep);
+    }
+  });
+  return wrap;
+}
+function h(tag,attrs,children){
+  var el=document.createElement(tag);
+  if(attrs) Object.keys(attrs).forEach(function(k){
+    if(k==="className") el.className=attrs[k];
+    else if(k==="innerHTML") el.innerHTML=attrs[k];
+    else if(k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(),attrs[k]);
+    else el.setAttribute(k,attrs[k]);
+  });
+  if(children){
+    if(!Array.isArray(children)) children=[children];
+    children.forEach(function(c){if(c!=null){if(typeof c==="string"||typeof c==="number") el.appendChild(document.createTextNode(c)); else el.appendChild(c);}});
+  }
+  return el;
+}
+function div(cls,children){return h("div",{className:cls||""},children)}
+function span(cls,text){return h("span",{className:cls||""},typeof text!=="undefined"?[text]:[])}
+
+// ─── STATS HELPERS ───────────────────────────────────────────────────
+function calcStats(trades){
+  var wins=trades.filter(function(t){return t.d>0});
+  var losses=trades.filter(function(t){return t.d<0});
+  var total=trades.reduce(function(a,t){return a+t.d},0);
+  var wr=trades.length?(wins.length/trades.length*100).toFixed(0):0;
+  var avgW=wins.length?wins.reduce(function(a,t){return a+t.d},0)/wins.length:0;
+  var avgL=losses.length?losses.reduce(function(a,t){return a+t.d},0)/losses.length:0;
+  return{wins:wins,losses:losses,total:total,wr:wr,avgW:avgW,avgL:avgL};
+}
+
+// ─── SVG CHARTS ──────────────────────────────────────────────────────
+function fmtAxisDollar(v){
+  var n=Math.round(v);
+  if(Math.abs(n)>=10000) return (n<0?"-":"")+"$"+(Math.abs(n)/1000).toFixed(0)+"k";
+  if(Math.abs(n)>=1000) return (n<0?"-":"")+"$"+(Math.abs(n)/1000).toFixed(1)+"k";
+  return (n>=0?"":"-")+"$"+Math.abs(n);
+}
+
+function equitySVG(trades,w,h2){
+  var eq=[0];
+  trades.slice().reverse().forEach(function(t){eq.push(eq[eq.length-1]+t.d)});
+  if(eq.length<2){
+    var empty=div("chart-wrap");
+    empty.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:10px;font-family:Courier New,monospace">No trades yet</div>';
+    return empty;
+  }
+  var mn=Math.min.apply(null,eq),mx=Math.max.apply(null,eq);
+  var rng=mx-mn||1;
+  var finalVal=eq[eq.length-1];
+  var longestLbl=fmtAxisDollar(Math.abs(mn)>Math.abs(mx)?mn:mx);
+  var pad2=Math.max(52,longestLbl.length*8);
+  var padR=58,padB=18,padT=12;
+  var W=w-pad2-padR,H=h2-padB-padT;
+  function px(i){return pad2+(i/(eq.length-1))*W}
+  function py(v){return padT+H-(v-mn)/rng*H}
+  var zero=py(0);
+  var gG="egG"+w+h2,gR="egR"+w+h2,cA="cA"+w+h2,cB="cB"+w+h2;
+
+  var svg='<svg width="100%" viewBox="0 0 '+w+' '+h2+'" xmlns="http://www.w3.org/2000/svg">';
+  svg+='<defs>';
+  svg+='<linearGradient id="'+gG+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e676" stop-opacity="0.25"/><stop offset="100%" stop-color="#00e676" stop-opacity="0"/></linearGradient>';
+  svg+='<linearGradient id="'+gR+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4444" stop-opacity="0"/><stop offset="100%" stop-color="#ff4444" stop-opacity="0.25"/></linearGradient>';
+  var aboveH=Math.max(0,Math.min(zero,padT+H)-padT);
+  svg+='<clipPath id="'+cA+'"><rect x="0" y="'+padT+'" width="'+w+'" height="'+aboveH+'"/></clipPath>';
+  var belowY=Math.max(padT,zero);var belowH=padT+H-belowY;
+  svg+='<clipPath id="'+cB+'"><rect x="0" y="'+belowY+'" width="'+w+'" height="'+Math.max(0,belowH)+'"/></clipPath>';
+  svg+='</defs>';
+
+  // Grid + labels
+  for(var s=0;s<=4;s++){
+    var frac=s/4;
+    var yg=(padT+H*(1-frac)).toFixed(1);
+    var vg=mn+rng*frac;
+    svg+='<line x1="'+pad2+'" y1="'+yg+'" x2="'+(pad2+W)+'" y2="'+yg+'" stroke="#1a3260" stroke-dasharray="2 4"/>';
+    var lbl=fmtAxisDollar(vg);
+    var lblCol=vg>0.5?"#00e676":vg<-0.5?"#ff4444":"#c9a84c";
+    svg+='<text x="'+(pad2-6)+'" y="'+(parseFloat(yg)+4)+'" text-anchor="end" font-size="10" font-weight="600" font-family="Courier New,monospace" fill="'+lblCol+'">'+lbl+'</text>';
+  }
+
+  // Zero line + $0 label
+  if(zero>=padT&&zero<=padT+H){
+    svg+='<line x1="'+pad2+'" y1="'+zero.toFixed(1)+'" x2="'+(pad2+W)+'" y2="'+zero.toFixed(1)+'" stroke="#2a5099" stroke-width="1.5" stroke-dasharray="4 3"/>';
+    svg+='<text x="'+(pad2-6)+'" y="'+(zero+4).toFixed(1)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#4d7ab8">$0</text>';
+  }
+
+  // Points string
+  var pts=eq.map(function(v,i){return px(i).toFixed(1)+","+py(v).toFixed(1)}).join(" ");
+  var zeroLine=pad2+","+zero.toFixed(1)+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1);
+
+  // Green fill above zero
+  svg+='<polygon points="'+pts+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1)+" "+pad2+","+zero.toFixed(1)+'" fill="url(#'+gG+')" clip-path="url(#'+cA+')"/>';
+  // Red fill below zero
+  svg+='<polygon points="'+pts+" "+(pad2+W).toFixed(1)+","+zero.toFixed(1)+" "+pad2+","+zero.toFixed(1)+'" fill="url(#'+gR+')" clip-path="url(#'+cB+')"/>';
+
+  // Full polyline clipped green (above zero)
+  svg+='<polyline points="'+pts+'" fill="none" stroke="#00e676" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#'+cA+')"/>';
+  // Full polyline clipped red (below zero)
+  svg+='<polyline points="'+pts+'" fill="none" stroke="#ff4444" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#'+cB+')"/>';
+
+  // End dot + label
+  var lastX=parseFloat(px(eq.length-1).toFixed(1));
+  var lastY=parseFloat(py(finalVal).toFixed(1));
+  var dotCol=finalVal>=0?"#00e676":"#ff4444";
+  svg+='<circle cx="'+lastX+'" cy="'+lastY+'" r="4" fill="'+dotCol+'" stroke="#0d1e38" stroke-width="1.5"/>';
+  var endLbl=(finalVal>=0?"+":"")+fmtAxisDollar(finalVal);
+  svg+='<text x="'+(lastX+8)+'" y="'+(lastY+4)+'" text-anchor="start" font-size="11" font-weight="700" font-family="Courier New,monospace" fill="'+dotCol+'">'+endLbl+'</text>';
+  svg+='</svg>';
+  var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
+}
+
+function barSVG(data,w,h2){
+  if(!data||!data.length) return div("chart-wrap");
+  var vals=data.map(function(d){return d.v});
+  var mn=Math.min(0,Math.min.apply(null,vals)),mx=Math.max(0,Math.max.apply(null,vals));
+  var rng=mx-mn||1;
+  var padL=30,padB=18,padT=6;
+  var W=w-padL,H=h2-padB-padT;
+  var bw=Math.floor(W/data.length*0.6);
+  var zero=padT+H-(-mn/rng)*H;
+  var svg='<svg width="100%" viewBox="0 0 '+w+" "+h2+'" xmlns="http://www.w3.org/2000/svg">';
+  [0.25,0.5,0.75,1].forEach(function(f){var y=padT+H*(1-f); svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
+  svg+='<line x1="'+padL+'" y1="'+zero+'" x2="'+(padL+W)+'" y2="'+zero+'" stroke="#2a5099"/>';
+  data.forEach(function(d,i){
+    var cx=padL+(i+0.5)*(W/data.length);
+    var yv=padT+H-(d.v-mn)/rng*H;
+    var ybar=Math.min(yv,zero),hbar=Math.abs(yv-zero);
+    if(hbar<1) hbar=1;
+    var col=d.v>=0?"#00e676":"#ff4444";
+    svg+='<rect x="'+(cx-bw/2)+'" y="'+ybar+'" width="'+bw+'" height="'+hbar+'" fill="'+col+'" rx="2"/>';
+    svg+='<text x="'+cx+'" y="'+(h2-4)+'" text-anchor="middle" font-size="8" fill="#c9a84c">'+d.l+'</text>';
+  });
+  [mn,mx].forEach(function(v){if(v===0)return; var y=padT+H-(v-mn)/rng*H; svg+='<text x="'+(padL-4)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" fill="#c9a84c">$'+Math.round(v)+'</text>'});
+  svg+='</svg>';
+  var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
+}
+
+function lineSVG(data,w,h2,col){
+  col=col||"#ffab00";
+  if(!data||data.length<2) return div("chart-wrap");
+  var vals=data.map(function(d){return d.v});
+  var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+  var rng=mx-mn||1;
+  var padL=24,padB=16,padT=6;
+  var W=w-padL,H=h2-padB-padT;
+  function px(i){return padL+(i/(data.length-1))*W}
+  function py(v){return padT+H-(v-mn)/rng*H}
+  var pts=data.map(function(d,i){return px(i)+","+py(d.v)}).join(" ");
+  var svg='<svg width="100%" viewBox="0 0 '+w+" "+h2+'" xmlns="http://www.w3.org/2000/svg">';
+  [0.25,0.5,0.75].forEach(function(f){var y=padT+H*f; svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
+  svg+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
+  data.forEach(function(d,i){svg+='<circle cx="'+px(i)+'" cy="'+py(d.v)+'" r="3" fill="'+col+'"/>'});
+  [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-4)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" fill="#c9a84c">'+v+'</text>'});
+  svg+='</svg>';
+  var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
+}
+
+// ─── UI COMPONENTS ───────────────────────────────────────────────────
+function makeChip(label,val,colorCls,sub){
+  var c=div("chip");
+  c.appendChild(div("cl",[label]));
+  var vEl=div("cv");
+  if(typeof val==="string"||typeof val==="number") vEl.className+=" "+(colorCls||"");
+  if(val instanceof HTMLElement) vEl.appendChild(val); else vEl.textContent=val;
+  if(colorCls&&(typeof val==="string"||typeof val==="number")) vEl.className="cv "+(colorCls||"");
+  c.appendChild(vEl);
+  if(sub){var s=div("cs");s.textContent=sub;c.appendChild(s);}
+  return c;
+}
+
+function makeBadge(cls,text){var b=h("span",{className:"badge "+cls});b.textContent=text;return b;}
+function impBadge(imp){
+  var cfg={
+    high:{cls:"imp-high",icon:"●●●",label:"HIGH"},
+    medium:{cls:"imp-med",icon:"●●○",label:"MED"},
+    low:{cls:"imp-low",icon:"●○○",label:"LOW"}
+  };
+  var c=cfg[imp]||cfg.medium;
+  var b=h("span",{className:"badge "+c.cls});
+  b.style.letterSpacing="3px";b.style.fontSize="8px";b.title=c.label+" importance";
+  b.textContent=c.icon;return b;
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────
+var TABS=[
+  {id:"home",icon:"⌂",label:"HOME"},
+  {id:"prep",icon:"◎",label:"PREP"},
+  {id:"log",icon:"≡",label:"TRADE LOG"},
+  {id:"opps",icon:"★",label:"BEST LICKS"},
+  {id:"playbook",icon:"◈",label:"PLAYS"},
+  {id:"analytics",icon:"⟁",label:"STATS"},
+  {id:"review",icon:"◫",label:"REVIEW"},
+  {id:"import",icon:"⬆",label:"IMPORT"},
+  {id:"chart",icon:"📈",label:"CHART"}
+];
+
+function renderTabs(){
+  var el=document.getElementById("tabs");
+  el.innerHTML="";
+  el.style.justifyContent="space-between";
+  var tabsWrap=div("row");tabsWrap.style.gap="1px";
+  TABS.forEach(function(t){
+    var tab=div("tab"+(State.tab===t.id?" active":""));
+    tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
+    tab.addEventListener("click",function(){State.tab=t.id;ss("tab",t.id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;if(t.id!=="review"){State.rv_selected_day=null;}render();window.scrollTo(0,0);});
+    tabsWrap.appendChild(tab);
+  });
+  el.appendChild(tabsWrap);
+  // Clock + countdown on right side
+  var clkWrap=div();clkWrap.id="tab-clock";
+  clkWrap.style.cssText="font-family:'Courier New',monospace;padding:0 16px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;white-space:nowrap;flex-shrink:0;gap:2px;";
+  var clkTime=div();clkTime.id="clk-time";clkTime.style.cssText="font-size:15px;font-weight:700;color:#ffffff;letter-spacing:2px;";
+  var clkCd=div();clkCd.id="clk-countdown";clkCd.style.cssText="font-size:11px;font-weight:700;color:#ff4444;letter-spacing:1px;";
+  clkWrap.appendChild(clkTime);clkWrap.appendChild(clkCd);
+  el.appendChild(clkWrap);
+  startClock();
+}
+
+var _clockInterval=null;
+function startClock(){
+  if(_clockInterval) clearInterval(_clockInterval);
+  function tick(){
+    var tEl=document.getElementById("clk-time");
+    var cdEl=document.getElementById("clk-countdown");
+    if(!tEl||!cdEl) return;
+    var now=new Date();
+    var hh=now.getHours(),mm=now.getMinutes(),ss2=now.getSeconds();
+    var ampm=hh>=12?"PM":"AM";
+    var hh12=hh%12||12;
+    tEl.textContent=(hh12<10?"0":"")+hh12+":"+(mm<10?"0":"")+mm+":"+(ss2<10?"0":"")+ss2+" "+ampm;
+
+    // Get ET time for market countdown
+    var etStr=new Date().toLocaleString("en-US",{timeZone:"America/New_York",hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    var etParts=etStr.split(":");
+    var etH=parseInt(etParts[0]),etM=parseInt(etParts[1]),etS=parseInt(etParts[2]);
+    // Market close: 16:15 ET
+    var closeH=16,closeM=15,closeS=0;
+    var nowSecs=etH*3600+etM*60+etS;
+    var closeSecs=closeH*3600+closeM*60+closeS;
+    var openSecs=9*3600+30*60; // 9:30 AM ET open
+    var day=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",weekday:"short"});
+    var isWeekend=(day==="Sat"||day==="Sun");
+
+    var etNow = new Date(
+      new Date().toLocaleString("en-US",{timeZone:"America/New_York"})
+    );
+    var dayNum = etNow.getDay();
+
+    if(dayNum===6){
+      cdEl.style.color="#ff4444";cdEl.textContent="MARKET CLOSED";
+    } else if(dayNum===0 && nowSecs<(18*3600)){
+      var ethOpenSecs=18*3600;
+      var diff=ethOpenSecs-nowSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#00e676";
+      cdEl.textContent="ETH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+    } else if(dayNum===0){
+      var mondayOpenSecs=9*3600+30*60;
+      var diff=((24*3600)-nowSecs)+mondayOpenSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#00d4d4";
+      cdEl.textContent="RTH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+    } else if(nowSecs<openSecs){
+      // Pre-market countdown to open
+      var diff=openSecs-nowSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#ffab00";
+      cdEl.textContent="OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+    } else if(nowSecs<closeSecs){
+      // Countdown to close
+      var diff2=closeSecs-nowSecs;
+      var ch2=Math.floor(diff2/3600),cm2=Math.floor((diff2%3600)/60),cs2=diff2%60;
+      cdEl.style.color="#ff4444";
+      cdEl.textContent="CLOSE IN "+(ch2>0?ch2+"h ":"")+(cm2<10?"0":"")+cm2+":"+(cs2<10?"0":"")+cs2;
+    } else {
+      cdEl.style.color="#8fadd4";cdEl.textContent="MARKET CLOSED 4:15 PM";
+    }
+  }
+  tick();
+  _clockInterval=setInterval(tick,1000);
+}
+
+function renderTopbar(){
+  var td=today();
+  var todayTrades=State.trades.filter(function(t){return t.date===td});
+  var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
+  var tW=todayTrades.filter(function(t){return t.d>0}).length;
+  var tL=todayTrades.filter(function(t){return t.d<0}).length;
+  var s=calcStats(State.trades);
+  var el=document.getElementById("topbar-stats");
+  el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span>W/L</span> <b class="g">'+tW+'</b><b class="m">–</b><b class="r">'+tL+'</b> &nbsp; <span>WIN%</span> <b>'+s.wr+'%</b> &nbsp; <b class="m xs">'+td+'</b>';
+}
+
+// ─── HOME TAB ─────────────────────────────────────────────────────────
+function homeTab(){
+  var el=div();
+  var td=today();
+  var todayTrades=State.trades.filter(function(t){return t.date===td});
+  var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
+  var tW=todayTrades.filter(function(t){return t.d>0}).length;
+  var tL=todayTrades.filter(function(t){return t.d<0}).length;
+  var s=calcStats(State.trades);
+
+  // Hero P&L row — 3-col if news selected, else 2-col
+  var tdNews=today();
+  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
+  var heroRow=div((hasNews?"":"g2 ")+"mb12");
+  if(hasNews) heroRow.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:12px;";
+  // Today P&L — big
+  var todayCard=div("card");todayCard.style.background="var(--panel2)";todayCard.style.borderColor=(tPnl>=0?"#00e67640":"#ff444440");todayCard.style.borderLeft=(tPnl>=0?"4px solid #00e676":"4px solid #ff4444");
+  var tcTop=div("rjb mb8");var tcL=div("card-t");tcL.textContent="TODAY P&L";tcTop.appendChild(tcL);
+  var tcBadge=div("xs m");
+  tcBadge.innerHTML=todayTrades.length+' trades &nbsp;&bull;&nbsp; <span style="color:var(--green);font-weight:700">'+tW+'W</span> / <span style="color:var(--red);font-weight:700">'+tL+'L</span>';
+  tcTop.appendChild(tcBadge);
+  todayCard.appendChild(tcTop);
+  var tcVal=div();tcVal.style.fontSize="38px";tcVal.style.fontWeight="700";tcVal.style.lineHeight="1";tcVal.style.letterSpacing="1px";tcVal.className=clr(tPnl);tcVal.textContent=dol(tPnl);todayCard.appendChild(tcVal);
+  var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+t.pts},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
+  var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;";
+  tcWr.textContent="WIN RATE  "+s.wr+"%";todayCard.appendChild(tcWr);
+  heroRow.appendChild(todayCard);
+  // News panel — only shown when news items are flagged
+  if(hasNews){
+    var keyEvents=State.newsSelected.filter(function(n){return !isMacroNews(n);});
+    var macroEvents=State.newsSelected.filter(function(n){return isMacroNews(n);});
+    var panelAccent=keyEvents.length>0?"var(--ca)":"#b06aff";
+    var newsPanel=div("card");newsPanel.style.cssText="background:var(--panel2);border-color:"+(keyEvents.length>0?"#ff8c0040":"#b06aff40")+";border-left:4px solid "+panelAccent+";";
+    var npTop=div("rjb mb8");var npL=div("card-t");npL.textContent="TODAY'S NEWS";npL.style.color=panelAccent;npTop.appendChild(npL);
+    var npBadge=div("xs b");npBadge.style.cssText="color:"+panelAccent+";font-size:10px;font-weight:700;letter-spacing:1px;";npBadge.textContent="⚠ "+State.newsSelected.length+" EVENT"+(State.newsSelected.length>1?"S":"");npTop.appendChild(npBadge);
+    newsPanel.appendChild(npTop);
+    var npSep=div("sep");npSep.style.margin="0 0 10px 0";newsPanel.appendChild(npSep);
+
+    // Original (key) events — orange
+    keyEvents.forEach(function(evName){
+      var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#ff8c0015;border:1px solid #ff8c0040;border-left:3px solid var(--ca);";
+      var npIcon=span();npIcon.style.cssText="color:var(--ca);font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npBadge2=span();npBadge2.style.cssText="background:#ff8c0020;color:var(--ca);border:1px solid #ff8c0050;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge2.textContent="KEY";npRow.appendChild(npBadge2);
+      newsPanel.appendChild(npRow);
+    });
+
+    // Macro events — purple
+    macroEvents.forEach(function(evName){
+      var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#b06aff15;border:1px solid #b06aff40;border-left:3px solid #b06aff;";
+      var npIcon=span();npIcon.style.cssText="color:#b06aff;font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npBadge3=span();npBadge3.style.cssText="background:#b06aff20;color:#b06aff;border:1px solid #b06aff50;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge3.textContent="MACRO";npRow.appendChild(npBadge3);
+      newsPanel.appendChild(npRow);
+    });
+
+    // Footer count removed
+
+    if(State.newsOther&&State.newsOther.trim()){
+      var npOtherRow=div("row gap8 mt4");npOtherRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--panel3);border:1px solid var(--border);margin-top:4px;";
+      var npOtherIcon=span();npOtherIcon.style.cssText="color:var(--text3);font-size:11px;flex-shrink:0;";npOtherIcon.textContent="◇";npOtherRow.appendChild(npOtherIcon);
+      var npOtherLbl=span("xs");npOtherLbl.style.cssText="color:var(--text3);font-size:11px;font-style:italic;";npOtherLbl.textContent=State.newsOther;npOtherRow.appendChild(npOtherLbl);
+      newsPanel.appendChild(npOtherRow);
+    }
+    heroRow.appendChild(newsPanel);
+  }
+  // Total P&L — big
+  var totalCard=div("card");totalCard.style.background="var(--panel2)";totalCard.style.borderLeft=(s.total>=0?"4px solid #00e67660":"4px solid #ff444460");
+  var ttTop=div("rjb mb8");var ttL=div("card-t");ttL.textContent="ALL-TIME P&L";ttTop.appendChild(ttL);
+  var ttBadge=div("xs m");ttBadge.textContent=State.trades.length+" total trades";ttTop.appendChild(ttBadge);
+  totalCard.appendChild(ttTop);
+  var ttVal=div();ttVal.style.fontSize="38px";ttVal.style.fontWeight="700";ttVal.style.lineHeight="1";ttVal.style.letterSpacing="1px";ttVal.className=clr(s.total);ttVal.textContent=dol(s.total);totalCard.appendChild(ttVal);
+  var ttWr=div("mt8");ttWr.style.fontSize="12px";
+  ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: '+dol(s.avgW)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: '+dol(s.avgL)+'</span>';
+  totalCard.appendChild(ttWr);
+  var ttRR=div("mt8");ttRR.style.cssText="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;";
+  ttRR.textContent="R:R  "+(s.avgL&&s.avgW?Math.abs(s.avgW/s.avgL).toFixed(2):"—");
+  totalCard.appendChild(ttRR);
+  heroRow.appendChild(totalCard);
+  el.appendChild(heroRow);
+  // Sub chips
+  var g4=div("g4");
+  // RTH Rules chip
+  var rthDiv=div();rthDiv.style.cssText="font-size:13px;display:flex;justify-content:space-between;gap:12px;";
+  var rthLeft=div();rthLeft.style.cssText="display:flex;flex-direction:column;gap:5px;";
+  rthLeft.innerHTML='<div style="color:var(--accent)">2–3 trades daily</div><div style="color:#b06aff">Mark 30min &amp; 1hr POC</div>';
+  var rthRight=div();rthRight.style.cssText="display:flex;flex-direction:column;gap:5px;text-align:right;";
+  rthRight.innerHTML='<div style="color:var(--green)">9:30–12pm &nbsp;Hi R:R</div><div style="color:var(--amber)">After 12pm &nbsp;Lo R:R</div>';
+  rthDiv.appendChild(rthLeft);rthDiv.appendChild(rthRight);
+  g4.appendChild(makeChip("RTH RULES",rthDiv,"",""));
+  // Current streak
+  var streak=0;var streakType="";
+  if(State.trades.length){
+    var first=State.trades[0];streakType=first.d>0?"W":"L";
+    for(var si=0;si<State.trades.length;si++){
+      if((State.trades[si].d>0&&streakType==="W")||(State.trades[si].d<0&&streakType==="L")) streak++;
+      else break;
+    }
+  }
+  var streakVal=div();
+  streakVal.innerHTML=streak>0?'<span class="'+(streakType==="W"?"g":"r")+'" style="font-size:22px;font-weight:700">'+streak+streakType+'</span>':'<span class="m" style="font-size:22px;font-weight:700">—</span>';
+  g4.appendChild(makeChip("STREAK",streakVal,"","current"));
+  // Max Drawdown
+  var eq2=[0];
+  State.trades.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
+  var peak=0,maxDD=0;
+  eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
+  var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
+  g4.appendChild(makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time"));
+  // Mindset chip — last
+  var msChecked=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
+  msChipVal.innerHTML='<span class="'+(msChecked===3?"g":"m")+'">'+msChecked+'</span><span style="color:var(--border3);font-size:14px"> / 3</span>';
+  g4.appendChild(makeChip("MINDSET",msChipVal,"","checked"));
+  el.appendChild(g4);
+
+  // Equity + Levels
+  var g2=div("g2");
+  var eqCard=div("card");
+  var eqH=div("card-h");
+  var eqT=div("card-t");eqT.textContent="Equity Curve";eqH.appendChild(eqT);
+  var eqBadge=makeBadge(s.total>=0?"bg":"br",s.total>=0?"▲ POSITIVE":"▼ DRAWDOWN");eqH.appendChild(eqBadge);
+  eqCard.appendChild(eqH);
+  eqCard.appendChild(equitySVG(State.trades,380,165));
+  g2.appendChild(eqCard);
+
+  var lvCard=div("card");
+  var lvH=div("card-h");
+  var lvT=div("card-t");lvT.textContent="Key Levels — Today";lvH.appendChild(lvT);
+  var editBtn=h("button",{className:"btn",onClick:function(){State.tab="prep";render();}});editBtn.textContent="EDIT";lvH.appendChild(editBtn);
+  lvCard.appendChild(lvH);
+  // Reset checks if it's a new day
+  var td2=today();
+  if(State.levelChecksDate!==td2){State.levelChecks={};State.levelChecksDate=td2;ss("levelChecks",{});ss("levelChecksDate",td2);}
+
+  // Count checked
+  var checkedCount=Object.values(State.levelChecks).filter(Boolean).length;
+  var totalLevels=State.levels.length;
+  if(totalLevels>0){
+    var prog=div("xs m mb8");prog.style.textAlign="right";
+    prog.innerHTML='<span class="'+(checkedCount===totalLevels?"g":"m")+'">'+checkedCount+' / '+totalLevels+' checked</span>';
+    lvCard.appendChild(prog);
+  }
+
+  State.levels.forEach(function(l,i){
+    var key="lv_"+i;
+    var isChecked=!!State.levelChecks[key];
+    var row=div("lvrow"+(isChecked?" checked":""));
+    // 3-column grid: [checkbox fixed] [label centered] [badge fixed same width]
+    row.style.cssText="display:grid;grid-template-columns:22px 1fr 22px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);gap:6px;";
+
+    // Col 1: Checkbox
+    var chk=div("lv-check"+(isChecked?" on":""));
+    chk.addEventListener("click",function(e){
+      e.stopPropagation();
+      State.levelChecks[key]=!State.levelChecks[key];
+      ss("levelChecks",State.levelChecks);
+      render();
+    });
+    row.appendChild(chk);
+
+    // Col 2: Label — truly centered
+    var lbl=span("lv-label");
+    lbl.style.cssText="font-size:14px;font-weight:700;letter-spacing:1.5px;text-align:center;"+(isChecked?"text-decoration:line-through;color:var(--text3);":"color:var(--text);");
+    lbl.textContent=l.l;
+    row.appendChild(lbl);
+
+    // Col 3: Importance badge — right aligned, fixed slot
+    var right2=div("lv-badge");right2.style.cssText="display:flex;justify-content:flex-end;align-items:center;";
+    right2.appendChild(impBadge(l.imp||"medium"));
+    row.appendChild(right2);
+    lvCard.appendChild(row);
+  });
+
+  // Reset all button
+  if(checkedCount>0){
+    var rstBtn=h("button",{className:"btn",style:"width:100%;margin-top:10px;font-size:9px;padding:4px"});
+    rstBtn.textContent="RESET ALL";
+    rstBtn.addEventListener("click",function(){State.levelChecks={};ss("levelChecks",{});render();});
+    lvCard.appendChild(rstBtn);
+  }
+  g2.appendChild(lvCard);
+  el.appendChild(g2);
+
+  // Best trade + intention
+  var g2b=div("g2");
+  var btCard=div("card");
+  var btH=div("card-h");
+  var btT=div("card-t");btT.textContent="Today's Best Trade";btH.appendChild(btT);
+  var best=todayTrades.filter(function(t){return t.hl})[0]||todayTrades.slice().sort(function(a,b){return b.d-a.d})[0];
+  if(best) btH.appendChild(makeBadge("bg","★ HIGHLIGHT"));
+  btCard.appendChild(btH);
+  if(best){
+    var brow=div("rjb mb8");
+    var left=div("row gap8");left.appendChild(makeBadge(best.dir==="Long"?"bg":"br",best.dir));var bn=span("fw7");bn.textContent=best.inst;left.appendChild(bn);var bt2=span("xs m");bt2.textContent=best.time;left.appendChild(bt2);brow.appendChild(left);
+    var bpnl=span("fw7 "+clr(best.d));bpnl.textContent=dol(best.d);brow.appendChild(bpnl);
+    btCard.appendChild(brow);
+    var bsu=span("xs m mb8");bsu.style.display="block";bsu.appendChild(setupColoredEl(best));btCard.appendChild(bsu);
+    var bn2=div("xs mb8");bn2.style.color="#e0c97a";bn2.style.lineHeight="1.6";bn2.textContent=best.post;btCard.appendChild(bn2);
+    var bgrow=div("row gap8 mt8");
+    bgrow.appendChild(h("span",{className:"gr "+grc(best.ex)},[best.ex]));var gla=span("xs m");gla.style.lineHeight="21px";gla.textContent="Exec";bgrow.appendChild(gla);
+    var gs=h("span",{className:"gr "+grc(best.ru)},[best.ru]);gs.style.marginLeft="6px";bgrow.appendChild(gs);var glb=span("xs m");glb.style.lineHeight="21px";glb.textContent="Rules";bgrow.appendChild(glb);
+    btCard.appendChild(bgrow);
+  } else {var nob=span("xs m");nob.textContent="No trades logged today.";btCard.appendChild(nob);}
+  g2b.appendChild(btCard);
+
+  var intCard=div("card");
+  var intH=div("card-h");var intT=div("card-t");intT.textContent="Daily Intention";intH.appendChild(intT);intCard.appendChild(intH);
+  var qb=div("qblock");
+  var qt=div("qtext");qt.textContent='"'+QUOTES[QI].t+'"';qb.appendChild(qt);
+  var qa=div("qauth");qa.textContent=QUOTES[QI].a;qb.appendChild(qa);
+  intCard.appendChild(qb);
+  var noteL=h("label",{},"Focus Note");intCard.appendChild(noteL);
+  var noteTA=h("textarea",{rows:"3"});noteTA.style.resize="none";noteTA.style.lineHeight="1.65";noteTA.value=State.note;
+  noteTA.addEventListener("input",function(){State.note=noteTA.value;ss("note",State.note);});
+  intCard.appendChild(noteTA);
+  g2b.appendChild(intCard);
+  el.appendChild(g2b);
+
+  // Weekly Scoreboard + Session Performance (traded only)
+  var combCard=div("card");
+  var combH=div("card-h");
+  var combT=div("card-t");combT.textContent="Weekly Scoreboard";combH.appendChild(combT);
+  var nowD=new Date();
+  var sunday=new Date(nowD);sunday.setDate(nowD.getDate()-nowD.getDay());
+  var wkLabel="Week of "+pad(sunday.getMonth()+1)+"/"+pad(sunday.getDate());
+  var combDate=span("xs m");combDate.textContent=wkLabel;combH.appendChild(combDate);
+  combCard.appendChild(combH);
+
+  // This week's trades
+  var wkTrades2=State.trades.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+    return (nowD-td3)/(1000*60*60*24)<7;
+  });
+  var ws2=calcStats(wkTrades2);
+
+  // P&L + W/L row
+  var wkTop=div("rjb mb8");
+  var wkPnl=div();
+  var wkBig=div();wkBig.style.cssText="font-size:28px;font-weight:700;line-height:1;";wkBig.className=clr(ws2.total);wkBig.textContent=dol(ws2.total);
+  var wkSub=div("xs m mt8");wkSub.textContent="this week";wkPnl.appendChild(wkBig);wkPnl.appendChild(wkSub);wkTop.appendChild(wkPnl);
+  var wkRight=div("row gap12");
+  var wkWL=div();wkWL.style.textAlign="center";var wkWLl=div("xs m mb8");wkWLl.textContent="W / L";wkWL.appendChild(wkWLl);
+  var wkWLv=div();wkWLv.innerHTML='<span class="fw7 g" style="font-size:14px">'+ws2.wins.length+'</span><span class="m"> / </span><span class="fw7 r" style="font-size:14px">'+ws2.losses.length+'</span>';wkWL.appendChild(wkWLv);wkRight.appendChild(wkWL);
+  var wkWR=div();wkWR.style.textAlign="center";var wkWRl=div("xs m mb8");wkWRl.textContent="WIN%";wkWR.appendChild(wkWRl);var wkWRv=div("fw7 ac");wkWRv.style.fontSize="14px";wkWRv.textContent=ws2.wr+"%";wkWR.appendChild(wkWRv);wkRight.appendChild(wkWR);
+  wkTop.appendChild(wkRight);combCard.appendChild(wkTop);
+
+  // Goal progress bar — always green, shows dollar amounts
+  var goalAmt=State.wkGoal?parseFloat(State.wkGoal.replace(/[^0-9.]/g,"")):2000;
+  var goalPct=goalAmt?Math.min(100,Math.round(Math.max(0,ws2.total)/goalAmt*100)):0;
+  var goalBar=div("mb12");
+  var goalRow=div("rjb mb8");
+  var goalLeft=div("row gap8");
+  var goalLbl=span("xs m");goalLbl.style.letterSpacing="1px";goalLbl.textContent="GOAL";goalLeft.appendChild(goalLbl);
+  var goalCurr=span("fw7 g");goalCurr.style.fontSize="12px";goalCurr.textContent=dol(ws2.total).replace("+","");goalLeft.appendChild(goalCurr);
+  var goalSlash=span("xs m");goalSlash.textContent="/";goalLeft.appendChild(goalSlash);
+  var goalTarget=span("xs m");goalTarget.style.fontSize="12px";goalTarget.textContent="$"+Math.round(goalAmt);goalLeft.appendChild(goalTarget);
+  goalRow.appendChild(goalLeft);
+  var goalPctEl=span("xs fw7 g");goalPctEl.textContent=goalPct+"%";goalRow.appendChild(goalPctEl);
+  goalBar.appendChild(goalRow);
+  var barBg=div();barBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
+  var barFill=div();barFill.style.cssText="background:var(--green);width:"+goalPct+"%;height:100%;border-radius:3px;";
+  barBg.appendChild(barFill);goalBar.appendChild(barBg);combCard.appendChild(goalBar);
+
+  // Session performance — traded only
+  var sep3=div("sep");combCard.appendChild(sep3);
+  var sessHdr=div("card-t mb8");sessHdr.textContent="SESSION PERFORMANCE";combCard.appendChild(sessHdr);
+  var tradedSessions=SESSIONS.filter(function(sess){return State.trades.some(function(t){return t.sess===sess;});});
+  if(tradedSessions.length===0){var noSess=span("xs m");noSess.textContent="No trades logged yet.";combCard.appendChild(noSess);}
+  tradedSessions.forEach(function(sess,si){
+    var sts=State.trades.filter(function(t){return t.sess===sess;});
+    var spnl=sts.reduce(function(a,t){return a+t.d},0);
+    var sr=div("rjb");sr.style.cssText="padding:6px 0;"+(si<tradedSessions.length-1?"border-bottom:1px solid var(--border);":"");
+    var sleft=div("row gap8");var sn=span("sm fw7");sn.style.color="var(--text2)";sn.textContent=sess;sleft.appendChild(sn);
+    var sc=span("xs m");sc.textContent=sts.length+(sts.length===1?" trade":" trades");sleft.appendChild(sc);sr.appendChild(sleft);
+    var sp=span("fw7 "+clr(spnl));sp.style.fontSize="14px";sp.textContent=dol(spnl);sr.appendChild(sp);
+    combCard.appendChild(sr);
+  });
+  el.appendChild(combCard);
+  // Monthly Scoreboard
+  var moNow=new Date();
+  var moTrades=State.trades.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
+  });
+  var moS=calcStats(moTrades);
+  var MNAMES2=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var moCard=div("card mt12");
+  var moH=div("card-h");
+  var moT=div("card-t");moT.textContent="Monthly Scoreboard";moH.appendChild(moT);
+  var moDate=span("xs m");moDate.textContent=MNAMES2[moNow.getMonth()]+" "+moNow.getFullYear();moH.appendChild(moDate);
+  moCard.appendChild(moH);
+
+  // 4 chips
+  var moG4=div("g4 mb12");
+  moG4.appendChild(makeChip("MONTH P&L",dol(moS.total),clr(moS.total)));
+  var moWL=div();moWL.innerHTML='<span class="fw7 g" style="font-size:20px">'+moS.wins.length+'</span><span class="m"> / </span><span class="fw7 r" style="font-size:20px">'+moS.losses.length+'</span>';
+  moG4.appendChild(makeChip("W / L",moWL));
+  moG4.appendChild(makeChip("WIN RATE",moS.wr+"%","ac"));
+  moG4.appendChild(makeChip("TRADES",moTrades.length));
+  moCard.appendChild(moG4);
+
+  // Monthly goal progress bar
+  var moGoalAmt=State.moGoal?parseFloat(State.moGoal.replace(/[^0-9.]/g,"")):8000;
+  var moPct=moGoalAmt?Math.min(100,Math.round(Math.max(0,moS.total)/moGoalAmt*100)):0;
+  var moGoalBar=div();
+  var moGoalRow=div("rjb mb8");
+  var moGoalLeft=div("row gap8");
+  var moGoalLbl=span("xs m");moGoalLbl.style.letterSpacing="1px";moGoalLbl.textContent="MONTHLY GOAL";moGoalLeft.appendChild(moGoalLbl);
+  var moGoalCurr=span("fw7 b");moGoalCurr.style.fontSize="12px";moGoalCurr.textContent=dol(moS.total).replace("+","");moGoalLeft.appendChild(moGoalCurr);
+  var moGoalSlash=span("xs m");moGoalSlash.textContent="/";moGoalLeft.appendChild(moGoalSlash);
+  var moGoalTarget=span("xs m");moGoalTarget.style.fontSize="12px";moGoalTarget.textContent="$"+Math.round(moGoalAmt);moGoalLeft.appendChild(moGoalTarget);
+  moGoalRow.appendChild(moGoalLeft);
+  var moPctEl=span("xs fw7 b");moPctEl.textContent=moPct+"%";moGoalRow.appendChild(moPctEl);
+  moGoalBar.appendChild(moGoalRow);
+  var moBarBg=div();moBarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
+  var moBarFill=div();moBarFill.style.cssText="background:var(--ca);width:"+moPct+"%;height:100%;border-radius:3px;";
+  moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
+  moCard.appendChild(moGoalBar);
+  el.appendChild(moCard);
+
+  return el;
+}
+
+// ─── PREP TAB ─────────────────────────────────────────────────────────
+function prepTab(){
+  var el=div();
+  var sh=div("sh");sh.innerHTML="Pre-Session Prep — "+today();el.appendChild(sh);
+
+  // ── Mindset Check + Feeling Notes ────────────────────────────────
+  var msCard=div("card mb12");
+  var msH=div("card-h");
+  var msT=div("card-t");msT.textContent="Mindset Check — Daily Reset";msH.appendChild(msT);
+
+  // Reset if new day
+  var msToday=today();
+  if(State.mindsetChecksDate!==msToday){
+    State.mindsetChecks={};State.mindsetChecksDate=msToday;
+    State.mindsetNote="";
+    ss("mindsetChecks",{});ss("mindsetChecksDate",msToday);ss("mindsetNote","");
+  }
+
+  var checkedMs=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var msCount=div("xs m");msCount.style.textAlign="right";
+  msCount.innerHTML='<span class="'+(checkedMs===3?"g":"m")+'">'+checkedMs+' / 3 checked</span>';
+  msH.appendChild(msCount);
+  msCard.appendChild(msH);
+
+  var msGrid=div("g3 mb12");
+  var msItems=["Meditate","Good night's sleep","Mind clear"];
+  msItems.forEach(function(item,i){
+    var key="ms_"+i;
+    var isChecked=!!State.mindsetChecks[key];
+    var box=div("chip");
+    box.style.cssText="cursor:pointer;border:1px solid "+(isChecked?"var(--green)":"var(--border)")+";background:"+(isChecked?"#00e67612":"var(--panel2)")+";display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:4px;user-select:none;";
+    box.addEventListener("click",function(){
+      State.mindsetChecks[key]=!State.mindsetChecks[key];
+      ss("mindsetChecks",State.mindsetChecks);render();
+    });
+    var chk=div();
+    chk.style.cssText="width:18px;height:18px;border-radius:3px;border:1px solid "+(isChecked?"var(--green)":"var(--border2)")+";background:"+(isChecked?"var(--green)":"var(--panel3)")+";display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;color:var(--bg);font-weight:700;";
+    chk.textContent=isChecked?"✓":"";
+    box.appendChild(chk);
+    var lbl=span("sm fw7");lbl.style.color=isChecked?"var(--green)":"var(--text)";lbl.textContent=item;
+    box.appendChild(lbl);
+    msGrid.appendChild(box);
+  });
+  msCard.appendChild(msGrid);
+
+  var fnL=h("label",{},"How am I feeling today?");msCard.appendChild(fnL);
+  var fnTA=h("textarea",{rows:"4",placeholder:"Write how you are feeling, your mindset, energy level, focus..."});
+  fnTA.style.resize="none";fnTA.style.lineHeight="1.7";
+  fnTA.value=State.mindsetNote;
+  fnTA.addEventListener("input",function(){State.mindsetNote=fnTA.value;ss("mindsetNote",State.mindsetNote);});
+  msCard.appendChild(fnTA);
+  el.appendChild(msCard);
+
+  var g2=div("g2");
+
+  // Levels card — no price, reorderable
+  var lvCard=div("card");
+  var lvH=div("card-h");
+  var lvT=div("card-t");lvT.textContent="Key Levels";lvH.appendChild(lvT);
+  lvCard.appendChild(lvH);
+
+  // Render level rows with up/down arrows
+  State.levels.forEach(function(l,i){
+    var row=div("rjb");row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);align-items:center;";
+    // Move arrows
+    var arrows=div("row gap8");arrows.style.marginRight="10px";
+    var up=h("button",{className:"btn",style:"padding:2px 7px;font-size:11px;line-height:1"});up.textContent="▲";up.title="Move up (higher priority)";
+    up.addEventListener("click",function(){if(i>0){var tmp=State.levels[i-1];State.levels[i-1]=State.levels[i];State.levels[i]=tmp;ss("levels",State.levels);render();}});
+    var dn=h("button",{className:"btn",style:"padding:2px 7px;font-size:11px;line-height:1"});dn.textContent="▼";dn.title="Move down";
+    dn.addEventListener("click",function(){if(i<State.levels.length-1){var tmp=State.levels[i+1];State.levels[i+1]=State.levels[i];State.levels[i]=tmp;ss("levels",State.levels);render();}});
+    if(i===0) up.style.opacity="0.25";
+    if(i===State.levels.length-1) dn.style.opacity="0.25";
+    arrows.appendChild(up);arrows.appendChild(dn);
+
+    // Priority rank
+    var rank=div("xs m");rank.style.cssText="min-width:16px;text-align:center;font-weight:700;color:var(--ca);";rank.textContent="#"+(i+1);
+
+    var left=div("row gap8");left.appendChild(arrows);left.appendChild(rank);
+    left.appendChild(impBadge(l.imp||"medium"));
+    var ln=span("sm fw7");ln.textContent=l.l;left.appendChild(ln);
+    // Session tag if present
+    if(l.sess){var st2=span("xs m");st2.style.cssText="background:var(--panel3);border:1px solid var(--border);border-radius:2px;padding:1px 6px;";st2.textContent=l.sess;left.appendChild(st2);}
+    row.appendChild(left);
+
+    var right=div("row gap8");
+    if(!l.builtin){
+      var del=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});del.textContent="✕";
+      del.addEventListener("click",function(){State.levels.splice(i,1);ss("levels",State.levels);render();});
+      right.appendChild(del);
+    }
+    row.appendChild(right);
+    lvCard.appendChild(row);
+  });
+
+  var sep=div("sep");lvCard.appendChild(sep);
+  var addT=div("card-t mb8");addT.textContent="ADD LEVEL";lvCard.appendChild(addT);
+
+  // Add form — no price field, has session tag
+  var addFg=div("fg");
+  var ll=div("s2");ll.appendChild(h("label",{},"Level Label"));
+  var li=h("input",{id:"nl_l",placeholder:"PDH/PDL, VAH/VAL, VWAP..."});ll.appendChild(li);addFg.appendChild(ll);
+
+  var lt=div();lt.appendChild(h("label",{},"Importance"));
+  var ts=h("select",{id:"nl_t"});
+  [{v:"high",l:"●●● HIGH — Must watch"},{v:"medium",l:"●●○ MEDIUM — Key level"},{v:"low",l:"●○○ LOW — Nice to know"}].forEach(function(o){var opt=h("option",{value:o.v},[o.l]);ts.appendChild(opt);});
+  lt.appendChild(ts);addFg.appendChild(lt);
+
+  var lse=div();lse.appendChild(h("label",{},"Session"));
+  var selinp=h("select",{id:"nl_sess"});
+  [{v:"",l:"Any"},{v:"Overnight",l:"Overnight"},{v:"London",l:"London"},{v:"RTH Open",l:"RTH Open"},{v:"Full RTH",l:"Full RTH"},{v:"Post-Market",l:"Post-Market"}].forEach(function(o){selinp.appendChild(h("option",{value:o.v},[o.l]));});
+  lse.appendChild(selinp);addFg.appendChild(lse);
+
+  var la=div();la.style.display="flex";la.style.alignItems="flex-end";
+  var ab=h("button",{className:"btn btn-g",style:"width:100%"});ab.textContent="+ ADD";
+  ab.addEventListener("click",function(){
+    var lv=li.value.trim(),tv=ts.value,sv=selinp.value;
+    if(!lv){alert("Label is required");return;}
+    State.levels.push({l:lv,imp:tv,sess:sv});
+    ss("levels",State.levels);render();
+  });la.appendChild(ab);addFg.appendChild(la);
+  lvCard.appendChild(addFg);g2.appendChild(lvCard);
+
+  // Pre-Week Key Levels card — same pattern as daily levels
+  var wkCard=div("card");
+  var wkH=div("card-h");
+  var wkT=div("card-t");wkT.textContent="Pre-Week Key Levels";wkH.appendChild(wkT);
+  // Reset button only shows if anything is checked
+  var anyWkChecked=Object.values(State.weekLevelChecks).filter(Boolean).length>0;
+  if(anyWkChecked){
+    var wkResetBtn=h("button",{className:"btn btn-r"});wkResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";wkResetBtn.textContent="RESET";
+    wkResetBtn.addEventListener("click",function(){
+      State.weekLevelChecks={};ss("weekLevelChecks",{});render();
+    });
+    wkH.appendChild(wkResetBtn);
+  }
+  wkCard.appendChild(wkH);
+
+  // Render week levels
+  State.weekLevels.forEach(function(l,i){
+    var wkKey="wl_"+i;
+    var wkChecked=!!State.weekLevelChecks[wkKey];
+    var row=div("rjb"+(wkChecked?" checked":""));row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);align-items:center;";
+
+    // Checkbox
+    var chk=div("lv-check"+(wkChecked?" on":""));chk.style.cssText="margin-right:8px;flex-shrink:0;";
+    (function(key){chk.addEventListener("click",function(e){e.stopPropagation();State.weekLevelChecks[key]=!State.weekLevelChecks[key];ss("weekLevelChecks",State.weekLevelChecks);render();});})(wkKey);
+
+    var arrows=div("row gap8");arrows.style.marginRight="8px";
+    var wup=h("button",{className:"btn",style:"padding:2px 7px;font-size:11px;line-height:1"});wup.textContent="▲";
+    wup.addEventListener("click",function(){if(i>0){var tmp=State.weekLevels[i-1];State.weekLevels[i-1]=State.weekLevels[i];State.weekLevels[i]=tmp;ss("weekLevels",State.weekLevels);render();}});
+    var wdn=h("button",{className:"btn",style:"padding:2px 7px;font-size:11px;line-height:1"});wdn.textContent="▼";
+    wdn.addEventListener("click",function(){if(i<State.weekLevels.length-1){var tmp=State.weekLevels[i+1];State.weekLevels[i+1]=State.weekLevels[i];State.weekLevels[i]=tmp;ss("weekLevels",State.weekLevels);render();}});
+    if(i===0) wup.style.opacity="0.25";
+    if(i===State.weekLevels.length-1) wdn.style.opacity="0.25";
+    arrows.appendChild(wup);arrows.appendChild(wdn);
+
+    var wrank=div("xs m");wrank.style.cssText="min-width:16px;text-align:center;font-weight:700;color:var(--ca);";wrank.textContent="#"+(i+1);
+
+    var wleft=div("row gap8");wleft.appendChild(chk);wleft.appendChild(arrows);wleft.appendChild(wrank);
+    wleft.appendChild(impBadge(l.imp||"medium"));
+    var wln=span("sm fw7");
+    wln.textContent=l.l;wleft.appendChild(wln);
+    // session tag hidden for week levels
+    row.appendChild(wleft);
+
+    var wright=div("row gap8");
+    if(!l.builtin){
+      var wdel=h("button",{className:"btn btn-r",style:"padding:3px 8px;font-size:9px"});wdel.textContent="✕";
+      (function(idx){wdel.addEventListener("click",function(){State.weekLevels.splice(idx,1);ss("weekLevels",State.weekLevels);render();});})(i);
+      wright.appendChild(wdel);
+    }
+    row.appendChild(wright);
+    wkCard.appendChild(row);
+  });
+
+  var wsep=div("sep");wkCard.appendChild(wsep);
+  var waddT=div("card-t mb8");waddT.textContent="ADD WEEK LEVEL";wkCard.appendChild(waddT);
+
+  var wfg=div("fg");
+  var wll=div("s2");wll.appendChild(h("label",{},"Level Label"));
+  var wli=h("input",{id:"wl_l",placeholder:"Weekly POC, HTF resistance..."});wll.appendChild(wli);wfg.appendChild(wll);
+
+  var wlt=div();wlt.appendChild(h("label",{},"Importance"));
+  var wts=h("select",{id:"wl_t"});
+  [{v:"high",l:"●●● HIGH — Must watch"},{v:"medium",l:"●●○ MEDIUM — Key level"},{v:"low",l:"●○○ LOW — Nice to know"}].forEach(function(o){wts.appendChild(h("option",{value:o.v},[o.l]));});
+  wlt.appendChild(wts);wfg.appendChild(wlt);
+
+  // session field removed from week levels
+
+  var wla=div();wla.style.display="flex";wla.style.alignItems="flex-end";
+  var wab=h("button",{className:"btn btn-g",style:"width:100%"});wab.textContent="+ ADD";
+  wab.addEventListener("click",function(){
+    var lv=wli.value.trim(),tv=wts.value,sv="";
+    if(!lv){alert("Label is required");return;}
+    State.weekLevels.push({l:lv,imp:tv,sess:sv});
+    ss("weekLevels",State.weekLevels);render();
+  });wla.appendChild(wab);wfg.appendChild(wla);
+  wkCard.appendChild(wfg);
+  g2.appendChild(wkCard);
+  el.appendChild(g2);
+
+  // ── Key News & Events ──────────────────────────────────────────────
+  var NEWS_EVENTS=[
+    {l:"FOMC Meeting / Fed Decision"},
+    {l:"Fed Speakers"},
+    {l:"CPI / Inflation Data"},
+    {l:"NFP / Non-Farm Payrolls"},
+    {l:"PCE Price Index"},
+    {l:"GDP Report"},
+    {l:"Initial Jobless Claims"},
+    {l:"Retail Sales"}
+  ];
+  var MACRO_EVENTS=[
+    {l:"ADP Non-Farm Employment"},
+    {l:"ISM Manufacturing PMI"},
+    {l:"ISM Services PMI"},
+    {l:"PPI (Producer Price Index)"},
+    {l:"JOLTS Job Openings"},
+    {l:"Consumer Confidence"},
+    {l:"Durable Goods Orders"},
+    {l:"10-Yr Treasury Auction"},
+    {l:"Michigan Consumer Sentiment"},
+    {l:"Unemployment Rate"}
+  ];
+
+  var newsToday=today();
+  if(State.newsChecksDate!==newsToday){State.newsChecks={};State.newsChecksDate=newsToday;State.newsOther="";ss("newsChecks",{});ss("newsChecksDate",newsToday);ss("newsOther","");}
+  if(State.newsSelectedDate!==newsToday){State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);}
+
+  var newsCard=div("card mt12");
+  var newsH=div("card-h");
+  var newsT=div("card-t");newsT.textContent="Key News & Events";newsH.appendChild(newsT);
+  var anyChecked=Object.values(State.newsChecks).filter(Boolean).length>0;
+  var anyFlagged=State.newsSelected&&State.newsSelected.length>0;
+  if(anyChecked||anyFlagged){
+    var newsResetBtn=h("button",{className:"btn btn-r"});newsResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";newsResetBtn.textContent="RESET";
+    newsResetBtn.addEventListener("click",function(){
+      State.newsChecks={};ss("newsChecks",{});
+      State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);
+      render();
+    });
+    newsH.appendChild(newsResetBtn);
+  }
+  newsCard.appendChild(newsH);
+
+  // helper to build a news row
+  function makeNewsRow(ev,key,bgDefault){
+    var isChecked=!!State.newsChecks[key];
+    var isSelected=State.newsSelected.indexOf(ev.l)>-1;
+    var isMacro=key.indexOf("macro_")===0;
+    var row=div("row gap8");
+    var borderCol=isSelected?"var(--ca)":(isMacro?"#b06aff40":"transparent");
+    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":bgDefault)+";align-items:center;border:1px solid "+borderCol+";transition:all .15s;";
+    var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
+    (function(k){chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[k]=!State.newsChecks[k];ss("newsChecks",State.newsChecks);render();});})(key);
+    row.appendChild(chk);
+    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=ev.l;row.appendChild(lbl);
+    var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
+    if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
+    (function(name){row.addEventListener("click",function(){
+      var idx=State.newsSelected.indexOf(name);
+      if(idx>-1) State.newsSelected.splice(idx,1);
+      else State.newsSelected.push(name);
+      ss("newsSelected",State.newsSelected);ss("newsSelectedDate",newsToday);render();
+    });})(ev.l);
+    return row;
+  }
+
+  // ── Your Originals ──
+  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;margin-top:8px;";
+  NEWS_EVENTS.forEach(function(ev,ni){origGrid.appendChild(makeNewsRow(ev,"news_"+ni,"var(--panel2)"));});
+  newsCard.appendChild(origGrid);
+
+  // ── Macro Calendar ──
+  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
+  MACRO_EVENTS.forEach(function(ev,mi){macroGrid.appendChild(makeNewsRow(ev,"macro_"+mi,"#1d1040"));});
+  newsCard.appendChild(macroGrid);
+
+  var newsOtherL=h("label",{},"Other Events / Notes");newsCard.appendChild(newsOtherL);
+  var newsOtherI=h("input",{placeholder:"e.g. Fed speech 2pm, Earnings after close, OPEX..."});newsOtherI.value=State.newsOther;
+  newsOtherI.addEventListener("input",function(){State.newsOther=newsOtherI.value;ss("newsOther",State.newsOther);});newsCard.appendChild(newsOtherI);
+  el.appendChild(newsCard);
+
+  // ── One Thing to Improve ──────────────────────────────────────────
+  var focusCard=div("card mt12");
+  var focusH=div("card-h");var focusT=div("card-t");focusT.textContent="One Thing to Improve Today";focusH.appendChild(focusT);
+  var focusSub=span("xs m");focusSub.textContent="carries over until changed";focusH.appendChild(focusSub);
+  focusCard.appendChild(focusH);
+  var focusTA=h("textarea",{rows:"2",placeholder:"e.g. Wait for confirmation before entering. Don't chase..."});
+  focusTA.style.cssText="resize:none;line-height:1.6;font-size:12px;";
+  focusTA.value=State.focusImprove;
+  focusTA.addEventListener("input",function(){State.focusImprove=focusTA.value;ss("focusImprove",State.focusImprove);});
+  focusCard.appendChild(focusTA);
+  el.appendChild(focusCard);
+
+  // ── Notes to Self / Mantra ────────────────────────────────────────
+  var mantraCard=div("card mt12");mantraCard.style.borderColor="#b06aff40";
+  var mantraH=div("card-h");var mantraT=div("card-t");mantraT.style.color="#b06aff";mantraT.textContent="Notes to Self — Mantra";mantraH.appendChild(mantraT);
+  var mantraSub=span("xs m");mantraSub.textContent="saved permanently";mantraH.appendChild(mantraSub);
+  mantraCard.appendChild(mantraH);
+  var mantraTA=h("textarea",{rows:"3",placeholder:"e.g. Trust the process. Size down when uncertain. Let winners run..."});
+  mantraTA.style.cssText="resize:none;line-height:1.7;font-size:12px;color:var(--text2);font-style:italic;";
+  mantraTA.value=State.mantraNotes;
+  mantraTA.addEventListener("input",function(){State.mantraNotes=mantraTA.value;ss("mantraNotes",State.mantraNotes);});
+  mantraCard.appendChild(mantraTA);
+  el.appendChild(mantraCard);
+
+  return el;
+}
+
+// ─── ADD TRADE FORM ───────────────────────────────────────────────────
+function tradeForm(existing){
+  var isEdit=!!existing;
+  var frm=div("card mt12");frm.style.border="1px solid var(--ca)";
+  var fh=div("card-h");
+  var ft=div("card-t b");ft.style.color="var(--ca)";ft.textContent=isEdit?"EDIT TRADE":"NEW TRADE ENTRY";fh.appendChild(ft);
+  var cc=h("button",{className:"btn",onClick:function(){State.adding=false;State.editing=null;render();}});cc.textContent="CANCEL";fh.appendChild(cc);
+  frm.appendChild(fh);
+
+  var fg=div("fg");
+  function fi(id,lbl,type,placeholder,defaultVal,cls){var w=div(cls||"");w.appendChild(h("label",{},[lbl]));var i=h("input",{id:"f_"+id,type:type||"text"});i.placeholder=placeholder||"";var val=(existing&&existing[id]!==undefined)?existing[id]:defaultVal;if(val!==undefined&&val!==null) i.value=val;if(type==="checkbox"){i.style.width="auto";if(existing&&existing[id]) i.checked=true;}w.appendChild(i);return w;}
+  function fs(id,lbl,opts,cls){var w=div(cls||"");w.appendChild(h("label",{},[lbl]));var s=h("select",{id:"f_"+id});opts.forEach(function(o){var val=typeof o==="object"?o.v:o;var lb2=typeof o==="object"?o.l:o;var opt=h("option",{value:val},[lb2]);if(existing&&existing[id]!==undefined&&String(existing[id])===String(val)) opt.selected=true;s.appendChild(opt);});w.appendChild(s);return w;}
+
+  // ── Date field with mini calendar popup ──
+  var dateWrap=div();dateWrap.style.position="relative";
+  dateWrap.appendChild(h("label",{},"Date"));
+  var dateInp=h("input",{id:"f_date",placeholder:"MM/DD/YY"});
+  var dateVal=(existing&&existing.date)?existing.date:today();
+  dateInp.value=dateVal;
+  dateWrap.appendChild(dateInp);
+  // Calendar state
+  var calOpen=false;
+  var calD=new Date();
+  var calMo=calD.getMonth(),calYr=calD.getFullYear();
+  var calPopup=null;
+  function buildCal(){
+    if(calPopup) calPopup.remove();
+    calPopup=div("cal-popup");
+    var MNAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var nav=div("cal-nav");
+    var pb=h("button");pb.textContent="◀";pb.onclick=function(e){e.stopPropagation();calMo--;if(calMo<0){calMo=11;calYr--;}buildCal();};
+    var nb2=h("button");nb2.textContent="▶";nb2.onclick=function(e){e.stopPropagation();calMo++;if(calMo>11){calMo=0;calYr++;}buildCal();};
+    var title=h("b");title.textContent=MNAMES[calMo]+" "+calYr;
+    nav.appendChild(pb);nav.appendChild(title);nav.appendChild(nb2);calPopup.appendChild(nav);
+    var grid=div("cal-grid");
+    ["S","M","T","W","T","F","S"].forEach(function(d){var dh=div("cal-dh");dh.textContent=d;grid.appendChild(dh);});
+    var firstDay=new Date(calYr,calMo,1).getDay();
+    var dim=new Date(calYr,calMo+1,0).getDate();
+    var todayObj=new Date();
+    // Parse currently selected
+    var selParts=(dateInp.value||"").split("/");
+    var selD=selParts.length===3?{m:parseInt(selParts[0])-1,d:parseInt(selParts[1]),y:2000+parseInt(selParts[2])}:null;
+    for(var ei=0;ei<firstDay;ei++){grid.appendChild(div("cal-day empty"));}
+    for(var dd=1;dd<=dim;dd++){
+      (function(day){
+        var isTod=todayObj.getDate()===day&&todayObj.getMonth()===calMo&&todayObj.getFullYear()===calYr;
+        var isSel=selD&&selD.d===day&&selD.m===calMo&&selD.y===calYr;
+        var dc=div("cal-day"+(isTod?" today":"")+(isSel?" selected":""));
+        dc.textContent=day;
+        dc.onclick=function(e){
+          e.stopPropagation();
+          var m=calMo+1;var y=calYr-2000;
+          dateInp.value=(m<10?"0":"")+m+"/"+(day<10?"0":"")+day+"/"+(y<10?"0":"")+y;
+          calOpen=false;calPopup.remove();calPopup=null;
+        };
+        grid.appendChild(dc);
+      })(dd);
+    }
+    calPopup.appendChild(grid);
+    dateWrap.appendChild(calPopup);
+  }
+  dateInp.addEventListener("click",function(e){e.stopPropagation();calOpen=!calOpen;if(calOpen){buildCal();}else if(calPopup){calPopup.remove();calPopup=null;}});
+  document.addEventListener("click",function(){if(calPopup){calPopup.remove();calPopup=null;calOpen=false;}},{once:false});
+  fg.appendChild(dateWrap);
+
+  fg.appendChild(fi("time","Time","text","09:42"));
+  fg.appendChild(fs("inst","Instrument",INSTR));
+  fg.appendChild(fs("dir","Direction",["Long","Short"]));
+  fg.appendChild(fi("entry","Entry","text","0000.00"));
+  fg.appendChild(fi("exit","Exit","text","0000.00"));
+
+  // ── Contracts with +/- buttons ──
+  var ctrWrap=div();
+  ctrWrap.appendChild(h("label",{},"Contracts"));
+  var ctrRow=div("ctr-wrap");
+  var ctrMinus=h("button",{className:"ctr-btn"});ctrMinus.textContent="−";
+  var ctrInp=h("input",{id:"f_ctr",type:"text"});
+  ctrInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--text);font-family:'Courier New',monospace;font-size:12px;height:32px;width:100%;";
+  var ctrVal=(existing&&existing.ctr)?existing.ctr:"1";
+  ctrInp.value=ctrVal;
+  var ctrPlus=h("button",{className:"ctr-btn"});ctrPlus.textContent="+";
+  ctrMinus.addEventListener("click",function(){var v=parseFloat(ctrInp.value)||1;if(v>1) ctrInp.value=v-1;updatePreview();});
+  ctrPlus.addEventListener("click",function(){var v=parseFloat(ctrInp.value)||0;ctrInp.value=v+1;updatePreview();});
+  ctrInp.addEventListener("input",updatePreview);
+  ctrRow.appendChild(ctrMinus);ctrRow.appendChild(ctrInp);ctrRow.appendChild(ctrPlus);
+  ctrWrap.appendChild(ctrRow);fg.appendChild(ctrWrap);
+  // P&L preview
+  var pvDiv=div();pvDiv.appendChild(h("label",{},"P&L Preview"));var pvEl=div();pvEl.id="f_pnl_preview";pvEl.style="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:11px;min-height:32px";pvEl.textContent="—";pvDiv.appendChild(pvEl);fg.appendChild(pvDiv);
+  function updatePreview(){var ent=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),inst=document.getElementById("f_inst"),dir=document.getElementById("f_dir"),ctr=document.getElementById("f_ctr");if(ent&&ex&&ent.value&&ex.value){var tv=TICK[inst.value]||1;var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dir.value==="Long"?1:-1);var dv=Math.round(pts*tv*(parseFloat(ctr.value)||1));pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";}}
+  setTimeout(function(){var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");if(e2)e2.addEventListener("input",updatePreview);if(ex)ex.addEventListener("input",updatePreview);if(ct)ct.addEventListener("input",updatePreview);},0);
+
+  var customSU=ls("playbook_custom",[]);
+  var allSetupNames=SETUPS.concat(customSU.map(function(e){return e.name;}));
+
+  // Multi-select setup chips — spans full width (s4)
+  var suWrap=div("s4");
+  suWrap.appendChild(h("label",{},"Setup(s) — Tap to toggle"));
+  var existingSetups=existing?getSetups(existing):[];
+  var selectedSetups=existingSetups.slice(); // copy
+  var chipsBox=div();chipsBox.id="f_setup_chips";chipsBox.style.cssText="display:flex;flex-wrap:wrap;gap:7px;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var counterEl=div();counterEl.style.cssText="font-size:10px;color:var(--text3);margin-top:5px;letter-spacing:.5px;";
+  function renderChips(){
+    chipsBox.innerHTML="";
+    allSetupNames.forEach(function(name){
+      var on=selectedSetups.indexOf(name)>-1;
+      var col=setupColor(name);
+      var chip=h("span");
+      var bg=on?(col+"15"):"var(--panel3)";
+      var bd=on?(col+"80"):"var(--border)";
+      var fg2=on?col:"var(--text2)";
+      chip.style.cssText="padding:6px 12px;border:1px solid "+bd+";background:"+bg+";color:"+fg2+";border-radius:3px;font-size:11px;letter-spacing:.5px;cursor:pointer;font-weight:"+(on?"500":"400")+";user-select:none;transition:all .12s;";
+      chip.textContent=(on?"✓ ":"")+name;
+      chip.addEventListener("click",function(){
+        var idx=selectedSetups.indexOf(name);
+        if(idx>-1) selectedSetups.splice(idx,1);
+        else selectedSetups.push(name);
+        renderChips();
+      });
+      chipsBox.appendChild(chip);
+    });
+    counterEl.textContent=selectedSetups.length===0?"No setups selected":(selectedSetups.length+" setup"+(selectedSetups.length>1?"s":"")+" selected"+(selectedSetups.length>1?" — confluence":""));
+  }
+  renderChips();
+  suWrap.appendChild(chipsBox);
+  suWrap.appendChild(counterEl);
+  fg.appendChild(suWrap);
+  // Expose selection for save handler
+  suWrap._getSelected=function(){return selectedSetups;};
+
+  fg.appendChild(fs("sess","Session",SESSIONS));
+  fg.appendChild(fs("ex","Exec Grade",["A","B","C"]));
+  fg.appendChild(fs("ru","Rule Grade",["A","B","C"]));
+  var emoCls=div();emoCls.appendChild(h("label",{},"Emotion"));
+  var emoSel=h("select",{id:"f_emo"});[1,2,3,4,5].forEach(function(n){var opt=h("option",{value:n},[EMO[n]+" "+n]);if(existing&&existing.emo===n) opt.selected=true;else if(!existing&&n===3) opt.selected=true;emoSel.appendChild(opt);});emoCls.appendChild(emoSel);fg.appendChild(emoCls);
+  var hlDiv=div();hlDiv.appendChild(h("label",{},"Highlight"));var hlInp=h("input",{id:"f_hl",type:"checkbox"});hlInp.style.width="auto";hlDiv.appendChild(hlInp);fg.appendChild(hlDiv);
+  var cd=div("s4");cd.appendChild(h("label",{},"Confluences"));cd.appendChild(h("input",{id:"f_conf",placeholder:"Key factors supporting this trade..."}));fg.appendChild(cd);
+  var pd=div("s2");pd.appendChild(h("label",{},"Post-Trade Notes"));pd.appendChild(h("input",{id:"f_post"}));fg.appendChild(pd);
+  var rd=div("s2");rd.appendChild(h("label",{},"What I Did Right"));rd.appendChild(h("input",{id:"f_right"}));fg.appendChild(rd);
+  var wd=div("s2");wd.appendChild(h("label",{},"What I Did Wrong"));wd.appendChild(h("input",{id:"f_wrong"}));fg.appendChild(wd);
+
+  var sv=div("s4 mt8");
+  var svb=h("button",{className:"btn btn-g",style:"width:100%"});svb.textContent=isEdit?"SAVE CHANGES":"SAVE TRADE";
+  svb.addEventListener("click",function(){
+    function gv(id){var el=document.getElementById("f_"+id);return el?el.value:"";}
+    var entry=gv("entry"),exit=gv("exit");
+    if(!entry||!exit){alert("Entry and exit are required.");return;}
+    var inst=gv("inst"),dir=gv("dir"),ctr=gv("ctr")||"1";
+    var tv=TICK[inst]||1;var pts=(parseFloat(exit)-parseFloat(entry))*(dir==="Long"?1:-1);
+    var setupsArr=suWrap._getSelected();
+    var setupStr=setupsArr.join(", ");
+    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:Math.round(pts*tv*parseFloat(ctr)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
+    if(isEdit){
+      State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
+      State.editing=null;State.expanded=updated.id;
+    } else {
+      State.trades.unshift(updated);State.adding=false;
+    }
+    ss("trades",State.trades);render();
+  });sv.appendChild(svb);fg.appendChild(sv);
+  frm.appendChild(fg);return frm;
+}
+
+// ─── LOG TAB ──────────────────────────────────────────────────────────
+function logTab(){
+  var el=div();
+  var hrow=div("rjb mb12");
+  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+State.trades.length+" entries";hrow.appendChild(sh);
+  var btnRow=div("row gap8");
+  var nb=h("button",{className:"btn",onClick:function(){State.adding=!State.adding;State.editing=null;render();}});nb.textContent="+ NEW TRADE";btnRow.appendChild(nb);
+  var impLink=h("button",{className:"btn",style:"border-color:var(--text3);color:var(--text3)",onClick:function(){State.tab="import";render();}});impLink.textContent="⬆ IMPORT CSV";btnRow.appendChild(impLink);
+  hrow.appendChild(btnRow);
+  el.appendChild(hrow);
+  if(State.adding) el.appendChild(tradeForm(null));
+  if(State.editing) el.appendChild(tradeForm(State.editing));
+  var tcard=div("card mt12");tcard.style.overflowX="auto";
+  var tbl=h("table",{className:"tbl"});
+  var thead=h("thead");var hr=h("tr");
+  ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","PTS","P&L","SETUP","SESSION","EX","RU","EMO"].forEach(function(hd){hr.appendChild(h("th",{},[hd]));});
+  thead.appendChild(hr);tbl.appendChild(thead);
+  var tbody=h("tbody");
+  State.trades.forEach(function(t){
+    var tr=h("tr",{className:"tr-click"+(State.expanded===t.id?" exp-open":"")});
+    tr.addEventListener("click",function(){State.expanded=State.expanded===t.id?null:t.id;render();});
+    var tdArr=[t.date,t.time,null,null,t.entry,t.exit,t.ctr,null,null,null,null,null,null,null];
+    tdArr[2]=null;tdArr[3]=null;
+    tr.appendChild(h("td",{},[t.date]));
+    tr.appendChild(h("td",{className:"m"},[t.time]));
+    tr.appendChild(h("td",{className:"fw7"},[t.inst]));
+    var dtd=h("td");dtd.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));tr.appendChild(dtd);
+    tr.appendChild(h("td",{},[t.entry]));tr.appendChild(h("td",{},[t.exit]));tr.appendChild(h("td",{className:"m"},[t.ctr]));
+    var ptd=h("td",{className:clr(t.pts)});
+    ptd.textContent=(t.pts>0?"+":"")+t.pts.toFixed(2);
+    ptd.style.fontWeight="600";
+    tr.appendChild(ptd);
+    var dtd2=h("td",{className:"fw7 "+clr(t.d)});
+    dtd2.textContent=dol(t.d);
+    dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":t.d<0?"background:#ff444430;border-radius:3px;padding:7px 10px":"padding:7px 10px";
+    tr.appendChild(dtd2);
+    var std=h("td",{className:"m xs"});std.style.maxWidth="130px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";
+    var stSetups=getSetups(t);
+    if(stSetups.length===0){std.textContent="";}
+    else if(stSetups.length===1){
+      var sn=stSetups[0];
+      var sCol=SETUP_COLORS[sn];
+      var sp1=h("span");sp1.textContent=sn;
+      if(sCol){sp1.style.color=sCol;sp1.style.fontWeight="700";}
+      std.appendChild(sp1);
+    }
+    else {
+      var sn1=stSetups[0];var sCol1=SETUP_COLORS[sn1];
+      var sp2=h("span");sp2.textContent=sn1;
+      if(sCol1){sp2.style.color=sCol1;sp2.style.fontWeight="700";}
+      std.appendChild(sp2);
+      var more=h("span");more.style.cssText="background:var(--ca15);color:var(--ca);border:1px solid var(--ca30);border-radius:2px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:5px;";
+      more.textContent="+"+(stSetups.length-1);
+      std.appendChild(more);
+    }
+    tr.appendChild(std);
+    var ssd=h("td");ssd.appendChild(makeBadge("bw xs",t.sess));tr.appendChild(ssd);
+    var exd=h("td");exd.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));tr.appendChild(exd);
+    var rud=h("td");rud.appendChild(h("span",{className:"gr "+grc(t.ru)},[t.ru]));tr.appendChild(rud);
+    tr.appendChild(h("td",{},[EMO[t.emo]||""]));
+    tbody.appendChild(tr);
+
+    if(State.expanded===t.id){
+      var exRow=h("tr");var exTd=h("td",{colspan:"14"});exTd.colSpan=14;exTd.style.padding="0";
+      var exDiv=div("exp");
+      var eg2=div();eg2.style.cssText="display:grid;grid-template-columns:1.3fr 1.3fr 1fr;gap:18px;padding:14px;";
+      var l=div();
+      var c1=div("xs m mb8");c1.textContent="CONFLUENCES";l.appendChild(c1);var c2=div("xs mb8");c2.style.color="#e0c97a";c2.style.lineHeight="1.7";c2.textContent=t.conf||"—";l.appendChild(c2);
+      var p1=div("xs m mt8 mb8");p1.textContent="POST-TRADE NOTES";l.appendChild(p1);var p2=div("xs");p2.style.color="#e0c97a";p2.style.lineHeight="1.7";p2.textContent=t.post||"—";l.appendChild(p2);
+      var r=div();
+      var rg=div("xs m mb8");rg.textContent="WHAT I DID RIGHT";r.appendChild(rg);var rv=div("xs g mb8");rv.style.lineHeight="1.7";rv.textContent=t.right||"—";r.appendChild(rv);
+      var wg=div("xs m mt8 mb8");wg.textContent="WHAT I DID WRONG";r.appendChild(wg);var wv=div("xs r mb12");wv.style.lineHeight="1.7";wv.textContent=t.wrong||"—";r.appendChild(wv);
+      var btnRow=div("row gap8 mt8");
+      var editBtn2=h("button",{className:"btn",style:"padding:4px 10px;font-size:9px"});editBtn2.textContent="EDIT TRADE";
+      (function(trade){editBtn2.addEventListener("click",function(e){e.stopPropagation();State.editing=trade;State.adding=false;State.expanded=null;render();});})(t);
+      btnRow.appendChild(editBtn2);
+      var delBtn=h("button",{className:"btn btn-r",style:"padding:4px 10px;font-size:9px"});delBtn.textContent="DELETE";
+      delBtn.addEventListener("click",function(e){e.stopPropagation();if(confirm("Delete this trade?")){State.trades=State.trades.filter(function(x){return x.id!==t.id});ss("trades",State.trades);State.expanded=null;State.editing=null;render();}});
+      btnRow.appendChild(delBtn);r.appendChild(btnRow);
+
+      // Setups column on the right
+      var sp=div();sp.style.cssText="border-left:1px solid var(--border);padding-left:14px;";
+      var sph=div("xs m mb8");sph.textContent="SETUPS";sp.appendChild(sph);
+      var tSetups=getSetups(t);
+      if(tSetups.length){
+        var stList=div();stList.style.cssText="display:flex;flex-direction:column;gap:6px;";
+        tSetups.forEach(function(name){
+          var col=setupColor(name);
+          var badge=div();
+          badge.style.cssText="padding:6px 10px;background:"+col+"12;border:1px solid "+col+"40;border-left:3px solid "+col+";border-radius:0 3px 3px 0;color:"+col+";font-size:11px;font-weight:700;letter-spacing:.5px;";
+          badge.textContent=name;
+          stList.appendChild(badge);
+        });
+        sp.appendChild(stList);
+        var foot=div("xs m");foot.style.cssText="margin-top:10px;letter-spacing:1px;text-transform:uppercase;opacity:.7;font-size:9px;";
+        foot.textContent=tSetups.length+" setup"+(tSetups.length>1?"s · confluence":"");
+        sp.appendChild(foot);
+      } else {
+        var none=div("xs m");none.style.fontStyle="italic";none.textContent="No setups tagged";sp.appendChild(none);
+      }
+
+      eg2.appendChild(l);eg2.appendChild(r);eg2.appendChild(sp);exDiv.appendChild(eg2);
+      exTd.appendChild(exDiv);exRow.appendChild(exTd);tbody.appendChild(exRow);
+    }
+  });
+  tbl.appendChild(tbody);tcard.appendChild(tbl);el.appendChild(tcard);return el;
+}
+
+// ─── OPPS TAB ─────────────────────────────────────────────────────────
+function oppsTab(){
+  var el=div();var sh=div("sh");sh.textContent="Best Opportunities";el.appendChild(sh);
+  var hl=State.trades.filter(function(t){return t.hl||t.d>500});
+  if(!hl.length){var msg=div("card");var m=span("xs m");m.textContent="No highlighted trades yet. Mark trades as Highlight when logging.";msg.appendChild(m);el.appendChild(msg);return el;}
+  hl.forEach(function(t){
+    var opp=div("opp");
+    var oh=div("row gap8 mb8 fw7");oh.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var oi=span("fw7");oi.textContent=" "+t.inst+" ";oh.appendChild(oi);var oe=span("xs m");oe.textContent="@ "+t.entry+" → "+t.exit;oh.appendChild(oe);opp.appendChild(oh);
+    var om=div("row gap8 mb8");om.style.flexWrap="wrap";
+    var op=span("fw7 "+clr(t.d));op.style.fontSize="19px";op.textContent=dol(t.d);om.appendChild(op);
+    om.appendChild(makeBadge("bb",t.pts.toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
+    var sep=div("sep");opp.appendChild(sep);
+    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";if(getSetups(t).length) sv2.appendChild(setupColoredEl(t)); else sv2.textContent="—";opp.appendChild(sv2);
+    var wl=div("xs m mb8");wl.textContent="WHY IT WORKED";opp.appendChild(wl);var wv=div("xs");wv.style.color="#e0c97a";wv.style.lineHeight="1.7";wv.textContent=t.post||t.conf||"—";opp.appendChild(wv);
+    var gr2=div("row gap8 mt8");gr2.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var gl=span("xs m");gl.style.lineHeight="21px";gl.textContent="Exec";gr2.appendChild(gl);var gs=h("span",{className:"gr "+grc(t.ru)},[t.ru]);gs.style.marginLeft="6px";gr2.appendChild(gs);var gl2=span("xs m");gl2.style.lineHeight="21px";gl2.textContent="Rules";gr2.appendChild(gl2);opp.appendChild(gr2);
+    el.appendChild(opp);
+  });
+  return el;
+}
+
+// ─── PLAYBOOK TAB ─────────────────────────────────────────────────────
+function playbookTab(){
+  // Load custom playbook entries from localStorage, merge with built-in
+  var customEntries=ls("playbook_custom",[]);
+  var editingIdx=State.pb_editing!==undefined?State.pb_editing:null;
+  var addingNew=State.pb_adding||false;
+
+  function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);}
+
+  // All entries: built-in SETUPS + custom
+  var allEntries=SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true};}).concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false};}));
+
+  var el=div();
+  var shRow=div("rjb mb12");
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Playbook — Setup Catalog";shRow.appendChild(sh);
+  var addBtn=h("button",{className:"btn",onClick:function(){State.pb_adding=!addingNew;State.pb_editing=undefined;render();}});addBtn.textContent=addingNew?"CANCEL":"+ ADD SETUP";shRow.appendChild(addBtn);
+  el.appendChild(shRow);
+
+  // Add new setup form
+  if(addingNew){
+    var addForm=div("card mb12");addForm.style.border="1px solid var(--ca)";
+    var afh=div("card-h");var aft=div("card-t b");aft.textContent="NEW SETUP";afh.appendChild(aft);addForm.appendChild(afh);
+    var nfl=h("label",{},"Setup Name");addForm.appendChild(nfl);
+    var nfi=h("input",{id:"pb_new_name",placeholder:"e.g. ICT Order Block Rejection"});addForm.appendChild(nfi);
+    nfi.style.marginBottom="10px";
+    var ndl=h("label",{},"Description / Entry Criteria");addForm.appendChild(ndl);
+    var ndt=h("textarea",{id:"pb_new_desc",rows:"3",placeholder:"Describe the setup, entry triggers, invalidation..."});ndt.style.resize="none";ndt.style.marginBottom="10px";addForm.appendChild(ndt);
+    var nsb=h("button",{className:"btn btn-g",style:"width:100%"});nsb.textContent="SAVE SETUP";
+    nsb.addEventListener("click",function(){
+      var nm=document.getElementById("pb_new_name").value.trim();
+      var ds=document.getElementById("pb_new_desc").value.trim();
+      if(!nm){alert("Setup name required");return;}
+      var arr=ls("playbook_custom",[]);arr.push({name:nm,desc:ds});ss("playbook_custom",arr);
+      State.pb_adding=false;render();
+    });addForm.appendChild(nsb);el.appendChild(addForm);
+  }
+
+  // Render all entries
+  allEntries.forEach(function(entry,idx){
+    var ts=State.trades.filter(function(t){return tradeHasSetup(t,entry.name)});
+    var pnl=ts.reduce(function(a,t){return a+t.d},0);
+    var w=ts.filter(function(t){return t.d>0}).length;
+    var isEditing=(editingIdx===idx);
+    var card=div("pbc");
+    if(isEditing) card.style.border="1px solid var(--ca)";
+
+    if(isEditing){
+      // Edit mode
+      var etop=div("card-h");var ett=div("card-t b");ett.textContent="EDITING SETUP";etop.appendChild(ett);
+      var ecb=h("button",{className:"btn btn-r",style:"padding:3px 9px;font-size:9px"});ecb.textContent="CANCEL";ecb.addEventListener("click",function(){State.pb_editing=undefined;render();});etop.appendChild(ecb);card.appendChild(etop);
+      var enl=h("label",{},"Setup Name");card.appendChild(enl);
+      var eni=h("input",{id:"pb_edit_name"});eni.value=entry.name;eni.style.marginBottom="10px";card.appendChild(eni);
+      var edl=h("label",{},"Description");card.appendChild(edl);
+      var edt=h("textarea",{id:"pb_edit_desc",rows:"3"});edt.value=entry.desc;edt.style.resize="none";edt.style.marginBottom="10px";card.appendChild(edt);
+      var esb=h("button",{className:"btn btn-g",style:"width:100%;margin-top:4px"});esb.textContent="SAVE CHANGES";
+      esb.addEventListener("click",function(){
+        var newName=document.getElementById("pb_edit_name").value.trim();
+        var newDesc=document.getElementById("pb_edit_desc").value.trim();
+        if(!newName){alert("Name required");return;}
+        if(entry.builtin){
+          SDESC[entry.name]=newDesc;
+        } else {
+          var arr=ls("playbook_custom",[]);
+          var ci=idx-SETUPS.length;
+          if(arr[ci]){arr[ci]={name:newName,desc:newDesc};ss("playbook_custom",arr);}
+        }
+        State.pb_editing=undefined;render();
+      });card.appendChild(esb);
+      if(!entry.builtin){
+        var delbtn=h("button",{className:"btn btn-r",style:"width:100%;margin-top:8px"});delbtn.textContent="DELETE SETUP";
+        delbtn.addEventListener("click",function(){
+          if(!confirm("Delete this setup?"))return;
+          var arr=ls("playbook_custom",[]);var ci=idx-SETUPS.length;arr.splice(ci,1);ss("playbook_custom",arr);State.pb_editing=undefined;render();
+        });card.appendChild(delbtn);
+      }
+    } else {
+      // View mode
+      var hrow=div("rjb mb8");
+      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="POC") nm.style.color="#ffd700";else if(entry.name==="VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
+      hrow.appendChild(left);
+      var right=div("row gap8");
+      if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
+      var editBtn=h("button",{className:"btn",style:"padding:3px 9px;font-size:9px"});editBtn.textContent="EDIT";
+      (function(i){editBtn.addEventListener("click",function(e){e.stopPropagation();State.pb_editing=i;State.pb_adding=false;render();});})(idx);
+      right.appendChild(editBtn);hrow.appendChild(right);card.appendChild(hrow);
+      var desc=div("xs m mb8");desc.style.lineHeight="1.65";desc.textContent=entry.desc||"No description yet. Click EDIT to add one.";card.appendChild(desc);
+      if(ts.length){
+        var stats=div("row mt8");
+        function ss3(l,v,c){var d=div();d.style.marginRight="18px";var dl=span("xs m");dl.style.display="block";dl.style.marginBottom="3px";dl.textContent=l;d.appendChild(dl);var dv=span("sm "+c);dv.textContent=v;d.appendChild(dv);return d;}
+        stats.appendChild(ss3("WIN RATE",(w/ts.length*100).toFixed(0)+"%",w/ts.length>=.5?"g":"r"));
+        stats.appendChild(ss3("TOTAL P&L",dol(pnl),clr(pnl)));
+        stats.appendChild(ss3("AVG TRADE",dol(pnl/ts.length),clr(pnl/ts.length)));
+        stats.appendChild(ss3("COUNT",ts.length,"b"));
+        card.appendChild(stats);
+      }
+    }
+    el.appendChild(card);
+  });
+  return el;
+}
+
+// ─── ANALYTICS TAB ────────────────────────────────────────────────────
+function analyticsTab(){
+  var el=div();var sh=div("sh");sh.textContent="Analytics";el.appendChild(sh);
+  var s=calcStats(State.trades);
+  var g4=div("g4");
+  g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac"));g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total)));
+  g4.appendChild(makeChip("TOTAL TRADES",State.trades.length));g4.appendChild(makeChip("WINS",s.wins.length,"g"));g4.appendChild(makeChip("LOSSES",s.losses.length,"r"));g4.appendChild(makeChip("R:R RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","ac"));
+  el.appendChild(g4);
+
+  var g2=div("g2");
+  var eqCard=div("card");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent="Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);
+  eqCard.appendChild(equitySVG(State.trades,380,200));g2.appendChild(eqCard);
+
+  var byHour=[];for(var i=0;i<10;i++){var hh=9+i;var hs=(hh<10?"0":"")+hh;var hts=State.trades.filter(function(t){return t.time&&t.time.indexOf(hs)===0});byHour.push({l:hh+":00",v:hts.reduce(function(a,t){return a+t.d},0)});}
+  var bhCard=div("card");var bhH=div("card-h");var bhT=div("card-t");bhT.textContent="P&L by Hour";bhH.appendChild(bhT);bhCard.appendChild(bhH);
+  bhCard.appendChild(barSVG(byHour,380,200));g2.appendChild(bhCard);
+  el.appendChild(g2);
+
+  // P&L by Day of Week
+  var DOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
+  var dowData=DOWS.map(function(d,di){
+    var ts=State.trades.filter(function(t){
+      if(!t.date) return false;
+      var p=t.date.split("/");if(p.length!==3)return false;
+      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+      return dt.getDay()===di; // Sun=0...Sat=6
+    });
+    return{l:d,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};
+  });
+  var dowCard=div("card mt12");var dowH=div("card-h");var dowT=div("card-t");dowT.textContent="P&L by Day of Week";dowH.appendChild(dowT);dowCard.appendChild(dowH);
+  dowCard.appendChild(barSVG(dowData,760,200));
+
+  // Day of week table
+  var dowTbl=h("table",{className:"tbl"});var dowThead=h("thead");var dowHr=h("tr");
+  ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){dowHr.appendChild(h("th",{},[hd]));});
+  dowThead.appendChild(dowHr);dowTbl.appendChild(dowThead);
+  var dowTbody=h("tbody");
+  dowData.forEach(function(d){
+    var ts=State.trades.filter(function(t){
+      if(!t.date) return false;
+      var p=t.date.split("/");if(p.length!==3)return false;
+      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+      return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(d.l)===dt.getDay();
+    });
+    var wins=ts.filter(function(t){return t.d>0}).length;
+    var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";
+    var avg=ts.length?(d.v/ts.length).toFixed(0):0;
+    var dr=h("tr");
+    dr.appendChild(h("td",{className:"fw7"},[d.l]));
+    dr.appendChild(h("td",{className:"m"},[ts.length]));
+    dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));
+    var dptd=h("td",{className:"fw7 "+clr(d.v)});dptd.textContent=dol(d.v);
+    dptd.style.cssText=d.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":d.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    dr.appendChild(dptd);
+    var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);
+    aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    dr.appendChild(aptd);
+    dowTbody.appendChild(dr);
+  });
+  dowTbl.appendChild(dowTbody);dowCard.appendChild(dowTbl);
+  el.appendChild(dowCard);
+
+  var sessCard=div("card mt12");var sessH=div("card-h");var sessT=div("card-t");sessT.textContent="P&L by Session";sessH.appendChild(sessT);sessCard.appendChild(sessH);
+  var stbl=h("table",{className:"tbl"});var sthead=h("thead");var shr=h("tr");
+  ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){shr.appendChild(h("th",{},[hd]));});sthead.appendChild(shr);stbl.appendChild(sthead);
+  var stbody=h("tbody");
+  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);
+    sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
+    str.appendChild(sptd);stbody.appendChild(str);});
+  stbl.appendChild(stbody);sessCard.appendChild(stbl);el.appendChild(sessCard);
+
+  // Setup P&L Breakdown (moved from Review/Stats)
+  var sbCard2=div("card mt12");var sbH2=div("card-h");var sbT2=div("card-t");sbT2.textContent="Setup P&L Breakdown";sbH2.appendChild(sbT2);sbCard2.appendChild(sbH2);
+  var allSetups2=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
+  var bySetup2=allSetups2.map(function(sv){var sts=State.trades.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
+  if(!bySetup2.length){var nsm3=span("xs m");nsm3.textContent="No tagged setups yet — tag trades in the log to see breakdown.";sbCard2.appendChild(nsm3);}
+  bySetup2.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){
+    var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";
+    var sl=div();var st2=div("xs fw7");st2.style.color=SETUP_COLORS[s2.full]||"var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);
+    var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);
+    var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);
+    sbCard2.appendChild(sr);
+  });
+  el.appendChild(sbCard2);
+
+  // Monthly Goal
+  var goalCard2=div("card mt12");var goalH2=div("card-h");var goalT2=div("card-t");goalT2.textContent="Monthly Goal";goalH2.appendChild(goalT2);goalCard2.appendChild(goalH2);
+  var mta3=h("textarea",{rows:"3"});mta3.style.resize="none";mta3.value=State.moGoal;mta3.addEventListener("input",function(){State.moGoal=mta3.value;ss("moGoal",State.moGoal);});goalCard2.appendChild(mta3);
+  el.appendChild(goalCard2);
+  return el;
+}
+
+// ─── REVIEW TAB (Combined Weekly + Monthly + Calendar) ──────────────
+function reviewTab(){
+  var el=div();
+  var now=new Date();
+  var calYear=State.rv_year!==undefined?State.rv_year:now.getFullYear();
+  var calMonth=State.rv_month!==undefined?State.rv_month:now.getMonth();
+  var viewMode=State.rv_view||"month";
+
+  var s=calcStats(State.trades);
+  var aG=State.trades.filter(function(t){return t.ex==="A"}).length;
+  var adh=State.trades.length?(aG/State.trades.length*100).toFixed(0):0;
+  var emoAvg=State.trades.length?(State.trades.reduce(function(a,t){return a+(t.emo||3)},0)/State.trades.length).toFixed(1):0;
+
+  // ── Header row with view toggles ──
+  var topRow=div("rjb mb12");
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Review";topRow.appendChild(sh);
+  var toggles=div("row gap8");
+  ["month","week"].forEach(function(v){
+    var b=h("button",{className:"btn"+(viewMode===v?" btn-active":""),style:"padding:9px 22px;font-size:13px;letter-spacing:1px;font-weight:700"+(viewMode===v?";border-color:#00d4d4;color:#00d4d4;background:#00d4d418":"")});
+    b.textContent=v.toUpperCase();
+    b.addEventListener("click",function(){State.rv_view=v;render();});
+    toggles.appendChild(b);
+  });
+  topRow.appendChild(toggles);
+  el.appendChild(topRow);
+
+  // ── SUMMARY CHIPS ──
+  var g4=div("g4 mb12");
+  g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total),State.trades.length+" trades"));
+  var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+s.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+s.losses.length+'</span>';
+  g4.appendChild(makeChip("W / L",wlDiv,"","all time"));
+  g4.appendChild(makeChip("AVG EMOTION",emoAvg+" / 5","a"));
+  g4.appendChild(makeChip("A-GRADE RATE",adh+"%",adh>=60?"g":"a"));
+  el.appendChild(g4);
+
+  // ── CALENDAR VIEW ──
+  if(viewMode==="month"){
+    var calCard=div("card mb12");
+
+    // Calendar nav
+    var calNav=div("rjb mb12");
+    var prevBtn=h("button",{className:"btn",style:"padding:4px 12px"});prevBtn.textContent="◀";
+    prevBtn.addEventListener("click",function(){
+      var m=calMonth-1;var y=calYear;if(m<0){m=11;y--;}
+      State.rv_month=m;State.rv_year=y;render();
+    });
+    var MNAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var calTitle=div("fw7");calTitle.style.cssText="font-size:15px;letter-spacing:1px;";calTitle.textContent=MNAMES[calMonth]+" "+calYear;
+    var nextBtn=h("button",{className:"btn",style:"padding:4px 12px"});nextBtn.textContent="▶";
+    nextBtn.addEventListener("click",function(){
+      var m=calMonth+1;var y=calYear;if(m>11){m=0;y++;}
+      State.rv_month=m;State.rv_year=y;render();
+    });
+    calNav.appendChild(prevBtn);calNav.appendChild(calTitle);calNav.appendChild(nextBtn);
+    calCard.appendChild(calNav);
+
+    // Build day→trades map using MM/DD/YY format
+    var dayMap={};
+    State.trades.forEach(function(t){
+      // parse MM/DD/YY
+      var parts=t.date.split("/");if(parts.length!==3)return;
+      var tm=parseInt(parts[0])-1,td2=parseInt(parts[1]),ty=2000+parseInt(parts[2]);
+      if(tm===calMonth&&ty===calYear){
+        var key=td2;
+        if(!dayMap[key])dayMap[key]={pnl:0,count:0,trades:[]};
+        dayMap[key].pnl+=t.d;dayMap[key].count++;dayMap[key].trades.push(t);
+      }
+    });
+
+    // Day headers
+    var DNAMES=["SUN","MON","TUE","WED","THU","FRI","SAT"];
+    var grid=div();grid.style.display="grid";grid.style.gridTemplateColumns="repeat(7,1fr)";grid.style.gap="4px";
+    DNAMES.forEach(function(d,di){
+      var isSat=(di===6);var isSun=(di===0);
+      var dh=div();dh.style.cssText="text-align:center;font-size:16px;letter-spacing:2px;padding:8px 0;color:"+(isSat?"#ff6b3d":"var(--text3)")+";font-weight:700;";dh.textContent=d;grid.appendChild(dh);
+    });
+
+    // First day of month
+    var firstDay=new Date(calYear,calMonth,1).getDay();
+    var daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+    var todayObj=new Date();
+    var isCurrentMonth=todayObj.getMonth()===calMonth&&todayObj.getFullYear()===calYear;
+
+    // Empty cells before first day
+    for(var i=0;i<firstDay;i++){grid.appendChild(div());}
+
+    // Day cells
+    for(var d=1;d<=daysInMonth;d++){
+      (function(day){
+        var cell=div();
+        var dow=(firstDay+day-1)%7; // 0=Sun,6=Sat
+        var isSat=dow===6;
+        var isSun=dow===0;
+        var isToday=isCurrentMonth&&todayObj.getDate()===day;
+        var data=dayMap[day];
+        var holiday=(!isSat&&!isSun)?getMarketHoliday(calMonth,day,calYear):null;
+        var holCol=holiday?(holiday.type==="closed"?"#ffd700":"#ffab00"):null;
+        var bg=isSat?"#1a0e06":"var(--panel2)";
+        var border=isSat?"1px solid #ff6b3d30":"1px solid var(--border)";
+        var pnlCol="";
+        // Holiday styling — only when no trade data
+        if(holiday&&!data){
+          if(holiday.type==="closed"){bg="#2b1f02";border="1px solid #ffd70060";}
+          else{bg="#2b220a";border="1px solid #ffab0060";}
+        }
+        // Trade data styling — overrides bg but accent border kept for holiday
+        if(data){
+          bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");
+          border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";
+          pnlCol=data.pnl>0?"#00e676":"#ff4444";
+        }
+        if(isToday){border="2px solid var(--ca)";}
+        // Holiday + trade: thicker holiday-colored left accent
+        var extraStyle=(data&&holiday)?"border-left:3px solid "+holCol+";":"";
+        cell.style.cssText="background:"+bg+";border:"+border+";"+extraStyle+"border-radius:4px;padding:8px 6px;min-height:72px;cursor:"+(data?"pointer":"default")+";position:relative;";
+
+        // Holiday indicator badge in top-right corner — shows when both data + holiday
+        if(holiday&&data){
+          var holBadge=div();holBadge.style.cssText="position:absolute;top:5px;right:5px;background:"+holCol+"20;color:"+holCol+";border:1px solid "+holCol+"60;font-size:7px;font-weight:700;padding:1px 4px;border-radius:2px;letter-spacing:.5px;";
+          holBadge.textContent=holiday.type==="closed"?"HOL":"½";
+          holBadge.title=holiday.name+(holiday.type==="closed"?" (closed)":" (early 1pm)");
+          cell.appendChild(holBadge);
+        }
+
+        var dnumColor=isToday?"var(--ca)":isSat?"#ff6b3d":(holiday&&!data?holCol:"var(--text2)");
+        var dnum=div();dnum.style.cssText="font-size:14px;font-weight:700;color:"+dnumColor+";margin-bottom:4px;";dnum.textContent=day;cell.appendChild(dnum);
+        if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:9px;color:#ff6b3d50;letter-spacing:1px;margin-top:3px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
+        if(holiday&&!data){
+          var holLbl=div();holLbl.style.cssText="font-size:9px;color:"+holCol+";letter-spacing:1px;margin-top:3px;font-weight:700;";holLbl.textContent=holiday.type==="closed"?"CLOSED":"EARLY 1PM";cell.appendChild(holLbl);
+          var holName=div();holName.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:2px;line-height:1.2;";holName.textContent=holiday.name;cell.appendChild(holName);
+        }
+        if(data){
+          var dpnl=div();dpnl.style.cssText="font-size:12px;font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
+          var wins=data.trades.filter(function(t){return t.d>0}).length;
+          var losses=data.trades.filter(function(t){return t.d<0}).length;
+          var wlRow=div();wlRow.style.cssText="display:flex;gap:4px;margin-top:2px;align-items:center;";
+          if(wins>0){var wEl=span();wEl.style.cssText="font-size:11px;font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
+          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:10px;color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
+          if(losses>0){var lEl=span();lEl.style.cssText="font-size:11px;font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
+          cell.appendChild(wlRow);
+          // Holiday name footer when both
+          if(holiday){
+            var holNameInline=div();holNameInline.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:3px;line-height:1.2;font-weight:700;";holNameInline.textContent=holiday.name;cell.appendChild(holNameInline);
+          }
+        }
+        // Click to show day trades
+        if(data){
+          cell.addEventListener("click",function(){
+            State.rv_selected_day=State.rv_selected_day===day?null:day;render();
+          });
+        }
+        grid.appendChild(cell);
+      })(d);
+    }
+    calCard.appendChild(grid);
+
+    // Legend
+    var leg=div("row gap12 mt12");leg.style.justifyContent="flex-end";leg.style.flexWrap="wrap";
+    [{col:"#00e676",lbl:"Profit"},{col:"#ff4444",lbl:"Loss"},{col:"var(--border)",lbl:"No trades"},{col:"#ff6b3d",lbl:"Weekend"},{col:"#ffd700",lbl:"Holiday close"},{col:"#ffab00",lbl:"Early close 1pm"}].forEach(function(l){
+      var li=div("row gap8");var dot=div();dot.style.cssText="width:10px;height:10px;border-radius:2px;background:"+l.col+"20;border:1px solid "+l.col+"60;flex-shrink:0;";var lt=span("xs m");lt.textContent=l.lbl;li.appendChild(dot);li.appendChild(lt);leg.appendChild(li);
+    });
+    calCard.appendChild(leg);
+
+    // Selected day detail
+    if(State.rv_selected_day&&dayMap[State.rv_selected_day]){
+      var selDay=State.rv_selected_day;var dd=dayMap[selDay];
+      var detCard=div("card mb12");detCard.style.borderColor=dd.pnl>=0?"#00e67640":"#ff444440";
+      var detH=div("card-h");var detT=div("card-t");
+      detT.textContent=MNAMES[calMonth]+" "+selDay+" — "+dd.count+" TRADE"+(dd.count>1?"S":"");detH.appendChild(detT);
+      var detPnl=span("fw7 "+clr(dd.pnl));detPnl.textContent=dol(dd.pnl);detH.appendChild(detPnl);
+      detCard.appendChild(detH);
+      dd.trades.forEach(function(t){
+        var tr=div();tr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;";
+        var tl=div("row gap8");tl.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var tn=span("fw7 sm");tn.textContent=t.inst;tl.appendChild(tn);var tt=span("xs m");tt.textContent=t.time;tl.appendChild(tt);var ts2=span("xs m");ts2.style.maxWidth="160px";ts2.style.overflow="hidden";ts2.style.whiteSpace="nowrap";ts2.style.textOverflow="ellipsis";if(getSetups(t).length) ts2.appendChild(setupColoredEl(t)); else ts2.textContent="";tl.appendChild(ts2);tr.appendChild(tl);
+        var tv=div("row gap8");tv.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var tp=span("fw7 "+clr(t.d));tp.textContent=dol(t.d);tv.appendChild(tp);tr.appendChild(tv);
+        detCard.appendChild(tr);
+      });
+      calCard.appendChild(detCard);
+    }
+    el.appendChild(calCard);
+
+    // Equity curve for the month
+    var monthTrades=State.trades.filter(function(t){var p=t.date.split("/");return p.length===3&&parseInt(p[0])-1===calMonth&&2000+parseInt(p[2])===calYear;});
+    if(monthTrades.length){
+      var eqCard=div("card mb12");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent=MNAMES[calMonth]+" Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);eqCard.appendChild(equitySVG(monthTrades,760,170));el.appendChild(eqCard);
+    }
+  }
+
+  // ── WEEK VIEW ──
+  if(viewMode==="week"){
+    // Get this week's trades (last 7 days)
+    var now2=new Date();
+    var wkTrades=State.trades.filter(function(t){
+      var p=t.date.split("/");if(p.length!==3)return false;
+      var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+      var diff=(now2-td3)/(1000*60*60*24);return diff>=0&&diff<7;
+    });
+    var ws=calcStats(wkTrades);
+    var waG=wkTrades.filter(function(t){return t.ex==="A"}).length;
+    var wadh=wkTrades.length?(waG/wkTrades.length*100).toFixed(0):0;
+    var wemoAvg=wkTrades.length?(wkTrades.reduce(function(a,t){return a+(t.emo||3)},0)/wkTrades.length).toFixed(1):"—";
+
+    var wg4=div("g4 mb12");
+    wg4.appendChild(makeChip("WEEK P&L",dol(ws.total),clr(ws.total),wkTrades.length+" trades"));
+    var wWL=div();wWL.innerHTML='<span class="g fw7">'+ws.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ws.losses.length+'</span>';
+    wg4.appendChild(makeChip("W / L",wWL));
+    wg4.appendChild(makeChip("AVG EMOTION",wemoAvg+" / 5","a"));
+    wg4.appendChild(makeChip("A-GRADE RATE",wadh+"%",wadh>=60?"g":"a"));
+    el.appendChild(wg4);
+
+    var wg2=div("g2 mb12");
+    // Best/worst
+    var bwCard=div("card");var bwH=div("card-h");var bwT=div("card-t");bwT.textContent="Best & Worst This Week";bwH.appendChild(bwT);bwCard.appendChild(bwH);
+    var wb=wkTrades.slice().sort(function(a,b){return b.d-a.d})[0];var ww=wkTrades.slice().sort(function(a,b){return a.d-b.d})[0];
+    if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.appendChild(document.createTextNode(wb.inst+" "+wb.dir+" — "));if(getSetups(wb).length) bd2.appendChild(setupColoredEl(wb)); else bd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(bd2);}
+    if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.appendChild(document.createTextNode(ww.inst+" "+ww.dir+" — "));if(getSetups(ww).length) wd2.appendChild(setupColoredEl(ww)); else wd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(wd2);}
+    if(!wkTrades.length){var nm2=span("xs m");nm2.textContent="No trades this week.";bwCard.appendChild(nm2);}
+    wg2.appendChild(bwCard);
+    // Emotional trend
+    var emCard=div("card");var emH=div("card-h");var emT2=div("card-t");emT2.textContent="Emotional Trend";emH.appendChild(emT2);emCard.appendChild(emH);
+    var emoData=wkTrades.slice().reverse().map(function(t,i){return{l:i+1,v:t.emo||3}});
+    if(emoData.length>=2) emCard.appendChild(lineSVG(emoData,380,150,"#ffab00"));else{var nem=span("xs m");nem.textContent="Not enough trades for trend.";emCard.appendChild(nem);}
+    wg2.appendChild(emCard);
+    el.appendChild(wg2);
+
+    // Setup perf this week
+    var spCard=div("card mb12");var spH=div("card-h");var spT2=div("card-t");spT2.textContent="Setup Performance This Week";spH.appendChild(spT2);spCard.appendChild(spH);
+    var hasSetup=false;
+    SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;})).forEach(function(sv){
+      var sts=wkTrades.filter(function(t){return tradeHasSetup(t,sv)});if(!sts.length)return;hasSetup=true;
+      var spnl=sts.reduce(function(a,t){return a+t.d},0);
+      var sr=div("rjb");sr.style.padding="6px 0";sr.style.borderBottom="1px solid var(--border)";
+      var sl=span("xs");sl.style.color="#e0c97a";sl.style.maxWidth="260px";sl.style.overflow="hidden";sl.style.textOverflow="ellipsis";sl.style.whiteSpace="nowrap";sl.textContent=sv;sr.appendChild(sl);
+      var sp=span("xs fw7 "+clr(spnl));sp.textContent=dol(spnl)+" ("+sts.length+")";sr.appendChild(sp);spCard.appendChild(sr);
+    });
+    if(!hasSetup){var ns=span("xs m");ns.textContent="No tagged trades this week.";spCard.appendChild(ns);}
+    el.appendChild(spCard);
+
+    // Goals
+    var goalCard=div("card");var goalH=div("card-h");var goalT=div("card-t");goalT.textContent="Weekly Goals & Focus";goalH.appendChild(goalT);goalCard.appendChild(goalH);
+    var gl=h("label",{},"Goal for This Week");goalCard.appendChild(gl);
+    var gta=h("textarea",{rows:"3"});gta.style.resize="none";gta.style.marginBottom="12px";gta.value=State.wkGoal;gta.addEventListener("input",function(){State.wkGoal=gta.value;ss("wkGoal",State.wkGoal);});goalCard.appendChild(gta);
+    var fl=h("label",{},"Focus for Next Week");goalCard.appendChild(fl);
+    var fta=h("textarea",{rows:"3",placeholder:"What will I improve next week?"});fta.style.resize="none";goalCard.appendChild(fta);
+    el.appendChild(goalCard);
+  }
+
+  // ── STATS VIEW ──
+
+
+  return el;
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────
+
+// ─── IMPORT TAB ───────────────────────────────────────────────────────
+
+function detectInstrument(s){
+  var c=(s||"").toUpperCase().split(" ").join("").split(".")[0];
+  if(c.indexOf("MES")===0) return "MES";
+  if(c.indexOf("MNQ")===0) return "MNQ";
+  if(c.indexOf("ES")===0)  return "ES";
+  if(c.indexOf("NQ")===0)  return "NQ";
+  if(c.indexOf("CL")===0)  return "CL";
+  if(c.indexOf("GC")===0)  return "GC";
+  return "Other";
+}
+
+function fmtImportDate(raw){
+  if(!raw) return today();
+  raw=(raw+"").trim().split("T")[0];
+  var p;
+  // YYYY-MM-DD or YYYY/MM/DD
+  if(raw.length>=10 && (raw[4]==="-"||raw[4]==="/")){
+    p=raw.split(raw[4]);
+    if(p.length>=3) return (p[1].length===1?"0":"")+p[1]+"/"+(p[2].length===1?"0":"")+p[2]+"/"+p[0].slice(2);
+  }
+  // MM/DD/YYYY or M/D/YYYY
+  p=raw.split("/");
+  if(p.length===3){
+    var yr=p[2].length===4?p[2].slice(2):p[2];
+    return (p[0].length===1?"0":"")+p[0]+"/"+(p[1].length===1?"0":"")+p[1]+"/"+yr;
+  }
+  return today();
+}
+
+function fmtImportTime(raw){
+  if(!raw) return "";
+  // look for HH:MM pattern in the string
+  var parts=(raw+"").split(":");
+  if(parts.length>=2){
+    var hh=parts[0].trim().split(" ");hh=hh[hh.length-1];
+    var mm=parts[1].slice(0,2);
+    if(hh.length>0&&mm.length>0) return (hh.length===1?"0":"")+hh+":"+mm;
+  }
+  return "";
+}
+
+function parseCSVLines(text){
+  // Split by newlines, handle \r\n and \n
+  var lines=[];
+  var cur="";
+  for(var i=0;i<text.length;i++){
+    var ch=text[i];
+    if(ch==="\r"){ if(text[i+1]==="\n") i++; lines.push(cur);cur=""; }
+    else if(ch==="\n"){ lines.push(cur);cur=""; }
+    else cur+=ch;
+  }
+  if(cur.trim()) lines.push(cur);
+  return lines;
+}
+
+function stripQuotes(s){
+  s=(s||"").trim();
+  if(s[0]==='"'&&s[s.length-1]==='"') s=s.slice(1,-1);
+  return s.trim();
+}
+
+function parseCSV(text){
+  var lines=parseCSVLines(text).filter(function(l){return l.trim();});
+  if(lines.length<2) return{trades:[],error:"Need a header row and at least one trade row."};
+  var header=lines[0].split(",").map(function(h){return stripQuotes(h).toLowerCase();});
+  var rows=lines.slice(1).filter(function(l){return l.indexOf(",")>-1;});
+  if(!rows.length) return{trades:[],error:"No data rows found after the header."};
+
+  function col(row,names){
+    for(var i=0;i<names.length;i++){
+      var idx=header.indexOf(names[i]);
+      if(idx>-1&&row[idx]!==undefined){var v=stripQuotes(row[idx]);if(v) return v;}
+    }
+    return "";
+  }
+  function cleanNum(s){return (s||"").replace("$","").replace(",","").trim();}
+
+  var isNT=header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1);
+  var trades=[];
+
+  rows.forEach(function(line,ri){
+    var row=line.split(",");
+    var t={};
+
+    if(isNT){
+      var inst=detectInstrument(col(row,["instrument","symbol"]));
+      var dirRaw=col(row,["market pos.","market pos","direction","side"]).toLowerCase();
+      var dir=dirRaw.indexOf("long")>-1?"Long":"Short";
+      var qty=cleanNum(col(row,["quantity","qty"]))||"1";
+      var entry=cleanNum(col(row,["entry price","entryprice"]));
+      var exit2=cleanNum(col(row,["exit price","exitprice"]));
+      var entryTime=col(row,["entry time","entrytime","time"]);
+      var profit=cleanNum(col(row,["profit","p&l","pnl","net profit"]));
+      var mae=cleanNum(col(row,["mae"]));
+      var mfe=cleanNum(col(row,["mfe"]));
+      var dateStr=entryTime.split(" ")[0]||"";
+      var timeStr=fmtImportTime(entryTime);
+      var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
+      var tv2=TICK[inst]||1;
+      var dollar=profit?Math.round(parseFloat(profit)):Math.round(pts*tv2*parseFloat(qty));
+      t={id:Date.now()+ri*7,date:fmtImportDate(dateStr),time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
+      if(mae) t.mae=mae;
+      if(mfe) t.mfe=mfe;
+    } else {
+      var contract=col(row,["contract","symbol","instrument","product"]);
+      var inst2=detectInstrument(contract);
+      var action=col(row,["action","buy/sell","side","direction","type","order action"]).toLowerCase();
+      var dir2=action.indexOf("buy")>-1||action.indexOf("long")>-1?"Long":"Short";
+      var qty2=cleanNum(col(row,["qty","quantity","size","contracts","filled qty"]))||"1";
+      var entryP=cleanNum(col(row,["entry price","entry","avg price","avgprice","price","fill price","avg fill price"]));
+      var exitP=cleanNum(col(row,["exit price","exit"]));
+      var pnl=cleanNum(col(row,["pnl","p&l","profit","net p&l","realized p&l","realized pnl","net profit"]));
+      var dateRaw=col(row,["date","datetime","date/time","filled at","timestamp","time"]);
+      var timeRaw=col(row,["time","filled at","timestamp"]);
+      var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
+      var tv3=TICK[inst2]||1;
+      var dollar2=pnl?Math.round(parseFloat(pnl)):Math.round(pts2*tv3*parseFloat(qty2));
+      t={id:Date.now()+ri*7,date:fmtImportDate(dateRaw),time:fmtImportTime(timeRaw),inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
+    }
+    if(t.inst) trades.push(t);
+  });
+
+  if(!trades.length) return{trades:[],error:"Parsed 0 trades. Check the platform selection matches your CSV format."};
+  return{trades:trades,error:null};
+}
+
+function processCSV(text,source){
+  var result=parseCSV(text);
+  if(result.error){State.imp_msg={type:"err",text:"Error parsing "+source+": "+result.error};State.imp_preview=null;}
+  else{State.imp_preview=result.trades;State.imp_msg={type:"info",text:"Parsed "+result.trades.length+" trades from "+source+". Review below then click IMPORT ALL."};}
+  render();
+}
+
+
+function importTab(){
+  var el=div();
+
+  // ── Sync / Upload tab switcher ──
+  var topRow=div("rjb mb12");
+  var sh2=div("sh");sh2.style.marginBottom="0";sh2.textContent="Import & Sync";topRow.appendChild(sh2);
+  var swRow=div("row gap8");
+  [{id:"tradovate",label:"Tradovate"},{id:"ninjatrader",label:"NinjaTrader"},{id:"csv",label:"CSV Upload"}].forEach(function(s){
+    var b=h("button",{className:"plt-btn"+(State.sync_tab===s.id?" sel":"")});
+    b.textContent=s.label;
+    b.addEventListener("click",function(){State.sync_tab=s.id;State.imp_msg="";render();});
+    swRow.appendChild(b);
+  });
+  topRow.appendChild(swRow);
+  el.appendChild(topRow);
+
+  // Message banner
+  if(State.imp_msg&&State.imp_msg.text){
+    var msg=div("imp-msg "+(State.imp_msg.type==="ok"?"imp-ok":State.imp_msg.type==="err"?"imp-err":"imp-info"));
+    msg.textContent=State.imp_msg.text;el.appendChild(msg);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // TRADOVATE SYNC
+  // ──────────────────────────────────────────────────────────────────
+  if(State.sync_tab==="tradovate"){
+    var tvCard=div("card mb12");
+    var tvH=div("card-h");
+    var tvT=div("card-t");tvT.textContent="Tradovate API Sync";tvH.appendChild(tvT);
+    var connected=!!(State.tv_token&&State.tv_token.accessToken);
+    var statusDot=div(connected?"sync-dot-on":"sync-dot-off");
+    var statusTxt=span("xs");statusTxt.style.color=connected?"var(--green)":"var(--text3)";
+    statusTxt.textContent=connected?"CONNECTED":"NOT CONNECTED";
+    var statusRow=div("sync-status");statusRow.appendChild(statusDot);statusRow.appendChild(statusTxt);
+    if(State.tv_lastSync){var lsText=span("xs m");lsText.style.marginLeft="auto";lsText.textContent="Last sync: "+State.tv_lastSync;statusRow.appendChild(lsText);}
+    tvH.appendChild(statusRow);
+    tvCard.appendChild(tvH);
+
+    var tvInfo=div("imp-info imp-msg mb12");
+    tvInfo.style.fontSize="10px";tvInfo.style.lineHeight="1.7";
+    tvInfo.innerHTML="To connect Tradovate: you need your <b>username</b>, <b>password</b>, and API credentials (CID + Secret) from <a href='https://trader.tradovate.com' style='color:var(--ca)'>trader.tradovate.com</a> under Settings → API. Choose Demo or Live environment.";
+    tvCard.appendChild(tvInfo);
+
+    var tvFg=div("fg");
+    function tvField(id,lbl,type,placeholder,val){
+      var w=div();w.appendChild(h("label",{},[lbl]));
+      var i=h("input",{id:"tv_"+id,type:type||"text"});
+      i.placeholder=placeholder||"";i.value=val||"";
+      w.appendChild(i);return w;
+    }
+    tvFg.appendChild(tvField("user","Tradovate Username","text","your@email.com",State.tv_creds.user));
+    tvFg.appendChild(tvField("pass","Password","password","",State.tv_creds.pass));
+    tvFg.appendChild(tvField("cid","App CID","text","e.g. 4321",State.tv_creds.cid));
+    tvFg.appendChild(tvField("sec","App Secret","password","",State.tv_creds.sec));
+    var envDiv=div();envDiv.appendChild(h("label",{},"Environment"));
+    var envSel=h("select",{id:"tv_env"});
+    [{v:"live",l:"Live Account"},{v:"demo",l:"Demo / Sim"}].forEach(function(o){
+      var opt=h("option",{value:o.v},[o.l]);
+      if(State.tv_creds.env===o.v) opt.selected=true;
+      envSel.appendChild(opt);
+    });
+    envDiv.appendChild(envSel);tvFg.appendChild(envDiv);
+    var daysDiv=div();daysDiv.appendChild(h("label",{},"Fetch Last N Days"));
+    var daysInp=h("input",{id:"tv_days",type:"text"});daysInp.value="30";daysDiv.appendChild(daysInp);
+    tvFg.appendChild(daysDiv);
+    tvCard.appendChild(tvFg);
+
+    var tvBtnRow=div("row gap8 mt12");
+    var tvConnect=h("button",{className:"btn btn-g",style:"flex:1"});tvConnect.textContent="CONNECT & SYNC";
+    tvConnect.addEventListener("click",function(){
+      var u=document.getElementById("tv_user"),pw=document.getElementById("tv_pass"),cid=document.getElementById("tv_cid"),sec=document.getElementById("tv_sec"),env=document.getElementById("tv_env"),days=document.getElementById("tv_days");
+      if(!u.value||!pw.value){State.imp_msg={type:"err",text:"Username and password are required."};render();return;}
+      var creds={user:u.value,pass:pw.value,cid:cid.value,sec:sec.value,env:env.value};
+      ss("tv_creds",creds);State.tv_creds=creds;
+      State.imp_msg={type:"info",text:"Connecting to Tradovate..."};render();
+      syncTradovate(creds,parseInt(days.value)||30);
+    });
+    tvBtnRow.appendChild(tvConnect);
+    if(connected){
+      var tvResync=h("button",{className:"btn",style:"flex:1"});tvResync.textContent="RE-SYNC NOW";
+      tvResync.addEventListener("click",function(){
+        var days2=document.getElementById("tv_days");
+        State.imp_msg={type:"info",text:"Re-syncing..."};render();
+        syncTradovate(State.tv_creds,parseInt(days2?days2.value:30)||30);
+      });
+      var tvDisc=h("button",{className:"btn btn-r",style:"flex:1"});tvDisc.textContent="DISCONNECT";
+      tvDisc.addEventListener("click",function(){State.tv_token=null;ss("tv_token",null);State.imp_msg={type:"ok",text:"Disconnected."};render();});
+      tvBtnRow.appendChild(tvResync);tvBtnRow.appendChild(tvDisc);
+    }
+    tvCard.appendChild(tvBtnRow);
+    el.appendChild(tvCard);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // NINJATRADER FILE SYNC
+  // ──────────────────────────────────────────────────────────────────
+  if(State.sync_tab==="ninjatrader"){
+    var ntCard=div("card mb12");
+    var ntH=div("card-h");
+    var ntT=div("card-t");ntT.textContent="NinjaTrader File Sync";ntH.appendChild(ntT);
+    var ntConnected=!!State.nt_fileHandle;
+    var ntStatusRow=div("sync-status mt8");
+    ntStatusRow.appendChild(div(ntConnected?"sync-dot-on":"sync-dot-off"));
+    var ntTxt=span("xs");ntTxt.style.color=ntConnected?"var(--green)":"var(--text3)";
+    ntTxt.textContent=ntConnected?"FILE LINKED":"NO FILE LINKED";ntStatusRow.appendChild(ntTxt);
+    if(State.nt_lastSync){var nlText=span("xs m");nlText.style.marginLeft="auto";nlText.textContent="Last load: "+State.nt_lastSync;ntStatusRow.appendChild(nlText);}
+    ntH.appendChild(ntStatusRow);
+    ntCard.appendChild(ntH);
+
+    var ntInfo=div("imp-info imp-msg mb12");
+    ntInfo.style.fontSize="10px";ntInfo.style.lineHeight="1.8";
+    ntInfo.innerHTML="<b>Setup NinjaTrader auto-export:</b><br>1. Open NinjaTrader → Control Center → Account Performance<br>2. Select Trade Performance tab<br>3. Right-click → Export → Save as CSV to a fixed location<br>4. Click SELECT FILE below and point to that CSV<br>5. Hit RELOAD anytime to pull the latest trades<br><br><b>Works in Chrome and Edge only</b> (File System Access API)";
+    ntCard.appendChild(ntInfo);
+
+    var ntBtnRow=div("row gap8 mt8");
+
+    var ntSelect=h("button",{className:"btn btn-g",style:"flex:1"});
+    ntSelect.textContent=ntConnected?"CHANGE FILE":"SELECT NT EXPORT FILE";
+    ntSelect.addEventListener("click",function(){
+      if(!window.showOpenFilePicker){
+        State.imp_msg={type:"err",text:"File System Access not supported. Use Chrome or Edge, or use CSV Upload tab instead."};render();return;
+      }
+      window.showOpenFilePicker({types:[{description:"CSV files",accept:{"text/csv":[".csv",".txt"]}}]}).then(function(handles){
+        State.nt_fileHandle=handles[0];
+        State.imp_msg={type:"info",text:"File linked. Click LOAD TRADES to import."};render();
+      }).catch(function(){});
+    });
+    ntBtnRow.appendChild(ntSelect);
+
+    if(ntConnected){
+      var ntLoad=h("button",{className:"btn",style:"flex:1"});ntLoad.textContent="LOAD TRADES";
+      ntLoad.addEventListener("click",function(){loadNTFile();});
+      var ntClear=h("button",{className:"btn btn-r",style:"flex:1"});ntClear.textContent="UNLINK";
+      ntClear.addEventListener("click",function(){State.nt_fileHandle=null;State.imp_msg={type:"ok",text:"File unlinked."};render();});
+      ntBtnRow.appendChild(ntLoad);ntBtnRow.appendChild(ntClear);
+    }
+    ntCard.appendChild(ntBtnRow);
+    el.appendChild(ntCard);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // CSV UPLOAD (existing functionality)
+  // ──────────────────────────────────────────────────────────────────
+  if(State.sync_tab==="csv"){
+    var g2=div("g2 mb12");
+    var upCard=div("card");
+    var upH=div("card-h");var upT2=div("card-t");upT2.textContent="Upload CSV File";upH.appendChild(upT2);upCard.appendChild(upH);
+    var dz=div("drop-zone");
+    var dzIcon=div("drop-icon");dzIcon.textContent="⬆";dz.appendChild(dzIcon);
+    var dzText=div("sm");dzText.style.color="var(--text2)";dzText.textContent="Drop CSV here or click to browse";dz.appendChild(dzText);
+    var fileInp=h("input",{type:"file",accept:".csv,.txt"});
+    dz.appendChild(fileInp);
+    dz.addEventListener("click",function(){fileInp.click();});
+    dz.addEventListener("dragover",function(e){e.preventDefault();dz.classList.add("over");});
+    dz.addEventListener("dragleave",function(){dz.classList.remove("over");});
+    dz.addEventListener("drop",function(e){e.preventDefault();dz.classList.remove("over");var f=e.dataTransfer.files[0];if(f){var r=new FileReader();r.onload=function(ev){processCSV(ev.target.result,f.name);};r.readAsText(f);}});
+    fileInp.addEventListener("change",function(){if(fileInp.files[0]){var r=new FileReader();r.onload=function(ev){processCSV(ev.target.result,fileInp.files[0].name);};r.readAsText(fileInp.files[0]);}});
+    upCard.appendChild(dz);g2.appendChild(upCard);
+    var pasteCard=div("card");
+    var pasteH=div("card-h");var pasteT2=div("card-t");pasteT2.textContent="Paste CSV";pasteH.appendChild(pasteT2);pasteCard.appendChild(pasteH);
+    var ta=h("textarea",{id:"imp_paste",rows:"8",placeholder:"Paste your CSV content here. Include the header row."});
+    ta.style.resize="vertical";ta.style.lineHeight="1.5";ta.style.fontSize="10px";pasteCard.appendChild(ta);
+    var parseBtn=h("button",{className:"btn btn-g",style:"width:100%;margin-top:10px"});parseBtn.textContent="PARSE & PREVIEW";
+    parseBtn.addEventListener("click",function(){var txt=document.getElementById("imp_paste");if(txt&&txt.value.trim()) processCSV(txt.value.trim(),"pasted data");else{State.imp_msg={type:"err",text:"Paste your CSV first."};render();}});
+    pasteCard.appendChild(parseBtn);g2.appendChild(pasteCard);el.appendChild(g2);
+  }
+
+  // Preview table (shared across all tabs)
+  if(State.imp_preview&&State.imp_preview.length){
+    var pvCard=div("card");
+    var pvH2=div("card-h");
+    var pvT3=div("card-t");pvT3.textContent="Preview — "+State.imp_preview.length+" trades";pvH2.appendChild(pvT3);
+    var impBtn=h("button",{className:"btn btn-g"});impBtn.textContent="IMPORT ALL";
+    impBtn.addEventListener("click",function(){
+      var dupes=0;
+      var keys=State.trades.map(function(t){return t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;});
+      var toAdd=State.imp_preview.filter(function(t){var k=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;if(keys.indexOf(k)>-1){dupes++;return false;}return true;});
+      State.trades=toAdd.concat(State.trades);ss("trades",State.trades);
+      State.imp_preview=null;
+      State.imp_msg={type:"ok",text:"✓ Imported "+toAdd.length+" trades."+(dupes?" Skipped "+dupes+" duplicates.":"")};
+      render();
+    });
+    pvH2.appendChild(impBtn);pvCard.appendChild(pvH2);
+    var pvWrap=div();pvWrap.style.overflowX="auto";
+    var pvTbl=h("table",{className:"preview-tbl"});
+    var pvHead=h("thead");var pvHr2=h("tr");
+    ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","P&L"].forEach(function(c){pvHr2.appendChild(h("th",{},[c]));});
+    pvHead.appendChild(pvHr2);pvTbl.appendChild(pvHead);
+    var pvBody=h("tbody");
+    State.imp_preview.slice(0,50).forEach(function(t){
+      var tr=h("tr");
+      tr.appendChild(h("td",{},[t.date]));tr.appendChild(h("td",{className:"m"},[t.time]));
+      tr.appendChild(h("td",{className:"fw7"},[t.inst]));
+      var dtd=h("td");dtd.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));tr.appendChild(dtd);
+      tr.appendChild(h("td",{},[t.entry]));tr.appendChild(h("td",{},[t.exit]));tr.appendChild(h("td",{className:"m"},[t.ctr]));
+      var ptd=h("td",{className:"fw7 "+clr(t.d)});ptd.textContent=dol(t.d);tr.appendChild(ptd);
+      pvBody.appendChild(tr);
+    });
+    if(State.imp_preview.length>50){var mr=h("tr");var mtd=h("td");mtd.colSpan=8;mtd.style.cssText="padding:7px 9px;color:var(--text3);font-size:10px;";mtd.textContent="... and "+(State.imp_preview.length-50)+" more";mr.appendChild(mtd);pvBody.appendChild(mr);}
+    pvTbl.appendChild(pvBody);pvWrap.appendChild(pvTbl);pvCard.appendChild(pvWrap);el.appendChild(pvCard);
+  }
+
+  return el;
+}
+
+// ── Tradovate API sync ─────────────────────────────────────────────
+function syncTradovate(creds,days){
+  var base=creds.env==="demo"?"https://demo.tradovate.com/v1":"https://live.tradovate.com/v1";
+  var authBody={name:creds.user,password:creds.pass,appId:"EDGE Terminal",appVersion:"1.0",cid:parseInt(creds.cid)||0,sec:creds.sec||""};
+  fetch(base+"/auth/accesstokenrequest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(authBody)})
+  .then(function(r){return r.json();})
+  .then(function(data){
+    if(!data.accessToken){
+      State.imp_msg={type:"err",text:"Auth failed: "+(data.errorText||data.error||"Check credentials and try again.")};render();return;
+    }
+    ss("tv_token",data);State.tv_token=data;
+    var token=data.accessToken;
+    // Fetch fills
+    return fetch(base+"/fill/list",{headers:{"Authorization":"Bearer "+token}})
+    .then(function(r){return r.json();})
+    .then(function(fills){
+      if(!Array.isArray(fills)){State.imp_msg={type:"err",text:"Could not fetch fills. "+(fills.errorText||"")};render();return;}
+      // Convert fills to paired trades
+      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
+      var trades=parseTradovateFills(fills.filter(function(f){return new Date(f.timestamp)>=cutoff;}));
+      State.imp_preview=trades;
+      var now=new Date();State.tv_lastSync=now.toLocaleDateString()+" "+now.toLocaleTimeString();ss("tv_lastSync",State.tv_lastSync);
+      State.imp_msg={type:"ok",text:"✓ Fetched "+trades.length+" trades from Tradovate. Review below."};render();
+    });
+  })
+  .catch(function(err){
+    State.imp_msg={type:"err",text:"Connection error: "+err.message+". Check your credentials and that CORS is allowed."};render();
+  });
+}
+
+function parseTradovateFills(fills){
+  // Group fills by orderId or pair buys/sells by contract
+  var trades=[];
+  var byContract={};
+  fills.forEach(function(f){
+    var inst=detectInstrument(f.contractId||f.contract||"");
+    if(!byContract[inst]) byContract[inst]=[];
+    byContract[inst].push(f);
+  });
+  Object.keys(byContract).forEach(function(inst){
+    var fs=byContract[inst].slice().sort(function(a,b){return new Date(a.timestamp)-new Date(b.timestamp);});
+    var i=0;
+    while(i<fs.length){
+      var entry=fs[i];
+      var exit2=fs[i+1];
+      if(exit2){
+        var dir=entry.action==="Buy"?"Long":"Short";
+        var entryP=(entry.price||0).toString();
+        var exitP=(exit2.price||0).toString();
+        var qty=(entry.qty||1).toString();
+        var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
+        var tv2=TICK[inst]||1;
+        var dollar=Math.round(pts*tv2*parseFloat(qty));
+        trades.push({id:Date.now()+i,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
+        i+=2;
+      } else { i++; }
+    }
+  });
+  return trades;
+}
+
+// ── NinjaTrader file load ──────────────────────────────────────────
+function loadNTFile(){
+  if(!State.nt_fileHandle){State.imp_msg={type:"err",text:"No file linked. Select a file first."};render();return;}
+  State.nt_fileHandle.getFile().then(function(file){
+    return file.text();
+  }).then(function(text){
+    var result=parseCSV(text);
+    if(result.error){State.imp_msg={type:"err",text:"Parse error: "+result.error};render();return;}
+    State.imp_preview=result.trades;
+    var now=new Date();State.nt_lastSync=now.toLocaleDateString()+" "+now.toLocaleTimeString();ss("nt_lastSync",State.nt_lastSync);
+    State.imp_msg={type:"ok",text:"✓ Loaded "+result.trades.length+" trades from NinjaTrader file."};render();
+  }).catch(function(err){
+    State.imp_msg={type:"err",text:"Could not read file: "+err.message};render();
+  });
+}
+
+function chartTab(){
+  var el=div();
+  el.style.padding="16px";
+
+  var sym    = State.chart_symbol  || "ES";
+  var tf     = State.chart_interval|| "1h";
+
+  // ── Header ────────────────────────────────────────────────
+  var hrow=div("rjb mb12");
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent=sym+" — "+tf;hrow.appendChild(sh);
+  var ctrlRow=div("row gap8");
+
+  // Symbol buttons
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"MES",n:"Micro E-mini S&P"},{l:"MNQ",n:"Micro E-mini NQ"}];
+  SYMS.forEach(function(s){
+    var b=h("button",{className:"btn"});
+    if(sym===s.l) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
+    b.textContent=s.l; b.title=s.n;
+    b.addEventListener("click",function(){State.chart_symbol=s.l;render();});
+    ctrlRow.appendChild(b);
+  });
+
+  // Separator
+  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
+
+  // Timeframe buttons
+  var TFS=["1m","5m","15m","1h"];
+  TFS.forEach(function(t){
+    var b=h("button",{className:"btn"});
+    b.style.padding="6px 10px";
+    if(tf===t) b.style.cssText="border-color:var(--accent);color:var(--accent);padding:6px 10px;";
+    b.textContent=t;
+    b.addEventListener("click",function(){State.chart_interval=t;render();});
+    ctrlRow.appendChild(b);
+  });
+
+  // Refresh button
+  var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp2);
+  var rbtn=h("button",{className:"btn"});
+  rbtn.textContent="↻ Refresh";
+  rbtn.addEventListener("click",function(){render();});
+  ctrlRow.appendChild(rbtn);
+
+  hrow.appendChild(ctrlRow);
+  el.appendChild(hrow);
+
+  // ── Chart container ───────────────────────────────────────
+  var chartDiv=div();
+  chartDiv.style.cssText="width:100%;height:620px;border:1px solid var(--border);border-radius:4px;background:#040d1a;position:relative;";
+  el.appendChild(chartDiv);
+
+  // Loading overlay
+  var loading=div();
+  loading.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;letter-spacing:2px;";
+  loading.textContent="LOADING CHART DATA...";
+  chartDiv.appendChild(loading);
+
+  // Footer note
+  var note=div("xs m mt8");
+  note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
+  note.textContent="Data via yfinance → Supabase • Refreshes every 5 min";
+  el.appendChild(note);
+
+  // ── Fetch data & render ───────────────────────────────────
+  function fetchAndRender(){
+    if(!supaClient){
+      loading.style.color="var(--red)";
+      loading.textContent="⚠ Supabase not connected — check your sync ID";
+      return;
+    }
+    supaFetch("GET",
+      "chart_data?symbol=eq."+encodeURIComponent(sym)+
+      "&timeframe=eq."+encodeURIComponent(tf)+
+      "&order=time.asc&limit=500"
+    )
+    .then(function(r){return r.json();})
+    .then(function(rows){
+      loading.remove();
+      if(!rows||!rows.length){
+        var msg=div();
+        msg.style.cssText="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px;gap:10px;";
+        msg.innerHTML="<div style='font-size:28px;opacity:.3'>📊</div><div style='letter-spacing:2px;'>NO DATA — RUN fetch_data.py FIRST</div><div style='font-size:11px;opacity:.6;'>python fetch_data.py</div>";
+        chartDiv.appendChild(msg);
+        return;
+      }
+
+      var chart=LightweightCharts.createChart(chartDiv,{
+        width:  chartDiv.offsetWidth,
+        height: 620,
+        layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
+        grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
+        crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+        rightPriceScale:{borderColor:"#1a3260"},
+        timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false},
+      });
+
+      var series=chart.addCandlestickSeries({
+        upColor:"#00e676",downColor:"#ff4444",
+        borderUpColor:"#00e676",borderDownColor:"#ff4444",
+        wickUpColor:"#00e676",wickDownColor:"#ff4444",
+      });
+
+      var candles=rows.map(function(r){
+        return{
+          time:  Math.floor(new Date(r.time).getTime()/1000),
+          open:  parseFloat(r.open),
+          high:  parseFloat(r.high),
+          low:   parseFloat(r.low),
+          close: parseFloat(r.close),
+        };
+      });
+
+      series.setData(candles);
+      chart.timeScale().fitContent();
+
+      // Resize handler
+      var ro=new ResizeObserver(function(){
+        chart.applyOptions({width:chartDiv.offsetWidth});
+      });
+      ro.observe(chartDiv);
+    })
+    .catch(function(e){
+      loading.style.color="var(--red)";
+      loading.textContent="⚠ Error loading chart data: "+e.message;
+    });
+  }
+
+  // Load lightweight-charts lib if not already loaded
+  if(window.LightweightCharts){
+    fetchAndRender();
+  } else {
+    var script=document.createElement("script");
+    script.src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js";
+    script.onload=function(){fetchAndRender();};
+    script.onerror=function(){
+      loading.style.color="var(--red)";
+      loading.textContent="⚠ Could not load chart library — check your connection";
+    };
+    document.head.appendChild(script);
+  }
+
+  return el;
+}
+
+function buildChart(){}
+function loadLWChart(){}
+function loadTVWidget(){render();}
+function fetchChartData(){}
+function loadChartData(){}
+function updateTVWidget(){render();}
+
+
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,chart:chartTab};
+
+function render(){
+  renderTabs();
+  renderTopbar();
+  var content=document.getElementById("content");
+  content.innerHTML="";
+  // No padding on chart tab so it fills edge to edge
+  content.style.padding="0";
+  content.style.overflow=State.tab==="chart"?"hidden":"";
+  content.style.padding="16px";content.style.overflow="auto";content.style.display="block";
+  content.appendChild(VIEWS[State.tab]());
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+initSupabase();
+initAutoSync();
+
+// Silent sync on load
+(function(){
+  var currentId=getSyncId();
+  if(supaClient){
+    loadFromCloud(currentId,function(ok){
+      if(ok) render();
+      else syncToCloud();
+    });
+  }
+})();
+
+// ── Poll tv_trades table every 5 seconds for new TradingView trades ──
+function pollTVTrades(){
+  var userId=getSyncId();
+  supaFetch("GET","tv_trades?user_id=eq."+encodeURIComponent(userId)+"&processed=eq.false&select=*")
+  .then(function(r){return r.json();})
+  .then(function(rows){
+    if(!Array.isArray(rows)||!rows.length) return;
+    var added=0;
+    rows.forEach(function(row){
+      // Convert to dashboard trade format
+      var inst=detectInstrument(row.instrument||"ES");
+      var tv2=TICK[inst]||1;
+      var newTrade={
+        id:Date.now()+Math.random(),
+        date:fmtImportDate((row.time||"").split("T")[0]),
+        time:fmtImportTime(row.time||""),
+        inst:inst,
+        dir:row.direction||"Long",
+        entry:(row.entry||0).toString(),
+        exit:"",
+        ctr:"1",
+        setup:"",
+        sess:row.session||"RTH Open",
+        conf:"",post:"",
+        ex:"B",ru:"B",emo:3,
+        right:"",wrong:"",
+        pts:0,d:0,hl:false,
+        tv_id:row.id
+      };
+      // Check not already imported
+      var exists=State.trades.some(function(t){return t.tv_id===row.id;});
+      if(!exists){
+        State.trades.unshift(newTrade);
+        added++;
+      }
+    });
+    if(added>0){
+      ss("trades",State.trades);
+      // Mark as processed
+      var ids=rows.map(function(r){return r.id;}).join(",");
+      supaFetch("PATCH","tv_trades?id=in.("+ids+")",{processed:true});
+      render();
+      // Show notification
+      showTVNotification(added);
+    }
+  })
+  .catch(function(){});
+}
+
+function showTVNotification(count){
+  var existing=document.getElementById("tv-notify");
+  if(existing) existing.remove();
+  var n=document.createElement("div");
+  n.id="tv-notify";
+  n.style.cssText="position:fixed;bottom:20px;right:20px;background:#112444;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:12px;padding:10px 16px;border-radius:4px;z-index:9999;box-shadow:0 4px 20px #00000060;";
+  n.textContent="⬆ "+count+" new trade"+(count>1?"s":"")+" from TradingView";
+  document.body.appendChild(n);
+  setTimeout(function(){if(n.parentNode) n.remove();},4000);
+}
+
+// Start polling every 5 seconds
+setInterval(pollTVTrades,5000);
+
+render();
+</script>
+</body>
+</html>
