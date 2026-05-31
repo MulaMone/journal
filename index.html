@@ -457,6 +457,22 @@ function getSetups(t){
 }
 function setupString(t){return getSetups(t).join(", ");}
 function tradeHasSetup(t,name){return getSetups(t).indexOf(name)>-1;}
+// Returns a DOM span with each setup colored per SETUP_COLORS theme.
+// Setups not in the color map get default inherited color.
+function setupColoredEl(t){
+  var s=getSetups(t);
+  var wrap=h("span");
+  if(!s.length) return wrap;
+  s.forEach(function(name,i){
+    var sp=h("span");sp.textContent=name;
+    if(SETUP_COLORS[name]){sp.style.color=SETUP_COLORS[name];sp.style.fontWeight="700";}
+    wrap.appendChild(sp);
+    if(i<s.length-1){
+      var sep=h("span");sep.textContent=", ";sep.style.color="var(--text3)";wrap.appendChild(sep);
+    }
+  });
+  return wrap;
+}
 function h(tag,attrs,children){
   var el=document.createElement(tag);
   if(attrs) Object.keys(attrs).forEach(function(k){
@@ -909,7 +925,7 @@ function homeTab(){
     var left=div("row gap8");left.appendChild(makeBadge(best.dir==="Long"?"bg":"br",best.dir));var bn=span("fw7");bn.textContent=best.inst;left.appendChild(bn);var bt2=span("xs m");bt2.textContent=best.time;left.appendChild(bt2);brow.appendChild(left);
     var bpnl=span("fw7 "+clr(best.d));bpnl.textContent=dol(best.d);brow.appendChild(bpnl);
     btCard.appendChild(brow);
-    var bsu=span("xs m mb8");bsu.style.display="block";bsu.textContent=setupString(best);btCard.appendChild(bsu);
+    var bsu=span("xs m mb8");bsu.style.display="block";bsu.appendChild(setupColoredEl(best));btCard.appendChild(bsu);
     var bn2=div("xs mb8");bn2.style.color="#e0c97a";bn2.style.lineHeight="1.6";bn2.textContent=best.post;btCard.appendChild(bn2);
     var bgrow=div("row gap8 mt8");
     bgrow.appendChild(h("span",{className:"gr "+grc(best.ex)},[best.ex]));var gla=span("xs m");gla.style.lineHeight="21px";gla.textContent="Exec";bgrow.appendChild(gla);
@@ -1512,8 +1528,23 @@ function logTab(){
     tr.appendChild(dtd2);
     var std=h("td",{className:"m xs"});std.style.maxWidth="130px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";
     var stSetups=getSetups(t);
-    if(stSetups.length<=1){std.textContent=stSetups[0]||"";}
-    else{std.innerHTML='<span style="color:var(--text2)">'+stSetups[0]+'</span> <span style="background:var(--ca15);color:var(--ca);border:1px solid var(--ca30);border-radius:2px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:3px">+'+(stSetups.length-1)+'</span>';}
+    if(stSetups.length===0){std.textContent="";}
+    else if(stSetups.length===1){
+      var sn=stSetups[0];
+      var sCol=SETUP_COLORS[sn];
+      var sp1=h("span");sp1.textContent=sn;
+      if(sCol){sp1.style.color=sCol;sp1.style.fontWeight="700";}
+      std.appendChild(sp1);
+    }
+    else {
+      var sn1=stSetups[0];var sCol1=SETUP_COLORS[sn1];
+      var sp2=h("span");sp2.textContent=sn1;
+      if(sCol1){sp2.style.color=sCol1;sp2.style.fontWeight="700";}
+      std.appendChild(sp2);
+      var more=h("span");more.style.cssText="background:var(--ca15);color:var(--ca);border:1px solid var(--ca30);border-radius:2px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:5px;";
+      more.textContent="+"+(stSetups.length-1);
+      std.appendChild(more);
+    }
     tr.appendChild(std);
     var ssd=h("td");ssd.appendChild(makeBadge("bw xs",t.sess));tr.appendChild(ssd);
     var exd=h("td");exd.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));tr.appendChild(exd);
@@ -1579,7 +1610,7 @@ function oppsTab(){
     var op=span("fw7 "+clr(t.d));op.style.fontSize="19px";op.textContent=dol(t.d);om.appendChild(op);
     om.appendChild(makeBadge("bb",t.pts.toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
     var sep=div("sep");opp.appendChild(sep);
-    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";sv2.textContent=setupString(t)||"—";opp.appendChild(sv2);
+    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";if(getSetups(t).length) sv2.appendChild(setupColoredEl(t)); else sv2.textContent="—";opp.appendChild(sv2);
     var wl=div("xs m mb8");wl.textContent="WHY IT WORKED";opp.appendChild(wl);var wv=div("xs");wv.style.color="#e0c97a";wv.style.lineHeight="1.7";wv.textContent=t.post||t.conf||"—";opp.appendChild(wv);
     var gr2=div("row gap8 mt8");gr2.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var gl=span("xs m");gl.style.lineHeight="21px";gl.textContent="Exec";gr2.appendChild(gl);var gs=h("span",{className:"gr "+grc(t.ru)},[t.ru]);gs.style.marginLeft="6px";gr2.appendChild(gs);var gl2=span("xs m");gl2.style.lineHeight="21px";gl2.textContent="Rules";gr2.appendChild(gl2);opp.appendChild(gr2);
     el.appendChild(opp);
@@ -1766,7 +1797,7 @@ function analyticsTab(){
   if(!bySetup2.length){var nsm3=span("xs m");nsm3.textContent="No tagged setups yet — tag trades in the log to see breakdown.";sbCard2.appendChild(nsm3);}
   bySetup2.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){
     var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";
-    var sl=div();var st2=div("xs fw7");st2.style.color="var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);
+    var sl=div();var st2=div("xs fw7");st2.style.color=SETUP_COLORS[s2.full]||"var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);
     var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);
     var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);
     sbCard2.appendChild(sr);
@@ -1922,7 +1953,7 @@ function reviewTab(){
       detCard.appendChild(detH);
       dd.trades.forEach(function(t){
         var tr=div();tr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;";
-        var tl=div("row gap8");tl.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var tn=span("fw7 sm");tn.textContent=t.inst;tl.appendChild(tn);var tt=span("xs m");tt.textContent=t.time;tl.appendChild(tt);var ts2=span("xs m");ts2.style.maxWidth="160px";ts2.style.overflow="hidden";ts2.style.whiteSpace="nowrap";ts2.style.textOverflow="ellipsis";ts2.textContent=setupString(t);tl.appendChild(ts2);tr.appendChild(tl);
+        var tl=div("row gap8");tl.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var tn=span("fw7 sm");tn.textContent=t.inst;tl.appendChild(tn);var tt=span("xs m");tt.textContent=t.time;tl.appendChild(tt);var ts2=span("xs m");ts2.style.maxWidth="160px";ts2.style.overflow="hidden";ts2.style.whiteSpace="nowrap";ts2.style.textOverflow="ellipsis";if(getSetups(t).length) ts2.appendChild(setupColoredEl(t)); else ts2.textContent="";tl.appendChild(ts2);tr.appendChild(tl);
         var tv=div("row gap8");tv.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var tp=span("fw7 "+clr(t.d));tp.textContent=dol(t.d);tv.appendChild(tp);tr.appendChild(tv);
         detCard.appendChild(tr);
       });
@@ -1963,8 +1994,8 @@ function reviewTab(){
     // Best/worst
     var bwCard=div("card");var bwH=div("card-h");var bwT=div("card-t");bwT.textContent="Best & Worst This Week";bwH.appendChild(bwT);bwCard.appendChild(bwH);
     var wb=wkTrades.slice().sort(function(a,b){return b.d-a.d})[0];var ww=wkTrades.slice().sort(function(a,b){return a.d-b.d})[0];
-    if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.textContent=wb.inst+" "+wb.dir+" — "+(setupString(wb)||"Untagged");bwCard.appendChild(bd2);}
-    if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.textContent=ww.inst+" "+ww.dir+" — "+(setupString(ww)||"Untagged");bwCard.appendChild(wd2);}
+    if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.appendChild(document.createTextNode(wb.inst+" "+wb.dir+" — "));if(getSetups(wb).length) bd2.appendChild(setupColoredEl(wb)); else bd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(bd2);}
+    if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.appendChild(document.createTextNode(ww.inst+" "+ww.dir+" — "));if(getSetups(ww).length) wd2.appendChild(setupColoredEl(ww)); else wd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(wd2);}
     if(!wkTrades.length){var nm2=span("xs m");nm2.textContent="No trades this week.";bwCard.appendChild(nm2);}
     wg2.appendChild(bwCard);
     // Emotional trend
