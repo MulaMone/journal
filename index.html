@@ -847,11 +847,7 @@ function homeTab(){
       newsPanel.appendChild(npRow);
     });
 
-    // Footer count when both types present
-    if(keyEvents.length>0&&macroEvents.length>0){
-      var npFoot=div("xs m");npFoot.style.cssText="font-size:9px;color:var(--text3);letter-spacing:.5px;border-top:1px solid var(--border);padding-top:7px;margin-top:4px;";
-      npFoot.textContent=keyEvents.length+" key · "+macroEvents.length+" macro";newsPanel.appendChild(npFoot);
-    }
+    // Footer count removed
 
     if(State.newsOther&&State.newsOther.trim()){
       var npOtherRow=div("row gap8 mt4");npOtherRow.style.cssText="padding:6px 9px;border-radius:3px;background:var(--panel3);border:1px solid var(--border);margin-top:4px;";
