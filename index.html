@@ -1961,22 +1961,38 @@ function reviewTab(){
         var isToday=isCurrentMonth&&todayObj.getDate()===day;
         var data=dayMap[day];
         var holiday=(!isSat&&!isSun)?getMarketHoliday(calMonth,day,calYear):null;
+        var holCol=holiday?(holiday.type==="closed"?"#ffd700":"#ffab00"):null;
         var bg=isSat?"#1a0e06":"var(--panel2)";
         var border=isSat?"1px solid #ff6b3d30":"1px solid var(--border)";
         var pnlCol="";
+        // Holiday styling — only when no trade data
         if(holiday&&!data){
           if(holiday.type==="closed"){bg="#2b1f02";border="1px solid #ffd70060";}
           else{bg="#2b220a";border="1px solid #ffab0060";}
         }
-        if(data){bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";pnlCol=data.pnl>0?"#00e676":"#ff4444";}
+        // Trade data styling — overrides bg but accent border kept for holiday
+        if(data){
+          bg=isSat?"#1a0e06":(data.pnl>0?"#00e67612":"#ff444412");
+          border=data.pnl>0?"1px solid #00e67640":isSat?"1px solid #ff6b3d40":"1px solid #ff444440";
+          pnlCol=data.pnl>0?"#00e676":"#ff4444";
+        }
         if(isToday){border="2px solid var(--ca)";}
-        cell.style.cssText="background:"+bg+";border:"+border+";border-radius:4px;padding:8px 6px;min-height:72px;cursor:"+(data?"pointer":"default")+";position:relative;";
+        // Holiday + trade: thicker holiday-colored left accent
+        var extraStyle=(data&&holiday)?"border-left:3px solid "+holCol+";":"";
+        cell.style.cssText="background:"+bg+";border:"+border+";"+extraStyle+"border-radius:4px;padding:8px 6px;min-height:72px;cursor:"+(data?"pointer":"default")+";position:relative;";
 
-        var dnumColor=isToday?"var(--ca)":isSat?"#ff6b3d":(holiday&&!data?(holiday.type==="closed"?"#ffd700":"#ffab00"):"var(--text2)");
+        // Holiday indicator badge in top-right corner — shows when both data + holiday
+        if(holiday&&data){
+          var holBadge=div();holBadge.style.cssText="position:absolute;top:5px;right:5px;background:"+holCol+"20;color:"+holCol+";border:1px solid "+holCol+"60;font-size:7px;font-weight:700;padding:1px 4px;border-radius:2px;letter-spacing:.5px;";
+          holBadge.textContent=holiday.type==="closed"?"HOL":"½";
+          holBadge.title=holiday.name+(holiday.type==="closed"?" (closed)":" (early 1pm)");
+          cell.appendChild(holBadge);
+        }
+
+        var dnumColor=isToday?"var(--ca)":isSat?"#ff6b3d":(holiday&&!data?holCol:"var(--text2)");
         var dnum=div();dnum.style.cssText="font-size:14px;font-weight:700;color:"+dnumColor+";margin-bottom:4px;";dnum.textContent=day;cell.appendChild(dnum);
         if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:9px;color:#ff6b3d50;letter-spacing:1px;margin-top:3px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
         if(holiday&&!data){
-          var holCol=holiday.type==="closed"?"#ffd700":"#ffab00";
           var holLbl=div();holLbl.style.cssText="font-size:9px;color:"+holCol+";letter-spacing:1px;margin-top:3px;font-weight:700;";holLbl.textContent=holiday.type==="closed"?"CLOSED":"EARLY 1PM";cell.appendChild(holLbl);
           var holName=div();holName.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:2px;line-height:1.2;";holName.textContent=holiday.name;cell.appendChild(holName);
         }
@@ -1989,6 +2005,10 @@ function reviewTab(){
           if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:10px;color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
           if(losses>0){var lEl=span();lEl.style.cssText="font-size:11px;font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
           cell.appendChild(wlRow);
+          // Holiday name footer when both
+          if(holiday){
+            var holNameInline=div();holNameInline.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:3px;line-height:1.2;font-weight:700;";holNameInline.textContent=holiday.name;cell.appendChild(holNameInline);
+          }
         }
         // Click to show day trades
         if(data){
