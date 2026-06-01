@@ -275,7 +275,7 @@ svg text{font-family:'Courier New',monospace}
 <div id="app">
   <div id="topbar">
     <div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div>
-    <div class="brand-name" onclick="localStorage.setItem('tab','home');window.location.reload();" style="cursor:pointer" title="Refresh">BILLION$</div>
+    <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));window.location.reload();" style="cursor:pointer" title="Refresh">BILLION$</div>
     <div id="topbar-stats"></div>
   </div>
   <div id="tabs"></div>
