@@ -3484,59 +3484,6 @@ function mobileHomeTab(){
     State.trades.slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
-  // ── Key levels quick view ──
-  if(State.levels.length){
-    var lvCheckedCount=Object.values(State.levelChecks).filter(Boolean).length;
-
-    // Section header: "Key Levels" + [RESET if any checked] + EDIT
-    var lvSh=document.createElement("div");lvSh.className="m-sh";lvSh.style.marginTop="4px";
-    var lvShLeft=document.createElement("span");lvShLeft.textContent="Key Levels";
-    var lvShBtns=document.createElement("div");lvShBtns.style.cssText="display:flex;gap:5px;align-items:center;";
-
-    if(lvCheckedCount>0){
-      var rstBtn=document.createElement("span");
-      rstBtn.textContent="RESET";
-      rstBtn.style.cssText="font-size:8px;color:#ff4444;border:1px solid #ff444435;padding:2px 9px;border-radius:4px;cursor:pointer;background:#ff444412;letter-spacing:.5px;-webkit-tap-highlight-color:transparent;";
-      rstBtn.addEventListener("click",function(e){
-        e.stopPropagation();
-        State.levelChecks={};ss("levelChecks",{});render();
-      });
-      lvShBtns.appendChild(rstBtn);
-    }
-
-    var editBtn2=document.createElement("span");
-    editBtn2.textContent="EDIT";
-    editBtn2.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 9px;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;";
-    editBtn2.addEventListener("click",function(){switchTab("prep");});
-    lvShBtns.appendChild(editBtn2);
-
-    lvSh.appendChild(lvShLeft);lvSh.appendChild(lvShBtns);
-    el.appendChild(lvSh);
-
-    // Progress counter
-    var lvProg=document.createElement("div");
-    lvProg.style.cssText="font-size:8px;letter-spacing:.5px;text-align:right;margin-bottom:5px;font-family:monospace;"+(lvCheckedCount===State.levels.length?"color:#00e676;":"color:#c9a84c;");
-    lvProg.textContent=lvCheckedCount+" / "+State.levels.length+" checked";
-    el.appendChild(lvProg);
-
-    // Levels card
-    var lvCard=document.createElement("div");lvCard.className="m-eq-card";lvCard.style.padding="8px 12px";
-    State.levels.forEach(function(l,i){
-      var key="lv_"+i;
-      var isChecked=!!State.levelChecks[key];
-      var row=document.createElement("div");
-      row.style.cssText="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #0d1e38;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:44px;";
-      var chk=document.createElement("div");chk.className="lv-check"+(isChecked?" on":"");chk.style.flexShrink="0";
-      chk.addEventListener("click",function(e){e.stopPropagation();State.levelChecks[key]=!State.levelChecks[key];ss("levelChecks",State.levelChecks);render();});
-      var lbl=document.createElement("span");lbl.style.cssText="font-size:12px;font-weight:700;letter-spacing:1px;flex:1;"+(isChecked?"text-decoration:line-through;color:#1a3260;":"color:#e8f0ff;");lbl.textContent=l.l;
-      row.appendChild(chk);row.appendChild(impBadge(l.imp||"medium"));row.appendChild(lbl);
-      // Tap the whole row to toggle
-      row.addEventListener("click",function(){State.levelChecks[key]=!State.levelChecks[key];ss("levelChecks",State.levelChecks);render();});
-      lvCard.appendChild(row);
-    });
-    el.appendChild(lvCard);
-  }
-
   return el;
 }
 
