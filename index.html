@@ -1048,9 +1048,9 @@ function renderTopbar(){
   var s=calcStats(State.trades);
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
-    el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;">'+dol(tPnl)+'</b><span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span><button onclick="toggleMobileMode()" style="margin-left:8px;background:#071428;border:1px solid #1a3260;color:#c9a84c;width:32px;height:32px;border-radius:8px;font-size:16px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;flex-shrink:0;">📱</button>';
+    el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;">'+dol(tPnl)+'</b><span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b><button onclick="toggleMobileMode()" style="margin-left:12px;background:transparent;border:1px solid #1a3260;color:#c9a84c;font-family:Courier New,monospace;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;letter-spacing:1px">📱</button>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b>';
   }
 }
 
@@ -3625,11 +3625,13 @@ function render(){
       content.style.transition="opacity .15s ease";
       content.style.opacity="1";
     } else {
-      // In-page state update (checkbox, level check etc): no fade — just re-render instantly
+      // In-page state update (checkbox, level check etc): save scroll, re-render, restore
+      var savedScroll=window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0;
       content.style.transition="none";
       content.style.opacity="1";
       content.innerHTML="";
       content.appendChild(VIEWS[State.tab]());
+      if(savedScroll>0) window.scrollTo(0,savedScroll);
     }
   } else {
     content.style.transition="none";
