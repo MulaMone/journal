@@ -1,8 +1,6 @@
 import yfinance as yf
-import pandas as pd
 from supabase import create_client
 from datetime import datetime
-import schedule, time
 import os
 try:
     from dotenv import load_dotenv
@@ -10,16 +8,8 @@ try:
 except ImportError:
     pass
 
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-print(f"DEBUG - SUPABASE_URL: {SUPABASE_URL}")
-if SUPABASE_KEY:
-    print(f"DEBUG - SUPABASE_KEY Length: {len(SUPABASE_KEY)}")
-    print(f"DEBUG - SUPABASE_KEY Starts with: {SUPABASE_KEY[:10]}... (ends with: ...{SUPABASE_KEY[-5:]})")
-else:
-    print("DEBUG - SUPABASE_KEY is None")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -38,6 +28,7 @@ INTERVALS = {
 }
 
 def fetch_and_push():
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching...")
     for sym_name, sym_ticker in SYMBOLS.items():
         for tf_name, tf_opts in INTERVALS.items():
             try:
@@ -48,7 +39,7 @@ def fetch_and_push():
                     progress=False
                 )
                 if df.empty:
-                    print(f"✗ {sym_name} {tf_name} — no data returned")
+                    print(f"  ✗ {sym_name} {tf_name} — no data")
                     continue
 
                 rows = []
@@ -57,10 +48,10 @@ def fetch_and_push():
                         "symbol":    sym_name,
                         "timeframe": tf_name,
                         "time":      ts.isoformat(),
-                        "open":      round(float(row["Open"]),   2),
-                        "high":      round(float(row["High"]),   2),
-                        "low":       round(float(row["Low"]),    2),
-                        "close":     round(float(row["Close"]),  2),
+                        "open":      round(float(row["Open"]),  2),
+                        "high":      round(float(row["High"]),  2),
+                        "low":       round(float(row["Low"]),   2),
+                        "close":     round(float(row["Close"]), 2),
                         "volume":    int(row["Volume"])
                     })
 
@@ -69,15 +60,10 @@ def fetch_and_push():
                     on_conflict="symbol,timeframe,time"
                 ).execute()
 
-                print(f"✓ {sym_name} {tf_name} — {len(rows)} candles pushed")
+                print(f"  ✓ {sym_name} {tf_name} — {len(rows)} candles")
 
             except Exception as e:
-                print(f"✗ {sym_name} {tf_name} error: {e}")
+                print(f"  ✗ {sym_name} {tf_name} error: {e}")
 
-# Run immediately then every 5 minutes
 fetch_and_push()
-schedule.every(5).minutes.do(fetch_and_push)
-
-while True:
-    schedule.run_pending()
-    time.sleep(30)
+print("Done.")
