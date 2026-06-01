@@ -3643,8 +3643,14 @@ function render(){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
-// Mobile mode is opt-in only — clear any stale flag so desktop is always default
-localStorage.removeItem("edge_mobile_mode");
+// Mobile mode: auto-detect on first visit only, never reset after that
+(function(){
+  if(localStorage.getItem("edge_mobile_mode")===null){
+    var ua=navigator.userAgent||"";
+    var phone=/iPhone|Android.*Mobile|BlackBerry|IEMobile/i.test(ua);
+    localStorage.setItem("edge_mobile_mode", phone?"1":"0");
+  }
+})();
 initSupabase();
 initAutoSync();
 
