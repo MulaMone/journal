@@ -299,7 +299,7 @@ var SDESC={
   "2min POC":"Naked 2min POC with confluences.",
   "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma."
 };
-var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:10,GC:10,Other:1};
+var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
 var EMO=["","😖","😟","😐","😊","🔥"];
 var QI=Math.floor(Math.random()*QUOTES.length);
 
@@ -481,7 +481,7 @@ var State={
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
-function dol(n){n=n||0;return(n>=0?"+":"")+"$"+Math.abs(n).toFixed(0)}
+function dol(n){n=n||0;var abs=Math.abs(n);var str=(abs%1===0)?abs.toFixed(0):abs.toFixed(2);return(n>=0?"+":"")+"$"+str;}
 function clr(n){return (n||0)>=0?"g":"r"}
 function grc(g){return "gr"+g}
 function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
@@ -1528,7 +1528,7 @@ function tradeForm(existing){
   ctrWrap.appendChild(ctrRow);fg.appendChild(ctrWrap);
   // P&L preview
   var pvDiv=div();pvDiv.appendChild(h("label",{},"P&L Preview"));var pvEl=div();pvEl.id="f_pnl_preview";pvEl.style="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:11px;min-height:32px";pvEl.textContent="—";pvDiv.appendChild(pvEl);fg.appendChild(pvDiv);
-  function updatePreview(){var ent=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),inst=document.getElementById("f_inst"),dir=document.getElementById("f_dir"),ctr=document.getElementById("f_ctr");if(ent&&ex&&ent.value&&ex.value){var tv=TICK[inst.value]||1;var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dir.value==="Long"?1:-1);var dv=Math.round(pts*tv*(parseFloat(ctr.value)||1));pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";}}
+  function updatePreview(){var ent=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),inst=document.getElementById("f_inst"),dir=document.getElementById("f_dir"),ctr=document.getElementById("f_ctr");if(ent&&ex&&ent.value&&ex.value){var tv=TICK[inst.value]||1;var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dir.value==="Long"?1:-1);var dv=parseFloat((pts*tv*(parseFloat(ctr.value)||1)).toFixed(2));pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";}}
   setTimeout(function(){var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");if(e2)e2.addEventListener("input",updatePreview);if(ex)ex.addEventListener("input",updatePreview);if(ct)ct.addEventListener("input",updatePreview);},0);
 
   var customSU=ls("playbook_custom",[]);
@@ -1590,7 +1590,7 @@ function tradeForm(existing){
     var tv=TICK[inst]||1;var pts=(parseFloat(exit)-parseFloat(entry))*(dir==="Long"?1:-1);
     var setupsArr=suWrap._getSelected();
     var setupStr=setupsArr.join(", ");
-    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:Math.round(pts*tv*parseFloat(ctr)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
+    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:parseFloat((pts*tv*parseFloat(ctr)).toFixed(2)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
     if(isEdit){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
@@ -2184,8 +2184,12 @@ function detectInstrument(s){
   var c=(s||"").toUpperCase().split(" ").join("").split(".")[0];
   if(c.indexOf("MES")===0) return "MES";
   if(c.indexOf("MNQ")===0) return "MNQ";
+  if(c.indexOf("M2K")===0) return "M2K";
+  if(c.indexOf("MYM")===0) return "MYM";
   if(c.indexOf("ES")===0)  return "ES";
   if(c.indexOf("NQ")===0)  return "NQ";
+  if(c.indexOf("RTY")===0) return "RTY";
+  if(c.indexOf("YM")===0)  return "YM";
   if(c.indexOf("CL")===0)  return "CL";
   if(c.indexOf("GC")===0)  return "GC";
   return "Other";
@@ -2313,7 +2317,7 @@ function parseCSV(text){
       var pnlRaw=cleanNum(col(row,["p/l","p&l","pnl","profit"]));
       var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
       var tv2=TICK[inst]||1;
-      var dollar=pnlRaw?Math.round(parseFloat(pnlRaw)):Math.round(pts*tv2*parseFloat(qty));
+      var dollar=pnlRaw?parseFloat(parseFloat(pnlRaw).toFixed(2)):parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
       // Use actual fill timestamp for date/time (not Trade Date which may be next day)
       var timeStr=fmtImportTime(entryTs);
       var dateStr=fmtImportDate(entryTs);
@@ -2333,7 +2337,7 @@ function parseCSV(text){
       var timeStr=fmtImportTime(entryTime);
       var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
       var tv2=TICK[inst]||1;
-      var dollar=profit?Math.round(parseFloat(profit)):Math.round(pts*tv2*parseFloat(qty));
+      var dollar=profit?parseFloat(parseFloat(profit).toFixed(2)):parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
       t={id:Date.now()+ri*7,date:fmtImportDate(dateStr),time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:autoSession(timeStr),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
@@ -2352,7 +2356,7 @@ function parseCSV(text){
       var parsedTime=fmtImportTime(timeRaw);
       var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
       var tv3=TICK[inst2]||1;
-      var dollar2=pnl?Math.round(parseFloat(pnl)):Math.round(pts2*tv3*parseFloat(qty2));
+      var dollar2=pnl?parseFloat(parseFloat(pnl).toFixed(2)):parseFloat((pts2*tv3*parseFloat(qty2)).toFixed(2));
       t={id:Date.now()+ri*7,date:fmtImportDate(dateRaw),time:parsedTime,inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:autoSession(parsedTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
     }
     if(t.inst) trades.push(t);
@@ -2627,7 +2631,7 @@ function parseTradovateFills(fills){
         var qty=(entry.qty||1).toString();
         var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
         var tv2=TICK[inst]||1;
-        var dollar=Math.round(pts*tv2*parseFloat(qty));
+        var dollar=parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
         trades.push({id:Date.now()+i,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
         i+=2;
       } else { i++; }
