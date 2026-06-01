@@ -1839,6 +1839,18 @@ function prepTab(){
   newsCard.appendChild(newsH);
 
   // helper to build a news row
+  var MACRO_ABBR={
+    "ADP Non-Farm Employment":"ADP Non-Farm",
+    "ISM Manufacturing PMI":"ISM Mfg PMI",
+    "ISM Services PMI":"ISM Svcs PMI",
+    "PPI (Producer Price Index)":"PPI",
+    "JOLTS Job Openings":"JOLTS",
+    "Consumer Confidence":"Cons. Confidence",
+    "Durable Goods Orders":"Durable Goods",
+    "10-Yr Treasury Auction":"10-Yr T Auction",
+    "Michigan Consumer Sentiment":"Mich. Sentiment",
+    "Unemployment Rate":"Unemp. Rate"
+  };
   function makeNewsRow(ev,key,bgDefault){
     var isChecked=!!State.newsChecks[key];
     var isSelected=State.newsSelected.indexOf(ev.l)>-1;
@@ -1849,7 +1861,8 @@ function prepTab(){
     var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
     (function(k){chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[k]=!State.newsChecks[k];ss("newsChecks",State.newsChecks);render();});})(key);
     row.appendChild(chk);
-    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=ev.l;row.appendChild(lbl);
+    var displayLabel=(isMacro&&isMobile()&&MACRO_ABBR[ev.l])?MACRO_ABBR[ev.l]:ev.l;
+    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=displayLabel;row.appendChild(lbl);
     var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
     if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
     (function(name){row.addEventListener("click",function(){
@@ -3365,6 +3378,85 @@ function mobileHomeTab(){
   sdHdr.appendChild(sdTitle);sdHdr.appendChild(sdStreak);
   streakCard.appendChild(sdHdr);streakCard.appendChild(sdResult.el);
   el.appendChild(streakCard);
+
+  // ── Weekly Scoreboard ──
+  var nowD2=new Date();
+  var wkStart3=new Date(nowD2);wkStart3.setDate(nowD2.getDate()-nowD2.getDay());wkStart3.setHours(0,0,0,0);
+  var wkTrades3=State.trades.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    var td4=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+    return td4>=wkStart3;
+  });
+  var ws3=calcStats(wkTrades3);
+  var goalAmt3=State.wkGoal?parseFloat(State.wkGoal.replace(/[^0-9.]/g,"")):2000;
+  var goalPct3=goalAmt3?Math.min(100,Math.round(Math.max(0,ws3.total)/goalAmt3*100)):0;
+  var sunday3=new Date(nowD2);sunday3.setDate(nowD2.getDate()-nowD2.getDay());
+  var wkLabelM="Wk of "+(sunday3.getMonth()+1)+"/"+sunday3.getDate();
+
+  var wkCard=document.createElement("div");wkCard.className="m-eq-card";wkCard.style.marginBottom="10px";
+  var wkCardHdr=document.createElement("div");wkCardHdr.className="m-card-hdr";
+  var wkCardTitle=document.createElement("div");wkCardTitle.className="m-card-title";wkCardTitle.textContent="Weekly Scoreboard";
+  var wkCardDate=document.createElement("div");wkCardDate.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;";wkCardDate.textContent=wkLabelM;
+  wkCardHdr.appendChild(wkCardTitle);wkCardHdr.appendChild(wkCardDate);wkCard.appendChild(wkCardHdr);
+
+  var wkStatRow=document.createElement("div");wkStatRow.style.cssText="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;";
+  var wkPnlDiv=document.createElement("div");
+  var wkBigM=document.createElement("div");wkBigM.style.cssText="font-size:26px;font-weight:700;line-height:1;";wkBigM.className=clr(ws3.total);wkBigM.textContent=dol(ws3.total);
+  var wkSubM=document.createElement("div");wkSubM.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;margin-top:4px;";wkSubM.textContent="this week";
+  wkPnlDiv.appendChild(wkBigM);wkPnlDiv.appendChild(wkSubM);wkStatRow.appendChild(wkPnlDiv);
+  var wkMeta=document.createElement("div");wkMeta.style.cssText="display:flex;gap:14px;text-align:center;";
+  var wkWins=document.createElement("div");wkWins.innerHTML='<div style="font-size:9px;color:#c9a84c;font-family:monospace;margin-bottom:3px;">W/L</div><div style="font-size:14px;font-weight:700;"><span style="color:#00e676;">'+ws3.wins.length+'</span><span style="color:#c9a84c;"> / </span><span style="color:#ff4444;">'+ws3.losses.length+'</span></div>';
+  var wkWinR=document.createElement("div");wkWinR.innerHTML='<div style="font-size:9px;color:#c9a84c;font-family:monospace;margin-bottom:3px;">WIN%</div><div style="font-size:14px;font-weight:700;color:#00d4d4;">'+ws3.wr+'%</div>';
+  wkMeta.appendChild(wkWins);wkMeta.appendChild(wkWinR);wkStatRow.appendChild(wkMeta);
+  wkCard.appendChild(wkStatRow);
+
+  var wkGoalRowM=document.createElement("div");wkGoalRowM.style.cssText="display:flex;justify-content:space-between;margin-bottom:5px;";
+  var wkGoalLeft=document.createElement("div");wkGoalLeft.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;letter-spacing:.5px;";
+  wkGoalLeft.textContent="GOAL  "+dol(ws3.total).replace("+","")+" / $"+Math.round(goalAmt3);
+  var wkGoalPctEl=document.createElement("div");wkGoalPctEl.style.cssText="font-size:9px;font-weight:700;color:#00e676;font-family:monospace;";wkGoalPctEl.textContent=goalPct3+"%";
+  wkGoalRowM.appendChild(wkGoalLeft);wkGoalRowM.appendChild(wkGoalPctEl);wkCard.appendChild(wkGoalRowM);
+  var wkBarBgM=document.createElement("div");wkBarBgM.style.cssText="background:#1a3260;border-radius:3px;height:5px;";
+  var wkBarFillM=document.createElement("div");wkBarFillM.style.cssText="background:#00e676;width:"+goalPct3+"%;height:100%;border-radius:3px;";
+  wkBarBgM.appendChild(wkBarFillM);wkCard.appendChild(wkBarBgM);
+  el.appendChild(wkCard);
+
+  // ── Monthly Scoreboard ──
+  var moNow2=new Date();
+  var moTrades2=State.trades.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    return parseInt(p[0])-1===moNow2.getMonth()&&2000+parseInt(p[2])===moNow2.getFullYear();
+  });
+  var moS2=calcStats(moTrades2);
+  var moGoalAmt2=State.moGoal?parseFloat(State.moGoal.replace(/[^0-9.]/g,"")):8000;
+  var moPct2=moGoalAmt2?Math.min(100,Math.round(Math.max(0,moS2.total)/moGoalAmt2*100)):0;
+  var MNAMES3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  var moCard2=document.createElement("div");moCard2.className="m-eq-card";moCard2.style.marginBottom="10px";
+  var moCardHdr=document.createElement("div");moCardHdr.className="m-card-hdr";
+  var moCardTitle=document.createElement("div");moCardTitle.className="m-card-title";moCardTitle.textContent="Monthly Scoreboard";
+  var moCardDate=document.createElement("div");moCardDate.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;";moCardDate.textContent=MNAMES3[moNow2.getMonth()]+" "+moNow2.getFullYear();
+  moCardHdr.appendChild(moCardTitle);moCardHdr.appendChild(moCardDate);moCard2.appendChild(moCardHdr);
+
+  var moStatRow=document.createElement("div");moStatRow.style.cssText="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;";
+  var moPnlDiv=document.createElement("div");
+  var moBigM=document.createElement("div");moBigM.style.cssText="font-size:26px;font-weight:700;line-height:1;";moBigM.className=clr(moS2.total);moBigM.textContent=dol(moS2.total);
+  var moSubM=document.createElement("div");moSubM.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;margin-top:4px;";moSubM.textContent="this month";
+  moPnlDiv.appendChild(moBigM);moPnlDiv.appendChild(moSubM);moStatRow.appendChild(moPnlDiv);
+  var moMeta=document.createElement("div");moMeta.style.cssText="display:flex;gap:14px;text-align:center;";
+  var moWins=document.createElement("div");moWins.innerHTML='<div style="font-size:9px;color:#c9a84c;font-family:monospace;margin-bottom:3px;">W/L</div><div style="font-size:14px;font-weight:700;"><span style="color:#00e676;">'+moS2.wins.length+'</span><span style="color:#c9a84c;"> / </span><span style="color:#ff4444;">'+moS2.losses.length+'</span></div>';
+  var moWinR=document.createElement("div");moWinR.innerHTML='<div style="font-size:9px;color:#c9a84c;font-family:monospace;margin-bottom:3px;">WIN%</div><div style="font-size:14px;font-weight:700;color:#00d4d4;">'+moS2.wr+'%</div>';
+  moMeta.appendChild(moWins);moMeta.appendChild(moWinR);moStatRow.appendChild(moMeta);
+  moCard2.appendChild(moStatRow);
+
+  var moGoalRowM=document.createElement("div");moGoalRowM.style.cssText="display:flex;justify-content:space-between;margin-bottom:5px;";
+  var moGoalLeftM=document.createElement("div");moGoalLeftM.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;letter-spacing:.5px;";
+  moGoalLeftM.textContent="GOAL  "+dol(moS2.total).replace("+","")+" / $"+Math.round(moGoalAmt2);
+  var moPctEl2=document.createElement("div");moPctEl2.style.cssText="font-size:9px;font-weight:700;color:#ff8c00;font-family:monospace;";moPctEl2.textContent=moPct2+"%";
+  moGoalRowM.appendChild(moGoalLeftM);moGoalRowM.appendChild(moPctEl2);moCard2.appendChild(moGoalRowM);
+  var moBarBgM=document.createElement("div");moBarBgM.style.cssText="background:#1a3260;border-radius:3px;height:5px;";
+  var moBarFillM=document.createElement("div");moBarFillM.style.cssText="background:#ff8c00;width:"+moPct2+"%;height:100%;border-radius:3px;";
+  moBarBgM.appendChild(moBarFillM);moCard2.appendChild(moBarBgM);
+  el.appendChild(moCard2);
 
   // ── Today's news warning ──
   var tdNews=today();
