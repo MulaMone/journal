@@ -143,6 +143,97 @@ label{font-size:11px;letter-spacing:1.5px;color:var(--text3);display:block;margi
 /* SVG CHART */
 .chart-wrap{overflow:hidden;margin-top:6px}
 svg text{font-family:'Courier New',monospace}
+
+/* ─── MOBILE RESPONSIVE ─────────────────────────────────────── */
+/* Table scroll wrapper */
+.tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+@media(max-width:768px){
+  /* Topbar */
+  #topbar{padding:0 10px;height:48px;flex-wrap:nowrap}
+  .logo{font-size:18px;letter-spacing:2px}
+  .logo small{font-size:11px;letter-spacing:1px;margin-left:6px}
+  .brand-name{font-size:15px;letter-spacing:5px}
+  #topbar-stats{gap:8px;font-size:11px;flex-shrink:0}
+  #topbar-stats .stat-pts,.stat-wr{display:none}
+
+  /* Tabs */
+  #tabs{padding:0 4px;height:40px;gap:0}
+  .tab{padding:0 10px;height:40px;font-size:12px;letter-spacing:0}
+
+  /* Content */
+  #content{padding:10px!important}
+
+  /* Grids → single column on mobile */
+  .g2,.g3,.g4{grid-template-columns:1fr!important;gap:8px}
+
+  /* Allow 2-col on slightly wider mobile */
+  @media(min-width:480px){
+    .g2{grid-template-columns:1fr 1fr!important}
+    .g4{grid-template-columns:1fr 1fr!important}
+  }
+
+  /* Cards */
+  .card{padding:12px}
+
+  /* Form grid → 2 columns */
+  .fg{grid-template-columns:1fr 1fr!important}
+  .fg .s4{grid-column:span 2!important}
+  .fg .s2{grid-column:span 2!important}
+
+  /* Tables → horizontal scroll */
+  .tbl{min-width:480px}
+  .tbl th,.tbl td{padding:6px 7px;font-size:11px}
+
+  /* Chips */
+  .chip .cv{font-size:18px}
+
+  /* Buttons — bigger touch targets */
+  .btn{padding:9px 14px;font-size:12px}
+  .plt-btn{padding:9px 12px;font-size:11px}
+
+  /* Counter/spinner */
+  .ctr-btn{width:36px;height:36px;font-size:18px}
+  .ctr-wrap input{height:36px}
+
+  /* Level rows */
+  .lvrow{flex-wrap:wrap;gap:6px}
+
+  /* Opportunity cards */
+  .opp{padding:10px}
+
+  /* Section header */
+  .sh{font-size:11px;letter-spacing:2px}
+
+  /* Hide less critical topbar info on smallest screens */
+  #topbar-stats span.hide-xs{display:none}
+  #topbar-stats b.hide-xs{display:none}
+
+  /* Override JS inline grid-template-columns */
+  #content [style*="grid-template-columns"]{grid-template-columns:1fr!important}
+
+  /* Calendar popup */
+  .cal-popup{width:calc(100vw - 24px);left:12px!important;right:12px!important}
+
+  /* Import drop zone */
+  .drop-zone{padding:20px 12px}
+
+  /* Sync status */
+  .sync-status{font-size:10px;padding:6px 8px}
+
+  /* Quote block */
+  .qtext{font-size:12px}
+
+  /* Stat row helper */
+  .rjb{flex-wrap:wrap;gap:6px}
+}
+
+@media(max-width:400px){
+  .brand-name{display:none}
+  #topbar-stats{font-size:10px;gap:6px}
+  .tab{padding:0 7px;font-size:11px}
+  .chip .cv{font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -800,7 +891,7 @@ function renderTopbar(){
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
   var s=calcStats(State.trades);
   var el=document.getElementById("topbar-stats");
-  el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span>W/L</span> <b class="g">'+tW+'</b><b class="m">–</b><b class="r">'+tL+'</b> &nbsp; <span>WIN%</span> <b>'+s.wr+'%</b> &nbsp; <b class="m xs">'+td+'</b>';
+  el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b>';
 }
 
 // ─── HOME TAB ─────────────────────────────────────────────────────────
@@ -1706,7 +1797,7 @@ function logTab(){
       exTd.appendChild(exDiv);exRow.appendChild(exTd);tbody.appendChild(exRow);
     }
   });
-  tbl.appendChild(tbody);tcard.appendChild(tbl);el.appendChild(tcard);return el;
+  tbl.appendChild(tbody);var tblWrap=div("tbl-wrap");tblWrap.appendChild(tbl);tcard.appendChild(tblWrap);el.appendChild(tcard);return el;
 }
 
 // ─── OPPS TAB ─────────────────────────────────────────────────────────
@@ -1889,7 +1980,7 @@ function analyticsTab(){
     dr.appendChild(aptd);
     dowTbody.appendChild(dr);
   });
-  dowTbl.appendChild(dowTbody);dowCard.appendChild(dowTbl);
+  dowTbl.appendChild(dowTbody);var dowWrap=div("tbl-wrap");dowWrap.appendChild(dowTbl);dowCard.appendChild(dowWrap);
   el.appendChild(dowCard);
 
   var sessCard=div("card mt12");var sessH=div("card-h");var sessT=div("card-t");sessT.textContent="P&L by Session";sessH.appendChild(sessT);sessCard.appendChild(sessH);
@@ -1899,7 +1990,7 @@ function analyticsTab(){
   SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);
     sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
     str.appendChild(sptd);stbody.appendChild(str);});
-  stbl.appendChild(stbody);sessCard.appendChild(stbl);el.appendChild(sessCard);
+  stbl.appendChild(stbody);var stblWrap=div("tbl-wrap");stblWrap.appendChild(stbl);sessCard.appendChild(stblWrap);el.appendChild(sessCard);
 
   // Setup P&L Breakdown (moved from Review/Stats)
   var sbCard2=div("card mt12");var sbH2=div("card-h");var sbT2=div("card-t");sbT2.textContent="Setup P&L Breakdown";sbH2.appendChild(sbT2);sbCard2.appendChild(sbH2);
