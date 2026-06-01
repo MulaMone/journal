@@ -492,6 +492,12 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
 function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){}}
 
+// On fresh launch (sessionStorage is empty), always start on home
+if(!sessionStorage.getItem('edge_session_active')){
+  sessionStorage.setItem('edge_session_active','1');
+  localStorage.setItem('edge_tab',JSON.stringify('home'));
+}
+
 var State={
   tab:ls("tab","home"),
   trades:ls("trades",DEFAULT_TRADES),
