@@ -2287,13 +2287,38 @@ function parseCSV(text){
   function cleanNum(s){return (s||"").replace("$","").replace(",","").trim();}
 
   var isNT=header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1);
+  var isTVPos=header.indexOf("bought timestamp")>-1&&header.indexOf("sold timestamp")>-1&&header.indexOf("avg. buy")>-1;
   var trades=[];
 
   rows.forEach(function(line,ri){
     var row=line.split(",");
     var t={};
 
-    if(isNT){
+    if(isTVPos){
+      // ── Tradovate Position History CSV ──
+      var inst=detectInstrument(col(row,["product","contract"]));
+      var qty=cleanNum(col(row,["paired qty","quantity","qty"]))||"1";
+      var boughtTs=col(row,["bought timestamp"]);
+      var soldTs=col(row,["sold timestamp"]);
+      // Direction: whichever fill came first = entry
+      var boughtDate=boughtTs?new Date(boughtTs):new Date(9999,0,1);
+      var soldDate=soldTs?new Date(soldTs):new Date(9999,0,1);
+      var isShort=soldDate<boughtDate; // sold first = short
+      var dir=isShort?"Short":"Long";
+      var entryTs=isShort?soldTs:boughtTs;
+      var avgBuy=cleanNum(col(row,["avg. buy","buy price"]));
+      var avgSell=cleanNum(col(row,["avg. sell","sell price"]));
+      var entry=isShort?avgSell:avgBuy;
+      var exit2=isShort?avgBuy:avgSell;
+      var pnlRaw=cleanNum(col(row,["p/l","p&l","pnl","profit"]));
+      var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
+      var tv2=TICK[inst]||1;
+      var dollar=pnlRaw?Math.round(parseFloat(pnlRaw)):Math.round(pts*tv2*parseFloat(qty));
+      // Use actual fill timestamp for date/time (not Trade Date which may be next day)
+      var timeStr=fmtImportTime(entryTs);
+      var dateStr=fmtImportDate(entryTs);
+      t={id:Date.now()+ri*7,date:dateStr,time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:autoSession(timeStr),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
+    } else if(isNT){
       var inst=detectInstrument(col(row,["instrument","symbol"]));
       var dirRaw=col(row,["market pos.","market pos","direction","side"]).toLowerCase();
       var dir=dirRaw.indexOf("long")>-1?"Long":"Short";
@@ -2313,17 +2338,16 @@ function parseCSV(text){
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
     } else {
-      var contract=col(row,["contract","symbol","instrument","product"]);
-      var inst2=detectInstrument(contract);
+      var contract2=col(row,["contract","symbol","instrument","product"]);
+      var inst2=detectInstrument(contract2);
       var action=col(row,["action","buy/sell","side","direction","type","order action"]).toLowerCase();
       var dir2=action.indexOf("buy")>-1||action.indexOf("long")>-1?"Long":"Short";
-      var qty2=cleanNum(col(row,["qty","quantity","size","contracts","filled qty"]))||"1";
-      var entryP=cleanNum(col(row,["entry price","entry","avg price","avgprice","price","fill price","avg fill price"]));
-      var exitP=cleanNum(col(row,["exit price","exit"]));
-      var pnl=cleanNum(col(row,["pnl","p&l","profit","net p&l","realized p&l","realized pnl","net profit","profit/loss","gain/loss"]));
-      var dateRaw=col(row,["date","datetime","date/time","filled at","timestamp","time"]);
-      var timeRaw=col(row,["time","filled at","timestamp"]);
-      // If timeRaw is same as dateRaw (datetime column), extract time from it
+      var qty2=cleanNum(col(row,["qty","quantity","size","contracts","filled qty","paired qty"]))||"1";
+      var entryP=cleanNum(col(row,["entry price","entry","avg price","avgprice","price","fill price","avg fill price","avg. buy","buy price"]));
+      var exitP=cleanNum(col(row,["exit price","exit","avg. sell","sell price"]));
+      var pnl=cleanNum(col(row,["pnl","p&l","p/l","profit","net p&l","realized p&l","realized pnl","net profit","profit/loss","gain/loss"]));
+      var dateRaw=col(row,["date","trade date","datetime","date/time","filled at","timestamp","time"]);
+      var timeRaw=col(row,["time","bought timestamp","sold timestamp","filled at","timestamp"]);
       if(!timeRaw||timeRaw===dateRaw) timeRaw=dateRaw;
       var parsedTime=fmtImportTime(timeRaw);
       var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
