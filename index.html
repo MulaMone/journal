@@ -1717,6 +1717,7 @@ function prepTab(){
 
   // Pre-Week Key Levels card — same pattern as daily levels
   var wkCard=div("card");
+  if(isMobile()) wkCard.style.display="none";
   var wkH=div("card-h");
   var wkT=div("card-t");wkT.textContent="Pre-Week Key Levels";wkH.appendChild(wkT);
   // Reset button only shows if anything is checked
@@ -1791,7 +1792,7 @@ function prepTab(){
     ss("weekLevels",State.weekLevels);render();
   });wla.appendChild(wab);wfg.appendChild(wla);
   wkCard.appendChild(wfg);
-  g2.appendChild(wkCard);
+  if(!isMobile()) g2.appendChild(wkCard);
   el.appendChild(g2);
 
   // ── Key News & Events ──────────────────────────────────────────────
