@@ -3631,7 +3631,8 @@ function render(){
       content.style.opacity="1";
       content.innerHTML="";
       content.appendChild(VIEWS[State.tab]());
-      if(savedScroll>0) window.scrollTo(0,savedScroll);
+      if(savedScroll>0 && render._initialized) window.scrollTo(0,savedScroll);
+      render._initialized=true;
     }
   } else {
     content.style.transition="none";
