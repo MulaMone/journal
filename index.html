@@ -756,10 +756,24 @@ function startClock(){
     var closeSecs=closeH*3600+closeM*60+closeS;
     var openSecs=9*3600+30*60; // 9:30 AM ET open
     var day=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",weekday:"short"});
-    var isWeekend=(day==="Sat"||day==="Sun");
 
-    if(isWeekend){
+    var etNow=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+    var dayNum=etNow.getDay();
+
+    if(dayNum===6){
       cdEl.style.color="#ff4444";cdEl.textContent="MARKET CLOSED";
+    } else if(dayNum===0&&nowSecs<(18*3600)){
+      var ethOpenSecs=18*3600;
+      var diff=ethOpenSecs-nowSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#00e676";
+      cdEl.textContent="ETH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+    } else if(dayNum===0){
+      var mondayOpenSecs=9*3600+30*60;
+      var diff=((24*3600)-nowSecs)+mondayOpenSecs;
+      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      cdEl.style.color="#00d4d4";
+      cdEl.textContent="RTH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
     } else if(nowSecs<openSecs){
       // Pre-market countdown to open
       var diff=openSecs-nowSecs;
