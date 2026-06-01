@@ -2923,6 +2923,14 @@ function showTVNotification(count){
 // Start polling every 5 seconds
 setInterval(pollTVTrades,5000);
 
+// Poll edge_data every 10 seconds to stay in sync across computers
+setInterval(function(){
+  var currentId=getSyncId();
+  loadFromCloud(currentId,function(ok){
+    if(ok) render();
+  });
+},10000);
+
 render();
 </script>
 </body>
