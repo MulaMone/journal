@@ -212,9 +212,9 @@ svg text{font-family:'Courier New',monospace}
 .m-bar-fill-g{height:100%;background:#00e676;border-radius:5px}
 .m-bar-fill-r{height:100%;background:#ff4444;border-radius:5px}
 .m-bar-val{font-size:9px;width:40px;flex-shrink:0;font-family:'Courier New',monospace;font-weight:700}
-.m-hm-hdrs{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px}
+.m-hm-hdrs{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;margin-bottom:3px}
 .m-hm-hdr{font-size:7px;color:#c9a84c;text-align:center;font-family:'Courier New',monospace}
-.m-hm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.m-hm-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
 .m-hm-cell{height:22px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:'Courier New',monospace;transition:opacity .15s}
 .m-hm-cell:active{opacity:.7}
 .hm-empty{background:#0a1422}
@@ -1163,11 +1163,12 @@ function mobileBarChart(data){
 function mobilePnlHeatmap(trades){
   var now=new Date();
   var yr=now.getFullYear(),mo=now.getMonth();
-  // Map trades by date key
+  // Map trades by date key MM/DD (current month only)
   var byDate={};
   trades.forEach(function(t){
     if(!t.date) return;
     var p=t.date.split("/");if(p.length!==3)return;
+    if(parseInt(p[0])-1!==mo||2000+parseInt(p[2])!==yr) return;
     var key=p[0]+"/"+p[1];
     byDate[key]=(byDate[key]||0)+t.d;
   });
@@ -1175,21 +1176,43 @@ function mobilePnlHeatmap(trades){
   Object.values(byDate).forEach(function(v){if(Math.abs(v)>maxAbs) maxAbs=Math.abs(v);});
 
   var wrap=document.createElement("div");
-  var hdrs=document.createElement("div");hdrs.className="m-hm-hdrs";
-  ["M","T","W","T","F","S","S"].forEach(function(d){var c=document.createElement("div");c.className="m-hm-hdr";c.textContent=d;hdrs.appendChild(c);});
-  wrap.appendChild(hdrs);
-  var grid=document.createElement("div");grid.className="m-hm-grid";
 
-  var firstDay=new Date(yr,mo,1).getDay(); // 0=Sun
-  // Shift to Mon=0
-  var offset=(firstDay+6)%7;
+  // 6 columns: Sun Mon Tue Wed Thu Fri  (Saturday removed — market closed)
+  var hdrs=document.createElement("div");
+  hdrs.className="m-hm-hdrs";
+  hdrs.style.gridTemplateColumns="repeat(6,1fr)";
+  ["Su","Mo","Tu","We","Th","Fr"].forEach(function(d){
+    var c=document.createElement("div");c.className="m-hm-hdr";c.textContent=d;hdrs.appendChild(c);
+  });
+  wrap.appendChild(hdrs);
+
+  var grid=document.createElement("div");
+  grid.className="m-hm-grid";
+  grid.style.gridTemplateColumns="repeat(6,1fr)";
+
   var dim=new Date(yr,mo+1,0).getDate();
   var today=now.getDate();
+  var mo2=mo+1;
 
-  for(var e=0;e<offset;e++){var ec=document.createElement("div");ec.className="m-hm-cell hm-empty";grid.appendChild(ec);}
+  // Find what day-of-week the 1st falls on (0=Sun...6=Sat)
+  // Sun=col 0, Mon=col 1 ... Fri=col 5, Sat=skipped
+  var firstDow=new Date(yr,mo,1).getDay(); // 0=Sun
+  // If month starts on Saturday (6), first visible col is Sunday of next week → offset=0 but skip day 1
+  // Offset = firstDow if 0-5, or 0 if Saturday (day 1 gets pushed to Sunday slot next row)
+  var offset=firstDow<=5?firstDow:0;
+
+  // Pad empty cells before the 1st
+  for(var e=0;e<offset;e++){
+    var ec=document.createElement("div");ec.className="m-hm-cell hm-empty";grid.appendChild(ec);
+  }
+
   for(var d=1;d<=dim;d++){
+    var dow=new Date(yr,mo,d).getDay(); // 0=Sun...6=Sat
+    // Skip Saturdays entirely — no cell added, no column shift
+    if(dow===6) continue;
+
     var cell=document.createElement("div");
-    var mo2=mo+1;var key2=(mo2<10?"0":"")+mo2+"/"+(d<10?"0":"")+d;
+    var key2=(mo2<10?"0":"")+mo2+"/"+(d<10?"0":"")+d;
     var val=byDate[key2];
     var cls="hm-empty";
     if(val===undefined){cls=d<=today?"hm-zero":"hm-empty";}
@@ -1204,7 +1227,6 @@ function mobilePnlHeatmap(trades){
     cell.className="m-hm-cell "+cls;
     if(val!==undefined){cell.title=dol(val);}
     if(d===today){cell.style.outline="1.5px solid #ff8c00";cell.style.outlineOffset="-1px";}
-    // Click to show day
     (function(day,v){cell.addEventListener("click",function(){if(v!==undefined) alert(new Date(yr,mo,day).toDateString()+" : "+dol(v));});})(d,val);
     grid.appendChild(cell);
   }
