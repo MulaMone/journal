@@ -3598,7 +3598,11 @@ function mobileAnalyticsTab(){
 
 var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,chart:chartTab};
 
+// Prevent browser restoring scroll position on refresh
+if('scrollRestoration' in history) history.scrollRestoration='manual';
+
 var _lastRenderedTab=null;
+var _firstRender=true;
 
 function render(){
   renderTabs();
@@ -3631,8 +3635,7 @@ function render(){
       content.style.opacity="1";
       content.innerHTML="";
       content.appendChild(VIEWS[State.tab]());
-      if(savedScroll>0 && render._initialized) window.scrollTo(0,savedScroll);
-      render._initialized=true;
+      if(savedScroll>0 && !_firstRender) window.scrollTo(0,savedScroll);
     }
   } else {
     content.style.transition="none";
@@ -3643,6 +3646,7 @@ function render(){
     content.style.padding="16px";content.style.overflow="auto";content.style.display="block";
     content.appendChild(VIEWS[State.tab]());
   }
+  if(_firstRender){ window.scrollTo(0,0); _firstRender=false; }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
