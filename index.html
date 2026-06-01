@@ -225,7 +225,12 @@ svg text{font-family:'Courier New',monospace}
 .hm-r2{background:#ff444455;color:#ff4444}
 .hm-r1{background:#ff444428}
 .hm-zero{background:#1a3260}
-@media(max-width:768px){
+/* ── SETUP STAR / BREAD & BUTTER ── */
+.star-btn{width:26px;height:26px;border-radius:3px;border:1px solid var(--border);background:var(--panel3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;transition:all .15s;flex-shrink:0;user-select:none;line-height:1}
+.star-btn.on{border-color:#ffd70055;background:#ffd70012;color:#ffd700}
+.star-btn.off{color:var(--border)}
+.star-btn.off:hover{border-color:#ffd70040;color:#ffd70055}
+@media(max-width:480px){
   #app{padding-bottom:64px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   #topbar{padding:0 12px;height:48px}
   .logo{font-size:16px;letter-spacing:2px}
@@ -258,7 +263,7 @@ svg text{font-family:'Courier New',monospace}
   .tbl{min-width:460px}
   .tbl th,.tbl td{padding:6px 7px;font-size:11px}
 }
-@media(max-width:400px){
+@media(max-width:380px){
   .brand-name{display:none}
   .m-stat-val{font-size:20px}
   .m-tc-pnl{font-size:16px}
@@ -327,7 +332,8 @@ function syncToCloud(){
       levelChecksDate:State.levelChecksDate,weekLevelChecks:State.weekLevelChecks,newsChecks:State.newsChecks,
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
       newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
-      focusImprove:State.focusImprove,mantraNotes:State.mantraNotes
+      focusImprove:State.focusImprove,mantraNotes:State.mantraNotes,
+      starredSetups:State.starredSetups
     },
     updated_at:new Date().toISOString()
   };
@@ -382,6 +388,7 @@ function loadFromCloud(syncId,callback){
       if(s.newsSelectedDate) State.newsSelectedDate=s.newsSelectedDate;
       if(s.focusImprove) State.focusImprove=s.focusImprove;
       if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
+      if(s.starredSetups) State.starredSetups=s.starredSetups;
     }
     ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
     if(callback) callback(true);
@@ -421,7 +428,7 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback","RTH VWAP"];
 var SDESC={
   "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
@@ -429,7 +436,8 @@ var SDESC={
   "VWAP Fade":"Fade extended moves away from VWAP. Best used when price is 1–2 standard deviations extended with divergence.",
   "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
   "2min POC":"Naked 2min POC with confluences.",
-  "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma."
+  "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma.",
+  "RTH VWAP":"Trade reactions off the prior RTH VWAP level. Look for confluence with key volume profile nodes."
 };
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
 var EMO=["","😖","😟","😐","😊","🔥"];
@@ -498,6 +506,7 @@ var State={
   weekLevelChecks:ls("weekLevelChecks",{}),
   pb_adding:false,
   pb_editing:undefined,
+  starredSetups:ls("starredSetups",[]),
   rv_view:"month",
   rv_year:undefined,
   rv_month:undefined,
@@ -624,7 +633,8 @@ var SETUP_COLORS={
   "2min POC":"#a5ff32",
   "VWAP Fade":"#b06aff",
   "POC":"#ffd700",
-  "VAH/VAL":"#40e0d0"
+  "VAH/VAL":"#40e0d0",
+  "RTH VWAP":"#5a6f82"
 };
 function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
 function getSetups(t){
@@ -844,10 +854,8 @@ var TABS=[
 ];
 
 function renderTabs(){
-  var isMobile=window.innerWidth<=768;
-
   // ── MOBILE: update bottom nav active state only ──
-  if(isMobile){
+  if(isMobile()){
     var el=document.getElementById("tabs");
     if(el) el.style.display="none";
     updateMobileNav();
@@ -1040,15 +1048,22 @@ function renderTopbar(){
   var s=calcStats(State.trades);
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
-    // Mobile: compact — today P&L + live dot
-    el.innerHTML='<span style="font-family:monospace;font-size:11px;color:#c9a84c;letter-spacing:.5px">TODAY</span> <b class="'+clr(tPnl)+'" style="font-size:12px;letter-spacing:.5px;font-weight:700;">'+dol(tPnl)+'</b> <span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span>';
+    el.innerHTML='<span style="font-family:monospace;font-size:11px;color:#c9a84c;letter-spacing:.5px">TODAY</span> <b class="'+clr(tPnl)+'" style="font-size:12px;letter-spacing:.5px;font-weight:700;">'+dol(tPnl)+'</b> <span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span><button onclick="toggleMobileMode()" style="margin-left:10px;background:transparent;border:1px solid #1a3260;color:#c9a84c;font-family:monospace;font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;letter-spacing:1px">DESKTOP</button>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b><button onclick="toggleMobileMode()" style="margin-left:12px;background:transparent;border:1px solid #1a3260;color:#c9a84c;font-family:Courier New,monospace;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;letter-spacing:1px">📱</button>';
   }
 }
 
+function toggleMobileMode(){
+  var current=localStorage.getItem("edge_mobile_mode");
+  // If currently mobile (override=1 or auto), force desktop
+  if(isMobile()) localStorage.setItem("edge_mobile_mode","0");
+  else localStorage.setItem("edge_mobile_mode","1");
+  render();
+}
+
 // ─── MOBILE HELPER FUNCTIONS ─────────────────────────────────────────
-function isMobile(){return window.innerWidth<=768;}
+function isMobile(){return localStorage.getItem("edge_mobile_mode")==="1";}
 
 // Build a mobile trade card element
 function mobileTradeCard(t){
@@ -2188,8 +2203,9 @@ function playbookTab(){
 
   function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);}
 
-  // All entries: built-in SETUPS + custom
+  // All entries: built-in SETUPS + custom, starred sorted to top
   var allEntries=SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true};}).concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false};}));
+  allEntries.sort(function(a,b){var as=State.starredSetups.indexOf(a.name)>-1,bs=State.starredSetups.indexOf(b.name)>-1;return as===bs?0:as?-1:1;});
 
   var el=div();
   var shRow=div("rjb mb12");
@@ -2256,14 +2272,41 @@ function playbookTab(){
       }
     } else {
       // View mode
+      var isStarred=State.starredSetups.indexOf(entry.name)>-1;
+      // star state only affects the star button — card appearance unchanged
       var hrow=div("rjb mb8");
-      var left=div("row gap8");var nm=h("span",{className:"setup-title"});nm.textContent=entry.name;if(entry.name==="2min POC") nm.style.color="#a5ff32";else if(entry.name==="VWAP Fade") nm.style.color="#b06aff";else if(entry.name==="POC") nm.style.color="#ffd700";else if(entry.name==="VAH/VAL") nm.style.color="#40e0d0";left.appendChild(nm);
+      // Left: name + trade badge
+      var left=div("row gap8");
+      var nm=h("span",{className:"setup-title"});
+      nm.textContent=entry.name;
+      var nameColor=SETUP_COLORS[entry.name];
+      if(nameColor) nm.style.color=nameColor;
+      left.appendChild(nm);
+      if(ts.length) left.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades"));
+      else left.appendChild(makeBadge("bw","0 trades"));
       hrow.appendChild(left);
+      // Right: EDIT + star (star on the far right)
       var right=div("row gap8");
-      if(ts.length) right.appendChild(makeBadge(pnl>=0?"bg":"br",ts.length+" trades")); else right.appendChild(makeBadge("bw","0 trades"));
       var editBtn=h("button",{className:"btn",style:"padding:3px 9px;font-size:9px"});editBtn.textContent="EDIT";
       (function(i){editBtn.addEventListener("click",function(e){e.stopPropagation();State.pb_editing=i;State.pb_adding=false;render();});})(idx);
-      right.appendChild(editBtn);hrow.appendChild(right);card.appendChild(hrow);
+      right.appendChild(editBtn);
+      // Star button
+      var starBtn=div("star-btn "+(isStarred?"on":"off"));
+      starBtn.textContent=isStarred?"★":"☆";
+      starBtn.title=isStarred?"Remove from favourites":"Mark as favourite";
+      (function(name,btn,crd){
+        btn.addEventListener("click",function(e){
+          e.stopPropagation();
+          var si=State.starredSetups.indexOf(name);
+          if(si>-1) State.starredSetups.splice(si,1);
+          else State.starredSetups.push(name);
+          ss("starredSetups",State.starredSetups);
+          render();
+        });
+      })(entry.name,starBtn,card);
+      right.appendChild(starBtn);
+      hrow.appendChild(right);
+      card.appendChild(hrow);
       var desc=div("xs m mb8");desc.style.lineHeight="1.65";desc.textContent=entry.desc||"No description yet. Click EDIT to add one.";card.appendChild(desc);
       if(ts.length){
         var stats=div("row mt8");
@@ -3600,6 +3643,8 @@ function render(){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
+// Mobile mode is opt-in only — clear any stale flag so desktop is always default
+localStorage.removeItem("edge_mobile_mode");
 initSupabase();
 initAutoSync();
 
@@ -3686,9 +3731,9 @@ setInterval(function(){
 },10000);
 
 // Re-render on resize (mobile <-> desktop breakpoint)
-var _lastMobile=window.innerWidth<=768;
+var _lastMobile=isMobile();
 window.addEventListener("resize",function(){
-  var nowMobile=window.innerWidth<=768;
+  var nowMobile=isMobile();
   if(nowMobile!==_lastMobile){_lastMobile=nowMobile;render();}
 });
 
