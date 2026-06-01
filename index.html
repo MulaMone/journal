@@ -2682,7 +2682,7 @@ function chartTab(){
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
 
   // Timeframe buttons
-  var TFS=["1m","5m","15m","1h"];
+  var TFS=["1m","5m","15m","1h","4h"];
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.padding="6px 10px";
@@ -2716,29 +2716,55 @@ function chartTab(){
   // Footer note
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent="Data via yfinance → Supabase • Refreshes every 5 min";
+  note.textContent="Live data via Yahoo Finance";
   el.appendChild(note);
 
   // ── Fetch data & render ───────────────────────────────────
+  // Yahoo Finance futures symbols
+  var YF_SYM={ES:"ES=F",NQ:"NQ=F",MES:"MES=F",MNQ:"MNQ=F"};
+  var YF_RANGE={"1m":"1d","5m":"5d","15m":"5d","1h":"1mo","4h":"1mo"};
+  // Yahoo Finance doesn't have 4h — use 1h data displayed as 4h by aggregation
+  var yfTF=(tf==="4h")?"1h":tf;
+  var yfSym=YF_SYM[sym]||"ES=F";
+  var yfRange=YF_RANGE[tf]||"1mo";
+
   function fetchAndRender(){
-    if(!supaClient){
-      loading.style.color="var(--red)";
-      loading.textContent="⚠ Supabase not connected — check your sync ID";
-      return;
-    }
-    supaFetch("GET",
-      "chart_data?symbol=eq."+encodeURIComponent(sym)+
-      "&timeframe=eq."+encodeURIComponent(tf)+
-      "&order=time.asc&limit=500"
-    )
-    .then(function(r){return r.json();})
-    .then(function(rows){
+    var url="https://query1.finance.yahoo.com/v8/finance/chart/"+yfSym
+      +"?interval="+yfTF+"&range="+yfRange+"&includePrePost=false&corsDomain=finance.yahoo.com";
+
+    fetch(url,{headers:{"Accept":"application/json"}})
+    .then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    })
+    .then(function(data){
       loading.remove();
-      if(!rows||!rows.length){
+      var result=data&&data.chart&&data.chart.result&&data.chart.result[0];
+      if(!result||!result.timestamp){
         var msg=div();
         msg.style.cssText="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px;gap:10px;";
-        msg.innerHTML="<div style='font-size:28px;opacity:.3'>📊</div><div style='letter-spacing:2px;'>NO DATA — RUN fetch_data.py FIRST</div><div style='font-size:11px;opacity:.6;'>python fetch_data.py</div>";
+        msg.innerHTML="<div style='font-size:28px;opacity:.3'>📊</div><div style='letter-spacing:2px;'>NO DATA RETURNED</div><div style='font-size:11px;opacity:.6;'>Yahoo Finance may be temporarily unavailable</div>";
         chartDiv.appendChild(msg);
+        return;
+      }
+
+      var timestamps=result.timestamp;
+      var q=result.indicators.quote[0];
+      var candles=[];
+      for(var i=0;i<timestamps.length;i++){
+        if(q.open[i]==null||q.close[i]==null) continue;
+        candles.push({
+          time: timestamps[i],
+          open: parseFloat(q.open[i].toFixed(2)),
+          high: parseFloat(q.high[i].toFixed(2)),
+          low:  parseFloat(q.low[i].toFixed(2)),
+          close:parseFloat(q.close[i].toFixed(2)),
+        });
+      }
+
+      if(!candles.length){
+        loading.style.color="var(--red)";
+        loading.textContent="⚠ No candles parsed from data";
         return;
       }
 
@@ -2758,18 +2784,15 @@ function chartTab(){
         wickUpColor:"#00e676",wickDownColor:"#ff4444",
       });
 
-      var candles=rows.map(function(r){
-        return{
-          time:  Math.floor(new Date(r.time).getTime()/1000),
-          open:  parseFloat(r.open),
-          high:  parseFloat(r.high),
-          low:   parseFloat(r.low),
-          close: parseFloat(r.close),
-        };
-      });
-
       series.setData(candles);
       chart.timeScale().fitContent();
+
+      // Show last price + update footer
+      var last=candles[candles.length-1];
+      var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
+      lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
+      el.appendChild(lastEl);
+      note.textContent="Live data via Yahoo Finance • "+new Date().toLocaleTimeString();
 
       // Resize handler
       var ro=new ResizeObserver(function(){
@@ -2779,7 +2802,7 @@ function chartTab(){
     })
     .catch(function(e){
       loading.style.color="var(--red)";
-      loading.textContent="⚠ Error loading chart data: "+e.message;
+      loading.textContent="⚠ Could not load chart: "+e.message+" — check connection or try refreshing";
     });
   }
 
