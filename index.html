@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
-html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden}
 #app{min-height:100vh;display:flex;flex-direction:column}
 /* TOPBAR */
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:54px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
@@ -25,7 +25,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 /* CONTENT */
-#content{padding:20px;-webkit-overflow-scrolling:touch}
+#content{padding:20px;-webkit-overflow-scrolling:touch;overflow-y:auto}
 ::-webkit-scrollbar{width:5px;height:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 /* GRID */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:12px}
@@ -226,7 +226,7 @@ svg text{font-family:'Courier New',monospace}
 .hm-r1{background:#ff444428}
 .hm-zero{background:#1a3260}
 @media(max-width:768px){
-  #app{padding-bottom:60px}
+  #app{padding-bottom:60px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   #topbar{padding:0 12px;height:48px}
   .logo{font-size:16px;letter-spacing:2px}
   .logo small{display:none}
@@ -3624,11 +3624,7 @@ window.addEventListener("resize",function(){
   if(nowMobile!==_lastMobile){_lastMobile=nowMobile;render();}
 });
 
-// Prevent bounce scroll on iOS interfering with app feel
-document.addEventListener("touchmove",function(e){
-  var el=e.target;while(el){if(el.scrollHeight>el.clientHeight&&["auto","scroll"].indexOf(window.getComputedStyle(el).overflowY)>-1) return;el=el.parentElement;}
-  e.preventDefault();
-},{passive:false});
+
 
 render();
 </script>
