@@ -161,7 +161,7 @@ svg text{font-family:'Courier New',monospace}
 .m-trade-card{background:#0d1e38;border:1px solid #1a3260;border-radius:10px;margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color .15s}
 .m-trade-card:active{border-color:#00d4d450}
 .m-trade-card.expanded{border-color:#00d4d430}
-.m-tc-top{display:flex;align-items:center;justify-content:space-between;padding:13px 13px}
+.m-tc-top{display:flex;align-items:center;justify-content:space-between;padding:13px 13px;min-height:56px}
 .m-tc-left{display:flex;align-items:center;gap:10px}
 .m-dir-badge{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;letter-spacing:.5px}
 .m-dir-l{background:#00e67618;border:1px solid #00e67645;color:#00e676}
@@ -232,11 +232,11 @@ svg text{font-family:'Courier New',monospace}
 .star-btn.off:hover{border-color:#ffd70040;color:#ffd70055}
 @media(max-width:480px){
   #app{padding-bottom:64px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  #topbar{padding:0 12px;height:48px}
-  .logo{font-size:16px;letter-spacing:2px}
+  #topbar{padding:0 14px;height:52px;gap:10px}
+  .logo{font-size:17px;letter-spacing:3px}
   .logo small{display:none}
-  .brand-name{font-size:12px;letter-spacing:5px}
-  #topbar-stats{gap:6px;font-size:11px;flex-shrink:0}
+  .brand-name{font-size:13px;letter-spacing:6px;position:static;transform:none;flex:1;text-align:center;overflow:hidden;min-width:0}
+  #topbar-stats{gap:8px;font-size:12px;flex-shrink:0;align-items:center}
   #tabs{display:none!important}
   #m-bnav{display:block}
   #content{padding:12px!important}
@@ -1048,7 +1048,7 @@ function renderTopbar(){
   var s=calcStats(State.trades);
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
-    el.innerHTML='<span style="font-family:monospace;font-size:11px;color:#c9a84c;letter-spacing:.5px">TODAY</span> <b class="'+clr(tPnl)+'" style="font-size:12px;letter-spacing:.5px;font-weight:700;">'+dol(tPnl)+'</b> <span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span><button onclick="toggleMobileMode()" style="margin-left:10px;background:transparent;border:1px solid #1a3260;color:#c9a84c;font-family:monospace;font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;letter-spacing:1px">DESKTOP</button>';
+    el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;">'+dol(tPnl)+'</b><span style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:9px;color:#00e676;letter-spacing:.5px"><span style="width:5px;height:5px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse 2s infinite"></span>LIVE</span><button onclick="toggleMobileMode()" style="margin-left:8px;background:#071428;border:1px solid #1a3260;color:#c9a84c;width:32px;height:32px;border-radius:8px;font-size:16px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;flex-shrink:0;">📱</button>';
   } else {
     el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b><button onclick="toggleMobileMode()" style="margin-left:12px;background:transparent;border:1px solid #1a3260;color:#c9a84c;font-family:Courier New,monospace;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;letter-spacing:1px">📱</button>';
   }
@@ -3433,7 +3433,7 @@ function mobileHomeTab(){
       var key="lv_"+i;
       var isChecked=!!State.levelChecks[key];
       var row=document.createElement("div");
-      row.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #0d1e38;cursor:pointer;-webkit-tap-highlight-color:transparent;";
+      row.style.cssText="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #0d1e38;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:44px;";
       var chk=document.createElement("div");chk.className="lv-check"+(isChecked?" on":"");chk.style.flexShrink="0";
       chk.addEventListener("click",function(e){e.stopPropagation();State.levelChecks[key]=!State.levelChecks[key];ss("levelChecks",State.levelChecks);render();});
       var lbl=document.createElement("span");lbl.style.cssText="font-size:12px;font-weight:700;letter-spacing:1px;flex:1;"+(isChecked?"text-decoration:line-through;color:#1a3260;":"color:#e8f0ff;");lbl.textContent=l.l;
