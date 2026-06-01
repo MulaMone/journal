@@ -758,25 +758,8 @@ function startClock(){
     var day=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",weekday:"short"});
     var isWeekend=(day==="Sat"||day==="Sun");
 
-    var etNow = new Date(
-      new Date().toLocaleString("en-US",{timeZone:"America/New_York"})
-    );
-    var dayNum = etNow.getDay();
-
-    if(dayNum===6){
+    if(isWeekend){
       cdEl.style.color="#ff4444";cdEl.textContent="MARKET CLOSED";
-    } else if(dayNum===0 && nowSecs<(18*3600)){
-      var ethOpenSecs=18*3600;
-      var diff=ethOpenSecs-nowSecs;
-      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
-      cdEl.style.color="#00e676";
-      cdEl.textContent="ETH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
-    } else if(dayNum===0){
-      var mondayOpenSecs=9*3600+30*60;
-      var diff=((24*3600)-nowSecs)+mondayOpenSecs;
-      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
-      cdEl.style.color="#00d4d4";
-      cdEl.textContent="RTH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
     } else if(nowSecs<openSecs){
       // Pre-market countdown to open
       var diff=openSecs-nowSecs;
@@ -2196,32 +2179,61 @@ function detectInstrument(s){
 
 function fmtImportDate(raw){
   if(!raw) return today();
-  raw=(raw+"").trim().split("T")[0];
+  raw=(raw+"").trim();
+  // Strip ISO T separator
+  raw=raw.split("T")[0];
+  // Strip time component after space (e.g. "05/28/2026 9:42 AM" → "05/28/2026")
+  raw=raw.split(" ")[0];
   var p;
   // YYYY-MM-DD or YYYY/MM/DD
-  if(raw.length>=10 && (raw[4]==="-"||raw[4]==="/")){
+  if(raw.length>=8&&(raw[4]==="-"||raw[4]==="/")){
     p=raw.split(raw[4]);
-    if(p.length>=3) return (p[1].length===1?"0":"")+p[1]+"/"+(p[2].length===1?"0":"")+p[2]+"/"+p[0].slice(2);
+    if(p.length>=3) return pad(parseInt(p[1]))+"/"+pad(parseInt(p[2]))+"/"+p[0].slice(2);
   }
   // MM/DD/YYYY or M/D/YYYY
   p=raw.split("/");
   if(p.length===3){
     var yr=p[2].length===4?p[2].slice(2):p[2];
-    return (p[0].length===1?"0":"")+p[0]+"/"+(p[1].length===1?"0":"")+p[1]+"/"+yr;
+    return pad(parseInt(p[0]))+"/"+pad(parseInt(p[1]))+"/"+yr;
+  }
+  // MM-DD-YYYY
+  p=raw.split("-");
+  if(p.length===3&&p[0].length<=2){
+    var yr2=p[2].length===4?p[2].slice(2):p[2];
+    return pad(parseInt(p[0]))+"/"+pad(parseInt(p[1]))+"/"+yr2;
   }
   return today();
 }
 
 function fmtImportTime(raw){
   if(!raw) return "";
-  // look for HH:MM pattern in the string
-  var parts=(raw+"").split(":");
-  if(parts.length>=2){
-    var hh=parts[0].trim().split(" ");hh=hh[hh.length-1];
-    var mm=parts[1].slice(0,2);
-    if(hh.length>0&&mm.length>0) return (hh.length===1?"0":"")+hh+":"+mm;
+  raw=(raw+"").trim();
+  // Handle ISO: "2026-05-28T09:42:15" or "2026-05-28 09:42:15"
+  var dtPart=raw.indexOf("T")>-1?raw.split("T")[1]:raw.indexOf(" ")>-1?raw.split(" ").slice(1).join(" "):raw;
+  // Extract HH:MM from whatever remains
+  var m=dtPart.match(/(\d{1,2}):(\d{2})/);
+  if(m){
+    var hh=parseInt(m[1]);
+    var mm=m[2];
+    // Handle AM/PM
+    if(dtPart.toLowerCase().indexOf("pm")>-1&&hh<12) hh+=12;
+    if(dtPart.toLowerCase().indexOf("am")>-1&&hh===12) hh=0;
+    return pad(hh)+":"+mm;
   }
   return "";
+}
+
+// Auto-assign session based on ET time (HH:MM string)
+function autoSession(timeStr){
+  if(!timeStr) return "RTH Open";
+  var m=timeStr.match(/(\d{1,2}):(\d{2})/);
+  if(!m) return "RTH Open";
+  var mins=parseInt(m[1])*60+parseInt(m[2]);
+  if(mins>=570&&mins<660)  return "RTH Open";   // 09:30–10:59
+  if(mins>=660&&mins<960)  return "Full RTH";   // 11:00–15:59
+  if(mins>=960&&mins<1080) return "Post-Market";// 16:00–17:59
+  if(mins>=180&&mins<570)  return "London";     // 03:00–09:29
+  return "Overnight";                           // 18:00–02:59
 }
 
 function parseCSVLines(text){
@@ -2283,7 +2295,7 @@ function parseCSV(text){
       var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
       var tv2=TICK[inst]||1;
       var dollar=profit?Math.round(parseFloat(profit)):Math.round(pts*tv2*parseFloat(qty));
-      t={id:Date.now()+ri*7,date:fmtImportDate(dateStr),time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
+      t={id:Date.now()+ri*7,date:fmtImportDate(dateStr),time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:autoSession(timeStr),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
     } else {
@@ -2294,13 +2306,16 @@ function parseCSV(text){
       var qty2=cleanNum(col(row,["qty","quantity","size","contracts","filled qty"]))||"1";
       var entryP=cleanNum(col(row,["entry price","entry","avg price","avgprice","price","fill price","avg fill price"]));
       var exitP=cleanNum(col(row,["exit price","exit"]));
-      var pnl=cleanNum(col(row,["pnl","p&l","profit","net p&l","realized p&l","realized pnl","net profit"]));
+      var pnl=cleanNum(col(row,["pnl","p&l","profit","net p&l","realized p&l","realized pnl","net profit","profit/loss","gain/loss"]));
       var dateRaw=col(row,["date","datetime","date/time","filled at","timestamp","time"]);
       var timeRaw=col(row,["time","filled at","timestamp"]);
+      // If timeRaw is same as dateRaw (datetime column), extract time from it
+      if(!timeRaw||timeRaw===dateRaw) timeRaw=dateRaw;
+      var parsedTime=fmtImportTime(timeRaw);
       var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
       var tv3=TICK[inst2]||1;
       var dollar2=pnl?Math.round(parseFloat(pnl)):Math.round(pts2*tv3*parseFloat(qty2));
-      t={id:Date.now()+ri*7,date:fmtImportDate(dateRaw),time:fmtImportTime(timeRaw),inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
+      t={id:Date.now()+ri*7,date:fmtImportDate(dateRaw),time:parsedTime,inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:autoSession(parsedTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
     }
     if(t.inst) trades.push(t);
   });
@@ -2575,7 +2590,7 @@ function parseTradovateFills(fills){
         var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
         var tv2=TICK[inst]||1;
         var dollar=Math.round(pts*tv2*parseFloat(qty));
-        trades.push({id:Date.now()+i,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:"RTH Open",conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
+        trades.push({id:Date.now()+i,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
         i+=2;
       } else { i++; }
     }
