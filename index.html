@@ -1032,11 +1032,12 @@ function homeTab(){
   var combDate=span("xs m");combDate.textContent=wkLabel;combH.appendChild(combDate);
   combCard.appendChild(combH);
 
-  // This week's trades
+  // This week's trades (Sun–Sat calendar week)
+  var wkStart2=new Date(nowD);wkStart2.setDate(nowD.getDate()-nowD.getDay());wkStart2.setHours(0,0,0,0);
   var wkTrades2=State.trades.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
     var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-    return (nowD-td3)/(1000*60*60*24)<7;
+    return td3>=wkStart2;
   });
   var ws2=calcStats(wkTrades2);
 
@@ -2111,12 +2112,13 @@ function reviewTab(){
 
   // ── WEEK VIEW ──
   if(viewMode==="week"){
-    // Get this week's trades (last 7 days)
+    // Get this week's trades (Sun–Sat calendar week)
     var now2=new Date();
+    var wkStart=new Date(now2);wkStart.setDate(now2.getDate()-now2.getDay());wkStart.setHours(0,0,0,0);
     var wkTrades=State.trades.filter(function(t){
       var p=t.date.split("/");if(p.length!==3)return false;
       var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-      var diff=(now2-td3)/(1000*60*60*24);return diff>=0&&diff<7;
+      return td3>=wkStart;
     });
     var ws=calcStats(wkTrades);
     var waG=wkTrades.filter(function(t){return t.ex==="A"}).length;
