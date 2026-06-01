@@ -867,8 +867,8 @@ function renderTabs(){
   var el=document.getElementById("tabs");
   el.style.display="";
   el.innerHTML="";
-  el.style.cssText="display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:sticky;top:0;z-index:200;justify-content:space-between;";
-  var tabsWrap=div("row");tabsWrap.style.gap="1px";
+  el.style.cssText="display:flex;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden;position:sticky;top:0;z-index:200;";
+  var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 14px;flex:1;min-width:0;overflow:hidden;";
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
     tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
@@ -877,7 +877,7 @@ function renderTabs(){
   });
   el.appendChild(tabsWrap);
   var clkWrap=div();clkWrap.id="tab-clock";
-  clkWrap.style.cssText="font-family:monospace;padding:0 16px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;white-space:nowrap;flex-shrink:0;gap:2px;";
+  clkWrap.style.cssText="font-family:monospace;padding:0 16px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;white-space:nowrap;flex-shrink:0;gap:2px;background:var(--bg3);";
   var clkTime=div();clkTime.id="clk-time";clkTime.style.cssText="font-size:15px;font-weight:700;color:#ffffff;letter-spacing:2px;";
   var clkCd=div();clkCd.id="clk-countdown";clkCd.style.cssText="font-size:11px;font-weight:700;color:#ff4444;letter-spacing:1px;";
   clkWrap.appendChild(clkTime);clkWrap.appendChild(clkCd);
