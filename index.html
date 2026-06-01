@@ -176,9 +176,7 @@ function supaFetch(method,path,body){
 }
 
 function getSyncId(){
-  var id=localStorage.getItem(SYNC_ID_KEY);
-  if(!id){id="edge_"+Math.random().toString(36).slice(2,10);localStorage.setItem(SYNC_ID_KEY,id);}
-  return id;
+  return "edge_main";
 }
 
 function syncToCloud(){
@@ -2376,41 +2374,6 @@ function processCSV(text,source){
 
 function importTab(){
   var el=div();
-
-  // ── DEVICE SYNC CODE ──────────────────────────────────────────────
-  var syncCard=div("card mb12");
-  var syncCardH=div("card-h mb8");
-  var syncCardT=div("card-t");syncCardT.textContent="Device Sync Code";syncCardH.appendChild(syncCardT);
-  var syncBadge=span("badge bb");syncBadge.textContent="USE SAME CODE ON ALL DEVICES";syncCardH.appendChild(syncBadge);
-  syncCard.appendChild(syncCardH);
-  var syncInfo=div("imp-info imp-msg");syncInfo.style.fontSize="10px";syncInfo.style.lineHeight="1.7";syncInfo.style.marginBottom="10px";
-  syncInfo.textContent="Enter the same Sync Code on every device (phone, tablet, other computer) to share trades across all of them.";
-  syncCard.appendChild(syncInfo);
-  var syncRow=div("row gap8");
-  var syncInp=h("input",{type:"text",placeholder:"Your sync code e.g. edge_abc123"});
-  syncInp.style.flex="1";
-  syncInp.value=getSyncId();
-  syncRow.appendChild(syncInp);
-  var syncApplyBtn=h("button",{className:"btn btn-g"});syncApplyBtn.textContent="APPLY";
-  syncApplyBtn.addEventListener("click",function(){
-    var val=syncInp.value.trim();
-    if(!val){return;}
-    localStorage.setItem(SYNC_ID_KEY,val);
-    loadFromCloud(val,function(ok){
-      if(ok){render();State.imp_msg={type:"ok",text:"✓ Sync code applied! Data loaded from cloud."};render();}
-      else{State.imp_msg={type:"err",text:"No data found for that code. Check it and try again."};render();}
-    });
-  });
-  syncRow.appendChild(syncApplyBtn);
-  var syncCopyBtn=h("button",{className:"btn"});syncCopyBtn.textContent="COPY";
-  syncCopyBtn.addEventListener("click",function(){
-    navigator.clipboard.writeText(getSyncId()).then(function(){
-      syncCopyBtn.textContent="COPIED!";setTimeout(function(){syncCopyBtn.textContent="COPY";},1500);
-    });
-  });
-  syncRow.appendChild(syncCopyBtn);
-  syncCard.appendChild(syncRow);
-  el.appendChild(syncCard);
 
   // ── Sync / Upload tab switcher ──
   var topRow=div("rjb mb12");
