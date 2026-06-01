@@ -251,7 +251,6 @@ svg text{font-family:'Courier New',monospace}
   #topbar-stats span.hide-xs,#topbar-stats b.hide-xs{display:none}
   .cal-popup{width:calc(100vw - 24px);left:0!important;right:0!important;margin:0 12px}
   .drop-zone{padding:20px 12px}
-  #content [style*="grid-template-columns"]{grid-template-columns:1fr!important}
   .opp{padding:10px;border-radius:8px}
   .rjb{flex-wrap:wrap;gap:8px}
   #content [style*="font-size:38px"]{font-size:24px!important}
@@ -1180,7 +1179,6 @@ function mobilePnlHeatmap(trades){
   // 6 columns: Sun Mon Tue Wed Thu Fri  (Saturday removed — market closed)
   var hdrs=document.createElement("div");
   hdrs.className="m-hm-hdrs";
-  hdrs.style.gridTemplateColumns="repeat(6,1fr)";
   ["Su","Mo","Tu","We","Th","Fr"].forEach(function(d){
     var c=document.createElement("div");c.className="m-hm-hdr";c.textContent=d;hdrs.appendChild(c);
   });
@@ -1188,7 +1186,6 @@ function mobilePnlHeatmap(trades){
 
   var grid=document.createElement("div");
   grid.className="m-hm-grid";
-  grid.style.gridTemplateColumns="repeat(6,1fr)";
 
   var dim=new Date(yr,mo+1,0).getDate();
   var today=now.getDate();
