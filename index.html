@@ -493,7 +493,7 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
-function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){}}
+function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
 // On fresh launch (sessionStorage is empty), always start on home
 if(!sessionStorage.getItem('edge_session_active')){
@@ -633,6 +633,12 @@ var State={
 // ─── HELPERS ─────────────────────────────────────────────────────────
 function dol(n){n=n||0;var abs=Math.abs(n);var str=(abs%1===0)?abs.toFixed(0):abs.toFixed(2);return(n>=0?"+":"")+"$"+str;}
 function clr(n){return (n||0)>=0?"g":"r"}
+function parseGoal(str,def){
+  if(!str) return def;
+  var s=str.replace(/[^0-9.k]/gi,"").toLowerCase();
+  if(s.indexOf("k")>-1) return parseFloat(s)*1000;
+  return parseFloat(s)||def;
+}
 function grc(g){return "gr"+g}
 function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
 function pad(n){return n<10?"0"+n:n}
@@ -1526,7 +1532,7 @@ function homeTab(){
   wkTop.appendChild(wkRight);combCard.appendChild(wkTop);
 
   // Goal progress bar — always green, shows dollar amounts
-  var goalAmt=State.wkGoal?parseFloat(State.wkGoal.replace(/[^0-9.]/g,"")):2000;
+  var goalAmt=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct=goalAmt?Math.min(100,Math.round(Math.max(0,ws2.total)/goalAmt*100)):0;
   var goalBar=div("mb12");
   var goalRow=div("rjb mb8");
@@ -1581,7 +1587,7 @@ function homeTab(){
   moCard.appendChild(moG4);
 
   // Monthly goal progress bar
-  var moGoalAmt=State.moGoal?parseFloat(State.moGoal.replace(/[^0-9.]/g,"")):8000;
+  var moGoalAmt=State.moGoal?parseGoal(State.moGoal,8000):8000;
   var moPct=moGoalAmt?Math.min(100,Math.round(Math.max(0,moS.total)/moGoalAmt*100)):0;
   var moGoalBar=div();
   var moGoalRow=div("rjb mb8");
@@ -2775,48 +2781,48 @@ function parseCSV(text){
   rows.forEach(function(line,ri){
     var row=line.split(",");
     var t={};
+    // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
+    var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
 
     if(isTVPos){
       // ── Tradovate Position History CSV ──
-      var inst=detectInstrument(col(row,["product","contract"]));
-      var qty=cleanNum(col(row,["paired qty","quantity","qty"]))||"1";
+      var tvInst=detectInstrument(col(row,["product","contract"]));
+      var tvQty=cleanNum(col(row,["paired qty","quantity","qty"]))||"1";
       var boughtTs=col(row,["bought timestamp"]);
       var soldTs=col(row,["sold timestamp"]);
-      // Direction: whichever fill came first = entry
       var boughtDate=boughtTs?new Date(boughtTs):new Date(9999,0,1);
       var soldDate=soldTs?new Date(soldTs):new Date(9999,0,1);
-      var isShort=soldDate<boughtDate; // sold first = short
-      var dir=isShort?"Short":"Long";
-      var entryTs=isShort?soldTs:boughtTs;
+      var tvIsShort=soldDate<boughtDate;
+      var tvDir=tvIsShort?"Short":"Long";
+      var entryTs=tvIsShort?soldTs:boughtTs;
       var avgBuy=cleanNum(col(row,["avg. buy","buy price"]));
       var avgSell=cleanNum(col(row,["avg. sell","sell price"]));
-      var entry=isShort?avgSell:avgBuy;
-      var exit2=isShort?avgBuy:avgSell;
-      var pnlRaw=cleanNum(col(row,["p/l","p&l","pnl","profit"]));
-      var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
-      var tv2=TICK[inst]||1;
-      var dollar=pnlRaw?parseFloat(parseFloat(pnlRaw).toFixed(2)):parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
-      // Use actual fill timestamp for date/time (not Trade Date which may be next day)
-      var timeStr=fmtImportTime(entryTs);
-      var dateStr=fmtImportDate(entryTs);
-      t={id:Date.now()+ri*7,date:dateStr,time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:autoSession(timeStr),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
+      var tvEntry=tvIsShort?avgSell:avgBuy;
+      var tvExit=tvIsShort?avgBuy:avgSell;
+      var tvPnlRaw=cleanNum(col(row,["p/l","p&l","pnl","profit"]));
+      var tvPts=tvEntry&&tvExit?(parseFloat(tvExit)-parseFloat(tvEntry))*(tvDir==="Long"?1:-1):0;
+      var tvTick=TICK[tvInst]||1;
+      var tvDollar=tvPnlRaw?parseFloat(parseFloat(tvPnlRaw).toFixed(2)):parseFloat((tvPts*tvTick*parseFloat(tvQty)).toFixed(2));
+      var tvTime=fmtImportTime(entryTs);
+      var tvDate=fmtImportDate(entryTs);
+      t={id:newId,date:tvDate,time:tvTime,inst:tvInst,dir:tvDir,entry:tvEntry,exit:tvExit,ctr:tvQty,setup:"",sess:autoSession(tvTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(tvPts.toFixed(2)),d:tvDollar,hl:false};
     } else if(isNT){
-      var inst=detectInstrument(col(row,["instrument","symbol"]));
-      var dirRaw=col(row,["market pos.","market pos","direction","side"]).toLowerCase();
-      var dir=dirRaw.indexOf("long")>-1?"Long":"Short";
-      var qty=cleanNum(col(row,["quantity","qty"]))||"1";
-      var entry=cleanNum(col(row,["entry price","entryprice"]));
-      var exit2=cleanNum(col(row,["exit price","exitprice"]));
+      var ntInst=detectInstrument(col(row,["instrument","symbol"]));
+      var ntDirRaw=col(row,["market pos.","market pos","direction","side"]).toLowerCase();
+      var ntDir=ntDirRaw.indexOf("long")>-1?"Long":"Short";
+      var ntQty=cleanNum(col(row,["quantity","qty"]))||"1";
+      var ntEntry=cleanNum(col(row,["entry price","entryprice"]));
+      var ntExit=cleanNum(col(row,["exit price","exitprice"]));
       var entryTime=col(row,["entry time","entrytime","time"]);
-      var profit=cleanNum(col(row,["profit","p&l","pnl","net profit"]));
+      var ntProfit=cleanNum(col(row,["profit","p&l","pnl","net profit"]));
       var mae=cleanNum(col(row,["mae"]));
       var mfe=cleanNum(col(row,["mfe"]));
-      var dateStr=entryTime.split(" ")[0]||"";
-      var timeStr=fmtImportTime(entryTime);
-      var pts=entry&&exit2?(parseFloat(exit2)-parseFloat(entry))*(dir==="Long"?1:-1):0;
-      var tv2=TICK[inst]||1;
-      var dollar=profit?parseFloat(parseFloat(profit).toFixed(2)):parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
-      t={id:Date.now()+ri*7,date:fmtImportDate(dateStr),time:timeStr,inst:inst,dir:dir,entry:entry,exit:exit2,ctr:qty,setup:"",sess:autoSession(timeStr),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false};
+      var ntDateStr=entryTime.split(" ")[0]||"";
+      var ntTime=fmtImportTime(entryTime);
+      var ntPts=ntEntry&&ntExit?(parseFloat(ntExit)-parseFloat(ntEntry))*(ntDir==="Long"?1:-1):0;
+      var ntTick=TICK[ntInst]||1;
+      var ntDollar=ntProfit?parseFloat(parseFloat(ntProfit).toFixed(2)):parseFloat((ntPts*ntTick*parseFloat(ntQty)).toFixed(2));
+      t={id:newId,date:fmtImportDate(ntDateStr),time:ntTime,inst:ntInst,dir:ntDir,entry:ntEntry,exit:ntExit,ctr:ntQty,setup:"",sess:autoSession(ntTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(ntPts.toFixed(2)),d:ntDollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
     } else {
@@ -2827,15 +2833,15 @@ function parseCSV(text){
       var qty2=cleanNum(col(row,["qty","quantity","size","contracts","filled qty","paired qty"]))||"1";
       var entryP=cleanNum(col(row,["entry price","entry","avg price","avgprice","price","fill price","avg fill price","avg. buy","buy price"]));
       var exitP=cleanNum(col(row,["exit price","exit","avg. sell","sell price"]));
-      var pnl=cleanNum(col(row,["pnl","p&l","p/l","profit","net p&l","realized p&l","realized pnl","net profit","profit/loss","gain/loss"]));
+      var csvPnl=cleanNum(col(row,["pnl","p&l","p/l","profit","net p&l","realized p&l","realized pnl","net profit","profit/loss","gain/loss"]));
       var dateRaw=col(row,["date","trade date","datetime","date/time","filled at","timestamp","time"]);
       var timeRaw=col(row,["time","bought timestamp","sold timestamp","filled at","timestamp"]);
       if(!timeRaw||timeRaw===dateRaw) timeRaw=dateRaw;
       var parsedTime=fmtImportTime(timeRaw);
       var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
       var tv3=TICK[inst2]||1;
-      var dollar2=pnl?parseFloat(parseFloat(pnl).toFixed(2)):parseFloat((pts2*tv3*parseFloat(qty2)).toFixed(2));
-      t={id:Date.now()+ri*7,date:fmtImportDate(dateRaw),time:parsedTime,inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:autoSession(parsedTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
+      var dollar2=csvPnl?parseFloat(parseFloat(csvPnl).toFixed(2)):parseFloat((pts2*tv3*parseFloat(qty2)).toFixed(2));
+      t={id:newId,date:fmtImportDate(dateRaw),time:parsedTime,inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:autoSession(parsedTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
     }
     if(t.inst) trades.push(t);
   });
@@ -3359,7 +3365,7 @@ function mobileHomeTab(){
     return td4>=wkStart3;
   });
   var ws3=calcStats(wkTrades3);
-  var goalAmt3=State.wkGoal?parseFloat(State.wkGoal.replace(/[^0-9.]/g,"")):2000;
+  var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct3=goalAmt3?Math.min(100,Math.round(Math.max(0,ws3.total)/goalAmt3*100)):0;
   var sunday3=new Date(nowD2);sunday3.setDate(nowD2.getDate()-nowD2.getDay());
   var wkLabelM="Wk of "+(sunday3.getMonth()+1)+"/"+sunday3.getDate();
@@ -3398,7 +3404,7 @@ function mobileHomeTab(){
     return parseInt(p[0])-1===moNow2.getMonth()&&2000+parseInt(p[2])===moNow2.getFullYear();
   });
   var moS2=calcStats(moTrades2);
-  var moGoalAmt2=State.moGoal?parseFloat(State.moGoal.replace(/[^0-9.]/g,"")):8000;
+  var moGoalAmt2=State.moGoal?parseGoal(State.moGoal,8000):8000;
   var moPct2=moGoalAmt2?Math.min(100,Math.round(Math.max(0,moS2.total)/moGoalAmt2*100)):0;
   var MNAMES3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -3901,14 +3907,39 @@ function render(){
 initSupabase();
 initAutoSync();
 
-// Silent sync on load
+// On load: show a loading screen, fetch cloud data, THEN render.
+// This prevents stale local data flashing on iPad/other devices.
 (function(){
+  var content=document.getElementById("content");
+  var loader=document.createElement("div");
+  loader.id="edge-loader";
+  loader.style.cssText="position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px;";
+  loader.innerHTML="<div style='font-size:26px;font-weight:700;letter-spacing:6px;color:var(--accent)'>EDGE</div>"+
+    "<div style='font-size:11px;letter-spacing:3px;color:var(--text3)'>SYNCING DATA...</div>"+
+    "<div id='edge-loader-dots' style='display:flex;gap:6px;margin-top:4px'>"+
+    "<span style='width:7px;height:7px;border-radius:50%;background:var(--ca);animation:pulse 1.2s infinite 0s'></span>"+
+    "<span style='width:7px;height:7px;border-radius:50%;background:var(--ca);animation:pulse 1.2s infinite .3s'></span>"+
+    "<span style='width:7px;height:7px;border-radius:50%;background:var(--ca);animation:pulse 1.2s infinite .6s'></span>"+
+    "</div>";
+  document.body.appendChild(loader);
+
+  function dismissLoader(){ var l=document.getElementById("edge-loader"); if(l) l.remove(); }
+
   var currentId=getSyncId();
+  // Timeout: if cloud takes >4s, just render with local data anyway
+  var loadTimer=setTimeout(function(){ dismissLoader(); render(); },4000);
+
   if(supaClient){
     loadFromCloud(currentId,function(ok){
+      clearTimeout(loadTimer);
+      dismissLoader();
       if(ok) render();
-      else syncToCloud();
+      else{ syncToCloud(); render(); }
     });
+  } else {
+    clearTimeout(loadTimer);
+    dismissLoader();
+    render();
   }
 })();
 
@@ -3972,11 +4003,13 @@ function showTVNotification(count){
   setTimeout(function(){if(n.parentNode) n.remove();},4000);
 }
 
-// Start polling every 5 seconds (only when cloud sync is active)
-if(supaClient) setInterval(pollTVTrades,5000);
+// Start polling every 5 seconds only if TradingView credentials are configured
+if(supaClient&&State.tv_creds&&(State.tv_creds.user||State.tv_creds.cid)) setInterval(pollTVTrades,5000);
 
 // Poll edge_data every 10 seconds to stay in sync across computers
+// Guard: skip if user has a form open to avoid wiping unsaved changes
 setInterval(function(){
+  if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
   var currentId=getSyncId();
   loadFromCloud(currentId,function(ok){
     if(ok) render();
@@ -3994,7 +4027,7 @@ window.addEventListener("resize",function(){
 
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
-render();
+// First render is now triggered by the cloud loader above
 </script>
 </body>
 </html>
