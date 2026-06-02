@@ -3631,7 +3631,7 @@ function notesTab(){
     var snT=document.createElement("div");snT.className="m-card-title";snT.textContent="Session Notes";
     var snChip=document.createElement("div");snChip.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 7px;border-radius:4px;font-family:monospace;";snChip.textContent="Today";
     snHdr.appendChild(snT);snHdr.appendChild(snChip);snCard.appendChild(snHdr);
-    var snTA=document.createElement("textarea");snTA.rows=5;snTA.placeholder="How is the market feeling? Bias, key observations, confluences to watch...";snTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:11px;padding:9px;resize:none;line-height:1.6;outline:none;";snTA.value=todaySession;
+    var snTA=document.createElement("textarea");snTA.rows=5;snTA.placeholder="How is the market feeling? Bias, key observations, confluences to watch...";snTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";snTA.value=todaySession;
     snCard.appendChild(snTA);
     var snSave=document.createElement("button");snSave.style.cssText="width:100%;background:transparent;border:1px solid #ff8c00;color:#ff8c00;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;border-radius:5px;padding:8px;margin-top:8px;cursor:pointer;";snSave.textContent="SAVE NOTE";
     snSave.addEventListener("click",function(){sessionNotes[notesToday]=snTA.value;ss("notes_session",sessionNotes);snSave.textContent="SAVED ✓";setTimeout(function(){snSave.textContent="SAVE NOTE";},1500);});
@@ -3647,13 +3647,13 @@ function notesTab(){
     var wrGrid=document.createElement("div");wrGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px;";
     wrPrompts.forEach(function(p){
       var box=document.createElement("div");box.style.cssText="background:#071428;border:1px solid #1a3260;border-radius:6px;padding:9px;";
-      var lbl=document.createElement("div");lbl.style.cssText="font-size:8px;color:#ff8c00;letter-spacing:1px;text-transform:uppercase;font-family:'Courier New',monospace;margin-bottom:5px;";lbl.textContent=p.l;
-      var inp=document.createElement("input");inp.style.cssText="background:transparent;border:none;border-bottom:1px solid #1a3260;color:#e0c97a;font-family:'Courier New',monospace;font-size:10px;width:100%;padding:3px 0;outline:none;";inp.placeholder="...";inp.value=wkReview[p.k]||"";
+      var lbl=document.createElement("div");lbl.style.cssText="font-size:10px;color:#ff8c00;letter-spacing:1px;text-transform:uppercase;font-family:'Courier New',monospace;margin-bottom:5px;";lbl.textContent=p.l;
+      var inp=document.createElement("input");inp.style.cssText="background:transparent;border:none;border-bottom:1px solid #1a3260;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;width:100%;padding:3px 0;outline:none;";inp.placeholder="...";inp.value=wkReview[p.k]||"";
       (function(key,input){input.addEventListener("input",function(){wkReview[key]=input.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});})(p.k,inp);
       box.appendChild(lbl);box.appendChild(inp);wrGrid.appendChild(box);
     });
     wrCard.appendChild(wrGrid);
-    var wrTA=document.createElement("textarea");wrTA.rows=2;wrTA.placeholder="Additional weekly thoughts...";wrTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:11px;padding:9px;resize:none;line-height:1.6;outline:none;";wrTA.value=wkReview.extra||"";
+    var wrTA=document.createElement("textarea");wrTA.rows=2;wrTA.placeholder="Additional weekly thoughts...";wrTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";wrTA.value=wkReview.extra||"";
     wrTA.addEventListener("input",function(){wkReview.extra=wrTA.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});
     wrCard.appendChild(wrTA);el.appendChild(wrCard);
 
@@ -3669,7 +3669,7 @@ function notesTab(){
         var row=document.createElement("div");row.style.cssText="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #0d1e38;align-items:flex-start;";
         var dot=document.createElement("div");dot.style.cssText="width:8px;height:8px;background:#ff8c00;transform:rotate(45deg);flex-shrink:0;margin-top:4px;";
         var body=document.createElement("div");body.style.flex="1";
-        var txt=document.createElement("div");txt.style.cssText="font-size:11px;color:#e0c97a;font-family:'Courier New',monospace;line-height:1.5;";txt.textContent=l.text;
+        var txt=document.createElement("div");txt.style.cssText="font-size:13px;color:#e0c97a;font-family:'Courier New',monospace;line-height:1.5;";txt.textContent=l.text;
         var meta=document.createElement("div");meta.style.cssText="display:flex;justify-content:space-between;margin-top:3px;";
         var dt=document.createElement("span");dt.style.cssText="font-size:8px;color:#c9a84c;font-family:monospace;";dt.textContent=l.date;
         var del=document.createElement("span");del.style.cssText="font-size:8px;color:#ff4444;cursor:pointer;font-family:monospace;";del.textContent="✕";
@@ -3679,7 +3679,7 @@ function notesTab(){
       });
       // Add input row
       var addRow=document.createElement("div");addRow.style.cssText="display:flex;gap:8px;margin-top:8px;";
-      var addInp=document.createElement("input");addInp.placeholder="Add a lesson learned...";addInp.style.cssText="flex:1;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:11px;padding:7px 9px;outline:none;";
+      var addInp=document.createElement("input");addInp.placeholder="Add a lesson learned...";addInp.style.cssText="flex:1;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
       var addBtn2=document.createElement("button");addBtn2.style.cssText="background:transparent;border:1px solid #00e676;color:#00e676;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";addBtn2.textContent="+ ADD";
       addBtn2.addEventListener("click",function(){var v=addInp.value.trim();if(!v)return;lessons.unshift({text:v,date:notesToday});ss("notes_lessons",lessons);renderLessonsM();});
       llAdd.addEventListener("click",function(){addInp.focus();});
@@ -3695,7 +3695,7 @@ function notesTab(){
     var npT=document.createElement("div");npT.className="m-card-title";npT.textContent="Notepad";
     var npSub=document.createElement("div");npSub.style.cssText="font-size:8px;color:#c9a84c;font-family:monospace;";npSub.textContent="scratch space";
     npHdr.appendChild(npT);npHdr.appendChild(npSub);npCard.appendChild(npHdr);
-    var npTA=document.createElement("textarea");npTA.rows=6;npTA.placeholder="Anything goes — ideas, numbers, trade setups you're watching, random thoughts...";npTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:11px;padding:9px;resize:none;line-height:1.6;outline:none;";npTA.value=notepad;
+    var npTA=document.createElement("textarea");npTA.rows=6;npTA.placeholder="Anything goes — ideas, numbers, trade setups you're watching, random thoughts...";npTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";npTA.value=notepad;
     npTA.addEventListener("input",function(){ss("notes_pad",npTA.value);});
     npCard.appendChild(npTA);el.appendChild(npCard);
 
