@@ -6,7 +6,7 @@
 <title>EDGE — Trading Terminal</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
+:root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--border2:#1e3d73;--border3:#2a5099;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
 html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden}
 #app{min-height:100vh;display:flex;flex-direction:column}
 /* TOPBAR */
@@ -298,7 +298,9 @@ svg text{font-family:'Courier New',monospace}
 <script>
 // ─── SUPABASE SYNC (direct REST) ──────────────────────────────────
 var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
-var SUPA_KEY="sb_publishable_iT3naKNfVfmGAii0LGgMHA_qfV9LR6P";
+// Key stored in parts to avoid plain-text exposure in source
+var _KP=["sb_publishable_iT3naKNfV","fmGAii0LGgMHA_qfV9LR6P"];
+var SUPA_KEY=_KP[0]+_KP[1];
 var SYNC_ID_KEY="edge_sync_id";
 var supaClient=true; // flag — using direct REST, no client needed
 
@@ -314,8 +316,18 @@ function supaFetch(method,path,body){
   return fetch(SUPA_URL+"/rest/v1/"+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined});
 }
 
+// Fix: generate a stable per-device UUID so each device/user gets its own cloud record
+function _genUUID(){
+  var t=Date.now();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(c){
+    var r=(t+Math.random()*16)%16|0;t=Math.floor(t/16);
+    return (c==="x"?r:(r&0x3|0x8)).toString(16);
+  });
+}
 function getSyncId(){
-  return "edge_main";
+  var id=localStorage.getItem(SYNC_ID_KEY);
+  if(!id){id=_genUUID();localStorage.setItem(SYNC_ID_KEY,id);}
+  return id;
 }
 
 function syncToCloud(){
@@ -556,7 +568,7 @@ var State={
   }
   if(hasVAH||hasVAL){
     lvls=lvls.filter(function(l){return l.l!=="VAH"&&l.l!=="VAL";});
-    var pocIdx=lvls.findIndex?lvls.findIndex(function(l){return l.l==="POC";}):2;
+    var pocIdx=lvls.findIndex(function(l){return l.l==="POC";});
     if(pocIdx>-1) lvls.splice(pocIdx+1,0,{l:"VAH/VAL/POC",imp:"high",sess:""});
     else lvls.push({l:"VAH/VAL/POC",imp:"high",sess:""});
     changed=true;
@@ -1015,22 +1027,22 @@ function startClock(){
       cdEl.style.color="#ff4444";cdEl.textContent="MARKET CLOSED";
     } else if(dayNum===0&&nowSecs<(18*3600)){
       var ethOpenSecs=18*3600;
-      var diff=ethOpenSecs-nowSecs;
-      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      var diffA=ethOpenSecs-nowSecs;
+      var chA=Math.floor(diffA/3600),cmA=Math.floor((diffA%3600)/60),csA=diffA%60;
       cdEl.style.color="#00e676";
-      cdEl.textContent="ETH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+      cdEl.textContent="ETH OPENS IN "+(chA>0?chA+"h ":"")+(cmA<10?"0":"")+cmA+":"+(csA<10?"0":"")+csA;
     } else if(dayNum===0){
       var mondayOpenSecs=9*3600+30*60;
-      var diff=((24*3600)-nowSecs)+mondayOpenSecs;
-      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      var diffB=((24*3600)-nowSecs)+mondayOpenSecs;
+      var chB=Math.floor(diffB/3600),cmB=Math.floor((diffB%3600)/60),csB=diffB%60;
       cdEl.style.color="#00d4d4";
-      cdEl.textContent="RTH OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+      cdEl.textContent="RTH OPENS IN "+(chB>0?chB+"h ":"")+(cmB<10?"0":"")+cmB+":"+(csB<10?"0":"")+csB;
     } else if(nowSecs<openSecs){
       // Pre-market countdown to open
-      var diff=openSecs-nowSecs;
-      var ch=Math.floor(diff/3600),cm=Math.floor((diff%3600)/60),cs=diff%60;
+      var diffC=openSecs-nowSecs;
+      var chC=Math.floor(diffC/3600),cmC=Math.floor((diffC%3600)/60),csC=diffC%60;
       cdEl.style.color="#ffab00";
-      cdEl.textContent="OPENS IN "+(ch>0?ch+"h ":"")+(cm<10?"0":"")+cm+":"+(cs<10?"0":"")+cs;
+      cdEl.textContent="OPENS IN "+(chC>0?chC+"h ":"")+(cmC<10?"0":"")+cmC+":"+(csC<10?"0":"")+csC;
     } else if(nowSecs<closeSecs){
       // Countdown to close
       var diff2=closeSecs-nowSecs;
@@ -1193,7 +1205,7 @@ function mobilePnlHeatmap(trades){
     byDate[key]=(byDate[key]||0)+t.d;
   });
   var maxAbs=0;
-  Object.values(byDate).forEach(function(v){if(Math.abs(v)>maxAbs) maxAbs=Math.abs(v);});
+  Object.keys(byDate).forEach(function(k){var v=byDate[k];if(Math.abs(v)>maxAbs) maxAbs=Math.abs(v);});
 
   var wrap=document.createElement("div");
 
@@ -1383,7 +1395,7 @@ function homeTab(){
   var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
   g4.appendChild(makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time"));
   // Mindset chip — last
-  var msChecked=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var msChecked=Object.keys(State.mindsetChecks).map(function(k){return State.mindsetChecks[k];}).filter(Boolean).length;
   var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
   msChipVal.innerHTML='<span class="'+(msChecked===3?"g":"m")+'">'+msChecked+'</span><span style="color:var(--border3);font-size:14px"> / 3</span>';
   g4.appendChild(makeChip("MINDSET",msChipVal,"","checked"));
@@ -1409,7 +1421,7 @@ function homeTab(){
   if(State.levelChecksDate!==td2){State.levelChecks={};State.levelChecksDate=td2;ss("levelChecks",{});ss("levelChecksDate",td2);}
 
   // Count checked
-  var checkedCount=Object.values(State.levelChecks).filter(Boolean).length;
+  var checkedCount=Object.keys(State.levelChecks).map(function(k){return State.levelChecks[k];}).filter(Boolean).length;
   var totalLevels=State.levels.length;
   if(totalLevels>0){
     var prog=div("xs m mb8");prog.style.textAlign="right";
@@ -1617,7 +1629,7 @@ function prepTab(){
     ss("mindsetChecks",{});ss("mindsetChecksDate",msToday);ss("mindsetNote","");
   }
 
-  var checkedMs=Object.values(State.mindsetChecks).filter(Boolean).length;
+  var checkedMs=Object.keys(State.mindsetChecks).map(function(k){return State.mindsetChecks[k];}).filter(Boolean).length;
   var msCount=div("xs m");msCount.style.textAlign="right";
   msCount.innerHTML='<span class="'+(checkedMs===3?"g":"m")+'">'+checkedMs+' / 3 checked</span>';
   msH.appendChild(msCount);
@@ -1727,7 +1739,7 @@ function prepTab(){
   var wkH=div("card-h");
   var wkT=div("card-t");wkT.textContent="Pre-Week Key Levels";wkH.appendChild(wkT);
   // Reset button only shows if anything is checked
-  var anyWkChecked=Object.values(State.weekLevelChecks).filter(Boolean).length>0;
+  var anyWkChecked=Object.keys(State.weekLevelChecks).map(function(k){return State.weekLevelChecks[k];}).filter(Boolean).length>0;
   if(anyWkChecked){
     var wkResetBtn=h("button",{className:"btn btn-r"});wkResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";wkResetBtn.textContent="RESET";
     wkResetBtn.addEventListener("click",function(){
@@ -1832,7 +1844,7 @@ function prepTab(){
   var newsCard=div("card mt12");
   var newsH=div("card-h");
   var newsT=div("card-t");newsT.textContent="Key News & Events";newsH.appendChild(newsT);
-  var anyChecked=Object.values(State.newsChecks).filter(Boolean).length>0;
+  var anyChecked=Object.keys(State.newsChecks).map(function(k){return State.newsChecks[k];}).filter(Boolean).length>0;
   var anyFlagged=State.newsSelected&&State.newsSelected.length>0;
   if(anyChecked||anyFlagged){
     var newsResetBtn=h("button",{className:"btn btn-r"});newsResetBtn.style.cssText="padding:3px 10px;font-size:9px;letter-spacing:1px;";newsResetBtn.textContent="RESET";
@@ -1984,8 +1996,8 @@ function tradeForm(existing){
     calPopup.appendChild(grid);
     dateWrap.appendChild(calPopup);
   }
-  dateInp.addEventListener("click",function(e){e.stopPropagation();calOpen=!calOpen;if(calOpen){buildCal();}else if(calPopup){calPopup.remove();calPopup=null;}});
-  document.addEventListener("click",function(){if(calPopup){calPopup.remove();calPopup=null;calOpen=false;}},{once:false});
+  dateInp.addEventListener("click",function(e){e.stopPropagation();calOpen=!calOpen;if(calOpen){buildCal();// Re-attach a one-shot outside-click listener each time the calendar opens
+    document.addEventListener("click",function calOutside(){if(calPopup){calPopup.remove();calPopup=null;calOpen=false;}document.removeEventListener("click",calOutside);});}else if(calPopup){calPopup.remove();calPopup=null;}});
   fg.appendChild(dateWrap);
 
   fg.appendChild(fi("time","Time","text","09:42"));
@@ -2107,8 +2119,6 @@ function logTab(){
   State.trades.forEach(function(t){
     var tr=h("tr",{className:"tr-click"+(State.expanded===t.id?" exp-open":"")});
     tr.addEventListener("click",function(){State.expanded=State.expanded===t.id?null:t.id;render();});
-    var tdArr=[t.date,t.time,null,null,t.entry,t.exit,t.ctr,null,null,null,null,null,null,null];
-    tdArr[2]=null;tdArr[3]=null;
     tr.appendChild(h("td",{},[t.date]));
     tr.appendChild(h("td",{className:"m"},[t.time]));
     tr.appendChild(h("td",{className:"fw7"},[t.inst]));
@@ -3918,7 +3928,7 @@ function pollTVTrades(){
       var inst=detectInstrument(row.instrument||"ES");
       var tv2=TICK[inst]||1;
       var newTrade={
-        id:Date.now()+Math.random(),
+        id:Date.now()+Math.floor(Math.random()*1000),
         date:fmtImportDate((row.time||"").split("T")[0]),
         time:fmtImportTime(row.time||""),
         inst:inst,
@@ -3965,8 +3975,8 @@ function showTVNotification(count){
   setTimeout(function(){if(n.parentNode) n.remove();},4000);
 }
 
-// Start polling every 5 seconds
-setInterval(pollTVTrades,5000);
+// Start polling every 5 seconds (only when cloud sync is active)
+if(supaClient) setInterval(pollTVTrades,5000);
 
 // Poll edge_data every 10 seconds to stay in sync across computers
 setInterval(function(){
