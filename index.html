@@ -2335,11 +2335,11 @@ function playbookTab(){
       var desc=div("xs m mb8");desc.style.lineHeight="1.65";desc.textContent=entry.desc||"No description yet. Click EDIT to add one.";card.appendChild(desc);
       if(ts.length){
         var stats=div("row mt8");
-        function ss3(l,v,c){var d=div();d.style.marginRight="18px";var dl=span("xs m");dl.style.display="block";dl.style.marginBottom="3px";dl.textContent=l;d.appendChild(dl);var dv=span("sm "+c);dv.textContent=v;d.appendChild(dv);return d;}
-        stats.appendChild(ss3("WIN RATE",(w/ts.length*100).toFixed(0)+"%",w/ts.length>=.5?"g":"r"));
-        stats.appendChild(ss3("TOTAL P&L",dol(pnl),clr(pnl)));
-        stats.appendChild(ss3("AVG TRADE",dol(pnl/ts.length),clr(pnl/ts.length)));
-        stats.appendChild(ss3("COUNT",ts.length,"b"));
+        var statBox=function(l,v,c){var d=div();d.style.marginRight="18px";var dl=span("xs m");dl.style.display="block";dl.style.marginBottom="3px";dl.textContent=l;d.appendChild(dl);var dv=span("sm "+c);dv.textContent=v;d.appendChild(dv);return d;};
+        stats.appendChild(statBox("WIN RATE",(w/ts.length*100).toFixed(0)+"%",w/ts.length>=.5?"g":"r"));
+        stats.appendChild(statBox("TOTAL P&L",dol(pnl),clr(pnl)));
+        stats.appendChild(statBox("AVG TRADE",dol(pnl/ts.length),clr(pnl/ts.length)));
+        stats.appendChild(statBox("COUNT",ts.length,"b"));
         card.appendChild(stats);
       }
     }
