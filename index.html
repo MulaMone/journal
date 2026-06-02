@@ -2322,11 +2322,13 @@ function playbookTab(){
           if(si>-1) State.starredSetups.splice(si,1);
           else State.starredSetups.push(name);
           ss("starredSetups",State.starredSetups);
-          // Update button in-place to avoid full re-render glitch
-          var nowStarred=State.starredSetups.indexOf(name)>-1;
-          btn.className="star-btn "+(nowStarred?"on":"off");
-          btn.textContent=nowStarred?"★":"☆";
-          btn.title=nowStarred?"Remove from favourites":"Mark as favourite";
+          var content=document.getElementById("content");
+          var savedScroll=window.pageYOffset||document.documentElement.scrollTop||0;
+          content.style.transition="none";
+          content.style.opacity="1";
+          content.innerHTML="";
+          content.appendChild(VIEWS[State.tab]());
+          window.scrollTo(0,savedScroll);
         });
       })(entry.name,starBtn,card);
       right.appendChild(starBtn);
