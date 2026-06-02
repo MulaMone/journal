@@ -2322,7 +2322,11 @@ function playbookTab(){
           if(si>-1) State.starredSetups.splice(si,1);
           else State.starredSetups.push(name);
           ss("starredSetups",State.starredSetups);
-          render();
+          // Update button in-place to avoid full re-render glitch
+          var nowStarred=State.starredSetups.indexOf(name)>-1;
+          btn.className="star-btn "+(nowStarred?"on":"off");
+          btn.textContent=nowStarred?"★":"☆";
+          btn.title=nowStarred?"Remove from favourites":"Mark as favourite";
         });
       })(entry.name,starBtn,card);
       right.appendChild(starBtn);
