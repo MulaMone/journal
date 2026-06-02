@@ -3732,46 +3732,6 @@ function notesTab(){
     renderLessonsM();
     el.appendChild(llCard);
 
-    // Mantras & Rules
-    var mrCard=document.createElement("div");mrCard.className="m-eq-card";mrCard.style.marginBottom="10px";
-    var mrHdr=document.createElement("div");mrHdr.className="m-card-hdr";
-    var mrT=document.createElement("div");mrT.className="m-card-title";mrT.textContent="Mantras & Rules";
-    var mrEdit=document.createElement("span");mrEdit.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 9px;border-radius:4px;cursor:pointer;font-family:monospace;";mrEdit.textContent="EDIT";
-    mrHdr.appendChild(mrT);mrHdr.appendChild(mrEdit);mrCard.appendChild(mrHdr);
-    var mrEditing=false;
-    function renderMantrasM(){
-      while(mrCard.children.length>1) mrCard.removeChild(mrCard.lastChild);
-      mantras.forEach(function(m,i){
-        var row=document.createElement("div");row.style.cssText="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #0d1e38;";
-        var dot=document.createElement("div");dot.style.cssText="font-size:12px;color:#ff8c00;font-weight:700;flex-shrink:0;width:10px;text-align:center;font-family:'Courier New',monospace;";dot.textContent="$";
-        var txt=document.createElement("div");txt.style.cssText="font-size:11px;color:"+(i%2===0?"#e8f0ff":"#c9a84c")+";font-family:'Courier New',monospace;flex:1;";txt.textContent=m;
-        row.appendChild(dot);row.appendChild(txt);
-        if(mrEditing){
-          var arrows=document.createElement("div");arrows.style.cssText="display:flex;flex-direction:column;gap:2px;flex-shrink:0;";
-          var up=document.createElement("span");up.style.cssText="font-size:9px;color:#00d4d4;cursor:pointer;line-height:1;opacity:"+(i===0?"0.2":"1")+";";up.textContent="▲";
-          var dn=document.createElement("span");dn.style.cssText="font-size:9px;color:#00d4d4;cursor:pointer;line-height:1;opacity:"+(i===mantras.length-1?"0.2":"1")+";";dn.textContent="▼";
-          (function(idx2){
-            up.addEventListener("click",function(){if(idx2===0)return;var tmp=mantras[idx2-1];mantras[idx2-1]=mantras[idx2];mantras[idx2]=tmp;ss("notes_mantras",mantras);renderMantrasM();});
-            dn.addEventListener("click",function(){if(idx2===mantras.length-1)return;var tmp=mantras[idx2+1];mantras[idx2+1]=mantras[idx2];mantras[idx2]=tmp;ss("notes_mantras",mantras);renderMantrasM();});
-          })(i);
-          arrows.appendChild(up);arrows.appendChild(dn);row.appendChild(arrows);
-          var del=document.createElement("span");del.style.cssText="font-size:10px;color:#ff4444;cursor:pointer;padding:2px 4px;";del.textContent="✕";
-          (function(idx2){del.addEventListener("click",function(){mantras.splice(idx2,1);ss("notes_mantras",mantras);renderMantrasM();});})(i);
-          row.appendChild(del);
-        }
-        mrCard.appendChild(row);
-      });
-      if(mrEditing){
-        var addRow=document.createElement("div");addRow.style.cssText="display:flex;gap:8px;margin-top:8px;";
-        var addInp=document.createElement("input");addInp.placeholder="Add mantra or rule...";addInp.style.cssText="flex:1;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:11px;padding:7px 9px;outline:none;";
-        var addBtn2=document.createElement("button");addBtn2.style.cssText="background:transparent;border:1px solid #00e676;color:#00e676;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";addBtn2.textContent="+ ADD";
-        addBtn2.addEventListener("click",function(){var v=addInp.value.trim();if(!v)return;mantras.push(v);ss("notes_mantras",mantras);renderMantrasM();});
-        addRow.appendChild(addInp);addRow.appendChild(addBtn2);mrCard.appendChild(addRow);
-      }
-    }
-    mrEdit.addEventListener("click",function(){mrEditing=!mrEditing;mrEdit.textContent=mrEditing?"DONE":"EDIT";renderMantrasM();});
-    renderMantrasM();
-    el.appendChild(mrCard);
 
     // Notepad
     var npCard=document.createElement("div");npCard.className="m-eq-card";npCard.style.marginBottom="10px";
