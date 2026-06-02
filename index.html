@@ -331,6 +331,9 @@ function getSyncId(){
 }
 
 function syncToCloud(){
+  // Safety guard: never push default placeholder trades to cloud
+  var isDefaultOnly=State.trades.length<=3&&State.trades.every(function(t){return t.id===1||t.id===2||t.id===3;});
+  if(isDefaultOnly) return;
   var id=getSyncId();
   var payload={
     user_id:id,
@@ -2858,6 +2861,71 @@ function processCSV(text,source){
 function importTab(){
   var el=div();
 
+  // ── DEVICE SYNC ID CARD ──────────────────────────────────────────
+  var syncCard=div("card mb12");
+  syncCard.style.borderColor="var(--ca30)";syncCard.style.background="linear-gradient(135deg,var(--panel),var(--panel2))";
+  var syncCardH=div("card-h");
+  var syncCardT=div("card-t");syncCardT.textContent="☁ Cloud Sync — Device Link";syncCardH.appendChild(syncCardT);
+  var syncBadge=span("badge bb");syncBadge.textContent="ACTIVE";syncCardH.appendChild(syncBadge);
+  syncCard.appendChild(syncCardH);
+
+  var syncDesc=div();syncDesc.style.cssText="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.7";
+  syncDesc.textContent="To view your data on another device (iPad, phone, etc.), copy your Sync ID below and paste it on that device under Import → Sync ID.";
+  syncCard.appendChild(syncDesc);
+
+  var currentId=getSyncId();
+
+  var idLabel=document.createElement("label");idLabel.textContent="YOUR SYNC ID";syncCard.appendChild(idLabel);
+  var idRow=div("row gap8 mb12");
+  var idBox=document.createElement("input");
+  idBox.type="text";idBox.readOnly=true;idBox.value=currentId;
+  idBox.style.cssText="font-size:11px;letter-spacing:.5px;color:var(--accent);background:var(--panel3);border-color:var(--ca30);cursor:text";
+  idRow.appendChild(idBox);
+  var copyBtn=h("button",{className:"btn"});copyBtn.textContent="COPY";copyBtn.style.flexShrink="0";copyBtn.style.whiteSpace="nowrap";
+  copyBtn.addEventListener("click",function(){
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(currentId).then(function(){copyBtn.textContent="✓ COPIED";setTimeout(function(){copyBtn.textContent="COPY";},2000);});
+    } else {
+      idBox.select();document.execCommand("copy");copyBtn.textContent="✓ COPIED";setTimeout(function(){copyBtn.textContent="COPY";},2000);
+    }
+  });
+  idRow.appendChild(copyBtn);
+  syncCard.appendChild(idRow);
+
+  var sep2=div("sep");syncCard.appendChild(sep2);
+
+  var pasteLabel=document.createElement("label");pasteLabel.textContent="PASTE SYNC ID FROM ANOTHER DEVICE";syncCard.appendChild(pasteLabel);
+  var pasteDesc=div();pasteDesc.style.cssText="font-size:11px;color:var(--text3);margin-bottom:8px";
+  pasteDesc.textContent="On this device, paste the Sync ID from your main device and tap LINK to load that device's data.";
+  syncCard.appendChild(pasteDesc);
+  var pasteRow=div("row gap8");
+  var pasteBox=document.createElement("input");pasteBox.type="text";pasteBox.placeholder="Paste Sync ID here…";
+  pasteBox.style.cssText="font-size:11px;";
+  pasteRow.appendChild(pasteBox);
+  var linkBtn=h("button",{className:"btn btn-g"});linkBtn.textContent="LINK";linkBtn.style.flexShrink="0";linkBtn.style.whiteSpace="nowrap";
+  linkBtn.addEventListener("click",function(){
+    var newId=(pasteBox.value||"").trim();
+    if(!newId||newId.length<10){State.imp_msg={type:"err",text:"Please paste a valid Sync ID."};render();return;}
+    if(newId===currentId){State.imp_msg={type:"err",text:"That's already your current Sync ID."};render();return;}
+    if(!confirm("Link this device to Sync ID:\n"+newId+"\n\nThis will replace your local data with that device's cloud data. Continue?")) return;
+    localStorage.setItem(SYNC_ID_KEY,newId);
+    State.imp_msg={type:"info",text:"↻ Linking to new Sync ID… loading cloud data."};render();
+    loadFromCloud(newId,function(ok){
+      if(ok){
+        // Save all loaded state to localStorage under the new id
+        ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
+        State.imp_msg={type:"ok",text:"✓ Linked! Loaded data from the other device. Your data is now synced."};
+      } else {
+        State.imp_msg={type:"err",text:"Could not find data for that Sync ID. Double-check it and try again."};
+      }
+      render();
+    });
+  });
+  pasteRow.appendChild(linkBtn);
+  syncCard.appendChild(pasteRow);
+  el.appendChild(syncCard);
+  // ── END DEVICE SYNC ID CARD ──────────────────────────────────────
+
   // ── Sync / Upload tab switcher ──
   var topRow=div("rjb mb12");
   var sh2=div("sh");sh2.style.marginBottom="0";sh2.textContent="Import & Sync";topRow.appendChild(sh2);
@@ -3904,13 +3972,13 @@ function render(){
 initSupabase();
 initAutoSync();
 
-// Silent sync on load
+// Silent sync on load — NEVER push to cloud on a failed load (prevents default data overwriting real data)
 (function(){
   var currentId=getSyncId();
   if(supaClient){
     loadFromCloud(currentId,function(ok){
       if(ok) render();
-      else syncToCloud();
+      // If load failed (network error, cold start, etc.) do nothing — keep local state, don't overwrite cloud
     });
   }
 })();
