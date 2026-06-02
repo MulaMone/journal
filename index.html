@@ -854,7 +854,6 @@ var TABS=[
   {id:"opps",icon:"★",label:"BEST LICKS"},
   {id:"playbook",icon:"◈",label:"PLAYS"},
   {id:"analytics",icon:"⟁",label:"STATS"},
-  {id:"review",icon:"◫",label:"REVIEW"},
   {id:"import",icon:"⬆",label:"IMPORT"},
   {id:"notes",icon:"✎",label:"NOTES"},
   {id:"chart",icon:"📈",label:"CHART"}
@@ -894,14 +893,14 @@ function renderTabs(){
 
 function switchTab(id){
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;
-  if(id!=="review"){State.rv_selected_day=null;}
+  if(id!=="analytics"){State.rv_selected_day=null;}
   render();window.scrollTo(0,0);
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","prep","opps","playbook","review","import","notes","chart"];
-var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",review:"Review",import:"Import",notes:"Notes",chart:"Chart"};
-var MORE_TABS_ICONS={home:"⌂",prep:"◎",opps:"★",playbook:"◈",review:"◫",import:"⬆",notes:"✎",chart:"📈"};
+var MORE_TABS=["home","prep","opps","playbook","import","notes","chart"];
+var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart"};
+var MORE_TABS_ICONS={home:"⌂",prep:"◎",opps:"★",playbook:"◈",import:"⬆",notes:"✎",chart:"📈"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -2346,95 +2345,7 @@ function playbookTab(){
 
 // ─── ANALYTICS TAB ────────────────────────────────────────────────────
 function analyticsTab(){
-  if(isMobile()) return mobileAnalyticsTab();
-  var el=div();var sh=div("sh");sh.textContent="Analytics";el.appendChild(sh);
-  var s=calcStats(State.trades);
-  var g4=div("g4");
-  g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac"));g4.appendChild(makeChip("AVG WINNER",dol(s.avgW),"g"));g4.appendChild(makeChip("AVG LOSER",dol(s.avgL),"r"));g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total)));
-  g4.appendChild(makeChip("TOTAL TRADES",State.trades.length));g4.appendChild(makeChip("WINS",s.wins.length,"g"));g4.appendChild(makeChip("LOSSES",s.losses.length,"r"));g4.appendChild(makeChip("R:R RATIO",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","ac"));
-  el.appendChild(g4);
-
-  var g2=div("g2");
-  var eqCard=div("card");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent="Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);
-  eqCard.appendChild(equitySVG(State.trades,380,200));g2.appendChild(eqCard);
-
-  var byHour=[];for(var i=0;i<10;i++){var hh=9+i;var hs=(hh<10?"0":"")+hh;var hts=State.trades.filter(function(t){return t.time&&t.time.indexOf(hs)===0});byHour.push({l:hh+":00",v:hts.reduce(function(a,t){return a+t.d},0)});}
-  var bhCard=div("card");var bhH=div("card-h");var bhT=div("card-t");bhT.textContent="P&L by Hour";bhH.appendChild(bhT);bhCard.appendChild(bhH);
-  bhCard.appendChild(barSVG(byHour,380,200));g2.appendChild(bhCard);
-  el.appendChild(g2);
-
-  // P&L by Day of Week
-  var DOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
-  var dowData=DOWS.map(function(d,di){
-    var ts=State.trades.filter(function(t){
-      if(!t.date) return false;
-      var p=t.date.split("/");if(p.length!==3)return false;
-      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-      return dt.getDay()===di; // Sun=0...Sat=6
-    });
-    return{l:d,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};
-  });
-  var dowCard=div("card mt12");var dowH=div("card-h");var dowT=div("card-t");dowT.textContent="P&L by Day of Week";dowH.appendChild(dowT);dowCard.appendChild(dowH);
-  dowCard.appendChild(barSVG(dowData,760,200));
-
-  // Day of week table
-  var dowTbl=h("table",{className:"tbl"});var dowThead=h("thead");var dowHr=h("tr");
-  ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){dowHr.appendChild(h("th",{},[hd]));});
-  dowThead.appendChild(dowHr);dowTbl.appendChild(dowThead);
-  var dowTbody=h("tbody");
-  dowData.forEach(function(d){
-    var ts=State.trades.filter(function(t){
-      if(!t.date) return false;
-      var p=t.date.split("/");if(p.length!==3)return false;
-      var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-      return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(d.l)===dt.getDay();
-    });
-    var wins=ts.filter(function(t){return t.d>0}).length;
-    var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";
-    var avg=ts.length?(d.v/ts.length).toFixed(0):0;
-    var dr=h("tr");
-    dr.appendChild(h("td",{className:"fw7"},[d.l]));
-    dr.appendChild(h("td",{className:"m"},[ts.length]));
-    dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));
-    var dptd=h("td",{className:"fw7 "+clr(d.v)});dptd.textContent=dol(d.v);
-    dptd.style.cssText=d.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":d.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
-    dr.appendChild(dptd);
-    var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);
-    aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";
-    dr.appendChild(aptd);
-    dowTbody.appendChild(dr);
-  });
-  dowTbl.appendChild(dowTbody);var dowWrap=div("tbl-wrap");dowWrap.appendChild(dowTbl);dowCard.appendChild(dowWrap);
-  el.appendChild(dowCard);
-
-  var sessCard=div("card mt12");var sessH=div("card-h");var sessT=div("card-t");sessT.textContent="P&L by Session";sessH.appendChild(sessT);sessCard.appendChild(sessH);
-  var stbl=h("table",{className:"tbl"});var sthead=h("thead");var shr=h("tr");
-  ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){shr.appendChild(h("th",{},[hd]));});sthead.appendChild(shr);stbl.appendChild(sthead);
-  var stbody=h("tbody");
-  SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var str=h("tr");str.appendChild(h("td",{className:"fw7"},[sess]));str.appendChild(h("td",{className:"m"},[sts.length]));str.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);
-    sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";
-    str.appendChild(sptd);stbody.appendChild(str);});
-  stbl.appendChild(stbody);var stblWrap=div("tbl-wrap");stblWrap.appendChild(stbl);sessCard.appendChild(stblWrap);el.appendChild(sessCard);
-
-  // Setup P&L Breakdown (moved from Review/Stats)
-  var sbCard2=div("card mt12");var sbH2=div("card-h");var sbT2=div("card-t");sbT2.textContent="Setup P&L Breakdown";sbH2.appendChild(sbT2);sbCard2.appendChild(sbH2);
-  var allSetups2=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
-  var bySetup2=allSetups2.map(function(sv){var sts=State.trades.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
-  if(!bySetup2.length){var nsm3=span("xs m");nsm3.textContent="No tagged setups yet — tag trades in the log to see breakdown.";sbCard2.appendChild(nsm3);}
-  bySetup2.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){
-    var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";
-    var sl=div();var st2=div("xs fw7");st2.style.color=SETUP_COLORS[s2.full]||"var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);
-    var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);
-    var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);
-    sbCard2.appendChild(sr);
-  });
-  el.appendChild(sbCard2);
-
-  // Monthly Goal
-  var goalCard2=div("card mt12");var goalH2=div("card-h");var goalT2=div("card-t");goalT2.textContent="Monthly Goal";goalH2.appendChild(goalT2);goalCard2.appendChild(goalH2);
-  var mta3=h("textarea",{rows:"3"});mta3.style.resize="none";mta3.value=State.moGoal;mta3.addEventListener("input",function(){State.moGoal=mta3.value;ss("moGoal",State.moGoal);});goalCard2.appendChild(mta3);
-  el.appendChild(goalCard2);
-  return el;
+  return reviewTab();
 }
 
 // ─── REVIEW TAB (Combined Weekly + Monthly + Calendar) ──────────────
@@ -2452,9 +2363,9 @@ function reviewTab(){
 
   // ── Header row with view toggles ──
   var topRow=div("rjb mb12");
-  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Review";topRow.appendChild(sh);
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Stats";topRow.appendChild(sh);
   var toggles=div("row gap8");
-  ["month","week"].forEach(function(v){
+  ["month","week","data"].forEach(function(v){
     var b=h("button",{className:"btn"+(viewMode===v?" btn-active":""),style:"padding:9px 22px;font-size:13px;letter-spacing:1px;font-weight:700"+(viewMode===v?";border-color:#00d4d4;color:#00d4d4;background:#00d4d418":"")});
     b.textContent=v.toUpperCase();
     b.addEventListener("click",function(){State.rv_view=v;render();});
@@ -2463,17 +2374,17 @@ function reviewTab(){
   topRow.appendChild(toggles);
   el.appendChild(topRow);
 
-  // ── SUMMARY CHIPS ──
-  var g4=div("g4 mb12");
-  g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total),State.trades.length+" trades"));
-  var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+s.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+s.losses.length+'</span>';
-  g4.appendChild(makeChip("W / L",wlDiv,"","all time"));
-  g4.appendChild(makeChip("AVG EMOTION",emoAvg+" / 5","a"));
-  g4.appendChild(makeChip("A-GRADE RATE",adh+"%",adh>=60?"g":"a"));
-  el.appendChild(g4);
-
   // ── CALENDAR VIEW ──
   if(viewMode==="month"){
+    // ── SUMMARY CHIPS ──
+    var g4=div("g4 mb12");
+    g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total),State.trades.length+" trades"));
+    var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+s.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+s.losses.length+'</span>';
+    g4.appendChild(makeChip("W / L",wlDiv,"","all time"));
+    g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac",""));
+    g4.appendChild(makeChip("A-GRADE RATE",adh+"%",adh>=60?"g":"a"));
+    el.appendChild(g4);
+
     var calCard=div("card mb12");
 
     // Calendar nav
@@ -2623,6 +2534,9 @@ function reviewTab(){
     if(monthTrades.length){
       var eqCard=div("card mb12");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent=MNAMES[calMonth]+" Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);eqCard.appendChild(equitySVG(monthTrades,760,170));el.appendChild(eqCard);
     }
+    var mgCard=div("card mt12");var mgH=div("card-h");var mgT=div("card-t");mgT.textContent="Monthly Goal";mgH.appendChild(mgT);mgCard.appendChild(mgH);
+    var mgTA=h("textarea",{rows:"3"});mgTA.style.resize="none";mgTA.value=State.moGoal;mgTA.addEventListener("input",function(){State.moGoal=mgTA.value;ss("moGoal",State.moGoal);});mgCard.appendChild(mgTA);
+    el.appendChild(mgCard);
   }
 
   // ── WEEK VIEW ──
@@ -2644,7 +2558,7 @@ function reviewTab(){
     wg4.appendChild(makeChip("WEEK P&L",dol(ws.total),clr(ws.total),wkTrades.length+" trades"));
     var wWL=div();wWL.innerHTML='<span class="g fw7">'+ws.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ws.losses.length+'</span>';
     wg4.appendChild(makeChip("W / L",wWL));
-    wg4.appendChild(makeChip("AVG EMOTION",wemoAvg+" / 5","a"));
+    wg4.appendChild(makeChip("WIN RATE",ws.wr+"%","ac","this week"));
     wg4.appendChild(makeChip("A-GRADE RATE",wadh+"%",wadh>=60?"g":"a"));
     el.appendChild(wg4);
 
@@ -2685,7 +2599,49 @@ function reviewTab(){
     el.appendChild(goalCard);
   }
 
-  // ── STATS VIEW ──
+  // ── DATA VIEW ──
+  if(viewMode==="data"){
+    var ds=calcStats(State.trades);
+    var dg4=div("g4");
+    dg4.appendChild(makeChip("WIN RATE",ds.wr+"%","ac"));dg4.appendChild(makeChip("AVG WINNER",dol(ds.avgW),"g"));dg4.appendChild(makeChip("AVG LOSER",dol(ds.avgL),"r"));dg4.appendChild(makeChip("NET P&L",dol(ds.total),clr(ds.total),"all time"));
+    var dWL=div();dWL.innerHTML='<span class="g fw7">'+ds.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ds.losses.length+'</span>';
+    dg4.appendChild(makeChip("W / L",dWL,"","all time"));
+    var daG=State.trades.filter(function(t){return t.ex==="A"}).length;
+    var dadh=State.trades.length?(daG/State.trades.length*100).toFixed(0):0;
+    dg4.appendChild(makeChip("A-GRADE RATE",dadh+"%",dadh>=60?"g":"a",""));
+    dg4.appendChild(makeChip("TOTAL TRADES",State.trades.length));dg4.appendChild(makeChip("R:R RATIO",(ds.avgL?Math.abs(ds.avgW/ds.avgL).toFixed(2):"—")+"R","ac"));
+    el.appendChild(dg4);
+
+    var dg2=div("g2");
+    var deqCard=div("card");var deqH=div("card-h");var deqT=div("card-t");deqT.textContent="Equity Curve";deqH.appendChild(deqT);deqCard.appendChild(deqH);deqCard.appendChild(equitySVG(State.trades,380,200));dg2.appendChild(deqCard);
+    var dByHour=[];for(var dhi=0;dhi<10;dhi++){var dhh=9+dhi;var dhs=(dhh<10?"0":"")+dhh;var dhts=State.trades.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});}
+    var dbhCard=div("card");var dbhH=div("card-h");var dbhT=div("card-t");dbhT.textContent="P&L by Hour";dbhH.appendChild(dbhT);dbhCard.appendChild(dbhH);dbhCard.appendChild(barSVG(dByHour,380,200));dg2.appendChild(dbhCard);
+    el.appendChild(dg2);
+
+    var dDOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
+    var dDowData=dDOWS.map(function(dw,di){var ts=State.trades.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return dt.getDay()===di;});return{l:dw,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};});
+    var ddowCard=div("card mt12");var ddowH=div("card-h");var ddowT=div("card-t");ddowT.textContent="P&L by Day of Week";ddowH.appendChild(ddowT);ddowCard.appendChild(ddowH);
+    ddowCard.appendChild(barSVG(dDowData,760,200));
+    var ddowTbl=h("table",{className:"tbl"});var ddowThead=h("thead");var ddowHr=h("tr");
+    ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){ddowHr.appendChild(h("th",{},[hd]));});ddowThead.appendChild(ddowHr);ddowTbl.appendChild(ddowThead);
+    var ddowTbody=h("tbody");
+    dDowData.forEach(function(dw){var ts=State.trades.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(dw.l)===dt.getDay();});var wins=ts.filter(function(t){return t.d>0}).length;var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";var avg=ts.length?(dw.v/ts.length).toFixed(0):0;var dr=h("tr");dr.appendChild(h("td",{className:"fw7"},[dw.l]));dr.appendChild(h("td",{className:"m"},[ts.length]));dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));var dptd=h("td",{className:"fw7 "+clr(dw.v)});dptd.textContent=dol(dw.v);dptd.style.cssText=dw.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":dw.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(dptd);var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(aptd);ddowTbody.appendChild(dr);});
+    ddowTbl.appendChild(ddowTbody);var ddowWrap=div("tbl-wrap");ddowWrap.appendChild(ddowTbl);ddowCard.appendChild(ddowWrap);el.appendChild(ddowCard);
+
+    var dsessCard=div("card mt12");var dsessH=div("card-h");var dsessT=div("card-t");dsessT.textContent="P&L by Session";dsessH.appendChild(dsessT);dsessCard.appendChild(dsessH);
+    var dstbl=h("table",{className:"tbl"});var dsthead=h("thead");var dshr=h("tr");
+    ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){dshr.appendChild(h("th",{},[hd]));});dsthead.appendChild(dshr);dstbl.appendChild(dsthead);
+    var dstbody=h("tbody");
+    SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var dstr=h("tr");dstr.appendChild(h("td",{className:"fw7"},[sess]));dstr.appendChild(h("td",{className:"m"},[sts.length]));dstr.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dstr.appendChild(sptd);dstbody.appendChild(dstr);});
+    dstbl.appendChild(dstbody);var dstblWrap=div("tbl-wrap");dstblWrap.appendChild(dstbl);dsessCard.appendChild(dstblWrap);el.appendChild(dsessCard);
+
+    var dsbCard=div("card mt12");var dsbH=div("card-h");var dsbT=div("card-t");dsbT.textContent="Setup P&L Breakdown";dsbH.appendChild(dsbT);dsbCard.appendChild(dsbH);
+    var dAllSetups=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
+    var dBySetup=dAllSetups.map(function(sv){var sts=State.trades.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
+    if(!dBySetup.length){var dnsm=span("xs m");dnsm.textContent="No tagged setups yet.";dsbCard.appendChild(dnsm);}
+    dBySetup.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";var sl=div();var st2=div("xs fw7");st2.style.color=SETUP_COLORS[s2.full]||"var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);dsbCard.appendChild(sr);});
+    el.appendChild(dsbCard);
+  }
 
 
   return el;
@@ -3873,7 +3829,7 @@ function notesTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,review:reviewTab,import:importTab,notes:notesTab,chart:chartTab};
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
