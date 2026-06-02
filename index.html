@@ -3972,13 +3972,12 @@ function render(){
 initSupabase();
 initAutoSync();
 
-// Silent sync on load — NEVER push to cloud on a failed load (prevents default data overwriting real data)
+// Silent sync on load — load cloud data FIRST, then render once (prevents flash of default/stale data)
 (function(){
   var currentId=getSyncId();
   if(supaClient){
     loadFromCloud(currentId,function(ok){
-      if(ok) render();
-      // If load failed (network error, cold start, etc.) do nothing — keep local state, don't overwrite cloud
+      render(); // always render after attempt — if ok, we have real data; if not, show local
     });
   }
 })();
@@ -4065,7 +4064,7 @@ window.addEventListener("resize",function(){
 
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
-render();
+// render() removed — cloud load callback handles initial render to avoid showing stale default data
 </script>
 </body>
 </html>
