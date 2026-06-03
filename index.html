@@ -2585,7 +2585,6 @@ function reviewTab(){
     if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.appendChild(document.createTextNode(wb.inst+" "+wb.dir+" — "));if(getSetups(wb).length) bd2.appendChild(setupColoredEl(wb)); else bd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(bd2);}
     if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.appendChild(document.createTextNode(ww.inst+" "+ww.dir+" — "));if(getSetups(ww).length) wd2.appendChild(setupColoredEl(ww)); else wd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(wd2);}
     if(!wkTrades.length){var nm2=span("xs m");nm2.textContent="No trades this week.";bwCard.appendChild(nm2);}
-    wg2.appendChild(bwCard);
     // Daily Breakdown this week (Sun-Fri)
     var dayCard=div("card");var dayH=div("card-h");var dayT=div("card-t");dayT.textContent="Daily Breakdown";dayH.appendChild(dayT);
     var daySub=span("xs m");daySub.textContent="this week";dayH.appendChild(daySub);dayCard.appendChild(dayH);
@@ -2622,6 +2621,7 @@ function reviewTab(){
       });
     }
     wg2.appendChild(dayCard);
+    wg2.appendChild(bwCard);
     el.appendChild(wg2);
 
     // Setup perf this week
