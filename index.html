@@ -2559,10 +2559,11 @@ function reviewTab(){
     // Get this week's trades (Sun–Sat calendar week)
     var now2=new Date();
     var wkStart=new Date(now2);wkStart.setDate(now2.getDate()-now2.getDay());wkStart.setHours(0,0,0,0);
+    var wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);wkEnd.setHours(23,59,59,999);
     var wkTrades=State.trades.filter(function(t){
       var p=t.date.split("/");if(p.length!==3)return false;
       var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-      return td3>=wkStart;
+      return td3>=wkStart&&td3<=wkEnd;
     });
     var ws=calcStats(wkTrades);
     var waG=wkTrades.filter(function(t){return t.ex==="A"}).length;
@@ -2580,7 +2581,7 @@ function reviewTab(){
     var wg2=div("g2 mb12");
     // Best/worst
     var bwCard=div("card");var bwH=div("card-h");var bwT=div("card-t");bwT.textContent="Best & Worst This Week";bwH.appendChild(bwT);bwCard.appendChild(bwH);
-    var wb=wkTrades.slice().sort(function(a,b){return b.d-a.d})[0];var ww=wkTrades.slice().sort(function(a,b){return a.d-b.d})[0];
+    var wkWinners=wkTrades.filter(function(t){return t.d>0});var wkLosers=wkTrades.filter(function(t){return t.d<0});    var wb=wkWinners.slice().sort(function(a,b){return b.d-a.d})[0]||null;var ww=wkLosers.slice().sort(function(a,b){return a.d-b.d})[0]||null;
     if(wb){var br2=div("rjb mb8");var bl2=span("xs m");bl2.textContent="BEST";br2.appendChild(bl2);var bv2=span("fw7 g");bv2.textContent=dol(wb.d);br2.appendChild(bv2);bwCard.appendChild(br2);var bd2=div("xs mb12");bd2.style.color="#e0c97a";bd2.appendChild(document.createTextNode(wb.inst+" "+wb.dir+" — "));if(getSetups(wb).length) bd2.appendChild(setupColoredEl(wb)); else bd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(bd2);}
     if(ww){var wr3=div("rjb mb8");var wl3=span("xs m");wl3.textContent="WORST";wr3.appendChild(wl3);var wv2=span("fw7 r");wv2.textContent=dol(ww.d);wr3.appendChild(wv2);bwCard.appendChild(wr3);var wd2=div("xs");wd2.style.color="#e0c97a";wd2.appendChild(document.createTextNode(ww.inst+" "+ww.dir+" — "));if(getSetups(ww).length) wd2.appendChild(setupColoredEl(ww)); else wd2.appendChild(document.createTextNode("Untagged"));bwCard.appendChild(wd2);}
     if(!wkTrades.length){var nm2=span("xs m");nm2.textContent="No trades this week.";bwCard.appendChild(nm2);}
