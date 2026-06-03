@@ -431,7 +431,7 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback","RTH VWAP"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback","RTH VWAP","Bizz Level"];
 var SDESC={
   "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
@@ -440,7 +440,8 @@ var SDESC={
   "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
   "2min POC":"Naked 2min POC with confluences.",
   "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma.",
-  "RTH VWAP":"Trade reactions off the prior RTH VWAP level. Look for confluence with key volume profile nodes."
+  "RTH VWAP":"Trade reactions off the prior RTH VWAP level. Look for confluence with key volume profile nodes.",
+  "Bizz Level":"RTH 1hr High vol node."
 };
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
 var EMO=["","😖","😟","😐","😊","🔥"];
@@ -649,7 +650,8 @@ var SETUP_COLORS={
   "VWAP Fade":"#b06aff",
   "POC":"#ffd700",
   "VAH/VAL":"#40e0d0",
-  "RTH VWAP":"#ff4444"
+  "RTH VWAP":"#ff4444",
+  "Bizz Level":"#4da6ff"
 };
 function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
 function getSetups(t){
