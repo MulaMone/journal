@@ -3897,27 +3897,27 @@ function render(){
 
   if(isMobile()){
     content.style.padding="12px";
-    content.style.overflow="auto";
+    content.style.overflow="visible";
     content.style.display="block";
 
     if(tabChanged){
-      // Tab switch: build new content off-screen, then crossfade in — no blank flash
+      // Tab switch: scroll to top, crossfade in
+      window.scrollTo(0,0);
       content.style.transition="none";
       content.style.opacity="0";
       content.innerHTML="";
       content.appendChild(VIEWS[State.tab]());
-      // Force layout, then fade in
       content.getBoundingClientRect();
       content.style.transition="opacity .15s ease";
       content.style.opacity="1";
     } else {
-      // In-page state update (checkbox, level check etc): save scroll, re-render, restore
+      // In-page state update: save scroll, re-render, restore — no jump
       var savedScroll=window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0;
       content.style.transition="none";
       content.style.opacity="1";
       content.innerHTML="";
       content.appendChild(VIEWS[State.tab]());
-      if(savedScroll>0 && !_firstRender) window.scrollTo(0,savedScroll);
+      if(savedScroll>0 && !_firstRender) requestAnimationFrame(function(){window.scrollTo(0,savedScroll);});
     }
   } else {
     content.style.transition="none";
