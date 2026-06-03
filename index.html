@@ -409,6 +409,9 @@ function loadFromCloud(syncId,callback){
       // ensure builtin flag and correct defaults
       State.levels.forEach(function(l){if(l.l===b.l){l.builtin=true;if(!l.imp)l.imp=b.imp;if(l.sess===undefined)l.sess=b.sess;}});
     });
+    // Any level with blank session (not a session-specific one) gets Full RTH
+    var SESSION_SPECIFIC=["ONH/ONL","OPEN"];
+    State.levels.forEach(function(l){if((!l.sess||l.sess==="")&&SESSION_SPECIFIC.indexOf(l.l)===-1) l.sess="Full RTH";});
     // Re-sort so builtins appear in defined order, custom levels stay at end
     var builtinOrder=ORDERED_BUILTINS.map(function(b){return b.l;});
     State.levels.sort(function(a,b2){
@@ -519,7 +522,7 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
-function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
+var _isLocal=window.location.protocol==="file:";function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
 // On fresh launch (sessionStorage is empty), always start on home
 if(!sessionStorage.getItem('edge_session_active')){
