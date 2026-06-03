@@ -393,6 +393,31 @@ function loadFromCloud(syncId,callback){
       if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
       if(s.starredSetups) State.starredSetups=s.starredSetups;
     }
+    // ── Post-cloud level migrations — runs every load so new builtins always appear ──
+    var ORDERED_BUILTINS=[
+      {l:"VAH/VAL/POC",imp:"high",sess:""},
+      {l:"PDH/PDL",imp:"high",sess:""},
+      {l:"RTH VWAP",imp:"medium",sess:""},
+      {l:"VWAP",imp:"medium",sess:""},
+      {l:"BIZZ",imp:"medium",sess:"Full RTH"},
+      {l:"ONH/ONL",imp:"low",sess:"Overnight"},
+      {l:"OPEN",imp:"low",sess:"RTH Open"}
+    ];
+    ORDERED_BUILTINS.forEach(function(b){
+      var exists=State.levels.some(function(l){return l.l===b.l;});
+      if(!exists) State.levels.push({l:b.l,imp:b.imp,sess:b.sess,builtin:true});
+      // ensure builtin flag and correct defaults
+      State.levels.forEach(function(l){if(l.l===b.l){l.builtin=true;if(!l.imp)l.imp=b.imp;if(l.sess===undefined)l.sess=b.sess;}});
+    });
+    // Re-sort so builtins appear in defined order, custom levels stay at end
+    var builtinOrder=ORDERED_BUILTINS.map(function(b){return b.l;});
+    State.levels.sort(function(a,b2){
+      var ai=builtinOrder.indexOf(a.l);var bi=builtinOrder.indexOf(b2.l);
+      if(ai>-1&&bi>-1) return ai-bi;
+      if(ai>-1) return -1;
+      if(bi>-1) return 1;
+      return 0;
+    });
     ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
     if(callback) callback(true);
   })
