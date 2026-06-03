@@ -4047,8 +4047,11 @@ if(supaClient&&State.tv_creds&&(State.tv_creds.user||State.tv_creds.cid)) setInt
 setInterval(function(){
   if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
   var currentId=getSyncId();
+  var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels});
   loadFromCloud(currentId,function(ok){
-    if(ok) render();
+    if(!ok) return;
+    var snapAfter=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels});
+    if(snapAfter!==snapBefore) render();
   });
 },10000);
 
