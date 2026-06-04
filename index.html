@@ -2436,6 +2436,13 @@ function reviewTab(){
     g4.appendChild(makeChip("A-GRADE RATE",adh+"%",adh>=60?"g":"a"));
     el.appendChild(g4);
 
+    // Monthly open reminder banner
+    var moReminder=div("card mb12");moReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
+    var moIcon=span("");moIcon.style.cssText="font-size:16px;flex-shrink:0;";moIcon.textContent="📌";
+    var moRText=span("sm");moRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";moRText.textContent="Reminder — mark out the monthly open on your chart";
+    moReminder.appendChild(moIcon);moReminder.appendChild(moRText);
+    el.appendChild(moReminder);
+
     var calCard=div("card mb12");
 
     // Calendar nav
@@ -3909,6 +3916,61 @@ function notesTab(){
     botG.appendChild(npCard);
     el.appendChild(botG);
   }
+
+  // ── EMA Decision Matrix ──
+  var emaCard=div("card mt12");
+  var emaH=div("card-h");var emaT=div("card-t");emaT.textContent="EMA Decision Matrix";emaH.appendChild(emaT);emaCard.appendChild(emaH);
+
+  var emaTable=document.createElement("table");emaTable.style.cssText="width:100%;border-collapse:collapse;font-size:13px;";
+  var emaThead=document.createElement("thead");
+  var emaHRow=document.createElement("tr");
+  ["EMA Condition","Interpretation"].forEach(function(h2){
+    var th=document.createElement("th");th.style.cssText="text-align:left;padding:8px 12px;font-size:11px;letter-spacing:1px;color:var(--text2);border-bottom:1px solid var(--border);font-weight:500;";th.textContent=h2.toUpperCase();emaHRow.appendChild(th);
+  });
+  emaThead.appendChild(emaHRow);emaTable.appendChild(emaThead);
+
+  var emaTbody=document.createElement("tbody");
+  var emaRows=[
+    ["Yellow crosses <green>green</green>","Potential reversal"],
+    ["Yellow crosses <gray>gray</gray>","Strong reversal confirmation"],
+    ["Yellow crosses <gold>gold</gold>","Hold bias"],
+    ["Price near <yellow>yellow</yellow> / <gold>gold</gold>","Change bias"]
+  ];
+  emaRows.forEach(function(row,i){
+    var tr=document.createElement("tr");tr.style.background=i%2===0?"":"var(--bg3)";
+    var td1=document.createElement("td");td1.style.cssText="padding:10px 12px;border-bottom:1px solid var(--border);";
+    var dotColors={"green":"#3dba6f","gray":"#888780","gold":"#c9962a","yellow":"#f5c842"};
+    var dotWrap=div("row gap8");dotWrap.style.alignItems="center";
+    var firstColor=row[0].match(/<(\w+)>/);var dotC=firstColor?dotColors[firstColor[1]]||"#f5c842":"#f5c842";
+    var dot=div();dot.style.cssText="width:8px;height:8px;border-radius:50%;background:"+dotC+";flex-shrink:0;";
+    dotWrap.appendChild(dot);
+    var txt=document.createElement("span");txt.style.color="var(--text)";
+    var raw=row[0].replace(/<(\w+)>(.*?)<\/>/g,function(m,color,word){
+      return '<span style="color:'+dotColors[color]+';font-weight:500;">'+word+'</span>';
+    });
+    txt.innerHTML=raw;dotWrap.appendChild(txt);td1.appendChild(dotWrap);
+    var td2=document.createElement("td");td2.style.cssText="padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text2);";td2.textContent=row[1];
+    tr.appendChild(td1);tr.appendChild(td2);emaTbody.appendChild(tr);
+  });
+  emaTable.appendChild(emaTbody);emaCard.appendChild(emaTable);
+
+  // Confluence checklist
+  var confH=div("card-h mt12");var confT=div("card-t");confT.textContent="Confluence Checklist";confH.appendChild(confT);emaCard.appendChild(confH);
+  var confItems=[
+    {color:"#f5c842",label:"Yellow",desc:" = 5min / 5ma"},
+    {color:"#3dba6f",label:"Green",desc:" = 1min / 50ma"},
+    {color:"#888780",label:"Gray",desc:" = 2min / 50ma"},
+    {color:"#c9962a",label:"Gold",desc:" = 5min / 50ma"}
+  ];
+  confItems.forEach(function(c){
+    var row=div("row gap8 mt8");row.style.cssText="align-items:center;padding:10px 12px;border:0.5px solid var(--border);border-radius:6px;";
+    var dot=div();dot.style.cssText="width:10px;height:10px;border-radius:50%;background:"+c.color+";flex-shrink:0;";
+    var lbl=document.createElement("span");lbl.style.cssText="font-size:13px;font-weight:500;color:"+c.color+";";lbl.textContent=c.label;
+    var desc=document.createElement("span");desc.style.cssText="font-size:13px;color:var(--text2);";desc.textContent=c.desc;
+    row.appendChild(dot);row.appendChild(lbl);row.appendChild(desc);emaCard.appendChild(row);
+  });
+
+  el.appendChild(emaCard);
 
   return el;
 }
