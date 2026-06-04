@@ -283,11 +283,11 @@ svg text{font-family:'Courier New',monospace}
   <div id="content"></div>
   <nav id="m-bnav" role="navigation" aria-label="Main navigation">
     <div class="bn-items">
-      <button class="bn-item" data-tab="home" aria-label="Home"><span class="bn-icon">⌂</span>Home</button>
+      <button class="bn-item" data-tab="openanalysis" aria-label="Open Analysis"><span class="bn-icon">◉</span>Open</button>
       <button class="bn-item" data-tab="log" aria-label="Trade Log"><span class="bn-icon">≡</span>Log</button>
-      <div class="bn-fab-wrap" id="m-fab" aria-label="Add Trade" role="button" tabindex="0">
-        <div class="bn-fab">+</div>
-        <div class="bn-fab-lbl">Add</div>
+      <div class="bn-fab-wrap" id="m-fab" aria-label="Prep" role="button" tabindex="0">
+        <div class="bn-fab">▣</div>
+        <div class="bn-fab-lbl">Prep</div>
       </div>
       <button class="bn-item" data-tab="analytics" aria-label="Analytics"><span class="bn-icon">⟁</span>Stats</button>
       <button class="bn-item" data-tab="__more" aria-label="More"><span class="bn-icon">⋯</span>More</button>
@@ -546,7 +546,7 @@ if(!sessionStorage.getItem('edge_session_active')){
 }
 
 var State={
-  tab:ls("tab","home"),
+  tab:ls("tab","openanalysis"),
   trades:ls("trades",DEFAULT_TRADES),
   levels:ls("levels",DEFAULT_LEVELS),
   note:ls("note","Focus on RTH open momentum. Wait for clear structure above VWAP before entering."),
@@ -909,7 +909,7 @@ function impBadge(imp){
 // ─── TABS ─────────────────────────────────────────────────────────────
 var TABS=[
   {id:"home",icon:"⌂",label:"HOME"},
-  {id:"prep",icon:"◎",label:"PREP"},
+  {id:"prep",icon:"▣",label:"PREP"},
   {id:"log",icon:"≡",label:"TRADE LOG"},
   {id:"opps",icon:"★",label:"BEST LICKS"},
   {id:"playbook",icon:"◈",label:"PLAYS"},
@@ -960,9 +960,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","prep","opps","playbook","import","notes","openanalysis"];
-var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes",openanalysis:"Open Analysis"};
-var MORE_TABS_ICONS={home:"⌂",prep:"◎",opps:"★",playbook:"◈",import:"⬆",notes:"✎",openanalysis:"◉"};
+var MORE_TABS=["home","prep","opps","playbook","import","notes"];
+var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes"};
+var MORE_TABS_ICONS={home:"⌂",prep:"▣",opps:"★",playbook:"◈",import:"⬆",notes:"✎"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -994,8 +994,7 @@ function updateMobileNav(){
     if(fab){
       fab.addEventListener("click",function(){
         closeMoreDrawer();
-        State.tab="log";State.adding=true;State.editing=null;
-        ss("tab","log");render();window.scrollTo(0,0);
+        switchTab("prep");
       });
     }
   }
