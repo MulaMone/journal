@@ -4047,9 +4047,143 @@ function openAnalysisTab(){
 
   // ── OPEN TYPE FRAMEWORK ──
   var s2=sec("Open Type Framework");
-  var openTypes=[{title:"Open Drive",col:"var(--green)",desc:"Opens and immediately moves one direction. Little or no retracement.",note:"Highest conviction \u2014 do not fight it."},{title:"Open Test Drive",col:"var(--accent)",desc:"Tests one side first. Finds no participation. Reverses and drives opposite direction.",note:"Often leads to trend days."},{title:"Open Rejection Reverse",col:"var(--amber)",desc:"Early move gets rejected. Market reverses through the open.",note:"Classic trap setup."},{title:"Open Auction In Range",col:"var(--text3)",desc:"Opens in value. Rotates around. Lowest conviction.",note:"Good for responsive trading."},{title:"Open Auction Out Of Range",col:"var(--ca)",desc:"Opens outside value. No immediate continuation.",note:"Wait for acceptance or rejection."}];
+  var openTypes=[
+    {id:"od", title:"Open Drive",col:"var(--green)",desc:"Opens and immediately moves one direction. Little or no retracement.",note:"Highest conviction \u2014 do not fight it."},
+    {id:"otd",title:"Open Test Drive",col:"var(--accent)",desc:"Tests one side first. Finds no participation. Reverses and drives opposite direction.",note:"Often leads to trend days."},
+    {id:"orr",title:"Open Rejection Reverse",col:"var(--amber)",desc:"Early move gets rejected. Market reverses through the open.",note:"Classic trap setup."},
+    {id:"oair",title:"Open Auction In Range",col:"var(--text3)",desc:"Opens in value. Rotates around. Lowest conviction.",note:"Good for responsive trading."},
+    {id:"oaor",title:"Open Auction Out Of Range",col:"var(--ca)",desc:"Opens outside value. No immediate continuation.",note:"Wait for acceptance or rejection."}
+  ];
+
+  // SVG diagram builder for each open type
+  function buildOpenDiagram(typeId){
+    // AX = x of the A column (circle aligns to this x center)
+    // openY = y of the open line
+    // line runs from x=10 to x=160, circle sits on line above/at first A
+    var S=14; // row spacing
+    var svgParts=[];
+    svgParts.push('<svg viewBox="0 0 220 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px;display:block;margin:0 auto;">');
+    svgParts.push('<rect width="220" height="360" fill="#040d1a" rx="4"/>');
+    svgParts.push('<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/></marker></defs>');
+
+    function line(x1,y1,x2,y2,col,w){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(col||'#5b9bd5')+'" stroke-width="'+(w||2)+'" marker-end="url(#arr)"/>';}
+    function linePlain(x1,y1,x2,y2,col,w){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(col||'#5b9bd5')+'" stroke-width="'+(w||2)+'"/>';}
+    function circle(cx,cy){return '<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="none" stroke="#e05555" stroke-width="1.5"/>';}
+    function letter(x,y,l){return '<text x="'+x+'" y="'+y+'" font-size="11" fill="#5b9bd5" font-family="Courier New">'+l+'</text>';}
+    function col(letters,y,ax){var s='';letters.forEach(function(l,i){s+=letter(ax+(i*12),y,l);});return s;}
+
+    var AX=50; // left edge of A column
+    var LX1=10, LX2=160; // open line x extents
+    var conviction,convCol;
+
+    if(typeId==='od'){
+      // Open Drive: open line at top, A column drops straight down
+      var oy=46;
+      svgParts.push('<text x="4" y="42" font-size="9" fill="#e0c97a" font-family="Courier New" font-style="italic">Open</text>');
+      svgParts.push(linePlain(LX1,oy,LX2,oy));
+      svgParts.push(circle(AX+3,oy));
+      var rows=[['A'],['A'],['A'],['A'],['A'],['A'],['A'],['A'],['A'],['A'],['A','B'],['A','B'],['B','C'],['B','C'],['C'],['C']];
+      rows.forEach(function(r,i){svgParts.push(col(r,oy+14+(i*S),AX));});
+      svgParts.push(line(AX+26,oy+12,AX+26,oy+14+(rows.length*S),'#e05555'));
+      conviction='HIGH';convCol='#00e676';
+
+    } else if(typeId==='otd'){
+      // Open Test Drive: 3 A's above open, then A's below
+      var oy=90;
+      svgParts.push('<text x="4" y="'+(oy-4)+'" font-size="9" fill="#e0c97a" font-family="Courier New" font-style="italic">Open</text>');
+      // 3 A's above — same x as A column, tight spacing
+      svgParts.push(col(['A'],oy-14*3,AX));
+      svgParts.push(col(['A'],oy-14*2,AX));
+      svgParts.push(col(['A'],oy-14,AX));
+      // open line + circle
+      svgParts.push(linePlain(LX1,oy,LX2,oy));
+      svgParts.push(circle(AX+3,oy));
+      // A's below
+      var below=[['A'],['A'],['A'],['A'],['A'],['A'],['A'],['A','B'],['A','B'],['B','C'],['B','C'],['B','C'],['C'],['C']];
+      below.forEach(function(r,i){svgParts.push(col(r,oy+14+(i*S),AX));});
+      // second circle at turn point (where B starts)
+      svgParts.push(circle(AX+12+3, oy+14+(7*S)));
+      // up arrow (test above)
+      svgParts.push(line(AX+30,oy-4,AX+30,oy-14*3-4,'#e05555'));
+      // down arrow (drive below)
+      svgParts.push(line(AX+42,oy+14,AX+42,oy+14+(below.length*S),'#e05555'));
+      conviction='HIGH';convCol='#00e676';
+
+    } else if(typeId==='orr'){
+      // Open Rejection Reverse: A's above, open line in middle, A+B below
+      var oy=140;
+      // A's above open
+      var above=[['A'],['A'],['A'],['A'],['A'],['A'],['A']];
+      above.forEach(function(r,i){svgParts.push(col(r,oy-14*(above.length-i),AX));});
+      // open line + circle
+      svgParts.push('<text x="4" y="'+(oy-4)+'" font-size="9" fill="#e0c97a" font-family="Courier New" font-style="italic">Open</text>');
+      svgParts.push(linePlain(LX1,oy,LX2,oy));
+      svgParts.push(circle(AX+3,oy));
+      // A+B below
+      var below=[['A','B'],['A','B'],['A','B'],['B','C'],['B','C'],['C'],['C'],['C'],['C'],['C']];
+      below.forEach(function(r,i){svgParts.push(col(r,oy+14+(i*S),AX));});
+      // up arrow (initial move rejected)
+      svgParts.push(line(AX+30,oy-4,AX+30,oy-14*above.length-4,'#e05555'));
+      // down arrow (reversal)
+      svgParts.push(line(AX+42,oy+14,AX+42,oy+14+(below.length*S),'#e05555'));
+      conviction='MED';convCol='#ffab00';
+
+    } else {
+      // Open Auction: rotates both ways, open in middle
+      var oy=154;
+      var above=[['A'],['A'],['A','B'],['A','B'],['A','B','C'],['A','B','C'],['A','B','C'],['A','B','C']];
+      above.forEach(function(r,i){svgParts.push(col(r,oy-14*(above.length-i),AX));});
+      svgParts.push('<text x="4" y="'+(oy-4)+'" font-size="9" fill="#e0c97a" font-family="Courier New" font-style="italic">Open</text>');
+      svgParts.push(linePlain(LX1,oy,LX2,oy));
+      svgParts.push(circle(AX+3,oy));
+      var below=[['A','B','C'],['A','B','C'],['A','B','C'],['A','B'],['A','C'],['C'],['C']];
+      below.forEach(function(r,i){svgParts.push(col(r,oy+14+(i*S),AX));});
+      // 3 arrows: up, down, up
+      svgParts.push(line(AX+42,oy-4,AX+42,oy-14*above.length-4,'#e05555'));
+      svgParts.push(line(AX+54,oy+14,AX+54,oy+14+(below.length*S),'#e05555'));
+      svgParts.push(line(AX+66,oy-4,AX+66,oy-14*above.length-4,'#e05555'));
+      conviction='LOW';convCol='#888780';
+    }
+
+    svgParts.push('<text x="110" y="348" font-size="9" fill="'+convCol+'" font-family="Courier New" text-anchor="middle" letter-spacing="1">CONVICTION: '+conviction+'</text>');
+    svgParts.push('</svg>');
+    return svgParts.join("");
+  }
+
   var otGrid=div();otGrid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr 1fr":"repeat(5,1fr)")+";gap:8px;";
-  openTypes.forEach(function(t){var c=div();c.style.cssText="background:var(--panel);border:1px solid var(--border);border-top:2px solid "+t.col+";border-radius:4px;padding:14px;";c.innerHTML="<div style='font-size:12px;font-weight:700;color:"+t.col+";margin-bottom:8px;line-height:1.4;'>"+t.title+"</div><div style='font-size:11px;color:#ffffff;line-height:1.6;margin-bottom:8px;'>"+t.desc+"</div><div style='font-size:10px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:6px;'>"+t.note+"</div>";otGrid.appendChild(c);});
+  // Modal overlay
+  var modalOverlay=div();modalOverlay.id="ot-modal";modalOverlay.style.cssText="display:none;position:fixed;inset:0;background:#000000cc;z-index:9999;align-items:center;justify-content:center;padding:20px;";
+  var modalBox=div();modalBox.style.cssText="background:#071428;border:1px solid #1a3260;border-radius:6px;max-width:340px;width:100%;padding:20px;position:relative;";
+  var modalClose=div();modalClose.style.cssText="position:absolute;top:10px;right:14px;cursor:pointer;color:#e0c97a;font-size:18px;font-weight:700;line-height:1;";modalClose.textContent="×";
+  modalClose.addEventListener("click",function(){modalOverlay.style.display="none";});
+  modalOverlay.addEventListener("click",function(e){if(e.target===modalOverlay)modalOverlay.style.display="none";});
+  var modalTitle=div();modalTitle.id="ot-modal-title";modalTitle.style.cssText="font-size:13px;font-weight:700;margin-bottom:4px;";
+  var modalDesc=div();modalDesc.id="ot-modal-desc";modalDesc.style.cssText="font-size:11px;color:#ffffff;line-height:1.6;margin-bottom:10px;";
+  var modalDiagram=div();modalDiagram.id="ot-modal-diagram";
+  var modalNote=div();modalNote.id="ot-modal-note";modalNote.style.cssText="font-size:10px;color:var(--text3);font-style:italic;border-top:1px solid #1a3260;padding-top:8px;margin-top:8px;";
+  modalBox.appendChild(modalClose);modalBox.appendChild(modalTitle);modalBox.appendChild(modalDesc);modalBox.appendChild(modalDiagram);modalBox.appendChild(modalNote);
+  modalOverlay.appendChild(modalBox);
+  var existingModal=document.getElementById("ot-modal");if(existingModal)existingModal.remove();
+  document.body.appendChild(modalOverlay);
+
+  openTypes.forEach(function(t){
+    var c=div();c.style.cssText="background:var(--panel);border:1px solid var(--border);border-top:2px solid "+t.col+";border-radius:4px;padding:14px;cursor:pointer;transition:border-color .15s;";
+    c.innerHTML="<div style='font-size:12px;font-weight:700;color:"+t.col+";margin-bottom:8px;line-height:1.4;'>"+t.title+"</div>"
+      +"<div style='font-size:11px;color:#ffffff;line-height:1.6;margin-bottom:8px;'>"+t.desc+"</div>"
+      +"<div style='font-size:10px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:6px;'>"+t.note+"</div>"
+      +"<div style='margin-top:10px;font-size:9px;letter-spacing:1px;color:"+t.col+";opacity:0.7;text-align:center;'>TAP TO VIEW DIAGRAM</div>";
+    c.addEventListener("mouseenter",function(){c.style.borderColor=t.col;});
+    c.addEventListener("mouseleave",function(){c.style.borderColor="var(--border)";});
+    c.addEventListener("click",function(){
+      document.getElementById("ot-modal-title").textContent=t.title;
+      document.getElementById("ot-modal-title").style.color=t.col;
+      document.getElementById("ot-modal-desc").textContent=t.desc;
+      document.getElementById("ot-modal-diagram").innerHTML=buildOpenDiagram(t.id);
+      document.getElementById("ot-modal-note").textContent=t.note;
+      var mo=document.getElementById("ot-modal");mo.style.display="flex";
+    });
+    otGrid.appendChild(c);
+  });
   s2.appendChild(otGrid);el.appendChild(s2);
 
   // ── CHEAT SHEET TABLE ──
