@@ -938,6 +938,8 @@ function renderTabs(){
 }
 
 function switchTab(id){
+  // Guard: if tab not in VIEWS (e.g. "chart" from old localStorage), fall back to home
+  if(!VIEWS[id]) id="home";
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;
   if(id!=="analytics"){State.rv_selected_day=null;}
   render();window.scrollTo(0,0);
