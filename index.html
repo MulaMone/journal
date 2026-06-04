@@ -902,7 +902,8 @@ var TABS=[
   {id:"analytics",icon:"⟁",label:"STATS"},
   {id:"import",icon:"⬆",label:"IMPORT"},
   {id:"notes",icon:"✎",label:"NOTES"},
-  {id:"chart",icon:"📈",label:"CHART"}
+  {id:"chart",icon:"📈",label:"CHART"},
+  {id:"openanalysis",icon:"◉",label:"OPEN"}
 ];
 
 function renderTabs(){
@@ -944,9 +945,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","prep","opps","playbook","import","notes","chart"];
-var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart"};
-var MORE_TABS_ICONS={home:"⌂",prep:"◎",opps:"★",playbook:"◈",import:"⬆",notes:"✎",chart:"📈"};
+var MORE_TABS=["home","prep","opps","playbook","import","notes","chart","openanalysis"];
+var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",openanalysis:"Open Analysis"};
+var MORE_TABS_ICONS={home:"⌂",prep:"◎",opps:"★",playbook:"◈",import:"⬆",notes:"✎",chart:"📈",openanalysis:"◉"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -3975,7 +3976,7 @@ function notesTab(){
     var col=div();col.style.cssText="display:flex;flex-direction:column;gap:8px;";
     items.forEach(function(c){
       var row=div("row gap8");row.style.cssText="align-items:center;padding:10px 12px;border:0.5px solid var(--border);border-radius:6px;";
-      var dc=c.dotColor||c.color;var dot=div();var dotSz=c.dotted&&isM?"14":"10";var dotBorder=c.dotted?"border:2px dashed "+dc+";background:transparent;":dc==="#ffffff"?"background:"+dc+";border:1px solid var(--border);":"background:"+dc+";";dot.style.cssText="width:"+dotSz+"px;height:"+dotSz+"px;border-radius:50%;flex-shrink:0;"+dotBorder;
+      var dc=c.dotColor||c.color;var dot=div();var dotBorder=c.dotted?"border:2px dashed "+dc+";background:transparent;":dc==="#ffffff"?"background:"+dc+";border:1px solid var(--border);":"background:"+dc+";";var dotSz=c.dotted&&isM?"14":"10";dot.style.cssText="width:"+dotSz+"px;height:"+dotSz+"px;border-radius:50%;flex-shrink:0;"+dotBorder;
       var lbl=document.createElement("span");lbl.style.cssText="font-size:13px;font-weight:500;color:"+(c.dotColor||c.color)+";";lbl.textContent=c.label;
       var desc=document.createElement("span");desc.style.cssText="font-size:12px;color:var(--text2);";desc.textContent=c.desc;
       row.appendChild(dot);row.appendChild(lbl);row.appendChild(desc);col.appendChild(row);
@@ -3991,7 +3992,54 @@ function notesTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab};
+function openAnalysisTab(){
+  var el=div();el.style.cssText="max-width:900px;margin:0 auto;";
+  var sh=div("sh");sh.innerHTML="Opening Analysis";el.appendChild(sh);
+  function sec(title){var d=div();d.style.cssText="margin-bottom:18px;";var h=div();h.style.cssText="font-size:10px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";h.textContent=title;d.appendChild(h);return d;}
+  function miniCard(html){return "<div style='background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:12px 14px;'>"+html+"</div>";}
+  // OPENING CONTEXT FRAMEWORK
+  var s0=sec("Opening Context Framework");
+  var locs=[{num:"1",title:"Open Inside Value",col:"var(--amber)"},{num:"2",title:"Open Above VAH",col:"var(--green)"},{num:"3",title:"Open Below VAL",col:"var(--red)"},{num:"4",title:"Open Above Range",col:"var(--accent)"},{num:"5",title:"Open Below Range",col:"var(--ca)"}];
+  var locGrid=div();locGrid.style.cssText="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;";
+  locs.forEach(function(l){var c=div();c.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px;text-align:center;";c.innerHTML="<div style='font-size:18px;font-weight:700;color:"+l.col+";font-family:Courier New,monospace;margin-bottom:6px;'>"+l.num+"</div><div style='font-size:11px;color:var(--text2);line-height:1.5;'>"+l.title+"</div>";locGrid.appendChild(c);});
+  s0.appendChild(locGrid);
+  var kq=div();kq.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-bottom:8px;";kq.innerHTML="<div style='font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Key Question</div><div style='font-size:14px;color:var(--text2);font-style:italic;'>Is the market <span style='color:var(--accent);font-weight:700;'>accepting</span> or <span style='color:var(--red);font-weight:700;'>rejecting</span> yesterday's value?</div>";
+  s0.appendChild(kq);el.appendChild(s0);
+  // OPENING LOCATION REFERENCE
+  var s1=sec("Opening Location Reference");
+  var c1=div();c1.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:4px;padding:16px 18px;margin-bottom:8px;";
+  c1.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'><span style='font-size:11px;background:#ffab0020;border:1px solid #ffab0040;color:var(--amber);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>1</span><span style='font-size:14px;font-weight:700;color:var(--text2);'>Open Inside Yesterday's Value <span style='color:var(--text3);font-size:12px;'>(VAH \u2194 VAL)</span></span></div><div style='display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px;'>"+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>MEANING</div><div style='color:#ffffff;line-height:1.6;'>Market is in balance. Yesterday's prices still considered fair. No strong conviction. Expect rotational behavior.</div>")+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>BIAS</div><div style='color:var(--amber);font-weight:700;margin-bottom:4px;'>Neutral</div><div style='color:#ffffff;line-height:1.6;'>Fade extremes &middot; Expect movement between VAH and VAL</div>")+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>QUESTIONS</div><div style='color:#ffffff;line-height:1.6;'>Can price escape value?<br>Can value migrate higher or lower?</div>")+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>TARGETS</div><div style='color:#ffffff;line-height:1.6;'>POC<br>Opposite side of value</div>")+"</div><div style='margin-top:10px;font-size:11px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:8px;'>Dalton: Open in value = auction first, direction later.</div>";
+  s1.appendChild(c1);
+  var c2=div();c2.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:4px;padding:16px 18px;margin-bottom:8px;";
+  c2.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'><span style='font-size:11px;background:#00e67615;border:1px solid #00e67635;color:var(--green);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>2</span><span style='font-size:14px;font-weight:700;color:var(--text2);'>Open Above Yesterday's VAH</span></div><div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:10px;'>"+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>MEANING</div><div style='color:#ffffff;line-height:1.6;'>Buyers willing to pay above yesterday's value. OTF buyers may be active. Attempting higher value.</div>")+miniCard("<div style='color:var(--green);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>BULLISH SCENARIO</div><div style='color:#ffffff;line-height:1.6;'>Price accepts above VAH &middot; Pullbacks hold VAH &middot; Value develops higher</div>")+miniCard("<div style='color:var(--red);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>BEARISH SCENARIO</div><div style='color:#ffffff;line-height:1.6;'>Price falls back inside value &middot; Failed auction &middot; Rotates toward POC or VAL</div>")+"</div><div style='font-size:11px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--green);'>Acceptance above value</span> = continuation &nbsp;&middot;&nbsp; <span style='color:var(--red);'>Rejection back into value</span> = reversal</div>";
+  s1.appendChild(c2);
+  var c3=div();c3.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:4px;padding:16px 18px;margin-bottom:8px;";
+  c3.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'><span style='font-size:11px;background:#ff444415;border:1px solid #ff444435;color:var(--red);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>3</span><span style='font-size:14px;font-weight:700;color:var(--text2);'>Open Below Yesterday's VAL</span></div><div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:10px;'>"+miniCard("<div style='color:var(--text3);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>MEANING</div><div style='color:#ffffff;line-height:1.6;'>Sellers reject yesterday's value. OTF sellers may be active. Attempting lower value.</div>")+miniCard("<div style='color:var(--red);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>BEARISH SCENARIO</div><div style='color:#ffffff;line-height:1.6;'>Acceptance below VAL &middot; Lower value migration &middot; Trend day potential</div>")+miniCard("<div style='color:var(--green);font-size:10px;letter-spacing:2px;margin-bottom:5px;'>BULLISH SCENARIO</div><div style='color:#ffffff;line-height:1.6;'>Re-entry into value &middot; Failed downside auction &middot; Move back toward POC or VAH</div>")+"</div><div style='font-size:11px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--red);'>Acceptance below value</span> = continuation &nbsp;&middot;&nbsp; <span style='color:var(--green);'>Rejection into value</span> = reversal</div>";
+  s1.appendChild(c3);
+  var row45=div();row45.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;";
+  var c4=div();c4.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;";
+  c4.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'><span style='font-size:11px;background:#00d4d420;border:1px solid #00d4d440;color:var(--accent);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>4</span><span style='font-size:13px;font-weight:700;color:var(--text2);'>Open Above Yesterday's Range</span></div><div style='font-size:11px;color:var(--accent);font-weight:700;letter-spacing:1px;margin-bottom:8px;'>HIGHEST BULLISH CONTEXT</div><div style='font-size:12px;color:#ffffff;line-height:1.6;margin-bottom:10px;'>Price is not only above value, but above all of yesterday's trading.</div><div style='font-size:11px;color:var(--text3);margin-bottom:6px;'>Is the gap accepted? Is new value being created higher?</div><div style='font-size:12px;color:var(--text2);line-height:1.6;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--green);'>If accepted:</span> Trend day possible &middot; Gap-and-go environment</div>";
+  var c5=div();c5.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--ca);border-radius:4px;padding:16px 18px;";
+  c5.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'><span style='font-size:11px;background:var(--ca15);border:1px solid var(--ca30);color:var(--ca);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>5</span><span style='font-size:13px;font-weight:700;color:var(--text2);'>Open Below Yesterday's Range</span></div><div style='font-size:11px;color:var(--ca);font-weight:700;letter-spacing:1px;margin-bottom:8px;'>HIGHEST BEARISH CONTEXT</div><div style='font-size:12px;color:#ffffff;line-height:1.6;margin-bottom:10px;'>Price is trading where yesterday never traded.</div><div style='font-size:11px;color:var(--text3);margin-bottom:6px;'>Are sellers committed? Is the gap accepted?</div><div style='font-size:12px;color:var(--text2);line-height:1.6;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--red);'>If accepted:</span> Strong downside continuation &middot; Trend day potential</div>";
+  row45.appendChild(c4);row45.appendChild(c5);s1.appendChild(row45);el.appendChild(s1);
+  // DALTON OPEN TYPE FRAMEWORK
+  var s2=sec("Open Type Framework");
+  var openTypes=[{title:"Open Drive",col:"var(--green)",desc:"Opens and immediately moves one direction. Little or no retracement.",note:"Highest conviction \u2014 do not fight it."},{title:"Open Test Drive",col:"var(--accent)",desc:"Tests one side first. Finds no participation. Reverses and drives opposite direction.",note:"Often leads to trend days."},{title:"Open Rejection Reverse",col:"var(--amber)",desc:"Early move gets rejected. Market reverses through the open.",note:"Classic trap setup."},{title:"Open Auction In Range",col:"var(--text3)",desc:"Opens in value. Rotates around. Lowest conviction.",note:"Good for responsive trading."},{title:"Open Auction Out Of Range",col:"var(--ca)",desc:"Opens outside value. No immediate continuation.",note:"Wait for acceptance or rejection."}];
+  var otGrid=div();otGrid.style.cssText="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;";
+  openTypes.forEach(function(t){var c=div();c.style.cssText="background:var(--panel);border:1px solid var(--border);border-top:2px solid "+t.col+";border-radius:4px;padding:14px;";c.innerHTML="<div style='font-size:12px;font-weight:700;color:"+t.col+";margin-bottom:8px;line-height:1.4;'>"+t.title+"</div><div style='font-size:11px;color:#ffffff;line-height:1.6;margin-bottom:8px;'>"+t.desc+"</div><div style='font-size:10px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);padding-top:6px;'>"+t.note+"</div>";otGrid.appendChild(c);});
+  s2.appendChild(otGrid);el.appendChild(s2);
+  // CHEAT SHEET TABLE
+  var s3=sec("Cheat Sheet");
+  var tbl=document.createElement("table");tbl.style.cssText="width:100%;border-collapse:collapse;font-size:13px;";
+  var thead=document.createElement("thead");var hrow=document.createElement("tr");
+  ["Open Location","Initial Expectation","What Confirms?","What Fails?"].forEach(function(h){var th=document.createElement("th");th.style.cssText="text-align:left;padding:10px 14px;font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border2);background:var(--bg2);";th.textContent=h;hrow.appendChild(th);});
+  thead.appendChild(hrow);tbl.appendChild(thead);
+  var tbody=document.createElement("tbody");
+  [{loc:"Inside Value",locCol:"var(--amber)",exp:"Rotation",confirm:"Stays in value",fail:"Acceptance outside value"},{loc:"Above VAH",locCol:"var(--green)",exp:"Bullish",confirm:"Holds above VAH",fail:"Returns into value"},{loc:"Below VAL",locCol:"var(--red)",exp:"Bearish",confirm:"Holds below VAL",fail:"Returns into value"},{loc:"Above Range",locCol:"var(--accent)",exp:"Strong Bullish",confirm:"Gap holds",fail:"Gap fills"},{loc:"Below Range",locCol:"var(--ca)",exp:"Strong Bearish",confirm:"Gap holds",fail:"Gap fills"}].forEach(function(r,i){var tr=document.createElement("tr");tr.style.cssText="border-bottom:1px solid var(--border);"+(i%2?"background:var(--panel2);":"background:var(--panel);");var td1=document.createElement("td");td1.style.cssText="padding:11px 14px;font-weight:700;color:"+r.locCol+";";td1.textContent=r.loc;var td2=document.createElement("td");td2.style.cssText="padding:11px 14px;color:var(--text2);";td2.textContent=r.exp;var td3=document.createElement("td");td3.style.cssText="padding:11px 14px;color:var(--green);";td3.textContent=r.confirm;var td4=document.createElement("td");td4.style.cssText="padding:11px 14px;color:var(--red);";td4.textContent=r.fail;tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);tbody.appendChild(tr);});
+  tbl.appendChild(tbody);var tblWrap=div();tblWrap.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;";tblWrap.appendChild(tbl);s3.appendChild(tblWrap);el.appendChild(s3);
+  return el;
+}
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
