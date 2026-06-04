@@ -4128,8 +4128,23 @@ function openAnalysisTab(){
       svgParts.push(line(AX+42,oy+14,AX+42,oy+14+(below.length*S),'#e05555'));
       conviction='MED';convCol='#ffab00';
 
+    } else if(typeId==='oaor'){
+      // Open Auction Out Of Range: opens outside value, then rotates
+      var oy=154;
+      // fewer rows above open since price gapped out of range
+      var above=[['A'],['A'],['A','B'],['A','B'],['A','B','C'],['A','B','C']];
+      above.forEach(function(r,i){svgParts.push(col(r,oy-14*(above.length-i),AX));});
+      svgParts.push('<text x="4" y="'+(oy-4)+'" font-size="9" fill="#e0c97a" font-family="Courier New" font-style="italic">Open</text>');
+      svgParts.push(linePlain(LX1,oy,LX2,oy));
+      svgParts.push(circle(AX+3,oy));
+      var below=[['A','B','C'],['A','B','C'],['A','B'],['A','C'],['C'],['C']];
+      below.forEach(function(r,i){svgParts.push(col(r,oy+14+(i*S),AX));});
+      svgParts.push(line(AX+42,oy-4,AX+42,oy-14*above.length-4,'#e05555'));
+      svgParts.push(line(AX+54,oy+14,AX+54,oy+14+(below.length*S),'#e05555'));
+      svgParts.push(line(AX+66,oy-4,AX+66,oy-14*above.length-4,'#e05555'));
+      conviction='MED-LOW';convCol='#ff8c00';
     } else {
-      // Open Auction: rotates both ways, open in middle
+      // Open Auction In Range: opens in value, rotates
       var oy=154;
       var above=[['A'],['A'],['A','B'],['A','B'],['A','B','C'],['A','B','C'],['A','B','C'],['A','B','C']];
       above.forEach(function(r,i){svgParts.push(col(r,oy-14*(above.length-i),AX));});
@@ -4259,7 +4274,7 @@ function render(){
     content.style.opacity="1";
     content.innerHTML="";
     content.style.padding="0";
-    content.style.overflow=State.tab==="chart"?"hidden":"";
+    content.style.overflow="";
     content.style.padding="16px";content.style.overflow="auto";content.style.display="block";
     content.appendChild(VIEWS[State.tab]());
   }
