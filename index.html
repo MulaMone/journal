@@ -4064,7 +4064,7 @@ function openAnalysisTab(){
     var svgParts=[];
     svgParts.push('<svg viewBox="0 0 220 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px;display:block;margin:0 auto;">');
     svgParts.push('<rect width="220" height="360" fill="#040d1a" rx="4"/>');
-    svgParts.push('<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/></marker></defs>');
+    svgParts.push('<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#e05555" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>');
 
     function line(x1,y1,x2,y2,col,w){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(col||'#5b9bd5')+'" stroke-width="'+(w||2)+'" marker-end="url(#arr)"/>';}
     function linePlain(x1,y1,x2,y2,col,w){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(col||'#5b9bd5')+'" stroke-width="'+(w||2)+'"/>';}
