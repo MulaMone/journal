@@ -3956,19 +3956,35 @@ function notesTab(){
 
   // Confluence checklist
   var confH=div("card-h mt12");var confT=div("card-t");confT.textContent="Confluence Checklist";confH.appendChild(confT);emaCard.appendChild(confH);
-  var confItems=[
+  var confLeft=[
     {color:"#f5c842",label:"Yellow",desc:" = 5min / 5ma"},
     {color:"#3dba6f",label:"Green",desc:" = 1min / 50ma"},
     {color:"#888780",label:"Gray",desc:" = 2min / 50ma"},
-    {color:"#c9962a",label:"Gold",desc:" = 5min / 50ma"}
+    {color:"#c9962a",label:"Gold",desc:" = 5min / 50ma"},
+    {color:"#c45c00",label:"Dark Orange",desc:" = 1hr / 50ma"}
   ];
-  confItems.forEach(function(c){
-    var row=div("row gap8 mt8");row.style.cssText="align-items:center;padding:10px 12px;border:0.5px solid var(--border);border-radius:6px;";
-    var dot=div();dot.style.cssText="width:10px;height:10px;border-radius:50%;background:"+c.color+";flex-shrink:0;";
-    var lbl=document.createElement("span");lbl.style.cssText="font-size:13px;font-weight:500;color:"+c.color+";";lbl.textContent=c.label;
-    var desc=document.createElement("span");desc.style.cssText="font-size:13px;color:var(--text2);";desc.textContent=c.desc;
-    row.appendChild(dot);row.appendChild(lbl);row.appendChild(desc);emaCard.appendChild(row);
-  });
+  var confRight=[
+    {color:"#89cff0",label:"Baby Blue",desc:" = 30min / 20ma"},
+    {color:"#9b59b6",label:"Purple",desc:" = 4hr / 50ma"},
+    {color:"#ffffff",label:"White",desc:" = 1day / 9ma"},
+    {color:"#4da6ff",label:"Blue",desc:" = 5hr / 50ma"},
+    {color:"#c9962a",label:"Gold (dotted)",desc:" = 1hr / 100ma",dotted:true}
+  ];
+  var confGrid=div();confGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;";
+  function makeConfCol(items){
+    var col=div();col.style.cssText="display:flex;flex-direction:column;gap:8px;";
+    items.forEach(function(c){
+      var row=div("row gap8");row.style.cssText="align-items:center;padding:10px 12px;border:0.5px solid var(--border);border-radius:6px;";
+      var dot=div();var dotBorder=c.dotted?"border:2px dashed "+c.color+";background:transparent;":c.color==="#ffffff"?"background:"+c.color+";border:1px solid var(--border);":"background:"+c.color+";";dot.style.cssText="width:10px;height:10px;border-radius:50%;flex-shrink:0;"+dotBorder;
+      var lbl=document.createElement("span");lbl.style.cssText="font-size:13px;font-weight:500;color:"+c.color+";";lbl.textContent=c.label;
+      var desc=document.createElement("span");desc.style.cssText="font-size:12px;color:var(--text2);";desc.textContent=c.desc;
+      row.appendChild(dot);row.appendChild(lbl);row.appendChild(desc);col.appendChild(row);
+    });
+    return col;
+  }
+  confGrid.appendChild(makeConfCol(confLeft));
+  confGrid.appendChild(makeConfCol(confRight));
+  emaCard.appendChild(confGrid);
 
   el.appendChild(emaCard);
 
