@@ -337,7 +337,13 @@ function syncToCloud(){
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
       newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
       focusImprove:State.focusImprove,mantraNotes:State.mantraNotes,
-      starredSetups:State.starredSetups
+      starredSetups:State.starredSetups,
+      notes_session:ls("notes_session",{}),
+      notes_weekly:ls("notes_weekly",{}),
+      notes_lessons:ls("notes_lessons",[]),
+      notes_mantras:ls("notes_mantras",[]),
+      notes_pad:ls("notes_pad",""),
+      playbook_custom:ls("playbook_custom",[])
     },
     updated_at:new Date().toISOString()
   };
@@ -393,6 +399,12 @@ function loadFromCloud(syncId,callback){
       if(s.focusImprove) State.focusImprove=s.focusImprove;
       if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
       if(s.starredSetups) State.starredSetups=s.starredSetups;
+      if(s.notes_session) ss("notes_session",s.notes_session);
+      if(s.notes_weekly) ss("notes_weekly",s.notes_weekly);
+      if(s.notes_lessons) ss("notes_lessons",s.notes_lessons);
+      if(s.notes_mantras&&s.notes_mantras.length) ss("notes_mantras",s.notes_mantras);
+      if(s.notes_pad!==undefined&&s.notes_pad!=="") ss("notes_pad",s.notes_pad);
+      if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
@@ -522,6 +534,8 @@ var DEFAULT_TRADES=[
 var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"RTH VWAP",imp:"medium",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
+function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn,ms);};}
+var _syncDebounced=debounce(syncToCloud,2000);
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
 var _isLocal=window.location.protocol==="file:";function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
@@ -2268,7 +2282,7 @@ function playbookTab(){
   var editingIdx=State.pb_editing!==undefined?State.pb_editing:null;
   var addingNew=State.pb_adding||false;
 
-  function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);}
+  function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);syncToCloud();}
 
   // All entries: built-in SETUPS + custom, starred sorted to top
   var allEntries=SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true};}).concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false};}));
@@ -2294,7 +2308,7 @@ function playbookTab(){
       var nm=document.getElementById("pb_new_name").value.trim();
       var ds=document.getElementById("pb_new_desc").value.trim();
       if(!nm){alert("Setup name required");return;}
-      var arr=ls("playbook_custom",[]);arr.push({name:nm,desc:ds});ss("playbook_custom",arr);
+      var arr=ls("playbook_custom",[]);arr.push({name:nm,desc:ds});ss("playbook_custom",arr);syncToCloud();
       State.pb_adding=false;render();
     });addForm.appendChild(nsb);el.appendChild(addForm);
   }
@@ -2334,7 +2348,7 @@ function playbookTab(){
         var delbtn=h("button",{className:"btn btn-r",style:"width:100%;margin-top:8px"});delbtn.textContent="DELETE SETUP";
         delbtn.addEventListener("click",function(){
           if(!confirm("Delete this setup?"))return;
-          var arr=ls("playbook_custom",[]);var ci=idx-SETUPS.length;arr.splice(ci,1);ss("playbook_custom",arr);State.pb_editing=undefined;render();
+          var arr=ls("playbook_custom",[]);var ci=idx-SETUPS.length;arr.splice(ci,1);ss("playbook_custom",arr);syncToCloud();State.pb_editing=undefined;render();
         });card.appendChild(delbtn);
       }
     } else {
@@ -3727,7 +3741,7 @@ function notesTab(){
     var snTA=document.createElement("textarea");snTA.rows=5;snTA.placeholder="How is the market feeling? Bias, key observations, confluences to watch...";snTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";snTA.value=todaySession;
     snCard.appendChild(snTA);
     var snSave=document.createElement("button");snSave.style.cssText="width:100%;background:transparent;border:1px solid #ff8c00;color:#ff8c00;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;border-radius:5px;padding:8px;margin-top:8px;cursor:pointer;";snSave.textContent="SAVE NOTE";
-    snSave.addEventListener("click",function(){sessionNotes[notesToday]=snTA.value;ss("notes_session",sessionNotes);snSave.textContent="SAVED ✓";setTimeout(function(){snSave.textContent="SAVE NOTE";},1500);});
+    snSave.addEventListener("click",function(){sessionNotes[notesToday]=snTA.value;ss("notes_session",sessionNotes);syncToCloud();snSave.textContent="SAVED ✓";setTimeout(function(){snSave.textContent="SAVE NOTE";},1500);});
     snCard.appendChild(snSave);el.appendChild(snCard);
 
     // Weekly Review
@@ -3742,12 +3756,12 @@ function notesTab(){
       var box=document.createElement("div");box.style.cssText="background:#071428;border:1px solid #1a3260;border-radius:6px;padding:9px;";
       var lbl=document.createElement("div");lbl.style.cssText="font-size:10px;color:#ff8c00;letter-spacing:1px;text-transform:uppercase;font-family:'Courier New',monospace;margin-bottom:5px;";lbl.textContent=p.l;
       var inp=document.createElement("input");inp.style.cssText="background:transparent;border:none;border-bottom:1px solid #1a3260;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;width:100%;padding:3px 0;outline:none;";inp.placeholder="...";inp.value=wkReview[p.k]||"";
-      (function(key,input){input.addEventListener("input",function(){wkReview[key]=input.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});})(p.k,inp);
+      (function(key,input){input.addEventListener("input",function(){wkReview[key]=input.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);_syncDebounced();});})(p.k,inp);
       box.appendChild(lbl);box.appendChild(inp);wrGrid.appendChild(box);
     });
     wrCard.appendChild(wrGrid);
     var wrTA=document.createElement("textarea");wrTA.rows=2;wrTA.placeholder="Additional weekly thoughts...";wrTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";wrTA.value=wkReview.extra||"";
-    wrTA.addEventListener("input",function(){wkReview.extra=wrTA.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});
+    wrTA.addEventListener("input",function(){wkReview.extra=wrTA.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);_syncDebounced();});
     wrCard.appendChild(wrTA);el.appendChild(wrCard);
 
     // Lessons Learned
@@ -3766,7 +3780,7 @@ function notesTab(){
         var meta=document.createElement("div");meta.style.cssText="display:flex;justify-content:space-between;margin-top:3px;";
         var dt=document.createElement("span");dt.style.cssText="font-size:8px;color:#c9a84c;font-family:monospace;";dt.textContent=l.date;
         var del=document.createElement("span");del.style.cssText="font-size:8px;color:#ff4444;cursor:pointer;font-family:monospace;";del.textContent="✕";
-        (function(idx2){del.addEventListener("click",function(){lessons.splice(idx2,1);ss("notes_lessons",lessons);renderLessonsM();});})(i);
+        (function(idx2){del.addEventListener("click",function(){lessons.splice(idx2,1);ss("notes_lessons",lessons);syncToCloud();renderLessonsM();});})(i);
         meta.appendChild(dt);meta.appendChild(del);body.appendChild(txt);body.appendChild(meta);
         row.appendChild(dot);row.appendChild(body);llCard.appendChild(row);
       });
@@ -3774,7 +3788,7 @@ function notesTab(){
       var addRow=document.createElement("div");addRow.style.cssText="display:flex;gap:8px;margin-top:8px;";
       var addInp=document.createElement("input");addInp.placeholder="Add a lesson learned...";addInp.style.cssText="flex:1;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
       var addBtn2=document.createElement("button");addBtn2.style.cssText="background:transparent;border:1px solid #00e676;color:#00e676;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";addBtn2.textContent="+ ADD";
-      addBtn2.addEventListener("click",function(){var v=addInp.value.trim();if(!v)return;lessons.unshift({text:v,date:notesToday});ss("notes_lessons",lessons);renderLessonsM();});
+      addBtn2.addEventListener("click",function(){var v=addInp.value.trim();if(!v)return;lessons.unshift({text:v,date:notesToday});ss("notes_lessons",lessons);syncToCloud();renderLessonsM();});
       llAdd.addEventListener("click",function(){addInp.focus();});
       addRow.appendChild(addInp);addRow.appendChild(addBtn2);llCard.appendChild(addRow);
     }
@@ -3789,7 +3803,7 @@ function notesTab(){
     var npSub=document.createElement("div");npSub.style.cssText="font-size:8px;color:#c9a84c;font-family:monospace;";npSub.textContent="scratch space";
     npHdr.appendChild(npT);npHdr.appendChild(npSub);npCard.appendChild(npHdr);
     var npTA=document.createElement("textarea");npTA.rows=6;npTA.placeholder="Anything goes — ideas, numbers, trade setups you're watching, random thoughts...";npTA.style.cssText="width:100%;background:#071428;border:1px solid #1a3260;border-radius:6px;color:#e0c97a;font-family:'Courier New',monospace;font-size:14px;padding:9px;resize:none;line-height:1.6;outline:none;";npTA.value=notepad;
-    npTA.addEventListener("input",function(){ss("notes_pad",npTA.value);});
+    npTA.addEventListener("input",function(){ss("notes_pad",npTA.value);_syncDebounced();});
     npCard.appendChild(npTA);el.appendChild(npCard);
 
   } else {
@@ -3807,7 +3821,7 @@ function notesTab(){
     snH.appendChild(snRight);snCard.appendChild(snH);
     var snTA=h("textarea",{rows:"9",placeholder:"How is the market feeling? Bias, key observations, confluences to watch for today..."});snTA.style.resize="none";snTA.style.marginBottom="10px";snTA.value=todaySession;snCard.appendChild(snTA);
     var snSaveBtn=h("button",{className:"btn"});snSaveBtn.style.cssText="float:right;";snSaveBtn.textContent="SAVE";
-    snSaveBtn.addEventListener("click",function(){sessionNotes[notesToday]=snTA.value;ss("notes_session",sessionNotes);snSaveBtn.textContent="SAVED ✓";setTimeout(function(){snSaveBtn.textContent="SAVE";},1500);});
+    snSaveBtn.addEventListener("click",function(){sessionNotes[notesToday]=snTA.value;ss("notes_session",sessionNotes);syncToCloud();snSaveBtn.textContent="SAVED ✓";setTimeout(function(){snSaveBtn.textContent="SAVE";},1500);});
     snCard.appendChild(snSaveBtn);topG.appendChild(snCard);
 
     // Weekly Review card
@@ -3821,15 +3835,15 @@ function notesTab(){
       var box=div();box.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:3px;padding:10px;";
       var lbl=h("label",{});lbl.style.cssText="font-size:9px;color:var(--ca);letter-spacing:1px;margin-bottom:6px;display:block;";lbl.textContent=p.l;
       var inp=h("input",{placeholder:"..."});inp.value=wkReview[p.k]||"";
-      (function(key,input){input.addEventListener("input",function(){wkReview[key]=input.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});})(p.k,inp);
+      (function(key,input){input.addEventListener("input",function(){wkReview[key]=input.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);_syncDebounced();});})(p.k,inp);
       box.appendChild(lbl);box.appendChild(inp);wrPG.appendChild(box);
     });
     wrCard.appendChild(wrPG);
     var wrTA=h("textarea",{rows:"3",placeholder:"Additional weekly thoughts..."});wrTA.style.resize="none";wrTA.style.marginBottom="10px";wrTA.value=wkReview.extra||"";
-    wrTA.addEventListener("input",function(){wkReview.extra=wrTA.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);});
+    wrTA.addEventListener("input",function(){wkReview.extra=wrTA.value;weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);_syncDebounced();});
     wrCard.appendChild(wrTA);
     var wrSaveBtn=h("button",{className:"btn"});wrSaveBtn.style.cssText="float:right;";wrSaveBtn.textContent="SAVE REVIEW";
-    wrSaveBtn.addEventListener("click",function(){weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);wrSaveBtn.textContent="SAVED ✓";setTimeout(function(){wrSaveBtn.textContent="SAVE REVIEW";},1500);});
+    wrSaveBtn.addEventListener("click",function(){weeklyReview[wkKey]=wkReview;ss("notes_weekly",weeklyReview);syncToCloud();wrSaveBtn.textContent="SAVED ✓";setTimeout(function(){wrSaveBtn.textContent="SAVE REVIEW";},1500);});
     wrCard.appendChild(wrSaveBtn);topG.appendChild(wrCard);
 
     // Mantras & Rules card
@@ -3862,14 +3876,14 @@ function notesTab(){
           })(i);
           arrows.appendChild(up);arrows.appendChild(dn);right.appendChild(arrows);
           var del=h("button",{className:"btn btn-r"});del.style.cssText="padding:2px 8px;font-size:9px;";del.textContent="✕";
-          (function(idx2){del.addEventListener("click",function(){mantras.splice(idx2,1);ss("notes_mantras",mantras);renderMantrasD();});})(i);
+          (function(idx2){del.addEventListener("click",function(){mantras.splice(idx2,1);ss("notes_mantras",mantras);syncToCloud();renderMantrasD();});})(i);
           right.appendChild(del);row.appendChild(right);
         }
         mrList.appendChild(row);
       });
     }
     mrEditBtn.addEventListener("click",function(){mrEditing=!mrEditing;mrEditBtn.textContent=mrEditing?"DONE":"EDIT";mrAddRow.style.display=mrEditing?"flex":"none";renderMantrasD();});
-    mrAddBtn.addEventListener("click",function(){var v=mrInp.value.trim();if(!v)return;mantras.push(v);ss("notes_mantras",mantras);mrInp.value="";renderMantrasD();});
+    mrAddBtn.addEventListener("click",function(){var v=mrInp.value.trim();if(!v)return;mantras.push(v);ss("notes_mantras",mantras);syncToCloud();mrInp.value="";renderMantrasD();});
     renderMantrasD();
     topG.appendChild(mrCard);
     el.appendChild(topG);
@@ -3893,14 +3907,14 @@ function notesTab(){
         var dt=div("xs m");dt.style.marginTop="3px";dt.textContent=l.date;
         left.appendChild(dot);left.appendChild(txt);left.appendChild(dt);row.appendChild(left);
         var del=h("button",{className:"btn btn-r"});del.style.cssText="padding:2px 8px;font-size:9px;flex-shrink:0;";del.textContent="✕";
-        (function(idx2){del.addEventListener("click",function(){lessons.splice(idx2,1);ss("notes_lessons",lessons);renderLessonsD();});})(i);
+        (function(idx2){del.addEventListener("click",function(){lessons.splice(idx2,1);ss("notes_lessons",lessons);syncToCloud();renderLessonsD();});})(i);
         row.appendChild(del);llList.appendChild(row);
       });
       if(llShowAdd){
         var llAddRow=div("row gap8 mt8");
         var llInp=h("input",{placeholder:"Add a lesson learned..."});
         var llSaveBtn=h("button",{className:"btn btn-g"});llSaveBtn.style.whiteSpace="nowrap";llSaveBtn.textContent="SAVE";
-        llSaveBtn.addEventListener("click",function(){var v=llInp.value.trim();if(!v)return;lessons.unshift({text:v,date:notesToday});ss("notes_lessons",lessons);llShowAdd=false;llAddBtn.textContent="+ ADD";renderLessonsD();});
+        llSaveBtn.addEventListener("click",function(){var v=llInp.value.trim();if(!v)return;lessons.unshift({text:v,date:notesToday});ss("notes_lessons",lessons);syncToCloud();llShowAdd=false;llAddBtn.textContent="+ ADD";renderLessonsD();});
         llAddRow.appendChild(llInp);llAddRow.appendChild(llSaveBtn);llList.appendChild(llAddRow);
         setTimeout(function(){llInp.focus();},50);
       }
@@ -3914,7 +3928,7 @@ function notesTab(){
     var npH=div("card-h");var npT=div("card-t");npT.textContent="Notepad";npH.appendChild(npT);
     var npSub=span("xs m");npSub.textContent="scratch space";npH.appendChild(npSub);npCard.appendChild(npH);
     var npTA=h("textarea",{rows:"14",placeholder:"Anything goes — ideas, numbers, trade setups you're watching, random thoughts, reminders..."});npTA.style.resize="none";npTA.value=notepad;
-    npTA.addEventListener("input",function(){ss("notes_pad",npTA.value);});npCard.appendChild(npTA);
+    npTA.addEventListener("input",function(){ss("notes_pad",npTA.value);_syncDebounced();});npCard.appendChild(npTA);
     botG.appendChild(npCard);
     el.appendChild(botG);
   }
