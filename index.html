@@ -3711,7 +3711,7 @@ function notesTab(){
   var wkReview=weeklyReview[wkKey]||{well:"",wrong:"",focus:"",emotion:"",extra:""};
   var todaySession=sessionNotes[notesToday]||"";
 
-  var sh=div("sh");sh.innerHTML="Notes &mdash; "+notesToday;el.appendChild(sh);
+  var sh=div("sh");sh.innerHTML="Notes";el.appendChild(sh);
 
   if(isM){
     // ── MOBILE: stacked cards ──
@@ -3975,7 +3975,7 @@ function notesTab(){
     var col=div();col.style.cssText="display:flex;flex-direction:column;gap:8px;";
     items.forEach(function(c){
       var row=div("row gap8");row.style.cssText="align-items:center;padding:10px 12px;border:0.5px solid var(--border);border-radius:6px;";
-      var dc=c.dotColor||c.color;var dot=div();var dotBorder=c.dotted?"border:2px dashed "+dc+";background:transparent;":dc==="#ffffff"?"background:"+dc+";border:1px solid var(--border);":"background:"+dc+";";dot.style.cssText="width:10px;height:10px;border-radius:50%;flex-shrink:0;"+dotBorder;
+      var dc=c.dotColor||c.color;var dot=div();var dotSz=c.dotted&&isM?"14":"10";var dotBorder=c.dotted?"border:2px dashed "+dc+";background:transparent;":dc==="#ffffff"?"background:"+dc+";border:1px solid var(--border);":"background:"+dc+";";dot.style.cssText="width:"+dotSz+"px;height:"+dotSz+"px;border-radius:50%;flex-shrink:0;"+dotBorder;
       var lbl=document.createElement("span");lbl.style.cssText="font-size:13px;font-weight:500;color:"+(c.dotColor||c.color)+";";lbl.textContent=c.label;
       var desc=document.createElement("span");desc.style.cssText="font-size:12px;color:var(--text2);";desc.textContent=c.desc;
       row.appendChild(dot);row.appendChild(lbl);row.appendChild(desc);col.appendChild(row);
