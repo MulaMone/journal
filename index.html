@@ -8,9 +8,9 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--border2:#1e3d73;--border3:#2a5099;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
 html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden}body{overflow-y:scroll;-webkit-overflow-scrolling:touch}
-#app{min-height:100vh;display:flex;flex-direction:column}
+#app{min-height:100vh;display:flex;flex-direction:column;padding-top:100px}
 /* TOPBAR */
-#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:54px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:201}
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:54px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:fixed;top:0;left:0;right:0;z-index:201}
 .logo{font-size:26px;font-weight:700;letter-spacing:4px;color:var(--accent)}
 .brand-name{font-family:'Cinzel',serif;font-size:24px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase}
 .logo small{color:var(--text3);font-size:14px;font-weight:400;margin-left:10px;letter-spacing:2px}
@@ -20,7 +20,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 /* TABS */
-#tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:sticky;top:54px;z-index:200}
+#tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:fixed;top:54px;left:0;right:0;z-index:200}
 .tab{padding:0 14px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
@@ -919,7 +919,7 @@ function renderTabs(){
   var el=document.getElementById("tabs");
   el.style.display="";
   el.innerHTML="";
-  el.style.cssText="display:flex;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden;position:sticky;top:54px;z-index:200;";
+  el.style.cssText="display:flex;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden;position:fixed;top:52px;left:0;right:0;z-index:200;";
   var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 14px;flex:1;min-width:0;overflow:hidden;";
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
