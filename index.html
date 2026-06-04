@@ -293,7 +293,7 @@ svg text{font-family:'Courier New',monospace}
       <button class="bn-item" data-tab="__more" aria-label="More"><span class="bn-icon">⋯</span>More</button>
     </div>
   </nav>
-  <div id="m-more-drawer" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:#071428;border-top:2px solid #ff8c00;z-index:499;padding:8px 0"></div>
+  <div id="m-more-drawer" style="display:none;position:fixed;bottom:80px;left:0;right:0;background:#071428;border-top:2px solid #ff8c00;z-index:499;padding:8px 0"></div>
 </div>
 
 <script>
@@ -960,9 +960,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","prep","opps","playbook","import","notes"];
-var MORE_TABS_LABELS={home:"Home",prep:"Prep",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes"};
-var MORE_TABS_ICONS={home:"⌂",prep:"▣",opps:"★",playbook:"◈",import:"⬆",notes:"✎"};
+var MORE_TABS=["home","opps","playbook","import","notes"];
+var MORE_TABS_LABELS={home:"Home",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes"};
+var MORE_TABS_ICONS={home:"⌂",opps:"★",playbook:"◈",import:"⬆",notes:"✎"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -1021,7 +1021,7 @@ function openMoreDrawer(){
   drawer.innerHTML="";
   MORE_TABS.forEach(function(id){
     var item=document.createElement("div");
-    item.style.cssText="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid #1a3260;cursor:pointer;font-family:monospace;font-size:12px;letter-spacing:1.5px;color:"+(State.tab===id?"#00d4d4":"#e0c97a")+";background:"+(State.tab===id?"#112444":"transparent")+";-webkit-tap-highlight-color:transparent;";
+    var isLast=(id===MORE_TABS[MORE_TABS.length-1]);item.style.cssText="display:flex;align-items:center;gap:12px;padding:13px 16px;"+(isLast?"":"border-bottom:1px solid #1a3260;")+"cursor:pointer;font-family:monospace;font-size:12px;letter-spacing:1.5px;color:"+(State.tab===id?"#00d4d4":"#e0c97a")+";background:"+(State.tab===id?"#112444":"transparent")+";-webkit-tap-highlight-color:transparent;";
     item.innerHTML="<span style='font-size:16px;width:22px;text-align:center'>"+MORE_TABS_ICONS[id]+"</span>"+MORE_TABS_LABELS[id].toUpperCase();
     item.addEventListener("click",function(){closeMoreDrawer();switchTab(id);});
     drawer.appendChild(item);
