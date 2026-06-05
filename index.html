@@ -1179,6 +1179,7 @@ function mobileTradeCard(t){
   var exp=document.createElement("div");exp.className="m-tc-expand";
   function ef(lbl,val){if(!val||!String(val).trim())return;var f=document.createElement("div");f.className="m-tc-exp-field";f.innerHTML='<div class="m-tc-exp-lbl">'+lbl+'</div><div class="m-tc-exp-val">'+val+"</div>";exp.appendChild(f);}
   ef("Confluences",t.conf);ef("Post-Trade",t.post);ef("Did Right",t.right);ef("Did Wrong",t.wrong);
+  if(t.r!=null){var rF=document.createElement("div");rF.className="m-tc-exp-field";var rCol3=t.r>=1?"#00e676":t.r>=0?"#ffab00":"#ff4444";rF.innerHTML='<div class="m-tc-exp-lbl">R MULTIPLE</div><div class="m-tc-exp-val" style="color:'+rCol3+';font-weight:700;font-size:15px;">'+(t.r>=0?"+":"")+t.r.toFixed(2)+'R'+(t.stopPts?' <span style="font-size:11px;color:#c9a84c;font-weight:400;">· '+t.stopPts+'pt stop</span>':"")+"</div>";exp.appendChild(rF);}
   // Action buttons
   var acts=document.createElement("div");acts.className="m-tc-exp-actions";
   var editBtn=document.createElement("button");editBtn.className="btn";editBtn.style.cssText="padding:7px 14px;font-size:11px;flex:1;";editBtn.textContent="EDIT";
@@ -2080,8 +2081,54 @@ function tradeForm(existing){
   ctrWrap.appendChild(ctrRow);fg.appendChild(ctrWrap);
   // P&L preview
   var pvDiv=div();pvDiv.appendChild(h("label",{},"P&L Preview"));var pvEl=div();pvEl.id="f_pnl_preview";pvEl.style="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:11px;min-height:32px";pvEl.textContent="—";pvDiv.appendChild(pvEl);fg.appendChild(pvDiv);
-  function updatePreview(){var ent=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),inst=document.getElementById("f_inst"),dir=document.getElementById("f_dir"),ctr=document.getElementById("f_ctr");if(ent&&ex&&ent.value&&ex.value){var tv=TICK[inst.value]||1;var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dir.value==="Long"?1:-1);var dv=parseFloat((pts*tv*(parseFloat(ctr.value)||1)).toFixed(2));pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";}}
-  setTimeout(function(){var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");if(e2)e2.addEventListener("input",updatePreview);if(ex)ex.addEventListener("input",updatePreview);if(ct)ct.addEventListener("input",updatePreview);},0);
+
+  // ── Stop Distance / Risk / R Multiple ──
+  var stopWrap=div();stopWrap.appendChild(h("label",{},"Stop (pts)"));var stopInp=h("input",{id:"f_stop_pts",type:"number"});stopInp.placeholder="e.g. 4";stopInp.step="0.25";stopInp.min="0";if(existing&&existing.stopPts) stopInp.value=existing.stopPts;stopWrap.appendChild(stopInp);fg.appendChild(stopWrap);
+
+  var riskWrap=div();riskWrap.appendChild(h("label",{},"Risk ($)"));var riskInp=h("input",{id:"f_risk_usd",type:"number"});riskInp.placeholder="auto";riskInp.step="1";riskInp.min="0";riskInp.style.color="var(--ca)";if(existing&&existing.riskUsd) riskInp.value=existing.riskUsd;riskWrap.appendChild(riskInp);fg.appendChild(riskWrap);
+
+  var rWrap=div();rWrap.appendChild(h("label",{},"R Multiple"));var rDisp=div();rDisp.id="f_r_display";rDisp.style.cssText="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:13px;font-weight:700;min-height:32px;font-family:monospace;";rDisp.textContent="—";rWrap.appendChild(rDisp);fg.appendChild(rWrap);
+
+  function updatePreview(){
+    var ent=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),instEl=document.getElementById("f_inst"),dirEl=document.getElementById("f_dir"),ctrEl=document.getElementById("f_ctr");
+    var stopEl=document.getElementById("f_stop_pts"),riskEl=document.getElementById("f_risk_usd"),rDispEl=document.getElementById("f_r_display");
+    if(ent&&ex&&ent.value&&ex.value){
+      var tv=TICK[instEl.value]||1;
+      var ctrs=parseFloat(ctrEl.value)||1;
+      var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dirEl.value==="Long"?1:-1);
+      var dv=parseFloat((pts*tv*ctrs).toFixed(2));
+      pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";
+      // R calc: if stop pts entered, auto-fill risk USD
+      var stopPts=parseFloat(stopEl.value)||0;
+      if(stopPts>0){
+        var ticksPerPt=1/(tv*0.01||0.25);
+        var riskUsd=parseFloat((stopPts*(tv/0.25)*ctrs).toFixed(2));
+        // Only auto-fill risk if user hasn't manually overridden it
+        if(!riskEl._manualOverride) riskEl.value=riskUsd.toFixed(0);
+      }
+      var riskUsdVal=parseFloat(riskEl.value)||0;
+      if(riskUsdVal>0&&dv!==0){
+        var r=parseFloat((dv/riskUsdVal).toFixed(2));
+        var col=r>=2?"var(--green)":r>=1?"var(--green)":r>=0?"var(--amber)":"var(--red)";
+        var badge=r>=2?"EXCELLENT ✓":r>=1?"GOOD ✓":r>=0?"SCRATCH":"LOSS";
+        rDispEl.style.color=col;
+        rDispEl.innerHTML=(r>=0?"+":"")+r.toFixed(2)+"R &nbsp;<span style='font-size:10px;font-weight:400;color:var(--text3);'>"+badge+"</span>";
+      } else {
+        rDispEl.style.color="var(--text3)";
+        rDispEl.textContent=stopPts>0&&riskUsdVal>0?"—":"Enter stop pts";
+      }
+    }
+  }
+  setTimeout(function(){
+    var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");
+    var stopEl=document.getElementById("f_stop_pts"),riskEl=document.getElementById("f_risk_usd");
+    if(e2)e2.addEventListener("input",updatePreview);
+    if(ex)ex.addEventListener("input",updatePreview);
+    if(ct)ct.addEventListener("input",updatePreview);
+    if(stopEl)stopEl.addEventListener("input",function(){if(riskEl) riskEl._manualOverride=false;updatePreview();});
+    if(riskEl)riskEl.addEventListener("input",function(){riskEl._manualOverride=true;updatePreview();});
+    updatePreview();
+  },0);
 
   var customSU=ls("playbook_custom",[]);
   var allSetupNames=SETUPS.concat(customSU.map(function(e){return e.name;}));
@@ -2142,7 +2189,11 @@ function tradeForm(existing){
     var tv=TICK[inst]||1;var pts=(parseFloat(exit)-parseFloat(entry))*(dir==="Long"?1:-1);
     var setupsArr=suWrap._getSelected();
     var setupStr=setupsArr.join(", ");
-    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:parseFloat((pts*tv*parseFloat(ctr)).toFixed(2)),hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false};
+    var dv=parseFloat((pts*tv*parseFloat(ctr)).toFixed(2));
+    var stopPts=parseFloat(gv("stop_pts"))||0;
+    var riskUsd=parseFloat(gv("risk_usd"))||0;
+    var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
+    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
     if(isEdit){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
@@ -2170,7 +2221,7 @@ function logTab(){
   var tcard=div("card mt12");tcard.style.overflowX="auto";
   var tbl=h("table",{className:"tbl"});
   var thead=h("thead");var hr=h("tr");
-  ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","PTS","P&L","SETUP","SESSION","EX","RU","EMO"].forEach(function(hd){hr.appendChild(h("th",{},[hd]));});
+  ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","PTS","P&L","R","SETUP","SESSION","EX","RU","EMO"].forEach(function(hd){hr.appendChild(h("th",{},[hd]));});
   thead.appendChild(hr);tbl.appendChild(thead);
   var tbody=h("tbody");
   State.trades.forEach(function(t){
@@ -2189,6 +2240,13 @@ function logTab(){
     dtd2.textContent=dol(t.d);
     dtd2.style.cssText=t.d>0?"background:#00e67630;border-radius:3px;padding:7px 10px":t.d<0?"background:#ff444430;border-radius:3px;padding:7px 10px":"padding:7px 10px";
     tr.appendChild(dtd2);
+    var rtd=h("td");
+    if(t.r!=null){
+      var rCol=t.r>=1?"var(--green)":t.r>=0?"var(--amber)":"var(--red)";
+      rtd.style.cssText="font-weight:700;font-size:12px;color:"+rCol+";white-space:nowrap;";
+      rtd.textContent=(t.r>=0?"+":"")+t.r.toFixed(2)+"R";
+    } else { rtd.textContent="—"; rtd.style.color="var(--border2)"; }
+    tr.appendChild(rtd);
     var std=h("td",{className:"m xs"});std.style.maxWidth="130px";std.style.overflow="hidden";std.style.whiteSpace="nowrap";std.style.textOverflow="ellipsis";
     var stSetups=getSetups(t);
     if(stSetups.length===0){std.textContent="";}
@@ -2216,12 +2274,13 @@ function logTab(){
     tbody.appendChild(tr);
 
     if(State.expanded===t.id){
-      var exRow=h("tr");var exTd=h("td",{colspan:"14"});exTd.colSpan=14;exTd.style.padding="0";
+      var exRow=h("tr");var exTd=h("td",{colspan:"15"});exTd.colSpan=15;exTd.style.padding="0";
       var exDiv=div("exp");
       var eg2=div();eg2.style.cssText="display:grid;grid-template-columns:1.3fr 1.3fr 1fr;gap:18px;padding:14px;";
       var l=div();
       var c1=div("xs m mb8");c1.textContent="CONFLUENCES";l.appendChild(c1);var c2=div("xs mb8");c2.style.color="#e0c97a";c2.style.lineHeight="1.7";c2.textContent=t.conf||"—";l.appendChild(c2);
       var p1=div("xs m mt8 mb8");p1.textContent="POST-TRADE NOTES";l.appendChild(p1);var p2=div("xs");p2.style.color="#e0c97a";p2.style.lineHeight="1.7";p2.textContent=t.post||"—";l.appendChild(p2);
+      if(t.r!=null){var rLine=div("xs mt8");rLine.style.cssText="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);";var rLbl=div("xs m");rLbl.textContent="RISK/REWARD";rLine.appendChild(rLbl);var rVal=div();var rCol2=t.r>=1?"var(--green)":t.r>=0?"var(--amber)":"var(--red)";rVal.style.cssText="font-weight:700;font-size:13px;color:"+rCol2+";";rVal.textContent=(t.r>=0?"+":"")+t.r.toFixed(2)+"R";rLine.appendChild(rVal);if(t.stopPts){var sPts=div("xs m");sPts.textContent="· "+t.stopPts+"pt stop · $"+t.riskUsd+" risk";rLine.appendChild(sPts);}l.appendChild(rLine);}
       var r=div();
       var rg=div("xs m mb8");rg.textContent="WHAT I DID RIGHT";r.appendChild(rg);var rv=div("xs g mb8");rv.style.lineHeight="1.7";rv.textContent=t.right||"—";r.appendChild(rv);
       var wg=div("xs m mt8 mb8");wg.textContent="WHAT I DID WRONG";r.appendChild(wg);var wv=div("xs r mb12");wv.style.lineHeight="1.7";wv.textContent=t.wrong||"—";r.appendChild(wv);
