@@ -2207,11 +2207,11 @@ function tradeForm(existing){
   fg.appendChild(fs("ru","Rule Grade",["A","B","C"]));
   var emoCls=div();emoCls.appendChild(h("label",{},"Emotion"));
   var emoSel=h("select",{id:"f_emo"});[1,2,3,4,5].forEach(function(n){var opt=h("option",{value:n},[EMO[n]+" "+n]);if(existing&&existing.emo===n) opt.selected=true;else if(!existing&&n===3) opt.selected=true;emoSel.appendChild(opt);});emoCls.appendChild(emoSel);fg.appendChild(emoCls);
-  var hlDiv=div();hlDiv.appendChild(h("label",{},"Highlight"));var hlInp=h("input",{id:"f_hl",type:"checkbox"});hlInp.style.width="auto";hlDiv.appendChild(hlInp);fg.appendChild(hlDiv);
-  var cd=div("s4");cd.appendChild(h("label",{},"Confluences"));cd.appendChild(h("input",{id:"f_conf",placeholder:"Key factors supporting this trade..."}));fg.appendChild(cd);
-  var pd=div("s2");pd.appendChild(h("label",{},"Post-Trade Notes"));pd.appendChild(h("input",{id:"f_post"}));fg.appendChild(pd);
-  var rd=div("s2");rd.appendChild(h("label",{},"What I Did Right"));rd.appendChild(h("input",{id:"f_right"}));fg.appendChild(rd);
-  var wd=div("s2");wd.appendChild(h("label",{},"What I Did Wrong"));wd.appendChild(h("input",{id:"f_wrong"}));fg.appendChild(wd);
+  fg.appendChild(fi("hl","Highlight","checkbox",null,null));
+  fg.appendChild(fi("conf","Confluences","text","Key factors supporting this trade...",existing?existing.conf:"","s4"));
+  fg.appendChild(fi("post","Post-Trade Notes","text","",existing?existing.post:"","s2"));
+  fg.appendChild(fi("right","What I Did Right","text","",existing?existing.right:"","s2"));
+  fg.appendChild(fi("wrong","What I Did Wrong","text","",existing?existing.wrong:"","s2"));
 
   var sv=div("s4 mt8");
   var svb=h("button",{className:"btn btn-g",style:"width:100%"});svb.textContent=isEdit?"SAVE CHANGES":"SAVE TRADE";
