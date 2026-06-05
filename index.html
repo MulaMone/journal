@@ -1137,7 +1137,10 @@ function toggleMobileMode(){
 }
 
 // ─── MOBILE HELPER FUNCTIONS ─────────────────────────────────────────
-function isMobile(){return localStorage.getItem("edge_mobile_mode")==="1";}
+function isMobile(){
+  if(window.navigator.standalone===true||window.matchMedia("(display-mode: standalone)").matches) return true;
+  return localStorage.getItem("edge_mobile_mode")==="1";
+}
 
 // Build a mobile trade card element
 function mobileTradeCard(t){
@@ -4391,10 +4394,12 @@ function render(){
 // ─── INIT ─────────────────────────────────────────────────────────
 // Mobile mode: auto-detect on first visit only, never reset after that
 (function(){
-  if(localStorage.getItem("edge_mobile_mode")===null){
-    var ua=navigator.userAgent||"";
-    var phone=/iPhone|Android.*Mobile|BlackBerry|IEMobile/i.test(ua);
-    localStorage.setItem("edge_mobile_mode", phone?"1":"0");
+  var ua=navigator.userAgent||"";
+  var phone=/iPhone|Android.*Mobile|BlackBerry|IEMobile/i.test(ua);
+  var isPWA=(window.navigator.standalone===true)||window.matchMedia("(display-mode: standalone)").matches;
+  // Always re-detect in PWA mode (standalone overrides any stored value)
+  if(isPWA||localStorage.getItem("edge_mobile_mode")===null){
+    localStorage.setItem("edge_mobile_mode", (phone||isPWA)?"1":"0");
   }
 })();
 initSupabase();
