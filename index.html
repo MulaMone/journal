@@ -2850,22 +2850,11 @@ function stripQuotes(s){
   if(s[0]==='"'&&s[s.length-1]==='"') s=s.slice(1,-1);
   return s.trim();
 }
-function splitCSVRow(line){
-  var result=[],cur="",inQ=false;
-  for(var i=0;i<line.length;i++){
-    var ch=line[i];
-    if(ch==='"'){inQ=!inQ;}
-    else if(ch===','&&!inQ){result.push(cur);cur="";}
-    else{cur+=ch;}
-  }
-  result.push(cur);
-  return result;
-}
 
 function parseCSV(text){
   var lines=parseCSVLines(text).filter(function(l){return l.trim();});
   if(lines.length<2) return{trades:[],error:"Need a header row and at least one trade row."};
-  var header=splitCSVRow(lines[0]).map(function(h){return stripQuotes(h).toLowerCase();});
+  var header=lines[0].split(",").map(function(h){return stripQuotes(h).toLowerCase();});
   var rows=lines.slice(1).filter(function(l){return l.indexOf(",")>-1;});
   if(!rows.length) return{trades:[],error:"No data rows found after the header."};
 
@@ -2879,31 +2868,31 @@ function parseCSV(text){
   function cleanNum(s){return (s||"").replace("$","").replace(",","").trim();}
 
   var isNT=header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1);
-  var isTVPos=header.indexOf("bought timestamp")>-1&&header.indexOf("sold timestamp")>-1&&header.indexOf("avg. buy")>-1;
+  var isTVPos=(header.indexOf("bought timestamp")>-1||header.indexOf("boughttimestamp")>-1)&&(header.indexOf("sold timestamp")>-1||header.indexOf("soldtimestamp")>-1)&&(header.indexOf("avg. buy")>-1||header.indexOf("buyprice")>-1);
   var trades=[];
 
   rows.forEach(function(line,ri){
-    var row=splitCSVRow(line);
+    var row=line.split(",");
     var t={};
     // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
     var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
 
     if(isTVPos){
       // ── Tradovate Position History CSV ──
-      var tvInst=detectInstrument(col(row,["product","contract"]));
-      var tvQty=cleanNum(col(row,["paired qty","quantity","qty"]))||"1";
-      var boughtTs=col(row,["bought timestamp"]);
-      var soldTs=col(row,["sold timestamp"]);
+      var tvInst=detectInstrument(col(row,["symbol","product","contract"]));
+      var tvQty=cleanNum(col(row,["qty","paired qty","quantity"]))||"1";
+      var boughtTs=col(row,["boughttimestamp","bought timestamp"]);
+      var soldTs=col(row,["soldtimestamp","sold timestamp"]);
       var boughtDate=boughtTs?new Date(boughtTs):new Date(9999,0,1);
       var soldDate=soldTs?new Date(soldTs):new Date(9999,0,1);
       var tvIsShort=soldDate<boughtDate;
       var tvDir=tvIsShort?"Short":"Long";
       var entryTs=tvIsShort?soldTs:boughtTs;
-      var avgBuy=cleanNum(col(row,["avg. buy","buy price"]));
-      var avgSell=cleanNum(col(row,["avg. sell","sell price"]));
+      var avgBuy=cleanNum(col(row,["buyprice","avg. buy","buy price"]));
+      var avgSell=cleanNum(col(row,["sellprice","avg. sell","sell price"]));
       var tvEntry=tvIsShort?avgSell:avgBuy;
       var tvExit=tvIsShort?avgBuy:avgSell;
-      var tvPnlRaw=cleanNum(col(row,["p/l","p&l","pnl","profit"]));
+      var tvPnlRaw=cleanNum(col(row,["pnl","p/l","p&l","profit"]));
       var tvPts=tvEntry&&tvExit?(parseFloat(tvExit)-parseFloat(tvEntry))*(tvDir==="Long"?1:-1):0;
       var tvTick=TICK[tvInst]||1;
       var tvDollar=tvPnlRaw?parseFloat(parseFloat(tvPnlRaw).toFixed(2)):parseFloat((tvPts*tvTick*parseFloat(tvQty)).toFixed(2));
