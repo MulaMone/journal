@@ -572,7 +572,7 @@ var State={
   tv_lastSync:ls("tv_lastSync",""),
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
-  sync_tab:"tradovate",
+  sync_tab:"csv",
   chart_symbol:"ES",
   chart_interval:"1h",
   mindsetChecks:ls("mindsetChecks",{}),
@@ -2969,7 +2969,7 @@ function importTab(){
   var topRow=div("rjb mb12");
   var sh2=div("sh");sh2.style.marginBottom="0";sh2.textContent="Import & Sync";topRow.appendChild(sh2);
   var swRow=div("row gap8");
-  [{id:"tradovate",label:"Tradovate"},{id:"ninjatrader",label:"NinjaTrader"},{id:"csv",label:"CSV Upload"}].forEach(function(s){
+  [{id:"csv",label:"CSV Upload"},{id:"tradovate",label:"Tradovate"},{id:"ninjatrader",label:"NinjaTrader"}].forEach(function(s){
     var b=h("button",{className:"plt-btn"+(State.sync_tab===s.id?" sel":"")});
     b.textContent=s.label;
     b.addEventListener("click",function(){State.sync_tab=s.id;State.imp_msg="";render();});
