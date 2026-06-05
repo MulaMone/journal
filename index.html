@@ -297,7 +297,7 @@ svg text{font-family:'Courier New',monospace}
       <button class="bn-item" data-tab="__more" aria-label="More"><span class="bn-icon">⋯</span>More</button>
     </div>
   </nav>
-  <div id="m-more-drawer" style="display:none;position:fixed;bottom:80px;left:0;right:0;background:#071428;border-top:2px solid #ff8c00;z-index:499;padding:8px 0;max-height:calc(100vh - 160px);overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+  <div id="m-more-drawer" style="display:none;position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:0;right:0;background:#071428;border-top:2px solid #ff8c00;z-index:501;padding:8px 0;max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 -8px 32px #00000080"></div>
 </div>
 
 <script>
@@ -1023,6 +1023,10 @@ function toggleMoreDrawer(){
 }
 function openMoreDrawer(){
   _moreOpen=true;
+  // Backdrop
+  var bd=document.getElementById("m-more-bd");
+  if(!bd){bd=document.createElement("div");bd.id="m-more-bd";bd.style.cssText="position:fixed;inset:0;bottom:calc(80px + env(safe-area-inset-bottom));background:#00000060;z-index:500;";bd.addEventListener("click",closeMoreDrawer);document.body.appendChild(bd);}
+  bd.style.display="block";
   var drawer=document.getElementById("m-more-drawer");
   if(!drawer) return;
   drawer.innerHTML="";
@@ -1041,6 +1045,7 @@ function openMoreDrawer(){
 }
 function closeMoreDrawer(){
   _moreOpen=false;
+  var bd=document.getElementById("m-more-bd");if(bd) bd.style.display="none";
   var drawer=document.getElementById("m-more-drawer");
   if(drawer) drawer.style.display="none";
 }
