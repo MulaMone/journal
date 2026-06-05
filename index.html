@@ -386,28 +386,29 @@ function loadFromCloud(syncId,callback){
     }
     if(d.settings){
       var s=d.settings;
-      if(s.note) State.note=s.note;
-      if(s.wkGoal) State.wkGoal=s.wkGoal;
-      if(s.moGoal) State.moGoal=s.moGoal;
-      if(s.mindsetChecks) State.mindsetChecks=s.mindsetChecks;
-      if(s.mindsetChecksDate) State.mindsetChecksDate=s.mindsetChecksDate;
-      if(s.mindsetNote) State.mindsetNote=s.mindsetNote;
-      if(s.levelChecks) State.levelChecks=s.levelChecks;
-      if(s.levelChecksDate) State.levelChecksDate=s.levelChecksDate;
-      if(s.weekLevelChecks) State.weekLevelChecks=s.weekLevelChecks;
-      if(s.newsChecks) State.newsChecks=s.newsChecks;
-      if(s.newsChecksDate) State.newsChecksDate=s.newsChecksDate;
-      if(s.newsOther) State.newsOther=s.newsOther;
-      if(s.newsSelected) State.newsSelected=s.newsSelected;
-      if(s.newsSelectedDate) State.newsSelectedDate=s.newsSelectedDate;
-      if(s.focusImprove) State.focusImprove=s.focusImprove;
-      if(s.mantraNotes) State.mantraNotes=s.mantraNotes;
-      if(s.starredSetups) State.starredSetups=s.starredSetups;
+      // Use !== undefined so empty strings sync correctly (user intentionally cleared a field)
+      if(s.note!==undefined){State.note=s.note;ss("note",s.note);}
+      if(s.wkGoal!==undefined){State.wkGoal=s.wkGoal;ss("wkGoal",s.wkGoal);}
+      if(s.moGoal!==undefined){State.moGoal=s.moGoal;ss("moGoal",s.moGoal);}
+      if(s.mindsetChecks){State.mindsetChecks=s.mindsetChecks;ss("mindsetChecks",s.mindsetChecks);}
+      if(s.mindsetChecksDate){State.mindsetChecksDate=s.mindsetChecksDate;ss("mindsetChecksDate",s.mindsetChecksDate);}
+      if(s.mindsetNote!==undefined){State.mindsetNote=s.mindsetNote;ss("mindsetNote",s.mindsetNote);}
+      if(s.levelChecks){State.levelChecks=s.levelChecks;ss("levelChecks",s.levelChecks);}
+      if(s.levelChecksDate){State.levelChecksDate=s.levelChecksDate;ss("levelChecksDate",s.levelChecksDate);}
+      if(s.weekLevelChecks){State.weekLevelChecks=s.weekLevelChecks;ss("weekLevelChecks",s.weekLevelChecks);}
+      if(s.newsChecks){State.newsChecks=s.newsChecks;ss("newsChecks",s.newsChecks);}
+      if(s.newsChecksDate){State.newsChecksDate=s.newsChecksDate;ss("newsChecksDate",s.newsChecksDate);}
+      if(s.newsOther!==undefined){State.newsOther=s.newsOther;ss("newsOther",s.newsOther);}
+      if(s.newsSelected){State.newsSelected=s.newsSelected;ss("newsSelected",s.newsSelected);}
+      if(s.newsSelectedDate){State.newsSelectedDate=s.newsSelectedDate;ss("newsSelectedDate",s.newsSelectedDate);}
+      if(s.focusImprove!==undefined){State.focusImprove=s.focusImprove;ss("focusImprove",s.focusImprove);}
+      if(s.mantraNotes!==undefined){State.mantraNotes=s.mantraNotes;ss("mantraNotes",s.mantraNotes);}
+      if(s.starredSetups){State.starredSetups=s.starredSetups;ss("starredSetups",s.starredSetups);}
       if(s.notes_session) ss("notes_session",s.notes_session);
       if(s.notes_weekly) ss("notes_weekly",s.notes_weekly);
       if(s.notes_lessons) ss("notes_lessons",s.notes_lessons);
       if(s.notes_mantras&&s.notes_mantras.length) ss("notes_mantras",s.notes_mantras);
-      if(s.notes_pad!==undefined&&s.notes_pad!=="") ss("notes_pad",s.notes_pad);
+      if(s.notes_pad!==undefined) ss("notes_pad",s.notes_pad);
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
