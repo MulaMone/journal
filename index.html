@@ -2086,7 +2086,7 @@ function tradeForm(existing){
   var stopWrap=div();stopWrap.appendChild(h("label",{},"Stop (pts)"));
   var stopRow=div("ctr-wrap");
   var stopMinus=h("button",{className:"ctr-btn"});stopMinus.textContent="−";
-  var stopInp=h("input",{id:"f_stop_pts",type:"number"});stopInp.placeholder="0";stopInp.step="0.25";stopInp.min="0";stopInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--text);font-family:monospace;font-size:12px;height:32px;width:100%;";
+  var stopInp=h("input",{id:"f_stop_pts",type:"text"});stopInp.placeholder="0";stopInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--text);font-family:monospace;font-size:12px;height:32px;width:100%;";
   if(existing&&existing.stopPts) stopInp.value=existing.stopPts;
   var stopPlus=h("button",{className:"ctr-btn"});stopPlus.textContent="+";
   stopMinus.addEventListener("click",function(){var v=parseFloat(stopInp.value)||0;if(v>=0.25){stopInp.value=(v-0.25).toFixed(2);}else{stopInp.value="0";}var riskEl2=document.getElementById("f_risk_usd");if(riskEl2) riskEl2._manualOverride=false;updatePreview();});
@@ -2098,7 +2098,7 @@ function tradeForm(existing){
   var riskWrap=div();riskWrap.appendChild(h("label",{},"Risk ($)"));
   var riskRow=div("ctr-wrap");
   var riskMinus=h("button",{className:"ctr-btn"});riskMinus.textContent="−";
-  var riskInp=h("input",{id:"f_risk_usd",type:"number"});riskInp.placeholder="auto";riskInp.step="25";riskInp.min="0";riskInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--ca);font-family:monospace;font-size:12px;height:32px;width:100%;";
+  var riskInp=h("input",{id:"f_risk_usd",type:"text"});riskInp.placeholder="auto";riskInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--ca);font-family:monospace;font-size:12px;height:32px;width:100%;";
   if(existing&&existing.riskUsd) riskInp.value=existing.riskUsd;
   var riskPlus=h("button",{className:"ctr-btn"});riskPlus.textContent="+";
   riskMinus.addEventListener("click",function(){var v=parseFloat(riskInp.value)||0;riskInp.value=Math.max(0,v-25);riskInp._manualOverride=true;updatePreview();});
