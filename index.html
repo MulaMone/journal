@@ -2101,9 +2101,7 @@ function tradeForm(existing){
       // R calc: if stop pts entered, auto-fill risk USD
       var stopPts=parseFloat(stopEl.value)||0;
       if(stopPts>0){
-        var ticksPerPt=1/(tv*0.01||0.25);
-        var riskUsd=parseFloat((stopPts*(tv/0.25)*ctrs).toFixed(2));
-        // Only auto-fill risk if user hasn't manually overridden it
+        var riskUsd=parseFloat((stopPts*tv*ctrs).toFixed(2));
         if(!riskEl._manualOverride) riskEl.value=riskUsd.toFixed(0);
       }
       var riskUsdVal=parseFloat(riskEl.value)||0;
