@@ -2083,9 +2083,28 @@ function tradeForm(existing){
   var pvDiv=div();pvDiv.appendChild(h("label",{},"P&L Preview"));var pvEl=div();pvEl.id="f_pnl_preview";pvEl.style="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:11px;min-height:32px";pvEl.textContent="—";pvDiv.appendChild(pvEl);fg.appendChild(pvDiv);
 
   // ── Stop Distance / Risk / R Multiple ──
-  var stopWrap=div();stopWrap.appendChild(h("label",{},"Stop (pts)"));var stopInp=h("input",{id:"f_stop_pts",type:"number"});stopInp.placeholder="e.g. 4";stopInp.step="0.25";stopInp.min="0";if(existing&&existing.stopPts) stopInp.value=existing.stopPts;stopWrap.appendChild(stopInp);fg.appendChild(stopWrap);
+  var stopWrap=div();stopWrap.appendChild(h("label",{},"Stop (pts)"));
+  var stopRow=div("ctr-wrap");
+  var stopMinus=h("button",{className:"ctr-btn"});stopMinus.textContent="−";
+  var stopInp=h("input",{id:"f_stop_pts",type:"number"});stopInp.placeholder="0";stopInp.step="0.25";stopInp.min="0";stopInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--text);font-family:monospace;font-size:12px;height:32px;width:100%;";
+  if(existing&&existing.stopPts) stopInp.value=existing.stopPts;
+  var stopPlus=h("button",{className:"ctr-btn"});stopPlus.textContent="+";
+  stopMinus.addEventListener("click",function(){var v=parseFloat(stopInp.value)||0;if(v>=0.25){stopInp.value=(v-0.25).toFixed(2);}else{stopInp.value="0";}var riskEl2=document.getElementById("f_risk_usd");if(riskEl2) riskEl2._manualOverride=false;updatePreview();});
+  stopPlus.addEventListener("click",function(){var v=parseFloat(stopInp.value)||0;stopInp.value=(v+0.25).toFixed(2);var riskEl2=document.getElementById("f_risk_usd");if(riskEl2) riskEl2._manualOverride=false;updatePreview();});
+  stopInp.addEventListener("input",function(){var riskEl2=document.getElementById("f_risk_usd");if(riskEl2) riskEl2._manualOverride=false;updatePreview();});
+  stopRow.appendChild(stopMinus);stopRow.appendChild(stopInp);stopRow.appendChild(stopPlus);
+  stopWrap.appendChild(stopRow);fg.appendChild(stopWrap);
 
-  var riskWrap=div();riskWrap.appendChild(h("label",{},"Risk ($)"));var riskInp=h("input",{id:"f_risk_usd",type:"number"});riskInp.placeholder="auto";riskInp.step="1";riskInp.min="0";riskInp.style.color="var(--ca)";if(existing&&existing.riskUsd) riskInp.value=existing.riskUsd;riskWrap.appendChild(riskInp);fg.appendChild(riskWrap);
+  var riskWrap=div();riskWrap.appendChild(h("label",{},"Risk ($)"));
+  var riskRow=div("ctr-wrap");
+  var riskMinus=h("button",{className:"ctr-btn"});riskMinus.textContent="−";
+  var riskInp=h("input",{id:"f_risk_usd",type:"number"});riskInp.placeholder="auto";riskInp.step="25";riskInp.min="0";riskInp.style.cssText="border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;text-align:center;background:var(--panel2);color:var(--ca);font-family:monospace;font-size:12px;height:32px;width:100%;";
+  if(existing&&existing.riskUsd) riskInp.value=existing.riskUsd;
+  var riskPlus=h("button",{className:"ctr-btn"});riskPlus.textContent="+";
+  riskMinus.addEventListener("click",function(){var v=parseFloat(riskInp.value)||0;riskInp.value=Math.max(0,v-25);riskInp._manualOverride=true;updatePreview();});
+  riskPlus.addEventListener("click",function(){var v=parseFloat(riskInp.value)||0;riskInp.value=v+25;riskInp._manualOverride=true;updatePreview();});
+  riskRow.appendChild(riskMinus);riskRow.appendChild(riskInp);riskRow.appendChild(riskPlus);
+  riskWrap.appendChild(riskRow);fg.appendChild(riskWrap);
 
   var rWrap=div();rWrap.appendChild(h("label",{},"R Multiple"));var rDisp=div();rDisp.id="f_r_display";rDisp.style.cssText="padding:7px 9px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;font-size:13px;font-weight:700;min-height:32px;font-family:monospace;";rDisp.textContent="—";rWrap.appendChild(rDisp);fg.appendChild(rWrap);
 
@@ -2119,11 +2138,10 @@ function tradeForm(existing){
   }
   setTimeout(function(){
     var e2=document.getElementById("f_entry"),ex=document.getElementById("f_exit"),ct=document.getElementById("f_ctr");
-    var stopEl=document.getElementById("f_stop_pts"),riskEl=document.getElementById("f_risk_usd");
+    var riskEl=document.getElementById("f_risk_usd");
     if(e2)e2.addEventListener("input",updatePreview);
     if(ex)ex.addEventListener("input",updatePreview);
     if(ct)ct.addEventListener("input",updatePreview);
-    if(stopEl)stopEl.addEventListener("input",function(){if(riskEl) riskEl._manualOverride=false;updatePreview();});
     if(riskEl)riskEl.addEventListener("input",function(){riskEl._manualOverride=true;updatePreview();});
     updatePreview();
   },0);
