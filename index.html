@@ -685,9 +685,12 @@ function dol(n){n=n||0;var abs=Math.abs(n);var str=(abs%1===0)?abs.toFixed(0):ab
 function clr(n){return (n||0)>=0?"g":"r"}
 function parseGoal(str,def){
   if(!str) return def;
-  var s=str.replace(/[^0-9.k]/gi,"").toLowerCase();
-  if(s.indexOf("k")>-1) return parseFloat(s)*1000;
-  return parseFloat(s)||def;
+  // Match first dollar amount like $8,000 or $8k or 8000 or 8k
+  var m=str.match(/\$?([0-9][0-9,]*(?:\.[0-9]+)?)\s*k/i);
+  if(m) return parseFloat(m[1].replace(/,/g,""))*1000;
+  var m2=str.match(/\$?([0-9][0-9,]*(?:\.[0-9]+)?)/);
+  if(m2) return parseFloat(m2[1].replace(/,/g,""))||def;
+  return def;
 }
 function grc(g){return "gr"+g}
 function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
@@ -1647,12 +1650,12 @@ function homeTab(){
   var moGoalLbl=span("xs m");moGoalLbl.style.letterSpacing="1px";moGoalLbl.textContent="MONTHLY GOAL";moGoalLeft.appendChild(moGoalLbl);
   var moGoalCurr=span("fw7 b");moGoalCurr.style.fontSize="12px";moGoalCurr.textContent=dol(moS.total).replace("+","");moGoalLeft.appendChild(moGoalCurr);
   var moGoalSlash=span("xs m");moGoalSlash.textContent="/";moGoalLeft.appendChild(moGoalSlash);
-  var moGoalTarget=span("xs m");moGoalTarget.style.fontSize="12px";moGoalTarget.textContent="$"+Math.round(moGoalAmt);moGoalLeft.appendChild(moGoalTarget);
+  var moGoalTarget=span("xs m");moGoalTarget.style.fontSize="12px";moGoalTarget.textContent=dol(moGoalAmt).replace("+","");moGoalLeft.appendChild(moGoalTarget);
   moGoalRow.appendChild(moGoalLeft);
   var moPctEl=span("xs fw7 b");moPctEl.textContent=moPct+"%";moGoalRow.appendChild(moPctEl);
   moGoalBar.appendChild(moGoalRow);
-  var moBarBg=div();moBarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
-  var moBarFill=div();moBarFill.style.cssText="background:var(--ca);width:"+moPct+"%;height:100%;border-radius:3px;";
+  var moBarBg=div();moBarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;overflow:hidden;";
+  var moBarFill=div();moBarFill.style.cssText="background:var(--ca);width:"+moPct+"%;height:100%;border-radius:3px;transition:width 0.4s ease;";
   moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
   moCard.appendChild(moGoalBar);
   el.appendChild(moCard);
@@ -2850,6 +2853,8 @@ function stripQuotes(s){
   if(s[0]==='"'&&s[s.length-1]==='"') s=s.slice(1,-1);
   return s.trim();
 }
+
+
 function splitCSVRow(line){
   var result=[],cur="",inQ=false;
   for(var i=0;i<line.length;i++){
@@ -2861,7 +2866,6 @@ function splitCSVRow(line){
   result.push(cur);
   return result;
 }
-
 function parseCSV(text){
   var lines=parseCSVLines(text).filter(function(l){return l.trim();});
   if(lines.length<2) return{trades:[],error:"Need a header row and at least one trade row."};
@@ -2876,14 +2880,14 @@ function parseCSV(text){
     }
     return "";
   }
-  function cleanNum(s){return (s||"").replace(/\$/g,"").replace(/,/g,"").trim();}
+  function cleanNum(s){return (s||"").replace(/[$]/g,"").replace(/,/g,"").trim();}
 
   var isTVPos=(header.indexOf("boughttimestamp")>-1||header.indexOf("bought timestamp")>-1)&&(header.indexOf("soldtimestamp")>-1||header.indexOf("sold timestamp")>-1)&&(header.indexOf("buyprice")>-1||header.indexOf("avg. buy")>-1||header.indexOf("buy price")>-1);
   var isNT=!isTVPos&&(header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1));
   var trades=[];
 
   rows.forEach(function(line,ri){
-    var row=splitCSVRow(line);
+    var row=line.split(",");
     var t={};
     // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
     var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
