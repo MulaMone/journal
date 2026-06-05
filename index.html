@@ -455,14 +455,23 @@ function updateSyncStatus(status){
 
 // Auto-sync on every ss() call — wrap the original
 var _ss_orig=null;
+var _syncInFlight=false;
+var _syncInFlightTimer=null;
 function initAutoSync(){
   _ss_orig=ss;
-  // Debounced sync — wait 1.5s after last save before pushing to cloud
   var syncTimer=null;
   window._syncToCloud=function(){
     updateSyncStatus("syncing");
+    // Block the background poll from overwriting while upload is pending
+    _syncInFlight=true;
+    clearTimeout(_syncInFlightTimer);
+    _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},8000);
     clearTimeout(syncTimer);
-    syncTimer=setTimeout(syncToCloud,1500);
+    syncTimer=setTimeout(function(){
+      syncToCloud();
+      clearTimeout(_syncInFlightTimer);
+      _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},3000);
+    },1500);
   };
 }
 
@@ -4510,9 +4519,10 @@ function showTVNotification(count){
 if(supaClient&&State.tv_creds&&(State.tv_creds.user||State.tv_creds.cid)) setInterval(pollTVTrades,5000);
 
 // Poll edge_data every 10 seconds to stay in sync across computers
-// Guard: skip if user has a form open to avoid wiping unsaved changes
+// Guard: skip if user has a form open or a sync is in-flight to avoid wiping unsaved changes
 setInterval(function(){
   if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
+  if(_syncInFlight) return; // don't overwrite while upload is pending
   var currentId=getSyncId();
   var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels});
   loadFromCloud(currentId,function(ok){
