@@ -15,10 +15,11 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 #app{min-height:100vh;display:flex;flex-direction:column;padding-top:calc(100px + env(safe-area-inset-top))}
 /* TOPBAR */
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;padding-top:env(safe-area-inset-top);height:calc(54px + env(safe-area-inset-top));background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:fixed;top:0;left:0;right:0;z-index:201}
+#topbar-left{display:flex;align-items:center;width:420px;flex-shrink:0}
 .logo{font-size:26px;font-weight:700;letter-spacing:4px;color:var(--accent)}
-.brand-name{font-family:'Cinzel',serif;font-size:24px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase}
+.brand-name{font-family:'Cinzel',serif;font-size:24px;font-weight:900;letter-spacing:10px;word-spacing:4px;background:linear-gradient(135deg,#ffd700 0%,#ff8c00 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;text-transform:uppercase;z-index:2;pointer-events:none}
 .logo small{color:var(--text3);font-size:14px;font-weight:400;margin-left:10px;letter-spacing:2px}
-#topbar-stats{display:flex;gap:18px;font-size:14px;min-width:200px;justify-content:flex-end;flex-shrink:0}
+#topbar-stats{display:flex;gap:10px;font-size:13px;justify-content:flex-end;align-items:center;width:420px;flex-shrink:0;overflow:hidden}
 #topbar-stats span{color:var(--text3)}
 #topbar-stats b{font-weight:600}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 2s infinite}
@@ -279,7 +280,7 @@ svg text{font-family:'Courier New',monospace}
 <body>
 <div id="app">
   <div id="topbar">
-    <div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div>
+    <div id="topbar-left"><div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
     <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));window.location.reload();" style="cursor:pointer" title="Refresh">BILLION$</div>
     <div id="topbar-stats"></div>
   </div>
@@ -1139,9 +1140,226 @@ function renderTopbar(){
   if(isMobile()){
     el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp; <span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <b class="m xs hide-xs">'+td+'</b>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">⚙</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
+    var dlEl=document.getElementById("topbar-dl");
+    if(dlEl){
+      var maxLoss=parseFloat(localStorage.getItem("edge_max_loss")||"0");
+      if(maxLoss>0){
+        var remaining=maxLoss+tPnl;
+        var breached=tPnl<=-maxLoss;
+        var col=breached?"var(--red)":remaining<=maxLoss*0.25?"var(--amber)":"var(--text3)";
+        var bdr=breached?"var(--red)":remaining<=maxLoss*0.25?"var(--amber)":"var(--border)";
+        dlEl.style.display="inline-flex";
+        dlEl.innerHTML='<span title="Max Daily Loss" style="background:var(--panel3);border:1px solid '+bdr+';font-size:10px;letter-spacing:.5px;padding:2px 8px;border-radius:3px;font-variant-numeric:tabular-nums;'+(breached?'animation:pulse 1.5s infinite;':'')+'">'+(breached?'<span style="color:var(--red)">MAX LOSS</span>':'<span style="color:var(--red);font-weight:700;">ML</span> <span style="color:var(--text);">$'+Math.abs(remaining).toFixed(0)+'</span>')+'</span>';
+      } else {
+        dlEl.style.display="none";
+        dlEl.innerHTML="";
+      }
+    }
   }
 }
+
+// ─── SETTINGS MODAL (desktop only) ───────────────────────────────────
+function openSettings(){
+  if(document.getElementById("settings-modal")) return;
+  var overlay=document.createElement("div");
+  overlay.id="settings-modal";
+  overlay.style.cssText="position:fixed;inset:0;background:#00000080;z-index:9999;display:flex;align-items:center;justify-content:center;";
+  overlay.addEventListener("click",function(e){if(e.target===overlay) closeSettings();});
+  var box=document.createElement("div");
+  box.style.cssText="background:var(--panel);border:1px solid var(--border2);border-radius:5px;width:460px;max-width:94vw;font-family:'Courier New',monospace;display:flex;flex-direction:column;height:85vh;";
+  // Header
+  var hdr=document.createElement("div");
+  hdr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;";
+  var title=document.createElement("div");
+  title.style.cssText="font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;";
+  title.textContent="\u2699  Settings";
+  var closeBtn=document.createElement("button");
+  closeBtn.textContent="\u2715";
+  closeBtn.style.cssText="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px;line-height:1;";
+  closeBtn.onmouseover=function(){this.style.color="var(--red)";};
+  closeBtn.onmouseout=function(){this.style.color="var(--text3)";};
+  closeBtn.onclick=closeSettings;
+  hdr.appendChild(title);hdr.appendChild(closeBtn);
+  box.appendChild(hdr);
+  // Scrollable body
+  var body=document.createElement("div");
+  body.style.cssText="padding:20px 18px;display:flex;flex-direction:column;gap:16px;overflow-y:scroll;flex:1;min-height:0;-webkit-overflow-scrolling:touch;";
+  function sectionLabel(txt){
+    var el=document.createElement("div");
+    el.style.cssText="font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:-8px;padding-top:4px;";
+    el.textContent=txt;return el;
+  }
+  function toggleRow(label,desc,storageKey,defaultVal){
+    var row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+    var info=document.createElement("div");
+    var lbl=document.createElement("div");lbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";lbl.textContent=label;
+    var dsc=document.createElement("div");dsc.style.cssText="font-size:10px;color:var(--text3);";dsc.textContent=desc;
+    info.appendChild(lbl);if(desc)info.appendChild(dsc);
+    var val=localStorage.getItem(storageKey);
+    var on=(val===null)?defaultVal:(val==="1");
+    var tog=document.createElement("div");
+    tog.style.cssText="width:36px;height:20px;border-radius:10px;cursor:pointer;flex-shrink:0;position:relative;transition:background .2s;background:"+(on?"var(--accent)":"var(--border2)")+";border:1px solid "+(on?"var(--accent)":"var(--border)")+";";
+    var knob=document.createElement("div");
+    knob.style.cssText="position:absolute;top:2px;"+(on?"right:2px":"left:2px")+";width:14px;height:14px;border-radius:50%;background:#fff;transition:all .2s;";
+    tog.appendChild(knob);
+    tog.onclick=function(){
+      var cur=localStorage.getItem(storageKey);
+      var nowOn=!((cur===null)?defaultVal:(cur==="1"));
+      localStorage.setItem(storageKey,nowOn?"1":"0");
+      tog.style.background=nowOn?"var(--accent)":"var(--border2)";
+      tog.style.borderColor=nowOn?"var(--accent)":"var(--border)";
+      knob.style.left=nowOn?"":"2px";knob.style.right=nowOn?"2px":"";
+    };
+    row.appendChild(info);row.appendChild(tog);
+    return row;
+  }
+  function actionRow(label,desc,btnTxt,btnColor,onClick){
+    var row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+    var info=document.createElement("div");
+    var lbl=document.createElement("div");lbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";lbl.textContent=label;
+    var dsc=document.createElement("div");dsc.style.cssText="font-size:10px;color:var(--text3);";dsc.textContent=desc;
+    info.appendChild(lbl);if(desc)info.appendChild(dsc);
+    var btn=document.createElement("button");
+    btn.textContent=btnTxt;
+    btn.style.cssText="background:none;border:1px solid "+btnColor+";color:"+btnColor+";font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;";
+    btn.onmouseover=function(){this.style.background=btnColor+"22";};
+    btn.onmouseout=function(){this.style.background="none";};
+    btn.onclick=onClick;
+    row.appendChild(info);row.appendChild(btn);
+    return row;
+  }
+
+  // ── SYNC ──
+  body.appendChild(sectionLabel("Sync"));
+  body.appendChild(toggleRow("Auto-Sync to Cloud","Push data to Supabase automatically","edge_autosync",true));
+
+  // ── DISPLAY ──
+  body.appendChild(sectionLabel("Display"));
+  body.appendChild(toggleRow("Compact Trade Cards","Smaller rows in the Trade Log","edge_compact_cards",false));
+  body.appendChild(toggleRow("Show Session Labels","Display session tag on each trade row","edge_show_session",true));
+  body.appendChild(toggleRow("Include Overnight Trades","Count overnight trades in daily P&L & stats","edge_show_overnight",true));
+
+  // ── RISK ──
+  body.appendChild(sectionLabel("Risk"));
+  var dmlRow=document.createElement("div");
+  dmlRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var dmlInfo=document.createElement("div");dmlInfo.style.cssText="min-width:0;";
+  var dmlLbl=document.createElement("div");dmlLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";dmlLbl.textContent="Max Daily Loss ($)";
+  var dmlDesc=document.createElement("div");dmlDesc.style.cssText="font-size:10px;color:var(--text3);";dmlDesc.textContent="Displays remaining amount next to TERMINAL in header";
+  dmlInfo.appendChild(dmlLbl);dmlInfo.appendChild(dmlDesc);
+  var dmlRight=document.createElement("div");dmlRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
+  var dmlInp=document.createElement("input");
+  dmlInp.type="text";dmlInp.placeholder="e.g. 500";
+  dmlInp.value=localStorage.getItem("edge_max_loss")||"";
+  dmlInp.style.cssText="width:80px;background:var(--panel3);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:12px;padding:5px 8px;border-radius:3px;text-align:right;";
+  var dmlSave=document.createElement("button");
+  dmlSave.textContent="SET";
+  dmlSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 8px;border-radius:3px;cursor:pointer;";
+  dmlSave.onclick=function(){
+    var v=parseFloat(dmlInp.value);
+    if(!isNaN(v)&&v>0){localStorage.setItem("edge_max_loss",v.toFixed(0));renderTopbar();}
+    else{localStorage.removeItem("edge_max_loss");renderTopbar();}
+    dmlSave.textContent="\u2713";setTimeout(function(){dmlSave.textContent="SET";},1200);
+  };
+  dmlRight.appendChild(dmlInp);dmlRight.appendChild(dmlSave);
+  dmlRow.appendChild(dmlInfo);dmlRow.appendChild(dmlRight);
+  body.appendChild(dmlRow);
+
+  // ── DATA ──
+  body.appendChild(sectionLabel("Data"));
+  body.appendChild(actionRow("Export Trades to CSV","Download all trades as a .csv file","EXPORT","var(--accent)",function(){
+    var trades=State.trades;
+    if(!trades||!trades.length){alert("No trades to export.");return;}
+    var cols=["date","time","inst","dir","entry","exit","ctr","sess","pts","d","ex","ru","emo","setups","conf","post","right","wrong","grade","rval","stopPts","riskUsd"];
+    var rows=[cols.join(",")];
+    trades.forEach(function(t){
+      var row=cols.map(function(c){
+        var v=t[c];
+        if(c==="setups") v=Array.isArray(t.setups)?t.setups.join("|"):(t.setup||"");
+        if(v===undefined||v===null) v="";
+        var s=String(v);
+        if(s.indexOf(",")>-1||s.indexOf('"')>-1||s.indexOf("\n")>-1) s='"'+s.replace(/"/g,'\"\""')+'"';
+        return s;
+      });
+      rows.push(row.join(","));
+    });
+    var csv=rows.join("\n");
+    var blob=new Blob([csv],{type:"text/csv"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="EDGE_trades_"+(new Date().toISOString().slice(0,10))+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }));
+  body.appendChild(actionRow("Delete All Trades","Permanently removes all trade history","DELETE","var(--red)",function(){
+    // Passcode modal
+    var pc=document.createElement("div");
+    pc.style.cssText="position:fixed;inset:0;background:#00000090;z-index:10000;display:flex;align-items:center;justify-content:center;";
+    var pcBox=document.createElement("div");
+    pcBox.style.cssText="background:var(--panel);border:1px solid var(--red);border-radius:5px;width:300px;font-family:'Courier New',monospace;overflow:hidden;";
+    var pcHdr=document.createElement("div");
+    pcHdr.style.cssText="padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:11px;letter-spacing:2px;color:var(--red);text-transform:uppercase;";
+    pcHdr.textContent="\u26a0  Enter Passcode";
+    var pcBody=document.createElement("div");
+    pcBody.style.cssText="padding:20px 16px;display:flex;flex-direction:column;gap:12px;";
+    var pcDesc=document.createElement("div");
+    pcDesc.style.cssText="font-size:11px;color:var(--text3);";
+    pcDesc.textContent="This will permanently delete all trade history.";
+    var pcInp=document.createElement("input");
+    pcInp.type="password";pcInp.maxLength=10;pcInp.placeholder="Passcode";
+    pcInp.style.cssText="background:var(--panel2);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:16px;padding:8px 12px;border-radius:3px;width:100%;text-align:center;letter-spacing:4px;";
+    var pcErr=document.createElement("div");
+    pcErr.style.cssText="font-size:11px;color:var(--red);text-align:center;min-height:16px;";
+    var pcBtns=document.createElement("div");
+    pcBtns.style.cssText="display:flex;gap:8px;";
+    var pcCancel=document.createElement("button");
+    pcCancel.textContent="CANCEL";
+    pcCancel.style.cssText="flex:1;background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:7px;border-radius:3px;cursor:pointer;";
+    pcCancel.onclick=function(){document.body.removeChild(pc);};
+    var pcConfirm=document.createElement("button");
+    pcConfirm.textContent="CONFIRM";
+    pcConfirm.style.cssText="flex:1;background:none;border:1px solid var(--red);color:var(--red);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:7px;border-radius:3px;cursor:pointer;";
+    pcConfirm.onclick=function(){
+      if(pcInp.value==="1591"){
+        document.body.removeChild(pc);
+        State.trades=[];ss("trades",[]);syncToCloud();closeSettings();render();
+      } else {
+        pcErr.textContent="Incorrect passcode. Try again.";
+        pcInp.value="";
+        pcInp.style.borderColor="var(--red)";
+        pcInp.focus();
+        setTimeout(function(){pcInp.style.borderColor="var(--border2)";pcErr.textContent="";},1500);
+      }
+    };
+    pcInp.addEventListener("keydown",function(e){if(e.key==="Enter")pcConfirm.click();if(e.key==="Escape")pcCancel.click();});
+    pcBody.appendChild(pcDesc);pcBody.appendChild(pcInp);pcBody.appendChild(pcErr);pcBtns.appendChild(pcCancel);pcBtns.appendChild(pcConfirm);pcBody.appendChild(pcBtns);
+    pcBox.appendChild(pcHdr);pcBox.appendChild(pcBody);pc.appendChild(pcBox);
+    document.body.appendChild(pc);
+    setTimeout(function(){pcInp.focus();},50);
+  }));
+  body.appendChild(actionRow("Clear Local Cache","Wipe localStorage & reload from cloud","CLEAR","var(--red)",function(){
+    if(confirm("Clear all local cache? Data will reload from Supabase.")){
+      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss"];
+      Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
+      closeSettings();window.location.reload();
+    }
+  }));
+
+
+
+  // Version
+  var ver=document.createElement("div");
+  ver.style.cssText="font-size:10px;color:var(--border2);text-align:right;padding-top:4px;";
+  ver.textContent="EDGE TERMINAL \u00b7 v1.0";
+  body.appendChild(ver);
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+function closeSettings(){var m=document.getElementById("settings-modal");if(m)m.remove();}
 
 function toggleMobileMode(){
   var current=localStorage.getItem("edge_mobile_mode");
@@ -4545,6 +4763,8 @@ window.addEventListener("resize",function(){
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
 // First render is now triggered by the cloud loader above
+
+
 </script>
 </body>
 </html>
