@@ -1651,7 +1651,7 @@ function homeTab(){
   totalCard.appendChild(ttTop);
   var ttVal=div();ttVal.style.fontSize="38px";ttVal.style.fontWeight="700";ttVal.style.lineHeight="1";ttVal.style.letterSpacing="1px";ttVal.className=clr(s.total);ttVal.textContent=dol(s.total);totalCard.appendChild(ttVal);
   var ttWr=div("mt8");ttWr.style.fontSize="12px";
-  ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: '+dol(s.avgW)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: '+dol(s.avgL)+'</span>';
+  ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: $'+Math.abs(s.avgW).toFixed(2)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: $'+Math.abs(s.avgL).toFixed(2)+'</span>';
   totalCard.appendChild(ttWr);
   var ttRR=div("mt8");ttRR.style.cssText="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;";
   ttRR.textContent="R:R  "+(s.avgL&&s.avgW?Math.abs(s.avgW/s.avgL).toFixed(2):"—");
@@ -3027,7 +3027,7 @@ function reviewTab(){
   if(viewMode==="data"){
     var ds=calcStats(State.trades);
     var dg4=div("g4");
-    dg4.appendChild(makeChip("WIN RATE",ds.wr+"%","ac"));dg4.appendChild(makeChip("AVG WINNER",dol(ds.avgW),"g"));dg4.appendChild(makeChip("AVG LOSER",dol(ds.avgL),"r"));dg4.appendChild(makeChip("NET P&L",dol(ds.total),clr(ds.total),"all time"));
+    dg4.appendChild(makeChip("WIN RATE",ds.wr+"%","ac"));dg4.appendChild(makeChip("AVG WINNER","$"+Math.abs(ds.avgW).toFixed(2),"g"));dg4.appendChild(makeChip("AVG LOSER","$"+Math.abs(ds.avgL).toFixed(2),"r"));dg4.appendChild(makeChip("NET P&L",dol(ds.total),clr(ds.total),"all time"));
     var dWL=div();dWL.innerHTML='<span class="g fw7">'+ds.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ds.losses.length+'</span>';
     dg4.appendChild(makeChip("W / L",dWL,"","all time"));
     var daG=State.trades.filter(function(t){return t.ex==="A"}).length;
@@ -3954,8 +3954,8 @@ function mobileAnalyticsTab(){
   kpiGrid.appendChild(mkpi("Max Drawdown",maxDD>0?"-$"+Math.round(maxDD):"$0",maxDD>0?"r":"g","Peak to trough"));
   kpiGrid.appendChild(mkpi("Profit Factor",profitFactor.toFixed(2)+"×",profitFactor>=1?"g":"r","Avg W / Avg L"));
   kpiGrid.appendChild(mkpi("Best Streak",bestStreak+"W","amber","Consecutive wins"));
-  kpiGrid.appendChild(mkpi("Avg Winner",dol(s.avgW),"g","Per trade"));
-  kpiGrid.appendChild(mkpi("Avg Loser",dol(s.avgL),"r","Per trade"));
+  kpiGrid.appendChild(mkpi("Avg Winner","$"+Math.abs(s.avgW).toFixed(2),"g","Per trade"));
+  kpiGrid.appendChild(mkpi("Avg Loser","$"+Math.abs(s.avgL).toFixed(2),"r","Per trade"));
   kpiGrid.appendChild(mkpi("R:R Ratio",(s.avgL?Math.abs(s.avgW/s.avgL).toFixed(2):"—")+"R","ac","Reward:Risk"));
   el.appendChild(kpiGrid);
 
