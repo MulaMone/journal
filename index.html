@@ -945,8 +945,8 @@ function renderTabs(){
     var el=document.getElementById("tabs");
     if(el) el.style.display="none";
     updateMobileNav();
-    startClock();
     renderTopbar();
+    startClock();
     return;
   }
 
@@ -1141,7 +1141,7 @@ function renderTopbar(){
   var s=calcStats(State.trades);
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
-    el.innerHTML='<span style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;" class="'+(tPnl>=0?"g":"r")+'">'+dol(tPnl)+'</span>';
+    el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b>';
   } else {
     el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">⚙</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
     var dlEl=document.getElementById("topbar-dl");
