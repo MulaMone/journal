@@ -4888,23 +4888,30 @@ function accountsTab(){
     } else {
       var na={id:"acct_"+Date.now(),name:name,broker:_selBroker,type:_selType,balance:(balInp.value||"").trim(),accountNum:(numInp.value||"").trim(),notes:(notesInp.value||"").trim(),createdAt:new Date().toISOString()};
       State.accounts.push(na);
-      // If this is the first account OR there is no active account, set it as active
-      // and auto-assign ALL existing untagged trades to it so they don't disappear
+      // First account: set active and tag ALL trades before anything else
       var isFirstAcct=State.accounts.length===1||!State.activeAccount;
       if(isFirstAcct){
-        State.activeAccount=na.id;ss("activeAccount",na.id);
-        var tagged=0;
+        State.activeAccount=na.id;
+        localStorage.setItem("edge_activeAccount",JSON.stringify(na.id));
         State.trades=State.trades.map(function(t){
-          if(!t.accountId){tagged++;return Object.assign({},t,{accountId:na.id});}
-          return t;
+          return Object.assign({},t,{accountId:na.id});
         });
-        if(tagged>0){ss("trades",State.trades);}
+        localStorage.setItem("edge_trades",JSON.stringify(State.trades));
       }
     }
-    ss("accounts",State.accounts);
+    // Save accounts
+    localStorage.setItem("edge_accounts",JSON.stringify(State.accounts));
+    localStorage.setItem("edge_activeAccount",JSON.stringify(State.activeAccount));
+    // Block background poll, sync full state, then render
+    saveBtn.textContent="\u2713 SAVING...";
+    _syncInFlight=true;
+    clearTimeout(_syncInFlightTimer);
+    _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},10000);
     syncToCloud();
-    saveBtn.textContent="\u2713 SAVED";
-    setTimeout(function(){render();},600);
+    setTimeout(function(){
+      saveBtn.textContent="\u2713 SAVED";
+      setTimeout(function(){render();},300);
+    },1500);
   };
 
   return el;
