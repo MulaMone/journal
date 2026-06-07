@@ -783,7 +783,9 @@ function span(cls,text){return h("span",{className:cls||""},typeof text!=="undef
 function activeTrades(){
   var aid=State.activeAccount;
   if(!aid||!State.accounts||!State.accounts.length) return State.trades;
-  // Strict: only show trades tagged to this account. Untagged only show when no account is active.
+  // If active account ID doesn't exist in accounts list, show all trades
+  var acctExists=State.accounts.some(function(a){return a.id===aid;});
+  if(!acctExists) return State.trades;
   return State.trades.filter(function(t){return t.accountId===aid;});
 }
 function calcStats(trades){
@@ -3807,7 +3809,7 @@ function mobileHomeTab(){
   var sc1=document.createElement("div");sc1.className="m-stat-card hero"+(tPnl<0?" neg":"");
   sc1.innerHTML='<div class="m-stat-lbl">Today P&L</div><div class="m-stat-val '+(tPnl>=0?"g":"r")+'">'+dol(tPnl)+'</div><div class="m-stat-sub">'+todayTrades.length+' trades · '+tW+'W/'+tL+'L · '+(tpts>=0?"+":"")+tpts.toFixed(1)+' pts</div>';
   var sc2=document.createElement("div");sc2.className="m-stat-card";
-  sc2.innerHTML='<div class="m-stat-lbl">Win Rate</div><div class="m-stat-val ac">'+s.wr+'%</div><div class="m-stat-sub">'+State.trades.length+' all-time trades</div>';
+  sc2.innerHTML='<div class="m-stat-lbl">Win Rate</div><div class="m-stat-val ac">'+s.wr+'%</div><div class="m-stat-sub">'+_mat.length+' all-time trades</div>';
   statRow.appendChild(sc1);statRow.appendChild(sc2);
   el.appendChild(statRow);
 
@@ -3930,10 +3932,10 @@ function mobileHomeTab(){
   tradesSh.querySelector("span:last-child").addEventListener("click",function(){switchTab("log");});
   el.appendChild(tradesSh);
 
-  if(!State.trades.length){
+  if(!_mat.length){
     var noop=document.createElement("div");noop.style.cssText="color:#1a3260;font-size:11px;text-align:center;padding:20px;font-family:monospace;";noop.textContent="No trades yet — tap + to add your first trade";el.appendChild(noop);
   } else {
-    activeTrades().slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
+    _mat.slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
   return el;
@@ -3957,13 +3959,14 @@ function mobileLogTab(){
     el.appendChild(formCard);
   }
 
-  if(!State.trades.length){
+  var _logAt=activeTrades();
+  if(!_logAt.length){
     var noop=document.createElement("div");noop.style.cssText="color:#1a3260;font-size:11px;text-align:center;padding:32px;font-family:monospace;";noop.textContent="No trades logged yet";el.appendChild(noop);return el;
   }
 
   // Group by date
   var dates=[];var byDate={};
-  activeTrades().forEach(function(t){
+  _logAt.forEach(function(t){
     var d=t.date||"Unknown";
     if(!byDate[d]){byDate[d]=[];dates.push(d);}
     byDate[d].push(t);
@@ -3987,14 +3990,15 @@ function mobileLogTab(){
 // ─── MOBILE ANALYTICS TAB ─────────────────────────────────────────────
 function mobileAnalyticsTab(){
   var el=document.createElement("div");
-  var s=calcStats(State.trades);
+  var _aat=activeTrades();
+  var s=calcStats(_aat);
 
   // ── KPI grid ──
-  var eq2=[0];State.trades.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
+  var eq2=[0];_aat.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
   var peak=0,maxDD=0;eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
   var profitFactor=Math.abs(s.avgL)>0?Math.abs(s.avgW/s.avgL):0;
   var bestStreak=0,curStreak=0,streakType2="";
-  activeTrades().slice().reverse().forEach(function(t){
+  _aat.slice().reverse().forEach(function(t){
     var type=t.d>0?"W":"L";if(type===streakType2){curStreak++;}else{streakType2=type;curStreak=1;}
     if(curStreak>bestStreak) bestStreak=curStreak;
   });
@@ -4017,7 +4021,7 @@ function mobileAnalyticsTab(){
   var eqT=document.createElement("div");eqT.className="m-card-title";eqT.textContent="Equity Curve";
   var eqB=document.createElement("div");eqB.className="m-card-badge"+(s.total<0?" neg":"");eqB.textContent=s.total>=0?"▲ POSITIVE":"▼ DRAWDOWN";
   eqHdr.appendChild(eqT);eqHdr.appendChild(eqB);eqCard.appendChild(eqHdr);
-  eqCard.appendChild(mobileEquitySVG(State.trades));
+  eqCard.appendChild(mobileEquitySVG(_aat));
   el.appendChild(eqCard);
 
   // ── P&L Heatmap ──
@@ -4034,7 +4038,7 @@ function mobileAnalyticsTab(){
   var customSU=ls("playbook_custom",[]);
   var allSetupNames2=SETUPS.concat(customSU.map(function(e){return e.name;}));
   var setupData=allSetupNames2.map(function(sv){
-    var ts=_mat.filter(function(t){return tradeHasSetup(t,sv);});
+    var ts=_aat.filter(function(t){return tradeHasSetup(t,sv);});
     return{l:sv,v:ts.reduce(function(a,t){return a+t.d;},0),n:ts.length};
   }).filter(function(d){return d.n>0;}).sort(function(a,b){return b.v-a.v;});
 
@@ -4049,7 +4053,7 @@ function mobileAnalyticsTab(){
 
   // ── P&L by Session bars ──
   var sessData=SESSIONS.map(function(sess){
-    var ts=_mat.filter(function(t){return t.sess===sess;});
+    var ts=_aat.filter(function(t){return t.sess===sess;});
     return{l:sess.split(" ")[0],v:ts.reduce(function(a,t){return a+t.d;},0),n:ts.length};
   }).filter(function(d){return d.n>0;});
 
@@ -4066,7 +4070,7 @@ function mobileAnalyticsTab(){
   var DOWS2=["Mon","Tue","Wed","Thu","Fri"];
   var DOW_IDX={Mon:1,Tue:2,Wed:3,Thu:4,Fri:5};
   var dowData2=DOWS2.map(function(d){
-    var ts=State.trades.filter(function(t){
+    var ts=_aat.filter(function(t){
       if(!t.date) return false;
       var p=t.date.split("/");if(p.length!==3)return false;
       var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
