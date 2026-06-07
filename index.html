@@ -858,11 +858,6 @@ var State={
   rv_selected_day:null,
   imp_preview:null,
   imp_msg:"",
-  tv_creds:ls("tv_creds",{user:"",pass:"",cid:"",sec:"",env:"live"}),
-  tv_token:ls("tv_token",null),
-  tv_lastSync:ls("tv_lastSync",""),
-  nt_lastSync:ls("nt_lastSync",""),
-  nt_fileHandle:null,
   sync_tab:"csv",
   logPage:0,
   logPageSize:parseInt(localStorage.getItem("edge_logPageSize")||"50"),
@@ -1080,7 +1075,7 @@ function equitySVG(trades,w,h2){
     empty.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:10px;font-family:Courier New,monospace">No trades yet</div>';
     return empty;
   }
-  var mn=Math.min.apply(null,eq),mx=Math.max.apply(null,eq);
+  var mn=eq.reduce(function(a,b){return a<b?a:b;},Infinity),mx=eq.reduce(function(a,b){return a>b?a:b;},-Infinity);
   var rng=mx-mn||1;
   var finalVal=eq[eq.length-1];
   var longestLbl=fmtAxisDollar(Math.abs(mn)>Math.abs(mx)?mn:mx);
@@ -1147,7 +1142,7 @@ function equitySVG(trades,w,h2){
 function barSVG(data,w,h2){
   if(!data||!data.length) return div("chart-wrap");
   var vals=data.map(function(d){return d.v});
-  var mn=Math.min(0,Math.min.apply(null,vals)),mx=Math.max(0,Math.max.apply(null,vals));
+  var mn=Math.min(0,vals.reduce(function(a,b){return a<b?a:b;},Infinity)),mx=Math.max(0,vals.reduce(function(a,b){return a>b?a:b;},-Infinity));
   var rng=mx-mn||1;
   var padL=30,padB=18,padT=6;
   var W=w-padL,H=h2-padB-padT;
@@ -1174,7 +1169,7 @@ function lineSVG(data,w,h2,col){
   col=col||"#ffab00";
   if(!data||data.length<2) return div("chart-wrap");
   var vals=data.map(function(d){return d.v});
-  var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+  var mn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),mx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
   var rng=mx-mn||1;
   var padL=24,padB=16,padT=6;
   var W=w-padL,H=h2-padB-padT;
@@ -1631,7 +1626,7 @@ function openSettings(){
     pcConfirm.textContent="CONFIRM";
     pcConfirm.style.cssText="flex:1;background:none;border:1px solid var(--red);color:var(--red);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:7px;border-radius:3px;cursor:pointer;";
     pcConfirm.onclick=function(){
-      if(pcInp.value==="1591"){
+      if(pcInp.value===(localStorage.getItem("edge_lk_pin")||"1591")){
         document.body.removeChild(pc);
         State.trades=State.trades.filter(function(t){return t.accountId!==State.activeAccount;});
         ss("trades",State.trades);syncToCloud();closeSettings();render();
@@ -1836,7 +1831,7 @@ function mobileEquitySVG(trades){
   if(eq.length<2){
     var e=document.createElement("div");e.style.cssText="height:60px;display:flex;align-items:center;justify-content:center;color:#1a3260;font-size:11px;font-family:monospace;";e.textContent="No trades yet";return e;
   }
-  var mn=Math.min.apply(null,eq),mx=Math.max.apply(null,eq);var rng=mx-mn||1;
+  var mn=eq.reduce(function(a,b){return a<b?a:b;},Infinity),mx=eq.reduce(function(a,b){return a>b?a:b;},-Infinity);var rng=mx-mn||1;
   var pL=8,pR=8,pT=6,pB=8;
   var pw=W-pL-pR,ph=H-pT-pB;
   function px(i){return pL+(i/(eq.length-1))*pw;}
@@ -1858,7 +1853,7 @@ function mobileEquitySVG(trades){
 // Build mobile bar chart for a data array [{l, v}]
 function mobileBarChart(data){
   var wrap=document.createElement("div");
-  var maxAbs=Math.max.apply(null,data.map(function(d){return Math.abs(d.v)||1;}));
+  var maxAbs=data.map(function(d){return Math.abs(d.v)||1;}).reduce(function(a,b){return a>b?a:b;},0);
   data.forEach(function(d){
     var row=document.createElement("div");row.className="m-bar-row";
     var nm=document.createElement("div");nm.className="m-bar-name";nm.textContent=d.l;
@@ -3607,7 +3602,7 @@ function reviewTab(){
     var hasAnyDay=dayData.some(function(d){return d.n>0;});
     if(!hasAnyDay){var ndm=span("xs m");ndm.textContent="No trades this week.";dayCard.appendChild(ndm);}
     else{
-      var maxAbs=Math.max.apply(null,dayData.map(function(x){return Math.abs(x.pnl);}));
+      var maxAbs=dayData.map(function(x){return Math.abs(x.pnl);}).reduce(function(a,b){return a>b?a:b;},0);
       dayData.forEach(function(d){
         var row=div("rjb");row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);";
         var left=div("row gap8");
@@ -3936,114 +3931,6 @@ function importTab(){
   // ──────────────────────────────────────────────────────────────────
   // TRADOVATE SYNC
   // ──────────────────────────────────────────────────────────────────
-  if(State.sync_tab==="tradovate"){
-    var tvCard=div("card mb12");
-    var tvH=div("card-h");
-    var tvT=div("card-t");tvT.textContent="Tradovate API Sync";tvH.appendChild(tvT);
-    var connected=!!(State.tv_token&&State.tv_token.accessToken);
-    var statusDot=div(connected?"sync-dot-on":"sync-dot-off");
-    var statusTxt=span("xs");statusTxt.style.color=connected?"var(--green)":"var(--text3)";
-    statusTxt.textContent=connected?"CONNECTED":"NOT CONNECTED";
-    var statusRow=div("sync-status");statusRow.appendChild(statusDot);statusRow.appendChild(statusTxt);
-    if(State.tv_lastSync){var lsText=span("xs m");lsText.style.marginLeft="auto";lsText.textContent="Last sync: "+State.tv_lastSync;statusRow.appendChild(lsText);}
-    tvH.appendChild(statusRow);
-    tvCard.appendChild(tvH);
-    var tvInfo=div("imp-info imp-msg mb12");
-    tvInfo.style.fontSize="10px";tvInfo.style.lineHeight="1.7";
-    tvInfo.innerHTML="To connect Tradovate: you need your <b>username</b>, <b>password</b>, and API credentials (CID + Secret) from <a href='https://trader.tradovate.com' style='color:var(--ca)'>trader.tradovate.com</a> under Settings → API. Choose Demo or Live environment.";
-    tvCard.appendChild(tvInfo);
-    var tvFg=div("fg");
-    function tvField(id,lbl,type,placeholder,val){
-      var w=div();w.appendChild(h("label",{},[lbl]));
-      var i=h("input",{id:"tv_"+id,type:type||"text"});
-      i.placeholder=placeholder||"";i.value=val||"";
-      w.appendChild(i);return w;
-    }
-    tvFg.appendChild(tvField("user","Tradovate Username","text","your@email.com",State.tv_creds.user));
-    tvFg.appendChild(tvField("pass","Password","password","",State.tv_creds.pass));
-    tvFg.appendChild(tvField("cid","App CID","text","e.g. 4321",State.tv_creds.cid));
-    tvFg.appendChild(tvField("sec","App Secret","password","",State.tv_creds.sec));
-    var envDiv=div();envDiv.appendChild(h("label",{},"Environment"));
-    var envSel=h("select",{id:"tv_env"});
-    [{v:"live",l:"Live Account"},{v:"demo",l:"Demo / Sim"}].forEach(function(o){
-      var opt=h("option",{value:o.v},[o.l]);
-      if(State.tv_creds.env===o.v) opt.selected=true;
-      envSel.appendChild(opt);
-    });
-    envDiv.appendChild(envSel);tvFg.appendChild(envDiv);
-    var daysDiv=div();daysDiv.appendChild(h("label",{},"Fetch Last N Days"));
-    var daysInp=h("input",{id:"tv_days",type:"text"});daysInp.value="30";daysDiv.appendChild(daysInp);
-    tvFg.appendChild(daysDiv);
-    tvCard.appendChild(tvFg);
-    var tvBtnRow=div("row gap8 mt12");
-    var tvConnect=h("button",{className:"btn btn-g",style:"flex:1"});tvConnect.textContent="CONNECT & SYNC";
-    tvConnect.addEventListener("click",function(){
-      var u=document.getElementById("tv_user"),pw=document.getElementById("tv_pass"),cid=document.getElementById("tv_cid"),sec=document.getElementById("tv_sec"),env=document.getElementById("tv_env"),days=document.getElementById("tv_days");
-      if(!u.value||!pw.value){State.imp_msg={type:"err",text:"Username and password are required."};render();return;}
-      var creds={user:u.value,pass:pw.value,cid:cid.value,sec:sec.value,env:env.value};
-      ss("tv_creds",creds);State.tv_creds=creds;
-      State.imp_msg={type:"info",text:"Connecting to Tradovate..."};render();
-      syncTradovate(creds,parseInt(days.value)||30);
-    });
-    tvBtnRow.appendChild(tvConnect);
-    if(connected){
-      var tvResync=h("button",{className:"btn",style:"flex:1"});tvResync.textContent="RE-SYNC NOW";
-      tvResync.addEventListener("click",function(){
-        var days2=document.getElementById("tv_days");
-        State.imp_msg={type:"info",text:"Re-syncing..."};render();
-        syncTradovate(State.tv_creds,parseInt(days2?days2.value:30)||30);
-      });
-      var tvDisc=h("button",{className:"btn btn-r",style:"flex:1"});tvDisc.textContent="DISCONNECT";
-      tvDisc.addEventListener("click",function(){State.tv_token=null;ss("tv_token",null);State.imp_msg={type:"ok",text:"Disconnected."};render();});
-      tvBtnRow.appendChild(tvResync);tvBtnRow.appendChild(tvDisc);
-    }
-    tvCard.appendChild(tvBtnRow);
-    el.appendChild(tvCard);
-  }
-
-  // ──────────────────────────────────────────────────────────────────
-  // NINJATRADER FILE SYNC
-  // ──────────────────────────────────────────────────────────────────
-  if(State.sync_tab==="ninjatrader"){
-    var ntCard=div("card mb12");
-    var ntH=div("card-h");
-    var ntT=div("card-t");ntT.textContent="NinjaTrader File Sync";ntH.appendChild(ntT);
-    var ntConnected=!!State.nt_fileHandle;
-    var ntStatusRow=div("sync-status mt8");
-    ntStatusRow.appendChild(div(ntConnected?"sync-dot-on":"sync-dot-off"));
-    var ntTxt=span("xs");ntTxt.style.color=ntConnected?"var(--green)":"var(--text3)";
-    ntTxt.textContent=ntConnected?"FILE LINKED":"NO FILE LINKED";ntStatusRow.appendChild(ntTxt);
-    if(State.nt_lastSync){var nlText=span("xs m");nlText.style.marginLeft="auto";nlText.textContent="Last load: "+State.nt_lastSync;ntStatusRow.appendChild(nlText);}
-    ntH.appendChild(ntStatusRow);
-    ntCard.appendChild(ntH);
-    var ntInfo=div("imp-info imp-msg mb12");
-    ntInfo.style.fontSize="10px";ntInfo.style.lineHeight="1.8";
-    ntInfo.innerHTML="<b>Setup NinjaTrader auto-export:</b><br>1. Open NinjaTrader → Control Center → Account Performance<br>2. Select Trade Performance tab<br>3. Right-click → Export → Save as CSV to a fixed location<br>4. Click SELECT FILE below and point to that CSV<br>5. Hit RELOAD anytime to pull the latest trades<br><br><b>Works in Chrome and Edge only</b> (File System Access API)";
-    ntCard.appendChild(ntInfo);
-    var ntBtnRow=div("row gap8 mt8");
-    var ntSelect=h("button",{className:"btn btn-g",style:"flex:1"});
-    ntSelect.textContent=ntConnected?"CHANGE FILE":"SELECT NT EXPORT FILE";
-    ntSelect.addEventListener("click",function(){
-      if(!window.showOpenFilePicker){
-        State.imp_msg={type:"err",text:"File System Access not supported. Use Chrome or Edge, or use CSV Upload tab instead."};render();return;
-      }
-      window.showOpenFilePicker({types:[{description:"CSV files",accept:{"text/csv":[".csv",".txt"]}}]}).then(function(handles){
-        State.nt_fileHandle=handles[0];
-        State.imp_msg={type:"info",text:"File linked. Click LOAD TRADES to import."};render();
-      }).catch(function(){});
-    });
-    ntBtnRow.appendChild(ntSelect);
-    if(ntConnected){
-      var ntLoad=h("button",{className:"btn",style:"flex:1"});ntLoad.textContent="LOAD TRADES";
-      ntLoad.addEventListener("click",function(){loadNTFile();});
-      var ntClear=h("button",{className:"btn btn-r",style:"flex:1"});ntClear.textContent="UNLINK";
-      ntClear.addEventListener("click",function(){State.nt_fileHandle=null;State.imp_msg={type:"ok",text:"File unlinked."};render();});
-      ntBtnRow.appendChild(ntLoad);ntBtnRow.appendChild(ntClear);
-    }
-    ntCard.appendChild(ntBtnRow);
-    el.appendChild(ntCard);
-  }
-
   // ──────────────────────────────────────────────────────────────────
   // CSV UPLOAD (existing functionality)
   // ──────────────────────────────────────────────────────────────────
@@ -4108,80 +3995,6 @@ function importTab(){
   }
 
   return el;
-}
-
-// ── Tradovate API sync ─────────────────────────────────────────────
-function syncTradovate(creds,days){
-  var base=creds.env==="demo"?"https://demo.tradovate.com/v1":"https://live.tradovate.com/v1";
-  var authBody={name:creds.user,password:creds.pass,appId:"EDGE Terminal",appVersion:"1.0",cid:parseInt(creds.cid)||0,sec:creds.sec||""};
-  fetch(base+"/auth/accesstokenrequest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(authBody)})
-  .then(function(r){return r.json();})
-  .then(function(data){
-    if(!data.accessToken){
-      State.imp_msg={type:"err",text:"Auth failed: "+(data.errorText||data.error||"Check credentials and try again.")};render();return;
-    }
-    ss("tv_token",data);State.tv_token=data;
-    var token=data.accessToken;
-    return fetch(base+"/fill/list",{headers:{"Authorization":"Bearer "+token}})
-    .then(function(r){return r.json();})
-    .then(function(fills){
-      if(!Array.isArray(fills)){State.imp_msg={type:"err",text:"Could not fetch fills. "+(fills.errorText||"")};render();return;}
-      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-      var trades=parseTradovateFills(fills.filter(function(f){return new Date(f.timestamp)>=cutoff;}));
-      State.imp_preview=trades;
-      var now=new Date();State.tv_lastSync=now.toLocaleDateString()+" "+now.toLocaleTimeString();ss("tv_lastSync",State.tv_lastSync);
-      State.imp_msg={type:"ok",text:"✓ Fetched "+trades.length+" trades from Tradovate. Review below."};render();
-    });
-  })
-  .catch(function(err){
-    State.imp_msg={type:"err",text:"Connection error: "+err.message+". Check your credentials and that CORS is allowed."};render();
-  });
-}
-
-function parseTradovateFills(fills){
-  var trades=[];
-  var byContract={};
-  fills.forEach(function(f){
-    var inst=detectInstrument(f.contractId||f.contract||"");
-    if(!byContract[inst]) byContract[inst]=[];
-    byContract[inst].push(f);
-  });
-  Object.keys(byContract).forEach(function(inst){
-    var fs=byContract[inst].slice().sort(function(a,b){return new Date(a.timestamp)-new Date(b.timestamp);});
-    var i=0;
-    while(i<fs.length){
-      var entry=fs[i];
-      var exit2=fs[i+1];
-      if(exit2){
-        var dir=entry.action==="Buy"?"Long":"Short";
-        var entryP=(entry.price||0).toString();
-        var exitP=(exit2.price||0).toString();
-        var qty=(entry.qty||1).toString();
-        var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
-        var tv2=TICK[inst]||1;
-        var dollar=parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
-        trades.push({id:Date.now()+i,accountId:State.activeAccount||null,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
-        i+=2;
-      } else { i++; }
-    }
-  });
-  return trades;
-}
-
-// ── NinjaTrader file load ──────────────────────────────────────────
-function loadNTFile(){
-  if(!State.nt_fileHandle){State.imp_msg={type:"err",text:"No file linked. Select a file first."};render();return;}
-  State.nt_fileHandle.getFile().then(function(file){
-    return file.text();
-  }).then(function(text){
-    var result=parseCSV(text);
-    if(result.error){State.imp_msg={type:"err",text:"Parse error: "+result.error};render();return;}
-    State.imp_preview=result.trades;
-    var now=new Date();State.nt_lastSync=now.toLocaleDateString()+" "+now.toLocaleTimeString();ss("nt_lastSync",State.nt_lastSync);
-    State.imp_msg={type:"ok",text:"✓ Loaded "+result.trades.length+" trades from NinjaTrader file."};render();
-  }).catch(function(err){
-    State.imp_msg={type:"err",text:"Could not read file: "+err.message};render();
-  });
 }
 
 function chartTab(){
