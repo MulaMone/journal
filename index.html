@@ -1008,7 +1008,6 @@ var TABS=[
   {id:"home",icon:"⌂",label:"HOME"},
   {id:"prep",icon:"▣",label:"PREP"},
   {id:"log",icon:"≡",label:"TRADE LOG"},
-  {id:"opps",icon:"★",label:"BEST LICKS"},
   {id:"playbook",icon:"◈",label:"PLAYS"},
   {id:"analytics",icon:"⟁",label:"STATS"},
   {id:"import",icon:"⬆",label:"IMPORT"},
@@ -1058,9 +1057,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","opps","playbook","import","notes"];
-var MORE_TABS_LABELS={home:"Home",opps:"Best Licks",playbook:"Plays",import:"Import",notes:"Notes"};
-var MORE_TABS_ICONS={home:"⌂",opps:"★",playbook:"◈",import:"⬆",notes:"✎"};
+var MORE_TABS=["home","playbook","import","notes"];
+var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes"};
+var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -1874,7 +1873,7 @@ function homeTab(){
   var btCard=div("card");
   var btH=div("card-h");
   var btT=div("card-t");btT.textContent="Today's Best Trade";btH.appendChild(btT);
-  var best=todayTrades.filter(function(t){return t.hl})[0]||todayTrades.slice().sort(function(a,b){return b.d-a.d})[0];
+  var best=todayTrades.slice().sort(function(a,b){return b.d-a.d})[0];
   if(best) btH.appendChild(makeBadge("bg","★ HIGHLIGHT"));
   btCard.appendChild(btH);
   if(best){
@@ -2577,7 +2576,6 @@ function tradeForm(existing){
   fg.appendChild(fs("ru","Rule Grade",["A","B","C"]));
   var emoCls=div();emoCls.appendChild(h("label",{},"Emotion"));
   var emoSel=h("select",{id:"f_emo"});[1,2,3,4,5].forEach(function(n){var opt=h("option",{value:n},[EMO[n]+" "+n]);if(existing&&existing.emo===n) opt.selected=true;else if(!existing&&n===3) opt.selected=true;emoSel.appendChild(opt);});emoCls.appendChild(emoSel);fg.appendChild(emoCls);
-  fg.appendChild(fi("hl","Highlight","checkbox",null,null));
   fg.appendChild(fi("conf","Confluences","text","Key factors supporting this trade...",existing?existing.conf:"","s4"));
   fg.appendChild(fi("post","Post-Trade Notes","text","",existing?existing.post:"","s2"));
   fg.appendChild(fi("right","What I Did Right","text","",existing?existing.right:"","s2"));
@@ -2603,7 +2601,7 @@ function tradeForm(existing){
     var stopPts=parseFloat(gv("stop_pts"))||0;
     var riskUsd=parseFloat(gv("risk_usd"))||0;
     var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
-    var updated={id:isEdit?existing.id:Date.now(),accountId:isEdit?(existing.accountId||State.activeAccount||null):(State.activeAccount||null),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
+    var updated={id:isEdit?existing.id:Date.now(),accountId:isEdit?(existing.accountId||State.activeAccount||null):(State.activeAccount||null),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
     if(isEdit){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
@@ -5149,7 +5147,7 @@ function accountsTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab};
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
