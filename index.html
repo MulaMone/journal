@@ -1934,7 +1934,7 @@ function homeTab(){
   var wkWR=div();wkWR.style.textAlign="center";var wkWRl=div("xs m mb8");wkWRl.textContent="WIN%";wkWR.appendChild(wkWRl);var wkWRv=div("fw7 ac");wkWRv.style.fontSize="14px";wkWRv.textContent=ws2.wr+"%";wkWR.appendChild(wkWRv);wkRight.appendChild(wkWR);
   wkTop.appendChild(wkRight);combCard.appendChild(wkTop);
 
-  // Goal progress bar — always green, shows dollar amounts
+  // Goal progress bar
   var goalAmt=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct=goalAmt?Math.min(100,Math.round(Math.max(0,ws2.total)/goalAmt*100)):0;
   var goalBar=div("mb12");
@@ -1951,7 +1951,7 @@ function homeTab(){
   var barFill=div();barFill.style.cssText="background:var(--green);width:"+goalPct+"%;height:100%;border-radius:3px;";
   barBg.appendChild(barFill);goalBar.appendChild(barBg);combCard.appendChild(goalBar);
 
-  // Session performance — traded only
+  // Session performance
   var sep3=div("sep");combCard.appendChild(sep3);
   var sessHdr=div("card-t mb8");sessHdr.textContent="SESSION PERFORMANCE";combCard.appendChild(sessHdr);
   var tradedSessions=SESSIONS.filter(function(sess){return _at.some(function(t){return t.sess===sess;});});
@@ -3127,19 +3127,108 @@ function reviewTab(){
 
   // ── WEEK VIEW ──
   if(viewMode==="week"){
-    // Get this week's trades (Sun–Sat calendar week)
+    // Build navigable week list from all trades
     var now2=new Date();
-    var wkStart=new Date(now2);wkStart.setDate(now2.getDate()-now2.getDay());wkStart.setHours(0,0,0,0);
-    var wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);wkEnd.setHours(23,59,59,999);
-    var wkTrades=_at.filter(function(t){
-      var p=t.date.split("/");if(p.length!==3)return false;
+    function swkStart(date){var d=new Date(date);d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d;}
+    function swkKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+    var swkMap={};
+    _at.forEach(function(t){
+      var p=t.date.split("/");if(p.length!==3)return;
       var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-      return td3>=wkStart&&td3<=wkEnd;
+      var ws3=swkStart(td3);var k=swkKey(ws3);
+      if(!swkMap[k])swkMap[k]={start:ws3,trades:[]};
+      swkMap[k].trades.push(t);
     });
+    var curSwkStart=swkStart(now2);var curSwkKey=swkKey(curSwkStart);
+    if(!swkMap[curSwkKey])swkMap[curSwkKey]={start:curSwkStart,trades:[]};
+    var swkList=Object.keys(swkMap).sort().reverse().map(function(k){return swkMap[k];});
+    var _swkIdx=State._swkIdx||0;
+
+    // Nav header card
+    var swkNavCard=div("card mb12");swkNavCard.style.overflow="hidden";
+    var swkHdr=div();swkHdr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel2);";
+    var swkTitle=div("card-t");swkTitle.textContent="Week";swkHdr.appendChild(swkTitle);
+    var swkRight=div();swkRight.style.cssText="display:flex;align-items:center;gap:8px;";
+    // Dots
+    var swkDots=div();swkDots.style.cssText="display:flex;gap:4px;align-items:center;";
+    var maxD=Math.min(swkList.length,8);
+    for(var sdi=0;sdi<maxD;sdi++){
+      (function(i){
+        var dot=div();var isA=i===_swkIdx;
+        var dp=swkList[i]?calcStats(swkList[i].trades).total:0;
+        dot.style.cssText="width:"+(isA?"10px":"7px")+";height:"+(isA?"10px":"7px")+";border-radius:50%;cursor:pointer;flex-shrink:0;background:"+(isA?(dp>=0?"var(--green)":"var(--red)"):"var(--border)")+";";
+        dot.onclick=function(){State._swkIdx=i;render();};
+        swkDots.appendChild(dot);
+      })(sdi);
+    }
+    swkRight.appendChild(swkDots);
+    var sprevBtn=document.createElement("button");sprevBtn.textContent="‹";
+    sprevBtn.style.cssText="background:none;border:1px solid var(--border);color:var(--text2);font-family:'Courier New',monospace;font-size:12px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;"+(_swkIdx>=swkList.length-1?"opacity:.25;cursor:default;":"");
+    sprevBtn.onclick=function(){if(_swkIdx<swkList.length-1){State._swkIdx=_swkIdx+1;render();}};
+    var swk=swkList[_swkIdx]||{start:curSwkStart,trades:[]};
+    var swkEnd2=new Date(swk.start);swkEnd2.setDate(swk.start.getDate()+6);
+    var swkRange=(swk.start.getMonth()+1)+"/"+pad(swk.start.getDate())+" — "+(swkEnd2.getMonth()+1)+"/"+pad(swkEnd2.getDate());
+    var srangeEl=div();srangeEl.style.cssText="font-size:13px;font-weight:700;letter-spacing:1px;padding:0 10px;min-width:140px;text-align:center;color:"+(_swkIdx===0?"var(--accent)":"var(--text2)")+";";srangeEl.textContent=swkRange;
+    var snextBtn=document.createElement("button");snextBtn.textContent="›";
+    snextBtn.style.cssText="background:none;border:1px solid var(--border);color:var(--text2);font-family:'Courier New',monospace;font-size:12px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;"+(_swkIdx===0?"opacity:.25;cursor:default;":"");
+    snextBtn.onclick=function(){if(_swkIdx>0){State._swkIdx=_swkIdx-1;render();}};
+    swkRight.appendChild(sprevBtn);swkRight.appendChild(srangeEl);swkRight.appendChild(snextBtn);
+    swkHdr.appendChild(swkRight);swkNavCard.appendChild(swkHdr);
+
+    // Stats grid in nav card
+    var wkTrades=swk.trades;
     var ws=calcStats(wkTrades);
     var waG=wkTrades.filter(function(t){return t.ex==="A"}).length;
     var wadh=wkTrades.length?(waG/wkTrades.length*100).toFixed(0):0;
     var wemoAvg=wkTrades.length?(wkTrades.reduce(function(a,t){return a+(t.emo||3)},0)/wkTrades.length).toFixed(1):"—";
+    var swkBody=div();swkBody.style.cssText="padding:14px;";
+    var swkPnlRow=div();swkPnlRow.style.cssText="display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;";
+    var swkPnlBig=div();swkPnlBig.style.cssText="font-size:38px;font-weight:700;line-height:1;letter-spacing:1px;color:"+(ws.total>=0?"var(--green)":"var(--red)")+";";swkPnlBig.textContent=dol(ws.total);
+    var swkTag=div();swkTag.style.cssText="font-size:8px;letter-spacing:2px;padding:2px 8px;border-radius:2px;margin-bottom:5px;"+(_swkIdx===0?"background:#00d4d420;border:1px solid #00d4d440;color:var(--accent);":ws.total>=0?"background:#00e67620;border:1px solid #00e67640;color:var(--green);":"background:#ff444420;border:1px solid #ff444440;color:var(--red);");
+    swkTag.textContent=_swkIdx===0?"CURRENT WEEK":"PREV WEEK";
+    swkPnlRow.appendChild(swkPnlBig);swkPnlRow.appendChild(swkTag);swkBody.appendChild(swkPnlRow);
+    function sStatBox(lbl,val,bg,bc,lc,vc){var b=div();b.style.cssText="background:"+bg+";border:1px solid "+bc+";border-radius:3px;padding:8px 10px;";var l=div();l.style.cssText="font-size:9px;letter-spacing:2px;color:"+lc+";margin-bottom:6px;";l.textContent=lbl;var v=div();v.style.cssText="font-size:20px;font-weight:700;color:"+vc+";";v.textContent=val;b.appendChild(l);b.appendChild(v);return b;}
+    var sgrid=div();sgrid.style.cssText="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
+    sgrid.appendChild(sStatBox("TRADES",wkTrades.length,"var(--panel2)","var(--border)","var(--text2)","var(--text2)"));
+    sgrid.appendChild(sStatBox("WINS",ws.wins.length,"#00e67612","#00e67640","#00e67699","var(--green)"));
+    sgrid.appendChild(sStatBox("LOSSES",ws.losses.length,"#ff444412","#ff444440","#ff444499","var(--red)"));
+    sgrid.appendChild(sStatBox("WIN %",ws.wr+"%","var(--panel2)","var(--border)","var(--text2)","var(--accent)"));
+    swkBody.appendChild(sgrid);
+    // Goal bar
+    var sgoalAmt=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
+    var sgoalPct=sgoalAmt?Math.min(100,Math.round(Math.max(0,ws.total)/sgoalAmt*100)):0;
+    var sgoalWrap=div();sgoalWrap.style.cssText="margin-top:14px;";
+    var sgoalRow=div("rjb mb8");
+    var sgoalLeft=div("row gap8");
+    var sgoalLbl=span("xs m");sgoalLbl.style.letterSpacing="1px";sgoalLbl.textContent="WEEKLY GOAL";sgoalLeft.appendChild(sgoalLbl);
+    var sgoalCurr=span("fw7");sgoalCurr.style.fontSize="12px";sgoalCurr.style.color=ws.total>=0?"var(--green)":"var(--red)";sgoalCurr.textContent=dol(ws.total).replace("+","");sgoalLeft.appendChild(sgoalCurr);
+    var sgoalSlash=span("xs m");sgoalSlash.textContent="/";sgoalLeft.appendChild(sgoalSlash);
+    var sgoalTarget=span("xs m");sgoalTarget.style.fontSize="12px";sgoalTarget.textContent="$"+Math.round(sgoalAmt);sgoalLeft.appendChild(sgoalTarget);
+    sgoalRow.appendChild(sgoalLeft);
+    var sgoalPctEl=span("xs fw7");sgoalPctEl.style.color=ws.total>=0?"var(--green)":"var(--red)";sgoalPctEl.textContent=sgoalPct+"%";sgoalRow.appendChild(sgoalPctEl);
+    sgoalWrap.appendChild(sgoalRow);
+    var sbarBg=div();sbarBg.style.cssText="background:var(--border);border-radius:3px;height:6px;";
+    var sbarFill=div();sbarFill.style.cssText="background:"+(ws.total>=0?"var(--green)":"var(--red)")+";width:"+sgoalPct+"%;height:100%;border-radius:3px;";
+    sbarBg.appendChild(sbarFill);sgoalWrap.appendChild(sbarBg);swkBody.appendChild(sgoalWrap);
+    // Session breakdown
+    var ssep=div();ssep.style.cssText="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;";
+    var ssessHdr=div();ssessHdr.style.cssText="font-size:8px;letter-spacing:2px;color:var(--text2);margin-bottom:10px;";ssessHdr.textContent="SESSION BREAKDOWN";ssep.appendChild(ssessHdr);
+    var stradedSess=SESSIONS.filter(function(sess){return wkTrades.some(function(t){return t.sess===sess;});});
+    if(!stradedSess.length){var snoSess=span("xs m");snoSess.textContent="No trades this week.";ssep.appendChild(snoSess);}
+    stradedSess.forEach(function(sess,si){
+      var sts=wkTrades.filter(function(t){return t.sess===sess;});
+      var spnl=sts.reduce(function(a,t){return a+t.d;},0);
+      var srow=div("rjb");srow.style.cssText="padding:6px 0;"+(si<stradedSess.length-1?"border-bottom:1px solid var(--border);":"");
+      var sleft=div("row gap8");
+      var slbl=span("sm fw7");slbl.style.color="var(--text2)";slbl.textContent=sess;sleft.appendChild(slbl);
+      var scnt=span("xs m");scnt.textContent=sts.length+(sts.length===1?" trade":" trades");sleft.appendChild(scnt);
+      srow.appendChild(sleft);
+      var spnlEl=span("fw7 "+clr(spnl));spnlEl.style.fontSize="14px";spnlEl.textContent=dol(spnl);srow.appendChild(spnlEl);
+      ssep.appendChild(srow);
+    });
+    swkBody.appendChild(ssep);
+    swkNavCard.appendChild(swkBody);
+    el.appendChild(swkNavCard);
 
     var wg4=div("g4 mb12");
     wg4.appendChild(makeChip("WEEK P&L",dol(ws.total),clr(ws.total),wkTrades.length+" trades"));
