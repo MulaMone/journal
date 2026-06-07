@@ -376,7 +376,7 @@ function loadFromCloud(syncId,callback){
     if(d.week_levels) State.weekLevels=d.week_levels;
     // Migrate renamed setups in cloud-loaded trades
     if(State.trades&&State.trades.forEach){
-      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation"};
+      var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation","Failed Auction":"Tape Read — Failed Auction","Momentum Shift":"Tape Read — Momentum Shift","Stop Run":"Tape Read — Stop Run","Naked POC Magnet":"Live Read — Naked POC Magnet","HTF Level Reaction":"Live Read — HTF Level Reaction","Trend Exhaustion":"Live Read — Trend Exhaustion"};
       State.trades.forEach(function(t){
         if(t.setup&&RN[t.setup]) t.setup=RN[t.setup];
         if(Array.isArray(t.setups)) t.setups=t.setups.map(function(s){return RN[s]||s;});
@@ -506,7 +506,7 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback","RTH VWAP","Bizz Level"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","2min POC","MA Pullback","RTH VWAP","Bizz Level","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"];
 var SDESC={
   "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
@@ -516,8 +516,23 @@ var SDESC={
   "2min POC":"Naked 2min POC with confluences.",
   "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma.",
   "RTH VWAP":"Trade reactions off the prior RTH VWAP level. Look for confluence with key volume profile nodes.",
-  "Bizz Level":"RTH 1hr High vol node."
+  "Bizz Level":"RTH 1hr High vol node.",
+"Live Read — Naked POC Magnet":"Prior session POC that was never revisited acts as a magnet. Price will seek it out. Trade the move toward it with confluence — best when price is in a rotation and the naked POC is within the day's range.",
+"Live Read — HTF Level Reaction":"Daily or weekly key level hit — PDH/PDL, prior week high/low, monthly open. Drop to lower timeframe for entry confirmation. Trade the reaction, not the anticipation — wait for rejection or acceptance signal.",
+"Live Read — Trend Exhaustion":"Extended trend with multiple pushes and shrinking range on each push. Volume drying up, delta flipping, price making new highs/lows but not holding. Fade the final push when exhaustion confirmed on tape.",
+"Tape Read — Failed Auction":"Price tests a key level but fails to find acceptance and reverses. Market profile context — goes above/below a reference area but can't sustain. No buyers above, no sellers below. Read it live as the failure prints.",
+"Tape Read — Momentum Shift":"Pure order flow read — clear shift in tape aggression from sellers to buyers or vice versa. Delta flips, pace changes, no level required. Act on the shift as it happens, not after it's obvious.",
+"Tape Read — Stop Run":"Quick sweep of obvious stops above/below a key level followed by immediate sharp reversal. Fast spike, heavy volume, clean rejection. Enter on reversal confirmation — not the spike itself."
 };
+// Setup category groups for playbook UI
+var SETUP_GROUPS=[
+  {label:"Volume Profile",setups:["VAH/VAL","POC","2min POC","Naked POC Magnet"]},
+  {label:"Mean Reversion",setups:["VWAP Fade","Extension Fade","RTH VWAP"]},
+  {label:"Trend",setups:["Trend Continuation","MA Pullback"]},
+  {label:"Structure",setups:["Bizz Level"]},
+  {label:"Live Reads",setups:["Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion"]},
+  {label:"Tape Reads",setups:["Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"]}
+];
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
 // CME minimum price increments (snap entry/exit to valid tick)
 var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
@@ -727,7 +742,10 @@ var State={
       "Mean Reversion — Extension Fade":"Extension Fade",
       "Volume Profile — VAH/VAL":"VAH/VAL",
       "Volume Profile — POC":"POC",
-      "Momentum — Trend Continuation":"Trend Continuation"
+      "Momentum — Trend Continuation":"Trend Continuation",
+      "Failed Auction":"Tape Read — Failed Auction",
+      "Momentum Shift":"Tape Read — Momentum Shift",
+      "Stop Run":"Tape Read — Stop Run","Naked POC Magnet":"Live Read — Naked POC Magnet","HTF Level Reaction":"Live Read — HTF Level Reaction","Trend Exhaustion":"Live Read — Trend Exhaustion"
     };
     var tradesChanged=false;
     State.trades.forEach(function(t){
@@ -2508,7 +2526,17 @@ function tradeForm(existing){
   var counterEl=div();counterEl.style.cssText="font-size:10px;color:var(--text3);margin-top:5px;letter-spacing:.5px;";
   function renderChips(){
     chipsBox.innerHTML="";
-    allSetupNames.forEach(function(name){
+    // Build grouped layout using SETUP_GROUPS
+    var grouped=[];var ungrouped=allSetupNames.slice();
+    SETUP_GROUPS.forEach(function(grp){
+      var inGroup=grp.setups.filter(function(s){return allSetupNames.indexOf(s)>-1;});
+      if(inGroup.length){
+        grouped.push({label:grp.label,names:inGroup});
+        inGroup.forEach(function(s){var i=ungrouped.indexOf(s);if(i>-1)ungrouped.splice(i,1);});
+      }
+    });
+    if(ungrouped.length) grouped.push({label:"Other",names:ungrouped});
+    function makeChipEl(name){
       var on=selectedSetups.indexOf(name)>-1;
       var col=setupColor(name);
       var chip=h("span");
@@ -2516,14 +2544,24 @@ function tradeForm(existing){
       var bd=on?(col+"80"):"var(--border)";
       var fg2=on?col:"var(--text2)";
       chip.style.cssText="padding:6px 12px;border:1px solid "+bd+";background:"+bg+";color:"+fg2+";border-radius:3px;font-size:11px;letter-spacing:.5px;cursor:pointer;font-weight:"+(on?"500":"400")+";user-select:none;transition:all .12s;";
-      chip.textContent=(on?"✓ ":"")+name;
+      chip.textContent=(on?"\u2713 ":"")+name;
       chip.addEventListener("click",function(){
         var idx=selectedSetups.indexOf(name);
         if(idx>-1) selectedSetups.splice(idx,1);
         else selectedSetups.push(name);
         renderChips();
       });
-      chipsBox.appendChild(chip);
+      return chip;
+    }
+    grouped.forEach(function(grp){
+      var grpWrap=div();grpWrap.style.cssText="width:100%;margin-bottom:4px;";
+      var grpLbl=div();grpLbl.style.cssText="font-size:8px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:5px;margin-top:4px;border-bottom:1px solid var(--border);padding-bottom:3px;";
+      grpLbl.textContent=grp.label;
+      grpWrap.appendChild(grpLbl);
+      var grpChips=div();grpChips.style.cssText="display:flex;flex-wrap:wrap;gap:7px;";
+      grp.names.forEach(function(name){grpChips.appendChild(makeChipEl(name));});
+      grpWrap.appendChild(grpChips);
+      chipsBox.appendChild(grpWrap);
     });
     counterEl.textContent=selectedSetups.length===0?"No setups selected":(selectedSetups.length+" setup"+(selectedSetups.length>1?"s":"")+" selected"+(selectedSetups.length>1?" — confluence":""));
   }
@@ -2722,7 +2760,20 @@ function playbookTab(){
   function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);syncToCloud();}
 
   // All entries: built-in SETUPS + custom, starred sorted to top
-  var allEntries=SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true};}).concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false};}));
+  // Group Tape Read sub-types into one parent card
+  var TAPE_SUBS=SETUPS.filter(function(s){return s.indexOf("Tape Read — ")===0;});
+  var LIVE_SUBS=SETUPS.filter(function(s){return s.indexOf("Live Read — ")===0;});
+  var BASE_SETUPS=SETUPS.filter(function(s){return s.indexOf("Tape Read — ")!==0&&s.indexOf("Live Read — ")!==0;});
+  var allEntries=BASE_SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true,subs:null};});
+  if(LIVE_SUBS.length){
+    allEntries.push({name:"Live Read",desc:"Unplanned reads based on live market context — spotted in real time from structure, profile, or price action and acted on immediately.",builtin:true,
+      subs:LIVE_SUBS.map(function(s){return{name:s,shortName:s.replace("Live Read — ",""),desc:SDESC[s]||""};})});
+  }
+  if(TAPE_SUBS.length){
+    allEntries.push({name:"Tape Read",desc:"Reactive reads taken live — no pre-planned setup. Spotted and acted on in real time using tape, order flow, or market structure.",builtin:true,
+      subs:TAPE_SUBS.map(function(s){return{name:s,shortName:s.replace("Tape Read — ",""),desc:SDESC[s]||""};})});
+  }
+  allEntries=allEntries.concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false,subs:null};}));
   allEntries.sort(function(a,b){var as=State.starredSetups.indexOf(a.name)>-1,bs=State.starredSetups.indexOf(b.name)>-1;return as===bs?0:as?-1:1;});
 
   var el=div();
@@ -2752,7 +2803,9 @@ function playbookTab(){
 
   // Render all entries
   allEntries.forEach(function(entry,idx){
-    var ts=activeTrades().filter(function(t){return tradeHasSetup(t,entry.name)});
+    var ts=entry.subs&&entry.subs.length
+      ?activeTrades().filter(function(t){return entry.subs.some(function(sub){return tradeHasSetup(t,sub.name);});})
+      :activeTrades().filter(function(t){return tradeHasSetup(t,entry.name);});
     var pnl=ts.reduce(function(a,t){return a+t.d},0);
     var w=ts.filter(function(t){return t.d>0}).length;
     var isEditing=(editingIdx===idx);
@@ -2832,6 +2885,28 @@ function playbookTab(){
       hrow.appendChild(right);
       card.appendChild(hrow);
       var desc=div("xs m mb8");desc.style.lineHeight="1.65";desc.textContent=entry.desc||"No description yet. Click EDIT to add one.";card.appendChild(desc);
+      // Sub-type breakdown for Tape Read
+      if(entry.subs&&entry.subs.length){
+        var subsWrap=div();subsWrap.style.cssText="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px;";
+        entry.subs.forEach(function(sub){
+          var sts=activeTrades().filter(function(t){return tradeHasSetup(t,sub.name);});
+          var sw=sts.filter(function(t){return t.d>0;}).length;
+          var spnl=sts.reduce(function(a,t){return a+t.d;},0);
+          var sRow=div();sRow.style.cssText="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);border-left:2px solid var(--ca);border-radius:3px;";
+          var sLeft=div();sLeft.style.cssText="flex:1;min-width:0;";
+          var sName=div();sName.style.cssText="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--ca);margin-bottom:3px;";sName.textContent=sub.shortName.toUpperCase();
+          var sDesc=div();sDesc.style.cssText="font-size:10px;color:var(--text3);line-height:1.6;";sDesc.textContent=sub.desc;
+          sLeft.appendChild(sName);sLeft.appendChild(sDesc);sRow.appendChild(sLeft);
+          if(sts.length){
+            var sStats=div();sStats.style.cssText="flex-shrink:0;text-align:right;font-size:9px;letter-spacing:1px;";
+            var sPnlEl=div();sPnlEl.style.color=spnl>=0?"var(--green)":"var(--red)";sPnlEl.style.fontWeight="700";sPnlEl.textContent=dol(spnl);
+            var sWr=div();sWr.style.color="var(--text3)";sWr.textContent=sts.length+" trades · "+(sts.length?Math.round(sw/sts.length*100):0)+"% W";
+            sStats.appendChild(sPnlEl);sStats.appendChild(sWr);sRow.appendChild(sStats);
+          }
+          subsWrap.appendChild(sRow);
+        });
+        card.appendChild(subsWrap);
+      }
       if(ts.length){
         var stats=div("row mt8");
         var statBox=function(l,v,c){var d=div();d.style.marginRight="18px";var dl=span("xs m");dl.style.display="block";dl.style.marginBottom="3px";dl.textContent=l;d.appendChild(dl);var dv=span("sm "+c);dv.textContent=v;d.appendChild(dv);return d;};
