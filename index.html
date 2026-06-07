@@ -576,7 +576,7 @@ if(!sessionStorage.getItem('edge_session_active')){
 }
 
 var State={
-  tab:ls("tab","openanalysis"),
+  tab:ls("tab","home"),
   trades:ls("trades",DEFAULT_TRADES),
   levels:ls("levels",DEFAULT_LEVELS),
   note:ls("note","Focus on RTH open momentum. Wait for clear structure above VWAP before entering."),
@@ -1385,6 +1385,7 @@ function openSettings(){
     if(confirm("Clear all local cache? Data will reload from Supabase.")){
       var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss"];
       Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
+      localStorage.setItem("edge_tab",JSON.stringify("home"));
       closeSettings();window.location.reload();
     }
   }));
