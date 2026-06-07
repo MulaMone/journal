@@ -519,6 +519,34 @@ var SDESC={
   "Bizz Level":"RTH 1hr High vol node."
 };
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
+// CME minimum price increments (snap entry/exit to valid tick)
+var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:0.50,Other:0.01};
+function snapToTick(val,inst){
+  var inc=TICK_INC[inst]||0.01;
+  var decimals=inc<0.1?2:inc<1?1:0;
+  return parseFloat((Math.round(val/inc)*inc).toFixed(decimals));
+}
+function fmtTime(raw){
+  // Accept: 942, 9:42, 0942, 09:42, 9.42, 934am — normalize to HH:MM
+  if(!raw) return raw;
+  var s=String(raw).trim().toLowerCase().replace(/[^0-9apm:]/g,"");
+  var isPM=s.indexOf("pm")>-1;var isAM=s.indexOf("am")>-1;
+  s=s.replace(/[apm]/g,"");
+  var h2,m2;
+  if(s.indexOf(":")>-1){
+    var p=s.split(":");h2=parseInt(p[0])||0;m2=parseInt(p[1])||0;
+  } else if(s.length<=2){
+    h2=parseInt(s)||0;m2=0;
+  } else if(s.length===3){
+    h2=parseInt(s[0]);m2=parseInt(s.slice(1));
+  } else {
+    h2=parseInt(s.slice(0,2));m2=parseInt(s.slice(2,4))||0;
+  }
+  if(isPM&&h2<12) h2+=12;
+  if(isAM&&h2===12) h2=0;
+  if(h2<0||h2>23||m2<0||m2>59) return raw; // invalid — keep original
+  return (h2<10?"0":"")+h2+":"+(m2<10?"0":"")+m2;
+}
 var EMO=["","😖","😟","😐","😊","🔥"];
 var QI=Math.floor(Math.random()*QUOTES.length);
 
@@ -2357,6 +2385,30 @@ function tradeForm(existing){
   fg.appendChild(fs("dir","Direction",["Long","Short"]));
   fg.appendChild(fi("entry","Entry","text","0000.00"));
   fg.appendChild(fi("exit","Exit","text","0000.00"));
+  // Snap entry/exit to CME tick on blur; format time on blur
+  setTimeout(function(){
+    var entInp=document.getElementById("f_entry");
+    var extInp=document.getElementById("f_exit");
+    var timInp=document.getElementById("f_time");
+    var instSel=document.getElementById("f_inst");
+    function snapField(inp){
+      var v=parseFloat(inp.value);
+      if(!isNaN(v)&&instSel){
+        var snapped=snapToTick(v,instSel.value);
+        inp.value=snapped;
+        updatePreview();
+      }
+    }
+    if(entInp){ entInp.addEventListener("blur",function(){snapField(entInp);}); }
+    if(extInp){ extInp.addEventListener("blur",function(){snapField(extInp);}); }
+    if(instSel){ instSel.addEventListener("change",function(){ snapField(entInp); snapField(extInp); }); }
+    if(timInp){
+      timInp.addEventListener("blur",function(){
+        var formatted=fmtTime(timInp.value);
+        if(formatted) timInp.value=formatted;
+      });
+    }
+  },0);
 
   // ── Contracts with +/- buttons ──
   var ctrWrap=div();
@@ -2496,7 +2548,11 @@ function tradeForm(existing){
     var entry=gv("entry"),exit=gv("exit");
     if(!entry||!exit){alert("Entry and exit are required.");return;}
     var inst=gv("inst"),dir=gv("dir"),ctr=gv("ctr")||"1";
-    var tv=TICK[inst]||1;var pts=(parseFloat(exit)-parseFloat(entry))*(dir==="Long"?1:-1);
+    var tv=TICK[inst]||1;
+    var entrySnapped=snapToTick(parseFloat(entry),inst);var exitSnapped=snapToTick(parseFloat(exit),inst);
+    entry=String(entrySnapped);exit=String(exitSnapped);
+    var timeFormatted=fmtTime(gv("time"));if(timeFormatted) document.getElementById("f_time").value=timeFormatted;
+    var pts=(exitSnapped-entrySnapped)*(dir==="Long"?1:-1);
     var setupsArr=suWrap._getSelected();
     var setupStr=setupsArr.join(", ");
     var dv=parseFloat((pts*tv*parseFloat(ctr)).toFixed(2));
