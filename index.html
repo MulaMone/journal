@@ -1721,9 +1721,9 @@ function homeTab(){
   // Current streak
   var streak=0;var streakType="";
   if(State.trades.length){
-    var first=State.trades[0];streakType=first.d>0?"W":"L";
-    for(var si=0;si<State.trades.length;si++){
-      if((State.trades[si].d>0&&streakType==="W")||(State.trades[si].d<0&&streakType==="L")) streak++;
+    var first=activeTrades()[0];streakType=first&&first.d>0?"W":"L";
+    for(var si=0;si<activeTrades().length;si++){
+      if((activeTrades()[si].d>0&&streakType==="W")||(activeTrades()[si].d<0&&streakType==="L")) streak++;
       else break;
     }
   }
@@ -1751,7 +1751,7 @@ function homeTab(){
   var eqT=div("card-t");eqT.textContent="Equity Curve";eqH.appendChild(eqT);
   var eqBadge=makeBadge(s.total>=0?"bg":"br",s.total>=0?"▲ POSITIVE":"▼ DRAWDOWN");eqH.appendChild(eqBadge);
   eqCard.appendChild(eqH);
-  eqCard.appendChild(equitySVG(State.trades,380,165));
+  eqCard.appendChild(equitySVG(activeTrades(),380,165));
   g2.appendChild(eqCard);
 
   var lvCard=div("card");
@@ -2526,7 +2526,7 @@ function logTab(){
   ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","PTS","P&L","R","SETUP","SESSION","EX","RU","EMO"].forEach(function(hd){hr.appendChild(h("th",{},[hd]));});
   thead.appendChild(hr);tbl.appendChild(thead);
   var tbody=h("tbody");
-  State.trades.forEach(function(t){
+  activeTrades().forEach(function(t){
     var tr=h("tr",{className:"tr-click"+(State.expanded===t.id?" exp-open":"")});
     tr.addEventListener("click",function(){State.expanded=State.expanded===t.id?null:t.id;render();});
     tr.appendChild(h("td",{},[t.date]));
@@ -2625,7 +2625,7 @@ function logTab(){
 // ─── OPPS TAB ─────────────────────────────────────────────────────────
 function oppsTab(){
   var el=div();var sh=div("sh");sh.textContent="Best Opportunities";el.appendChild(sh);
-  var hl=State.trades.filter(function(t){return t.hl||t.d>500});
+  var hl=activeTrades().filter(function(t){return t.hl||t.d>500});
   if(!hl.length){var msg=div("card");var m=span("xs m");m.textContent="No highlighted trades yet. Mark trades as Highlight when logging.";msg.appendChild(m);el.appendChild(msg);return el;}
   hl.forEach(function(t){
     var opp=div("opp");
@@ -2682,7 +2682,7 @@ function playbookTab(){
 
   // Render all entries
   allEntries.forEach(function(entry,idx){
-    var ts=State.trades.filter(function(t){return tradeHasSetup(t,entry.name)});
+    var ts=activeTrades().filter(function(t){return tradeHasSetup(t,entry.name)});
     var pnl=ts.reduce(function(a,t){return a+t.d},0);
     var w=ts.filter(function(t){return t.d>0}).length;
     var isEditing=(editingIdx===idx);
@@ -2790,11 +2790,11 @@ function reviewTab(){
   var calMonth=State.rv_month!==undefined?State.rv_month:now.getMonth();
   var viewMode=State.rv_view||"month";
 
-  var s=calcStats(State.trades);
-  var aG=State.trades.filter(function(t){return t.ex==="A"}).length;
-  var adh=State.trades.length?(aG/State.trades.length*100).toFixed(0):0;
-  var emoAvg=State.trades.length?(State.trades.reduce(function(a,t){return a+(t.emo||3)},0)/State.trades.length).toFixed(1):0;
-
+  var _at2=activeTrades();
+  var s=calcStats(_at2);
+  var aG=_at2.filter(function(t){return t.ex==="A"}).length;
+  var adh=_at2.length?(aG/_at2.length*100).toFixed(0):0;
+  var emoAvg=_at2.length?(_at2.reduce(function(a,t){return a+(t.emo||3)},0)/_at2.length).toFixed(1):0;
   // ── Header row with view toggles ──
   var topRow=div("rjb mb12");
   var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Stats";topRow.appendChild(sh);
@@ -2971,7 +2971,7 @@ function reviewTab(){
     el.appendChild(calCard);
 
     // Equity curve for the month
-    var monthTrades=State.trades.filter(function(t){var p=t.date.split("/");return p.length===3&&parseInt(p[0])-1===calMonth&&2000+parseInt(p[2])===calYear;});
+    var monthTrades=_at.filter(function(t){var p=t.date.split("/");return p.length===3&&parseInt(p[0])-1===calMonth&&2000+parseInt(p[2])===calYear;});
     if(monthTrades.length){
       var eqCard=div("card mb12");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent=MNAMES[calMonth]+" Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);eqCard.appendChild(equitySVG(monthTrades,760,170));el.appendChild(eqCard);
     }
@@ -2986,7 +2986,7 @@ function reviewTab(){
     var now2=new Date();
     var wkStart=new Date(now2);wkStart.setDate(now2.getDate()-now2.getDay());wkStart.setHours(0,0,0,0);
     var wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);wkEnd.setHours(23,59,59,999);
-    var wkTrades=State.trades.filter(function(t){
+    var wkTrades=_at.filter(function(t){
       var p=t.date.split("/");if(p.length!==3)return false;
       var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
       return td3>=wkStart&&td3<=wkEnd;
@@ -3075,12 +3075,12 @@ function reviewTab(){
 
   // ── DATA VIEW ──
   if(viewMode==="data"){
-    var ds=calcStats(State.trades);
+    var ds=calcStats(_at);
     var dg4=div("g4");
     dg4.appendChild(makeChip("WIN RATE",ds.wr+"%","ac"));dg4.appendChild(makeChip("AVG WINNER","$"+Math.abs(ds.avgW).toFixed(2),"g"));dg4.appendChild(makeChip("AVG LOSER","$"+Math.abs(ds.avgL).toFixed(2),"r"));dg4.appendChild(makeChip("NET P&L",dol(ds.total),clr(ds.total),"all time"));
     var dWL=div();dWL.innerHTML='<span class="g fw7">'+ds.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ds.losses.length+'</span>';
     dg4.appendChild(makeChip("W / L",dWL,"","all time"));
-    var daG=State.trades.filter(function(t){return t.ex==="A"}).length;
+    var daG=_at.filter(function(t){return t.ex==="A"}).length;
     var dadh=State.trades.length?(daG/State.trades.length*100).toFixed(0):0;
     dg4.appendChild(makeChip("A-GRADE RATE",dadh+"%",dadh>=60?"g":"a",""));
     dg4.appendChild(makeChip("TOTAL TRADES",State.trades.length));dg4.appendChild(makeChip("R:R RATIO",(ds.avgL?Math.abs(ds.avgW/ds.avgL).toFixed(2):"—")+"R","ac"));
@@ -3088,30 +3088,30 @@ function reviewTab(){
 
     var dg2=div("g2");
     var deqCard=div("card");var deqH=div("card-h");var deqT=div("card-t");deqT.textContent="Equity Curve";deqH.appendChild(deqT);deqCard.appendChild(deqH);deqCard.appendChild(equitySVG(State.trades,380,200));dg2.appendChild(deqCard);
-    var dByHour=[];for(var dhi=0;dhi<10;dhi++){var dhh=9+dhi;var dhs=(dhh<10?"0":"")+dhh;var dhts=State.trades.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});}
+    var dByHour=[];for(var dhi=0;dhi<10;dhi++){var dhh=9+dhi;var dhs=(dhh<10?"0":"")+dhh;var dhts=_at.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});}
     var dbhCard=div("card");var dbhH=div("card-h");var dbhT=div("card-t");dbhT.textContent="P&L by Hour";dbhH.appendChild(dbhT);dbhCard.appendChild(dbhH);dbhCard.appendChild(barSVG(dByHour,380,200));dg2.appendChild(dbhCard);
     el.appendChild(dg2);
 
     var dDOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
-    var dDowData=dDOWS.map(function(dw,di){var ts=State.trades.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return dt.getDay()===di;});return{l:dw,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};});
+    var dDowData=dDOWS.map(function(dw,di){var ts=_at.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return dt.getDay()===di;});return{l:dw,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};});
     var ddowCard=div("card mt12");var ddowH=div("card-h");var ddowT=div("card-t");ddowT.textContent="P&L by Day of Week";ddowH.appendChild(ddowT);ddowCard.appendChild(ddowH);
     ddowCard.appendChild(barSVG(dDowData,760,200));
     var ddowTbl=h("table",{className:"tbl"});var ddowThead=h("thead");var ddowHr=h("tr");
     ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){ddowHr.appendChild(h("th",{},[hd]));});ddowThead.appendChild(ddowHr);ddowTbl.appendChild(ddowThead);
     var ddowTbody=h("tbody");
-    dDowData.forEach(function(dw){var ts=State.trades.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(dw.l)===dt.getDay();});var wins=ts.filter(function(t){return t.d>0}).length;var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";var avg=ts.length?(dw.v/ts.length).toFixed(0):0;var dr=h("tr");dr.appendChild(h("td",{className:"fw7"},[dw.l]));dr.appendChild(h("td",{className:"m"},[ts.length]));dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));var dptd=h("td",{className:"fw7 "+clr(dw.v)});dptd.textContent=dol(dw.v);dptd.style.cssText=dw.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":dw.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(dptd);var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(aptd);ddowTbody.appendChild(dr);});
+    dDowData.forEach(function(dw){var ts=_at.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(dw.l)===dt.getDay();});var wins=ts.filter(function(t){return t.d>0}).length;var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";var avg=ts.length?(dw.v/ts.length).toFixed(0):0;var dr=h("tr");dr.appendChild(h("td",{className:"fw7"},[dw.l]));dr.appendChild(h("td",{className:"m"},[ts.length]));dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));var dptd=h("td",{className:"fw7 "+clr(dw.v)});dptd.textContent=dol(dw.v);dptd.style.cssText=dw.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":dw.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(dptd);var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(aptd);ddowTbody.appendChild(dr);});
     ddowTbl.appendChild(ddowTbody);var ddowWrap=div("tbl-wrap");ddowWrap.appendChild(ddowTbl);ddowCard.appendChild(ddowWrap);el.appendChild(ddowCard);
 
     var dsessCard=div("card mt12");var dsessH=div("card-h");var dsessT=div("card-t");dsessT.textContent="P&L by Session";dsessH.appendChild(dsessT);dsessCard.appendChild(dsessH);
     var dstbl=h("table",{className:"tbl"});var dsthead=h("thead");var dshr=h("tr");
     ["SESSION","TRADES","WIN RATE","TOTAL P&L"].forEach(function(hd){dshr.appendChild(h("th",{},[hd]));});dsthead.appendChild(dshr);dstbl.appendChild(dsthead);
     var dstbody=h("tbody");
-    SESSIONS.forEach(function(sess){var sts=State.trades.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var dstr=h("tr");dstr.appendChild(h("td",{className:"fw7"},[sess]));dstr.appendChild(h("td",{className:"m"},[sts.length]));dstr.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dstr.appendChild(sptd);dstbody.appendChild(dstr);});
+    SESSIONS.forEach(function(sess){var sts=_at.filter(function(t){return t.sess===sess});var spnl=sts.reduce(function(a,t){return a+t.d},0);var swr=sts.length?(sts.filter(function(t){return t.d>0}).length/sts.length*100).toFixed(0):"—";var dstr=h("tr");dstr.appendChild(h("td",{className:"fw7"},[sess]));dstr.appendChild(h("td",{className:"m"},[sts.length]));dstr.appendChild(h("td",{className:swr>=50?"ac":"r"},[swr+"%"]));var sptd=h("td",{className:"fw7 "+clr(spnl)});sptd.textContent=dol(spnl);sptd.style.cssText=spnl>0?"background:#00e67630;border-radius:3px;padding:8px 10px":spnl<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dstr.appendChild(sptd);dstbody.appendChild(dstr);});
     dstbl.appendChild(dstbody);var dstblWrap=div("tbl-wrap");dstblWrap.appendChild(dstbl);dsessCard.appendChild(dstblWrap);el.appendChild(dsessCard);
 
     var dsbCard=div("card mt12");var dsbH=div("card-h");var dsbT=div("card-t");dsbT.textContent="Setup P&L Breakdown";dsbH.appendChild(dsbT);dsbCard.appendChild(dsbH);
     var dAllSetups=SETUPS.concat((ls("playbook_custom",[])).map(function(e){return e.name;}));
-    var dBySetup=dAllSetups.map(function(sv){var sts=State.trades.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
+    var dBySetup=dAllSetups.map(function(sv){var sts=_at.filter(function(t){return tradeHasSetup(t,sv)});var spnl=sts.reduce(function(a,t){return a+t.d},0);return{full:sv,n:sts.length,pnl:spnl};}).filter(function(s2){return s2.n>0;});
     if(!dBySetup.length){var dnsm=span("xs m");dnsm.textContent="No tagged setups yet.";dsbCard.appendChild(dnsm);}
     dBySetup.slice().sort(function(a,b){return b.pnl-a.pnl}).forEach(function(s2){var sr=div("rjb");sr.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);";var sl=div();var st2=div("xs fw7");st2.style.color=SETUP_COLORS[s2.full]||"var(--text2)";st2.textContent=s2.full;sl.appendChild(st2);var sc=div("xs m");sc.textContent=s2.n+" trades";sl.appendChild(sc);sr.appendChild(sl);var sp=span("fw7 "+clr(s2.pnl));sp.textContent=dol(s2.pnl);sr.appendChild(sp);dsbCard.appendChild(sr);});
     el.appendChild(dsbCard);
@@ -3794,11 +3794,11 @@ function updateTVWidget(){render();}
 function mobileHomeTab(){
   var el=document.createElement("div");
   var td=today();
-  var todayTrades=State.trades.filter(function(t){return t.date===td;});
+  var _mat=activeTrades();var todayTrades=_mat.filter(function(t){return t.date===td;});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d;},0);
   var tW=todayTrades.filter(function(t){return t.d>0;}).length;
   var tL=todayTrades.filter(function(t){return t.d<0;}).length;
-  var s=calcStats(State.trades);
+  var s=calcStats(_mat);
   var tpts=todayTrades.reduce(function(a,t){return a+t.pts;},0);
 
   // ── Stat row: Today P&L + Win Rate ──
@@ -3816,11 +3816,11 @@ function mobileHomeTab(){
   var eqTitle=document.createElement("div");eqTitle.className="m-card-title";eqTitle.textContent="Equity Curve";
   var eqBadge=document.createElement("div");eqBadge.className="m-card-badge"+(s.total<0?" neg":"");eqBadge.textContent=(s.total>=0?"+":"")+dol(s.total)+" all-time";
   eqHdr.appendChild(eqTitle);eqHdr.appendChild(eqBadge);eqCard.appendChild(eqHdr);
-  eqCard.appendChild(mobileEquitySVG(State.trades));
+  eqCard.appendChild(mobileEquitySVG(_mat));
   el.appendChild(eqCard);
 
   // ── Streak dots ──
-  var sdResult=mobileStreakDots(State.trades,10);
+  var sdResult=mobileStreakDots(_mat,10);
   var streakCard=document.createElement("div");streakCard.className="m-eq-card";streakCard.style.padding="10px 12px";
   var sdHdr=document.createElement("div");sdHdr.className="m-card-hdr";sdHdr.style.marginBottom="0";
   var sdTitle=document.createElement("div");sdTitle.className="m-card-title";sdTitle.textContent="Last 10 Trades";
@@ -3833,7 +3833,7 @@ function mobileHomeTab(){
   // ── Weekly Scoreboard ──
   var nowD2=new Date();
   var wkStart3=new Date(nowD2);wkStart3.setDate(nowD2.getDate()-nowD2.getDay());wkStart3.setHours(0,0,0,0);
-  var wkTrades3=State.trades.filter(function(t){
+  var wkTrades3=_mat.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
     var td4=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
     return td4>=wkStart3;
@@ -3873,7 +3873,7 @@ function mobileHomeTab(){
 
   // ── Monthly Scoreboard ──
   var moNow2=new Date();
-  var moTrades2=State.trades.filter(function(t){
+  var moTrades2=_mat.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
     return parseInt(p[0])-1===moNow2.getMonth()&&2000+parseInt(p[2])===moNow2.getFullYear();
   });
@@ -3932,7 +3932,7 @@ function mobileHomeTab(){
   if(!State.trades.length){
     var noop=document.createElement("div");noop.style.cssText="color:#1a3260;font-size:11px;text-align:center;padding:20px;font-family:monospace;";noop.textContent="No trades yet — tap + to add your first trade";el.appendChild(noop);
   } else {
-    State.trades.slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
+    activeTrades().slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
   return el;
@@ -3962,7 +3962,7 @@ function mobileLogTab(){
 
   // Group by date
   var dates=[];var byDate={};
-  State.trades.forEach(function(t){
+  activeTrades().forEach(function(t){
     var d=t.date||"Unknown";
     if(!byDate[d]){byDate[d]=[];dates.push(d);}
     byDate[d].push(t);
@@ -3993,7 +3993,7 @@ function mobileAnalyticsTab(){
   var peak=0,maxDD=0;eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
   var profitFactor=Math.abs(s.avgL)>0?Math.abs(s.avgW/s.avgL):0;
   var bestStreak=0,curStreak=0,streakType2="";
-  State.trades.slice().reverse().forEach(function(t){
+  activeTrades().slice().reverse().forEach(function(t){
     var type=t.d>0?"W":"L";if(type===streakType2){curStreak++;}else{streakType2=type;curStreak=1;}
     if(curStreak>bestStreak) bestStreak=curStreak;
   });
@@ -4026,14 +4026,14 @@ function mobileAnalyticsTab(){
   var now=new Date();var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   hmT.textContent="Daily P&L Heatmap · "+MONTHS[now.getMonth()]+" "+now.getFullYear();
   hmHdr.appendChild(hmT);hmCard.appendChild(hmHdr);
-  hmCard.appendChild(mobilePnlHeatmap(State.trades));
+  hmCard.appendChild(mobilePnlHeatmap(activeTrades()));
   el.appendChild(hmCard);
 
   // ── P&L by Setup bar chart ──
   var customSU=ls("playbook_custom",[]);
   var allSetupNames2=SETUPS.concat(customSU.map(function(e){return e.name;}));
   var setupData=allSetupNames2.map(function(sv){
-    var ts=State.trades.filter(function(t){return tradeHasSetup(t,sv);});
+    var ts=_mat.filter(function(t){return tradeHasSetup(t,sv);});
     return{l:sv,v:ts.reduce(function(a,t){return a+t.d;},0),n:ts.length};
   }).filter(function(d){return d.n>0;}).sort(function(a,b){return b.v-a.v;});
 
@@ -4048,7 +4048,7 @@ function mobileAnalyticsTab(){
 
   // ── P&L by Session bars ──
   var sessData=SESSIONS.map(function(sess){
-    var ts=State.trades.filter(function(t){return t.sess===sess;});
+    var ts=_mat.filter(function(t){return t.sess===sess;});
     return{l:sess.split(" ")[0],v:ts.reduce(function(a,t){return a+t.d;},0),n:ts.length};
   }).filter(function(d){return d.n>0;});
 
