@@ -1314,7 +1314,7 @@ function openSettings(){
   // ── DATA ──
   body.appendChild(sectionLabel("Data"));
   body.appendChild(actionRow("Export Trades to CSV","Download all trades as a .csv file","EXPORT","var(--accent)",function(){
-    var trades=State.trades;
+    var trades=activeTrades();
     if(!trades||!trades.length){alert("No trades to export.");return;}
     var cols=["date","time","inst","dir","entry","exit","ctr","sess","pts","d","ex","ru","emo","setups","conf","post","right","wrong","grade","rval","stopPts","riskUsd"];
     var rows=[cols.join(",")];
@@ -1700,7 +1700,7 @@ function homeTab(){
   // Total P&L — big
   var totalCard=div("card");totalCard.style.background="var(--panel2)";totalCard.style.borderLeft=(s.total>=0?"4px solid #00e67660":"4px solid #ff444460");
   var ttTop=div("rjb mb8");var ttL=div("card-t");ttL.textContent="ALL-TIME P&L";ttTop.appendChild(ttL);
-  var ttBadge=div("xs m");ttBadge.textContent=State.trades.length+" total trades";ttTop.appendChild(ttBadge);
+  var ttBadge=div("xs m");ttBadge.textContent=activeTrades().length+" total trades";ttTop.appendChild(ttBadge);
   totalCard.appendChild(ttTop);
   var ttVal=div();ttVal.style.fontSize="38px";ttVal.style.fontWeight="700";ttVal.style.lineHeight="1";ttVal.style.letterSpacing="1px";ttVal.className=clr(s.total);ttVal.textContent=dol(s.total);totalCard.appendChild(ttVal);
   var ttWr=div("mt8");ttWr.style.fontSize="12px";
@@ -1724,9 +1724,9 @@ function homeTab(){
   // Current streak
   var streak=0;var streakType="";
   if(State.trades.length){
-    var first=activeTrades()[0];streakType=first&&first.d>0?"W":"L";
-    for(var si=0;si<activeTrades().length;si++){
-      if((activeTrades()[si].d>0&&streakType==="W")||(activeTrades()[si].d<0&&streakType==="L")) streak++;
+    var _st=activeTrades();var first=_st[0];streakType=first&&first.d>0?"W":"L";
+    for(var si=0;si<_st.length;si++){
+      if((_st[si].d>0&&streakType==="W")||(_st[si].d<0&&streakType==="L")) streak++;
       else break;
     }
   }
@@ -1900,7 +1900,7 @@ function homeTab(){
   // Session performance — traded only
   var sep3=div("sep");combCard.appendChild(sep3);
   var sessHdr=div("card-t mb8");sessHdr.textContent="SESSION PERFORMANCE";combCard.appendChild(sessHdr);
-  var tradedSessions=SESSIONS.filter(function(sess){return State.trades.some(function(t){return t.sess===sess;});});
+  var tradedSessions=SESSIONS.filter(function(sess){return _at.some(function(t){return t.sess===sess;});});
   if(tradedSessions.length===0){var noSess=span("xs m");noSess.textContent="No trades logged yet.";combCard.appendChild(noSess);}
   tradedSessions.forEach(function(sess,si){
     var sts=_at.filter(function(t){return t.sess===sess;});
@@ -2793,11 +2793,11 @@ function reviewTab(){
   var calMonth=State.rv_month!==undefined?State.rv_month:now.getMonth();
   var viewMode=State.rv_view||"month";
 
-  var _at2=activeTrades();
-  var s=calcStats(_at2);
-  var aG=_at2.filter(function(t){return t.ex==="A"}).length;
-  var adh=_at2.length?(aG/_at2.length*100).toFixed(0):0;
-  var emoAvg=_at2.length?(_at2.reduce(function(a,t){return a+(t.emo||3)},0)/_at2.length).toFixed(1):0;
+  var _at2=activeTrades();var _at=_at2;
+  var s=calcStats(_at);
+  var aG=_at.filter(function(t){return t.ex==="A"}).length;
+  var adh=_at.length?(aG/_at.length*100).toFixed(0):0;
+  var emoAvg=_at.length?(_at.reduce(function(a,t){return a+(t.emo||3)},0)/_at.length).toFixed(1):0;
   // ── Header row with view toggles ──
   var topRow=div("rjb mb12");
   var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Stats";topRow.appendChild(sh);
@@ -2815,7 +2815,7 @@ function reviewTab(){
   if(viewMode==="month"){
     // ── SUMMARY CHIPS ──
     var g4=div("g4 mb12");
-    g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total),State.trades.length+" trades"));
+    g4.appendChild(makeChip("NET P&L",dol(s.total),clr(s.total),_at.length+" trades"));
     var wlDiv=div();wlDiv.innerHTML='<span class="g fw7">'+s.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+s.losses.length+'</span>';
     g4.appendChild(makeChip("W / L",wlDiv,"","all time"));
     g4.appendChild(makeChip("WIN RATE",s.wr+"%","ac",""));
@@ -2850,7 +2850,7 @@ function reviewTab(){
 
     // Build day→trades map using MM/DD/YY format
     var dayMap={};
-    State.trades.forEach(function(t){
+    _at.forEach(function(t){
       // parse MM/DD/YY
       var parts=t.date.split("/");if(parts.length!==3)return;
       var tm=parseInt(parts[0])-1,td2=parseInt(parts[1]),ty=2000+parseInt(parts[2]);
@@ -3084,13 +3084,13 @@ function reviewTab(){
     var dWL=div();dWL.innerHTML='<span class="g fw7">'+ds.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ds.losses.length+'</span>';
     dg4.appendChild(makeChip("W / L",dWL,"","all time"));
     var daG=_at.filter(function(t){return t.ex==="A"}).length;
-    var dadh=State.trades.length?(daG/State.trades.length*100).toFixed(0):0;
+    var dadh=_at.length?(daG/_at.length*100).toFixed(0):0;
     dg4.appendChild(makeChip("A-GRADE RATE",dadh+"%",dadh>=60?"g":"a",""));
-    dg4.appendChild(makeChip("TOTAL TRADES",State.trades.length));dg4.appendChild(makeChip("R:R RATIO",(ds.avgL?Math.abs(ds.avgW/ds.avgL).toFixed(2):"—")+"R","ac"));
+    dg4.appendChild(makeChip("TOTAL TRADES",_at.length));dg4.appendChild(makeChip("R:R RATIO",(ds.avgL?Math.abs(ds.avgW/ds.avgL).toFixed(2):"—")+"R","ac"));
     el.appendChild(dg4);
 
     var dg2=div("g2");
-    var deqCard=div("card");var deqH=div("card-h");var deqT=div("card-t");deqT.textContent="Equity Curve";deqH.appendChild(deqT);deqCard.appendChild(deqH);deqCard.appendChild(equitySVG(State.trades,380,200));dg2.appendChild(deqCard);
+    var deqCard=div("card");var deqH=div("card-h");var deqT=div("card-t");deqT.textContent="Equity Curve";deqH.appendChild(deqT);deqCard.appendChild(deqH);deqCard.appendChild(equitySVG(_at,380,200));dg2.appendChild(deqCard);
     var dByHour=[];for(var dhi=0;dhi<10;dhi++){var dhh=9+dhi;var dhs=(dhh<10?"0":"")+dhh;var dhts=_at.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});}
     var dbhCard=div("card");var dbhH=div("card-h");var dbhT=div("card-t");dbhT.textContent="P&L by Hour";dbhH.appendChild(dbhT);dbhCard.appendChild(dbhH);dbhCard.appendChild(barSVG(dByHour,380,200));dg2.appendChild(dbhCard);
     el.appendChild(dg2);
@@ -3809,7 +3809,8 @@ function mobileHomeTab(){
   var sc1=document.createElement("div");sc1.className="m-stat-card hero"+(tPnl<0?" neg":"");
   sc1.innerHTML='<div class="m-stat-lbl">Today P&L</div><div class="m-stat-val '+(tPnl>=0?"g":"r")+'">'+dol(tPnl)+'</div><div class="m-stat-sub">'+todayTrades.length+' trades · '+tW+'W/'+tL+'L · '+(tpts>=0?"+":"")+tpts.toFixed(1)+' pts</div>';
   var sc2=document.createElement("div");sc2.className="m-stat-card";
-  sc2.innerHTML='<div class="m-stat-lbl">Win Rate</div><div class="m-stat-val ac">'+s.wr+'%</div><div class="m-stat-sub">'+_mat.length+' all-time trades</div>';
+  var _mca=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length)return null;return State.accounts.find(function(x){return x.id===State.activeAccount;})||null;})();
+  sc2.innerHTML='<div class="m-stat-lbl">Win Rate</div><div class="m-stat-val ac">'+s.wr+'%</div><div class="m-stat-sub">'+_mat.length+' trades'+(_mca?' &middot; <span style="color:var(--ca);font-weight:700;">'+_mca.name.toUpperCase()+'</span>':'')+'</div>';
   statRow.appendChild(sc1);statRow.appendChild(sc2);
   el.appendChild(statRow);
 
