@@ -5007,16 +5007,35 @@ initAutoSync();
   // Timeout: if cloud takes >4s, just render with local data anyway
   var loadTimer=setTimeout(function(){ dismissLoader(); render(); },4000);
 
+  function ensureDefaultAccount(){
+    if(State.accounts&&State.accounts.length) return; // already has accounts
+    var defId="acct_default_mula_live";
+    var defAcct={id:defId,name:"Mula Live",broker:"Tradovate",type:"Live",balance:"",accountNum:"",notes:"",createdAt:new Date().toISOString()};
+    State.accounts=[defAcct];
+    State.activeAccount=defId;
+    // Tag all untagged trades to this account
+    State.trades=State.trades.map(function(t){
+      if(!t.accountId) return Object.assign({},t,{accountId:defId});
+      return t;
+    });
+    ss("accounts",State.accounts);
+    ss("activeAccount",State.activeAccount);
+    ss("trades",State.trades);
+    syncToCloud();
+  }
+
   if(supaClient){
     loadFromCloud(currentId,function(ok){
       clearTimeout(loadTimer);
       dismissLoader();
+      ensureDefaultAccount();
       if(ok) render();
       else{ syncToCloud(); render(); }
     });
   } else {
     clearTimeout(loadTimer);
     dismissLoader();
+    ensureDefaultAccount();
     render();
   }
 })();
