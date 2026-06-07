@@ -864,6 +864,8 @@ var State={
   nt_lastSync:ls("nt_lastSync",""),
   nt_fileHandle:null,
   sync_tab:"csv",
+  logPage:0,
+  logPageSize:parseInt(localStorage.getItem("edge_logPageSize")||"50"),
   chart_symbol:"ES",
   chart_interval:"1h",
   mindsetChecks:ls("mindsetChecks",{}),
@@ -1262,7 +1264,7 @@ function renderTabs(){
 function switchTab(id){
   // Guard: if tab not in VIEWS (e.g. "chart" from old localStorage), fall back to home
   if(!VIEWS[id]) id="home";
-  State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;
+  State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
   if(id!=="analytics"){State.rv_selected_day=null;}
   render();window.scrollTo(0,0);
 }
@@ -1649,7 +1651,7 @@ function openSettings(){
   }));
   body.appendChild(actionRow("Clear Local Cache","Wipe localStorage & reload from cloud","CLEAR","var(--red)",function(){
     if(confirm("Clear all local cache? Data will reload from Supabase.")){
-      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp"];
+      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize"];
       Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
       localStorage.setItem("edge_tab",JSON.stringify("home"));
       closeSettings();window.location.reload();
@@ -2898,7 +2900,7 @@ function tradeForm(existing){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
     } else {
-      State.trades.unshift(updated);State.adding=false;
+      State.trades.unshift(updated);State.adding=false;State.logPage=0;
     }
     ss("trades",State.trades);render();
   });sv.appendChild(svb);fg.appendChild(sv);
@@ -2908,9 +2910,15 @@ function tradeForm(existing){
 // ─── LOG TAB ──────────────────────────────────────────────────────────
 function logTab(){
   if(isMobile()) return mobileLogTab();
+  var _allTrades=activeTrades();
+  var _pageSize=State.logPageSize||50;
+  var _totalPages=Math.max(1,Math.ceil(_allTrades.length/_pageSize));
+  if(State.logPage>=_totalPages) State.logPage=_totalPages-1;
+  var _start=State.logPage*_pageSize;
+  var _pageTrades=_allTrades.slice(_start,_start+_pageSize);
   var el=div();
   var hrow=div("rjb mb12");
-  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+activeTrades().length+" entries ("+State.trades.length+" total)";hrow.appendChild(sh);
+  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+_allTrades.length+" entries ("+State.trades.length+" total)";hrow.appendChild(sh);
   var btnRow=div("row gap8");
   var nb=h("button",{className:"btn",onClick:function(){State.adding=!State.adding;State.editing=null;render();}});nb.textContent="+ NEW TRADE";btnRow.appendChild(nb);
   var impLink=h("button",{className:"btn",style:"border-color:var(--text3);color:var(--text3)",onClick:function(){State.tab="import";render();}});impLink.textContent="⬆ IMPORT CSV";btnRow.appendChild(impLink);
@@ -2924,7 +2932,8 @@ function logTab(){
   ["DATE","TIME","INST","DIR","ENTRY","EXIT","CTR","PTS","P&L","R","SETUP","SESSION","EX","RU","EMO"].forEach(function(hd){hr.appendChild(h("th",{},[hd]));});
   thead.appendChild(hr);tbl.appendChild(thead);
   var tbody=h("tbody");
-  activeTrades().forEach(function(t){
+
+  _pageTrades.forEach(function(t){
     var tr=h("tr",{className:"tr-click"+(State.expanded===t.id?" exp-open":"")});
     tr.addEventListener("click",function(){State.expanded=State.expanded===t.id?null:t.id;render();});
     tr.appendChild(h("td",{},[t.date]));
@@ -3017,7 +3026,54 @@ function logTab(){
       exTd.appendChild(exDiv);exRow.appendChild(exTd);tbody.appendChild(exRow);
     }
   });
-  tbl.appendChild(tbody);var tblWrap=div("tbl-wrap");tblWrap.appendChild(tbl);tcard.appendChild(tblWrap);el.appendChild(tcard);return el;
+  tbl.appendChild(tbody);var tblWrap=div("tbl-wrap");tblWrap.appendChild(tbl);tcard.appendChild(tblWrap);el.appendChild(tcard);
+
+  // ── Pagination bar ──
+  if(_allTrades.length>0){
+    var pgBar=div();pgBar.style.cssText="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:10px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:'Courier New',monospace;";
+
+    // Page size selector
+    var pgSizeWrap=div();pgSizeWrap.style.cssText="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text3);letter-spacing:1px;";
+    pgSizeWrap.appendChild(document.createTextNode("SHOW"));
+    var pgSel=h("select");pgSel.style.cssText="background:var(--panel2);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:3px 6px;border-radius:3px;cursor:pointer;";
+    [25,50,100,200].forEach(function(n){
+      var o=h("option");o.value=n;o.textContent=n;if(n===_pageSize)o.selected=true;
+      pgSel.appendChild(o);
+    });
+    pgSel.onchange=function(){State.logPageSize=parseInt(pgSel.value);localStorage.setItem("edge_logPageSize",pgSel.value);State.logPage=0;State.expanded=null;render();};
+    pgSizeWrap.appendChild(pgSel);
+    pgSizeWrap.appendChild(document.createTextNode("PER PAGE"));
+    pgBar.appendChild(pgSizeWrap);
+
+    // Right side: info + buttons
+    var pgRight=div();pgRight.style.cssText="display:flex;align-items:center;gap:12px;flex-wrap:wrap;";
+    var pgInfo=div();pgInfo.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;white-space:nowrap;";
+    pgInfo.innerHTML="<b style='color:var(--text2)'>"+_allTrades.length+"</b> trades total";
+    pgRight.appendChild(pgInfo);
+
+    if(_totalPages>1){
+      var pgBtns=div();pgBtns.style.cssText="display:flex;align-items:center;gap:4px;";
+      function pgBtn(label,page,isActive,disabled){
+        var b=h("button");
+        b.textContent=label;
+        b.style.cssText="background:"+(isActive?"var(--accentglow)":"transparent")+";border:1px solid "+(isActive?"var(--accent)":"var(--border2)")+";color:"+(isActive?"var(--accent)":"var(--text3)")+";font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:4px 8px;border-radius:3px;cursor:"+(disabled?"default":"pointer")+";opacity:"+(disabled?"0.3":"1")+";";
+        if(!disabled) b.onclick=function(){State.logPage=page;State.expanded=null;render();window.scrollTo(0,0);};
+        return b;
+      }
+      pgInfo.innerHTML="PAGE <b style='color:var(--accent)'>"+(State.logPage+1)+"</b> OF <b style='color:var(--accent)'>"+_totalPages+"</b> &nbsp;·&nbsp; <b style='color:var(--text2)'>"+(_start+1)+"–"+Math.min(_start+_pageSize,_allTrades.length)+"</b> OF <b style='color:var(--text2)'>"+_allTrades.length+"</b>";
+      pgBtns.appendChild(pgBtn("◀ PREV",State.logPage-1,false,State.logPage===0));
+      var pgStart=Math.max(0,State.logPage-2);var pgEnd=Math.min(_totalPages-1,pgStart+4);pgStart=Math.max(0,pgEnd-4);
+      if(pgStart>0){pgBtns.appendChild(pgBtn("1",0,false,false));if(pgStart>1){var ell=div();ell.style.cssText="color:var(--border2);padding:0 4px;font-size:12px;line-height:28px;";ell.textContent="···";pgBtns.appendChild(ell);}}
+      for(var pi=pgStart;pi<=pgEnd;pi++){pgBtns.appendChild(pgBtn(pi+1,pi,pi===State.logPage,false));}
+      if(pgEnd<_totalPages-1){if(pgEnd<_totalPages-2){var ell2=div();ell2.style.cssText="color:var(--border2);padding:0 4px;font-size:12px;line-height:28px;";ell2.textContent="···";pgBtns.appendChild(ell2);}pgBtns.appendChild(pgBtn(_totalPages,_totalPages-1,false,false));}
+      pgBtns.appendChild(pgBtn("NEXT ▶",State.logPage+1,false,State.logPage>=_totalPages-1));
+      pgRight.appendChild(pgBtns);
+    }
+    pgBar.appendChild(pgRight);
+    el.appendChild(pgBar);
+  }
+
+  return el;
 }
 
 // ─── OPPS TAB ─────────────────────────────────────────────────────────
@@ -4027,7 +4083,7 @@ function importTab(){
       var toAdd=State.imp_preview.filter(function(t){var k=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;if(keys.indexOf(k)>-1){dupes++;return false;}return true;});
       toAdd=toAdd.map(function(t){return Object.assign({},t,{accountId:t.accountId||State.activeAccount||null});});
       State.trades=toAdd.concat(State.trades);ss("trades",State.trades);
-      State.imp_preview=null;
+      State.imp_preview=null;State.logPage=0;
       State.imp_msg={type:"ok",text:"✓ Imported "+toAdd.length+" trades."+(dupes?" Skipped "+dupes+" duplicates.":"")};
       render();
     });
@@ -4457,9 +4513,16 @@ function mobileHomeTab(){
 function mobileLogTab(){
   var el=document.createElement("div");
 
+  var _allLogAt=activeTrades();
+  var _mPageSize=State.logPageSize||50;
+  var _mTotalPages=Math.max(1,Math.ceil(_allLogAt.length/_mPageSize));
+  if(State.logPage>=_mTotalPages) State.logPage=_mTotalPages-1;
+  var _mStart=State.logPage*_mPageSize;
+  var _logAt=_allLogAt.slice(_mStart,_mStart+_mPageSize);
+
   // Header row
   var hdr=document.createElement("div");hdr.className="m-sh";
-  hdr.innerHTML='<span>Trade Log — '+activeTrades().length+' trades</span>';
+  hdr.innerHTML='<span>Trade Log — '+_allLogAt.length+' trades</span>';
   var filterBtn=document.createElement("span");filterBtn.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 9px;border-radius:4px;cursor:pointer;";filterBtn.textContent="FILTER";
   hdr.appendChild(filterBtn);
   el.appendChild(hdr);
@@ -4471,8 +4534,7 @@ function mobileLogTab(){
     el.appendChild(formCard);
   }
 
-  var _logAt=activeTrades();
-  if(!_logAt.length){
+  if(!_allLogAt.length){
     var noop=document.createElement("div");noop.style.cssText="color:#1a3260;font-size:11px;text-align:center;padding:32px;font-family:monospace;";noop.textContent="No trades logged yet";el.appendChild(noop);return el;
   }
 
@@ -4495,6 +4557,27 @@ function mobileLogTab(){
     el.appendChild(sep);
     byDate[dateKey].forEach(function(t){el.appendChild(mobileTradeCard(t));});
   });
+
+  // Mobile pagination bar
+  if(_mTotalPages>1){
+    var mpgBar=document.createElement("div");
+    mpgBar.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:12px;margin-top:8px;background:#071428;border:1px solid #1a3260;border-radius:8px;font-family:'Courier New',monospace;";
+    var mpgInfo=document.createElement("div");
+    mpgInfo.style.cssText="font-size:10px;color:#c9a84c;letter-spacing:1px;";
+    mpgInfo.innerHTML="PAGE <b style='color:#00d4d4'>"+(State.logPage+1)+"</b> / <b style='color:#00d4d4'>"+_mTotalPages+"</b>";
+    mpgBar.appendChild(mpgInfo);
+    var mpgBtns=document.createElement("div");mpgBtns.style.cssText="display:flex;gap:8px;";
+    function mpgBtn(label,page,disabled){
+      var b=document.createElement("button");b.textContent=label;
+      b.style.cssText="background:transparent;border:1px solid "+(disabled?"#1a3260":"#1e3d73")+";color:"+(disabled?"#1a3260":"#c9a84c")+";font-family:'Courier New',monospace;font-size:11px;padding:6px 14px;border-radius:6px;cursor:"+(disabled?"default":"pointer")+";";
+      if(!disabled) b.onclick=function(){State.logPage=page;State.expanded=null;render();window.scrollTo(0,0);};
+      return b;
+    }
+    mpgBtns.appendChild(mpgBtn("◀ PREV",State.logPage-1,State.logPage===0));
+    mpgBtns.appendChild(mpgBtn("NEXT ▶",State.logPage+1,State.logPage>=_mTotalPages-1));
+    mpgBar.appendChild(mpgBtns);
+    el.appendChild(mpgBar);
+  }
 
   return el;
 }
