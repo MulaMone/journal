@@ -565,7 +565,8 @@ function syncToCloud(){
       notes_pad:ls("notes_pad",""),
       playbook_custom:ls("playbook_custom",[]),
       accounts:State.accounts,
-      activeAccount:State.activeAccount
+      activeAccount:State.activeAccount,
+      lk_pin:localStorage.getItem("edge_lk_pin")||null
     },
     updated_at:new Date().toISOString()
   };
@@ -630,6 +631,7 @@ function loadFromCloud(syncId,callback){
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
       if(s.accounts&&s.accounts.length){State.accounts=s.accounts;ss("accounts",s.accounts);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
+      if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
@@ -1681,6 +1683,7 @@ function openSettings(){
     var v=pinInp.value.replace(/\D/g,"");
     if(v.length!==4){pinInp.style.borderColor="var(--red)";setTimeout(function(){pinInp.style.borderColor="var(--border2)";},1200);return;}
     try{localStorage.setItem("edge_lk_pin",v);}catch(e){}
+    syncToCloud();
     pinInp.value="";pinSave.textContent="✓";
     setTimeout(function(){pinSave.textContent="SET";},1500);
   };
