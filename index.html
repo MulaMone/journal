@@ -520,10 +520,12 @@ var SDESC={
 };
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
 // CME minimum price increments (snap entry/exit to valid tick)
-var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:0.50,Other:0.01};
+var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
 function snapToTick(val,inst){
   var inc=TICK_INC[inst]||0.01;
-  var decimals=inc<0.1?2:inc<1?1:0;
+  // Use decimal places of the increment itself for correct precision
+  var incStr=String(inc);
+  var decimals=incStr.indexOf(".")>-1?incStr.split(".")[1].length:0;
   return parseFloat((Math.round(val/inc)*inc).toFixed(decimals));
 }
 function fmtTime(raw){
