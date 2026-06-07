@@ -1341,7 +1341,7 @@ function openSettings(){
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }));
-  body.appendChild(actionRow("Delete All Trades","Permanently removes all trade history","DELETE","var(--red)",function(){
+  body.appendChild(actionRow("Delete All Trades","Permanently removes all trades for the active account","DELETE","var(--red)",function(){
     // Passcode modal
     var pc=document.createElement("div");
     pc.style.cssText="position:fixed;inset:0;background:#00000090;z-index:10000;display:flex;align-items:center;justify-content:center;";
@@ -1372,7 +1372,8 @@ function openSettings(){
     pcConfirm.onclick=function(){
       if(pcInp.value==="1591"){
         document.body.removeChild(pc);
-        State.trades=[];ss("trades",[]);syncToCloud();closeSettings();render();
+        State.trades=State.trades.filter(function(t){return t.accountId!==State.activeAccount;});
+        ss("trades",State.trades);syncToCloud();closeSettings();render();
       } else {
         pcErr.textContent="Incorrect passcode. Try again.";
         pcInp.value="";
