@@ -522,6 +522,7 @@ var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other
 // CME minimum price increments (snap entry/exit to valid tick)
 var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
 function snapToTick(val,inst){
+  if(isNaN(val)||val===null||val===undefined) return val;
   var inc=TICK_INC[inst]||0.01;
   // Use decimal places of the increment itself for correct precision
   var incStr=String(inc);
@@ -2394,10 +2395,11 @@ function tradeForm(existing){
     var timInp=document.getElementById("f_time");
     var instSel=document.getElementById("f_inst");
     function snapField(inp){
+      if(!inp||!inp.value||!inp.value.trim()) return;
       var v=parseFloat(inp.value);
       if(!isNaN(v)&&instSel){
         var snapped=snapToTick(v,instSel.value);
-        inp.value=snapped;
+        if(!isNaN(snapped)) inp.value=snapped;
         updatePreview();
       }
     }
@@ -2551,7 +2553,9 @@ function tradeForm(existing){
     if(!entry||!exit){alert("Entry and exit are required.");return;}
     var inst=gv("inst"),dir=gv("dir"),ctr=gv("ctr")||"1";
     var tv=TICK[inst]||1;
-    var entrySnapped=snapToTick(parseFloat(entry),inst);var exitSnapped=snapToTick(parseFloat(exit),inst);
+    var entrySnapped=snapToTick(parseFloat(entry),inst);
+    var exitSnapped=snapToTick(parseFloat(exit),inst);
+    if(isNaN(entrySnapped)||isNaN(exitSnapped)){alert("Invalid entry or exit price.");return;}
     entry=String(entrySnapped);exit=String(exitSnapped);
     var timeFormatted=fmtTime(gv("time"));if(timeFormatted) document.getElementById("f_time").value=timeFormatted;
     var pts=(exitSnapped-entrySnapped)*(dir==="Long"?1:-1);
