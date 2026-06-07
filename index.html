@@ -4674,13 +4674,6 @@ function accountsTab(){
   binfo.appendChild(blbl);binfo.appendChild(bname);if(active)binfo.appendChild(bmeta);
   banner.appendChild(bdot);banner.appendChild(binfo);
   if(active){
-    var bswitch=document.createElement("button");
-    bswitch.textContent="SWITCH";
-    bswitch.style.cssText="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;flex-shrink:0;";
-    bswitch.onmouseover=function(){this.style.borderColor="var(--accent)";this.style.color="var(--accent)";};
-    bswitch.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
-    bswitch.onclick=function(){document.getElementById("acct-cards").scrollIntoView({behavior:"smooth"});};
-    banner.appendChild(bswitch);
   }
   el.appendChild(banner);
 
