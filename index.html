@@ -1789,7 +1789,7 @@ function mobileTradeCard(t){
 
   var right=document.createElement("div");right.className="m-tc-right";
   var pnl=document.createElement("div");pnl.className="m-tc-pnl "+(t.d>=0?"g":"r");pnl.textContent=dol(t.d);
-  var pts=document.createElement("div");pts.className="m-tc-pts";pts.textContent=(t.pts>0?"+":"")+t.pts.toFixed(2)+" pts";
+  var pts=document.createElement("div");pts.className="m-tc-pts";var _pts=t.pts||0;pts.textContent=(_pts>0?"+":"")+_pts.toFixed(2)+" pts";
   right.appendChild(pnl);right.appendChild(pts);top.appendChild(right);
   card.appendChild(top);
 
@@ -1993,7 +1993,7 @@ function homeTab(){
   tcTop.appendChild(tcBadge);
   todayCard.appendChild(tcTop);
   var tcVal=div();tcVal.style.fontSize="38px";tcVal.style.fontWeight="700";tcVal.style.lineHeight="1";tcVal.style.letterSpacing="1px";tcVal.className=clr(tPnl);tcVal.textContent=dol(tPnl);todayCard.appendChild(tcVal);
-  var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+t.pts},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
+  var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+(t.pts||0)},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
   var _ca2=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length)return null;return State.accounts.find(function(x){return x.id===State.activeAccount;})||null;})();
   var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;";
   var tcWrTxt=div();tcWrTxt.textContent="WIN RATE  "+s.wr+"%";tcWr.appendChild(tcWrTxt);
@@ -2942,7 +2942,7 @@ function logTab(){
     var dtd=h("td");dtd.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));tr.appendChild(dtd);
     tr.appendChild(h("td",{},[t.entry]));tr.appendChild(h("td",{},[t.exit]));tr.appendChild(h("td",{className:"m"},[t.ctr]));
     var ptd=h("td",{className:clr(t.pts)});
-    ptd.textContent=(t.pts>0?"+":"")+t.pts.toFixed(2);
+    ptd.textContent=(t.pts>0?"+":"")+(t.pts||0).toFixed(2);
     ptd.style.fontWeight="600";
     tr.appendChild(ptd);
     var dtd2=h("td",{className:"fw7 "+clr(t.d)});
@@ -3086,7 +3086,7 @@ function oppsTab(){
     var oh=div("row gap8 mb8 fw7");oh.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var oi=span("fw7");oi.textContent=" "+t.inst+" ";oh.appendChild(oi);var oe=span("xs m");oe.textContent="@ "+t.entry+" → "+t.exit;oh.appendChild(oe);opp.appendChild(oh);
     var om=div("row gap8 mb8");om.style.flexWrap="wrap";
     var op=span("fw7 "+clr(t.d));op.style.fontSize="19px";op.textContent=dol(t.d);om.appendChild(op);
-    om.appendChild(makeBadge("bb",t.pts.toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
+    om.appendChild(makeBadge("bb",(t.pts||0).toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
     var sep=div("sep");opp.appendChild(sep);
     var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";if(getSetups(t).length) sv2.appendChild(setupColoredEl(t)); else sv2.textContent="—";opp.appendChild(sv2);
     var wl=div("xs m mb8");wl.textContent="WHY IT WORKED";opp.appendChild(wl);var wv=div("xs");wv.style.color="#e0c97a";wv.style.lineHeight="1.7";wv.textContent=t.post||t.conf||"—";opp.appendChild(wv);
@@ -4387,7 +4387,7 @@ function mobileHomeTab(){
   var tW=todayTrades.filter(function(t){return t.d>0;}).length;
   var tL=todayTrades.filter(function(t){return t.d<0;}).length;
   var s=calcStats(_mat);
-  var tpts=todayTrades.reduce(function(a,t){return a+t.pts;},0);
+  var tpts=todayTrades.reduce(function(a,t){return a+(t.pts||0);},0);
 
   // ── Stat row: Today P&L + Win Rate ──
   var statRow=document.createElement("div");statRow.className="m-stat-row";
