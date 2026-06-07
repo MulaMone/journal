@@ -1581,7 +1581,7 @@ function openSettings(){
   body.appendChild(actionRow("Export Trades to CSV","Download all trades as a .csv file","EXPORT","var(--accent)",function(){
     var trades=activeTrades();
     if(!trades||!trades.length){alert("No trades to export.");return;}
-    var cols=["date","time","inst","dir","entry","exit","ctr","sess","pts","d","ex","ru","emo","setups","conf","post","right","wrong","grade","rval","stopPts","riskUsd"];
+    var cols=["date","time","inst","dir","entry","exit","ctr","sess","pts","d","ex","ru","emo","setups","conf","post","right","wrong","r","stopPts","riskUsd"];
     var rows=[cols.join(",")];
     trades.forEach(function(t){
       var row=cols.map(function(c){
@@ -1812,7 +1812,7 @@ function mobileTradeCard(t){
   var editBtn=document.createElement("button");editBtn.className="btn";editBtn.style.cssText="padding:7px 14px;font-size:11px;flex:1;";editBtn.textContent="EDIT";
   editBtn.addEventListener("click",function(e){e.stopPropagation();State.editing=t;State.adding=false;State.tab="log";render();window.scrollTo(0,0);});
   var delBtn=document.createElement("button");delBtn.className="btn btn-r";delBtn.style.cssText="padding:7px 14px;font-size:11px;";delBtn.textContent="DELETE";
-  delBtn.addEventListener("click",function(e){e.stopPropagation();if(!confirm("Delete this trade?"))return;State.trades=State.trades.filter(function(x){return x.id!==t.id;});ss("trades",State.trades);render();});
+  delBtn.addEventListener("click",function(e){e.stopPropagation();if(!confirm("Delete this trade?"))return;State.trades=State.trades.filter(function(x){return x.id!==t.id;});ss("trades",State.trades);syncToCloud();render();});
   acts.appendChild(editBtn);acts.appendChild(delBtn);exp.appendChild(acts);
   card.appendChild(exp);
 
@@ -2902,7 +2902,7 @@ function tradeForm(existing){
     } else {
       State.trades.unshift(updated);State.adding=false;State.logPage=0;
     }
-    ss("trades",State.trades);render();
+    ss("trades",State.trades);syncToCloud();render();
   });sv.appendChild(svb);fg.appendChild(sv);
   frm.appendChild(fg);return frm;
 }
@@ -2998,7 +2998,7 @@ function logTab(){
       (function(trade){editBtn2.addEventListener("click",function(e){e.stopPropagation();State.editing=trade;State.adding=false;State.expanded=null;render();});})(t);
       btnRow.appendChild(editBtn2);
       var delBtn=h("button",{className:"btn btn-r",style:"padding:4px 10px;font-size:9px"});delBtn.textContent="DELETE";
-      delBtn.addEventListener("click",function(e){e.stopPropagation();if(confirm("Delete this trade?")){State.trades=State.trades.filter(function(x){return x.id!==t.id});ss("trades",State.trades);State.expanded=null;State.editing=null;render();}});
+      delBtn.addEventListener("click",function(e){e.stopPropagation();if(confirm("Delete this trade?")){State.trades=State.trades.filter(function(x){return x.id!==t.id});ss("trades",State.trades);syncToCloud();State.expanded=null;State.editing=null;render();}});
       btnRow.appendChild(delBtn);r.appendChild(btnRow);
 
       // Setups column on the right
