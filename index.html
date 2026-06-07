@@ -604,7 +604,9 @@ var State={
   focusImprove:ls("focusImprove",""),
   mantraNotes:ls("mantraNotes",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
-  moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup.")
+  moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup."),
+  accounts:ls("accounts",[]),
+  activeAccount:ls("activeAccount",null)
 };
 // Migrate old PDH/PDL split levels to combined
 (function(){
@@ -765,6 +767,13 @@ function div(cls,children){return h("div",{className:cls||""},children)}
 function span(cls,text){return h("span",{className:cls||""},typeof text!=="undefined"?[text]:[])}
 
 // ─── STATS HELPERS ───────────────────────────────────────────────────
+// Returns trades scoped to active account (or all if no accounts set)
+function activeTrades(){
+  var aid=State.activeAccount;
+  if(!aid||!State.accounts||!State.accounts.length) return State.trades;
+  // Strict: only show trades tagged to this account. Untagged only show when no account is active.
+  return State.trades.filter(function(t){return t.accountId===aid;});
+}
 function calcStats(trades){
   var wins=trades.filter(function(t){return t.d>0});
   var losses=trades.filter(function(t){return t.d<0});
@@ -1052,6 +1061,13 @@ function openMoreDrawer(){
     item.addEventListener("click",function(){closeMoreDrawer();switchTab(id);});
     drawer.appendChild(item);
   });
+  // Accounts entry
+  var acctItem=document.createElement("div");
+  acctItem.style.cssText="display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:2px solid #1a3260;cursor:pointer;font-family:monospace;font-size:12px;letter-spacing:1.5px;color:"+(State.tab==="accounts"?"#00d4d4":"#ff8c00")+";background:"+(State.tab==="accounts"?"#112444":"transparent")+";-webkit-tap-highlight-color:transparent;";
+  var _an=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length)return null;var a=State.accounts.find(function(x){return x.id===State.activeAccount;});return a?a.name:null;})();
+  acctItem.innerHTML="<span style='font-size:16px;width:22px;text-align:center'>&#x2B21;</span> ACCOUNTS"+(_an?"<span style='font-size:9px;color:#00d4d4;margin-left:8px;'>\u25cf "+_an+"</span>":"");
+  acctItem.addEventListener("click",function(){closeMoreDrawer();switchTab("accounts");});
+  drawer.appendChild(acctItem);
   drawer.style.display="block";
   // Close on outside tap
   setTimeout(function(){
@@ -1135,16 +1151,18 @@ function startClock(){
 
 function renderTopbar(){
   var td=today();
-  var todayTrades=State.trades.filter(function(t){return t.date===td});
+  var _at=activeTrades();
+  var todayTrades=_at.filter(function(t){return t.date===td});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
   var tW=todayTrades.filter(function(t){return t.d>0}).length;
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
-  var s=calcStats(State.trades);
+  var s=calcStats(_at);
+  var _acctName=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length) return null;var a=State.accounts.find(function(x){return x.id===State.activeAccount;});return a?a.name:null;})();
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
     el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">⚙</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
     var dlEl=document.getElementById("topbar-dl");
     if(dlEl){
       var maxLoss=parseFloat(localStorage.getItem("edge_max_loss")||"0");
@@ -1236,6 +1254,12 @@ function openSettings(){
     row.appendChild(info);row.appendChild(btn);
     return row;
   }
+
+  // ── ACCOUNTS ──
+  body.appendChild(sectionLabel("Accounts"));
+  body.appendChild(actionRow("Trading Accounts","Manage accounts & set active","→ MANAGE","var(--accent)",function(){
+    closeSettings();State.tab="accounts";render();
+  }));
 
   // ── SYNC ──
   body.appendChild(sectionLabel("Sync"));
@@ -1587,11 +1611,12 @@ function homeTab(){
   if(isMobile()) return mobileHomeTab();
   var el=div();
   var td=today();
-  var todayTrades=State.trades.filter(function(t){return t.date===td});
+  var _at=activeTrades();
+  var todayTrades=_at.filter(function(t){return t.date===td});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
   var tW=todayTrades.filter(function(t){return t.d>0}).length;
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
-  var s=calcStats(State.trades);
+  var s=calcStats(_at);
 
   // Hero P&L row — 3-col if news selected, else 2-col
   var tdNews=today();
@@ -1607,8 +1632,16 @@ function homeTab(){
   todayCard.appendChild(tcTop);
   var tcVal=div();tcVal.style.fontSize="38px";tcVal.style.fontWeight="700";tcVal.style.lineHeight="1";tcVal.style.letterSpacing="1px";tcVal.className=clr(tPnl);tcVal.textContent=dol(tPnl);todayCard.appendChild(tcVal);
   var tcPts=div("xs m mt8");var tpts=todayTrades.reduce(function(a,t){return a+t.pts},0);tcPts.textContent=(tpts>=0?"+":"")+tpts.toFixed(2)+" pts total";todayCard.appendChild(tcPts);
-  var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;";
-  tcWr.textContent="WIN RATE  "+s.wr+"%";todayCard.appendChild(tcWr);
+  var _ca2=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length)return null;return State.accounts.find(function(x){return x.id===State.activeAccount;})||null;})();
+  var tcWr=div("mt8");tcWr.style.cssText="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;";
+  var tcWrTxt=div();tcWrTxt.textContent="WIN RATE  "+s.wr+"%";tcWr.appendChild(tcWrTxt);
+  if(_ca2){
+    var _acctBadge=div();_acctBadge.style.cssText="display:flex;align-items:center;gap:5px;cursor:pointer;";_acctBadge.onclick=function(){State.tab="accounts";render();};
+    var _acctDot=div();_acctDot.style.cssText="width:6px;height:6px;border-radius:50%;background:"+(_ca2.type==="Live"?"var(--green)":_ca2.type==="Sim / Demo"?"var(--accent)":"var(--amber)")+";flex-shrink:0;";
+    var _acctNm=div();_acctNm.style.cssText="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--ca);";_acctNm.textContent=_ca2.name.toUpperCase();
+    _acctBadge.appendChild(_acctDot);_acctBadge.appendChild(_acctNm);tcWr.appendChild(_acctBadge);
+  }
+  todayCard.appendChild(tcWr);
   heroRow.appendChild(todayCard);
   // News panel — only shown when news items are flagged
   if(hasNews){
@@ -1814,7 +1847,7 @@ function homeTab(){
 
   // This week's trades (Sun–Sat calendar week)
   var wkStart2=new Date(nowD);wkStart2.setDate(nowD.getDate()-nowD.getDay());wkStart2.setHours(0,0,0,0);
-  var wkTrades2=State.trades.filter(function(t){
+  var wkTrades2=_at.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
     var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
     return td3>=wkStart2;
@@ -1855,7 +1888,7 @@ function homeTab(){
   var tradedSessions=SESSIONS.filter(function(sess){return State.trades.some(function(t){return t.sess===sess;});});
   if(tradedSessions.length===0){var noSess=span("xs m");noSess.textContent="No trades logged yet.";combCard.appendChild(noSess);}
   tradedSessions.forEach(function(sess,si){
-    var sts=State.trades.filter(function(t){return t.sess===sess;});
+    var sts=_at.filter(function(t){return t.sess===sess;});
     var spnl=sts.reduce(function(a,t){return a+t.d},0);
     var sr=div("rjb");sr.style.cssText="padding:6px 0;"+(si<tradedSessions.length-1?"border-bottom:1px solid var(--border);":"");
     var sleft=div("row gap8");var sn=span("sm fw7");sn.style.color="var(--text2)";sn.textContent=sess;sleft.appendChild(sn);
@@ -1866,7 +1899,7 @@ function homeTab(){
   el.appendChild(combCard);
   // Monthly Scoreboard
   var moNow=new Date();
-  var moTrades=State.trades.filter(function(t){
+  var moTrades=_at.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
     return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
   });
@@ -2450,7 +2483,7 @@ function tradeForm(existing){
     var stopPts=parseFloat(gv("stop_pts"))||0;
     var riskUsd=parseFloat(gv("risk_usd"))||0;
     var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
-    var updated={id:isEdit?existing.id:Date.now(),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
+    var updated={id:isEdit?existing.id:Date.now(),accountId:isEdit?(existing.accountId||State.activeAccount||null):(State.activeAccount||null),date:gv("date")||today(),time:gv("time"),inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,hl:document.getElementById("f_hl")?document.getElementById("f_hl").checked:false,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
     if(isEdit){
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
@@ -2467,7 +2500,7 @@ function logTab(){
   if(isMobile()) return mobileLogTab();
   var el=div();
   var hrow=div("rjb mb12");
-  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+State.trades.length+" entries";hrow.appendChild(sh);
+  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+activeTrades().length+" entries ("+State.trades.length+" total)";hrow.appendChild(sh);
   var btnRow=div("row gap8");
   var nb=h("button",{className:"btn",onClick:function(){State.adding=!State.adding;State.editing=null;render();}});nb.textContent="+ NEW TRADE";btnRow.appendChild(nb);
   var impLink=h("button",{className:"btn",style:"border-color:var(--text3);color:var(--text3)",onClick:function(){State.tab="import";render();}});impLink.textContent="⬆ IMPORT CSV";btnRow.appendChild(impLink);
@@ -3463,6 +3496,7 @@ function importTab(){
       var dupes=0;
       var keys=State.trades.map(function(t){return t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;});
       var toAdd=State.imp_preview.filter(function(t){var k=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;if(keys.indexOf(k)>-1){dupes++;return false;}return true;});
+      toAdd=toAdd.map(function(t){return Object.assign({},t,{accountId:t.accountId||State.activeAccount||null});});
       State.trades=toAdd.concat(State.trades);ss("trades",State.trades);
       State.imp_preview=null;
       State.imp_msg={type:"ok",text:"✓ Imported "+toAdd.length+" trades."+(dupes?" Skipped "+dupes+" duplicates.":"")};
@@ -3544,7 +3578,7 @@ function parseTradovateFills(fills){
         var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
         var tv2=TICK[inst]||1;
         var dollar=parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
-        trades.push({id:Date.now()+i,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
+        trades.push({id:Date.now()+i,accountId:State.activeAccount||null,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
         i+=2;
       } else { i++; }
     }
@@ -3898,7 +3932,7 @@ function mobileLogTab(){
 
   // Header row
   var hdr=document.createElement("div");hdr.className="m-sh";
-  hdr.innerHTML='<span>Trade Log — '+State.trades.length+' trades</span>';
+  hdr.innerHTML='<span>Trade Log — '+activeTrades().length+' trades</span>';
   var filterBtn=document.createElement("span");filterBtn.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 9px;border-radius:4px;cursor:pointer;";filterBtn.textContent="FILTER";
   hdr.appendChild(filterBtn);
   el.appendChild(hdr);
@@ -4578,7 +4612,281 @@ function openAnalysisTab(){
   el.appendChild(s3);
   return el;
 }
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab};
+
+// ─── ACCOUNTS TAB ─────────────────────────────────────────────────────
+function accountsTab(){
+  var BROKERS=["Tradovate","NinjaTrader","Interactive Brokers","TD Ameritrade","Other"];
+  var ACCT_TYPES=["Live","Sim / Demo","Paper"];
+  var TYPE_COL={Live:"var(--green)","Sim / Demo":"var(--accent)",Paper:"var(--amber)"};
+  function tCol(t){return TYPE_COL[t]||"var(--text3)";}
+  var el=div();
+
+  // ── Page header ──────────────────────────────────────────────────────
+  var hdr=div("rjb mb16");
+  var backBtn=document.createElement("button");
+  backBtn.textContent="\u2190 BACK";
+  backBtn.style.cssText="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1.5px;padding:6px 12px;border-radius:3px;cursor:pointer;";
+  backBtn.onmouseover=function(){this.style.borderColor="var(--ca)";this.style.color="var(--ca)";};
+  backBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
+  backBtn.onclick=function(){State.tab="home";render();};
+  var ttlWrap=div();
+  var ttl=div();ttl.style.cssText="font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";ttl.textContent="\u2B21  Trading Accounts";
+  var sub=div();sub.style.cssText="font-size:10px;color:var(--border3);margin-top:3px;letter-spacing:1px;";sub.textContent="Add accounts \u00b7 set active \u00b7 all data reflects active account";
+  ttlWrap.appendChild(ttl);ttlWrap.appendChild(sub);
+  hdr.appendChild(backBtn);hdr.appendChild(ttlWrap);
+  el.appendChild(hdr);
+
+  // ── Active account banner ─────────────────────────────────────────────
+  var active=State.accounts&&State.accounts.length?State.accounts.find(function(a){return a.id===State.activeAccount;}):null;
+  var banner=div();
+  banner.style.cssText="background:var(--panel2);border:1px solid "+(active?"var(--accent)":"var(--border)")+";border-left:4px solid "+(active?tCol(active.type):"var(--border2)")+";border-radius:4px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;";
+  var bdot=div();bdot.style.cssText="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:"+(active?tCol(active.type):"var(--border2)")+";box-shadow:"+(active?"0 0 8px "+tCol(active.type):"none")+";";
+  var binfo=div();binfo.style.cssText="flex:1;min-width:0;";
+  var blbl=div();blbl.style.cssText="font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:3px;";blbl.textContent="ACTIVE ACCOUNT";
+  var bname=div();bname.style.cssText="font-size:15px;font-weight:700;color:"+(active?"var(--text)":"var(--text3)")+";";bname.textContent=active?active.name:"None selected — set one below";
+  var bmeta=div();bmeta.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:1px;";
+  if(active){
+    var atTrades=State.trades.filter(function(t){return t.accountId===active.id;});
+    bmeta.textContent=active.broker+" \u00b7 "+active.type+(active.balance?" \u00b7 $"+Number(active.balance).toLocaleString():"")+(" \u00b7 "+atTrades.length+" trade"+(atTrades.length!==1?"s":""));
+  }
+  binfo.appendChild(blbl);binfo.appendChild(bname);if(active)binfo.appendChild(bmeta);
+  banner.appendChild(bdot);banner.appendChild(binfo);
+  if(active){
+    var bswitch=document.createElement("button");
+    bswitch.textContent="SWITCH";
+    bswitch.style.cssText="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;flex-shrink:0;";
+    bswitch.onmouseover=function(){this.style.borderColor="var(--accent)";this.style.color="var(--accent)";};
+    bswitch.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
+    bswitch.onclick=function(){document.getElementById("acct-cards").scrollIntoView({behavior:"smooth"});};
+    banner.appendChild(bswitch);
+  }
+  el.appendChild(banner);
+
+  // ── Account cards ─────────────────────────────────────────────────────
+  var cardGrid=div();cardGrid.id="acct-cards";
+  cardGrid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:22px;";
+  var accounts=State.accounts||[];
+  if(!accounts.length){
+    var empty=div();empty.style.cssText="grid-column:1/-1;text-align:center;padding:36px 20px;color:var(--text3);font-size:11px;letter-spacing:1.5px;border:1px dashed var(--border);border-radius:4px;";
+    empty.textContent="No accounts yet. Add one below.";
+    cardGrid.appendChild(empty);
+  } else {
+    accounts.forEach(function(acct){
+      var isActive=acct.id===State.activeAccount;
+      var card=div("card");
+      card.style.cssText="background:var(--panel);border:1px solid "+(isActive?"var(--accent)":"var(--border)")+";border-left:4px solid "+(isActive?tCol(acct.type):"var(--border2)")+";border-radius:4px;padding:16px;transition:border-color .2s;";
+      // Card top
+      var ctop=div("rjb mb8");
+      var cnameRow=div("row gap8");
+      var cdot=div();cdot.style.cssText="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:"+tCol(acct.type)+";box-shadow:0 0 5px "+tCol(acct.type)+";";
+      var cname=div();cname.style.cssText="font-size:14px;font-weight:700;color:var(--text);";cname.textContent=acct.name;
+      cnameRow.appendChild(cdot);cnameRow.appendChild(cname);
+      var cmeta=div();cmeta.style.cssText="font-size:9px;color:var(--text3);margin-top:3px;letter-spacing:1px;";
+      var cTrades=State.trades.filter(function(t){return t.accountId===acct.id;});
+      cmeta.textContent=acct.broker+" \u00b7 "+acct.type+" \u00b7 "+cTrades.length+" trade"+(cTrades.length!==1?"s":"");
+      var cleft=div();cleft.appendChild(cnameRow);cleft.appendChild(cmeta);
+      // Action buttons
+      var cacts=div("row gap6");
+      var editBtn=document.createElement("button");
+      editBtn.textContent="EDIT";
+      editBtn.style.cssText="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;padding:4px 8px;border-radius:3px;cursor:pointer;";
+      editBtn.onmouseover=function(){this.style.borderColor="var(--ca)";this.style.color="var(--ca)";};
+      editBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
+      var delBtn=document.createElement("button");
+      delBtn.textContent="\u2715";
+      delBtn.style.cssText="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'Courier New',monospace;font-size:9px;padding:4px 7px;border-radius:3px;cursor:pointer;";
+      delBtn.onmouseover=function(){this.style.borderColor="var(--red)";this.style.color="var(--red)";};
+      delBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
+      (function(a){
+        delBtn.onclick=function(){
+          if(!confirm('Delete account "'+a.name+'"? Trades assigned to it will remain but become unfiltered.')) return;
+          State.accounts=State.accounts.filter(function(x){return x.id!==a.id;});
+          if(State.activeAccount===a.id) State.activeAccount=State.accounts.length?State.accounts[0].id:null;
+          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);render();
+        };
+        editBtn.onclick=function(){openForm(a);};
+      })(acct);
+      cacts.appendChild(editBtn);cacts.appendChild(delBtn);
+      ctop.appendChild(cleft);ctop.appendChild(cacts);
+      card.appendChild(ctop);
+      // Balance
+      if(acct.balance){
+        var brow=div("mb8");
+        var blb=div();blb.style.cssText="font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:2px;";blb.textContent="BALANCE";
+        var bval=div();bval.style.cssText="font-size:17px;font-weight:700;color:var(--text2);";bval.textContent="$"+Number(acct.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+        brow.appendChild(blb);brow.appendChild(bval);card.appendChild(brow);
+      }
+      // Notes
+      if(acct.notes){
+        var nrow=div("mb10");nrow.style.cssText="border-left:2px solid var(--border2);padding-left:8px;margin-bottom:10px;";
+        var nval=div();nval.style.cssText="font-size:10px;color:var(--text3);font-style:italic;";nval.textContent=acct.notes;
+        nrow.appendChild(nval);card.appendChild(nrow);
+      }
+      // Assign button
+      var hasUntagged=State.trades.some(function(t){return !t.accountId;});
+      if(hasUntagged){
+        var assignBtn=document.createElement("button");
+        assignBtn.style.cssText="width:100%;padding:7px;border-radius:3px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:1.5px;cursor:pointer;background:none;border:1px dashed var(--ca);color:var(--ca);margin-bottom:6px;transition:all .15s;";
+        var ucount=State.trades.filter(function(t){return !t.accountId;}).length;
+        assignBtn.textContent="\u25BC ASSIGN "+ucount+" UNTAGGED TRADE"+(ucount!==1?"S":"")+" TO THIS ACCOUNT";
+        assignBtn.onmouseover=function(){this.style.background="var(--ca15)";};
+        assignBtn.onmouseout=function(){this.style.background="none";};
+        (function(a){
+          assignBtn.onclick=function(){
+            var count=0;
+            State.trades=State.trades.map(function(t){
+              if(!t.accountId){count++;return Object.assign({},t,{accountId:a.id});}
+              return t;
+            });
+            ss("trades",State.trades);syncToCloud();
+            assignBtn.textContent="\u2713 "+count+" TRADE"+(count!==1?"S":"")+" ASSIGNED";
+            assignBtn.style.borderColor="var(--green)";assignBtn.style.color="var(--green)";
+            assignBtn.style.borderStyle="solid";
+            setTimeout(function(){render();},800);
+          };
+        })(acct);
+        card.appendChild(assignBtn);
+      }
+      // Set active button
+      var setBtn=document.createElement("button");
+      setBtn.style.cssText="width:100%;padding:8px;border-radius:3px;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1.5px;cursor:pointer;transition:all .2s;";
+      if(isActive){
+        setBtn.textContent="\u2713 ACTIVE";
+        setBtn.style.cssText+=";background:var(--accentglow);border:1px solid var(--accent);color:var(--accent);";
+      } else {
+        setBtn.textContent="SET AS ACTIVE";
+        setBtn.style.cssText+=";background:none;border:1px solid var(--border2);color:var(--text3);";
+        setBtn.onmouseover=function(){this.style.borderColor="var(--accent)";this.style.color="var(--accent)";this.style.background="var(--accentglow)";};
+        setBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";this.style.background="none";};
+        (function(a){
+          setBtn.onclick=function(){State.activeAccount=a.id;ss("activeAccount",a.id);render();};
+        })(acct);
+      }
+      card.appendChild(setBtn);
+      cardGrid.appendChild(card);
+    });
+  }
+  el.appendChild(cardGrid);
+
+  // ── Add / Edit form ───────────────────────────────────────────────────
+  var formCard=div("card");formCard.id="acct-form-card";
+  formCard.style.cssText="background:var(--panel);border:1px solid var(--border2);border-radius:4px;padding:20px;";
+  var formTitle=div();formTitle.id="acct-form-title";formTitle.style.cssText="font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:16px;";formTitle.textContent="+ ADD ACCOUNT";
+  formCard.appendChild(formTitle);
+
+  function fi(ph,id){
+    var i=document.createElement("input");i.type="text";i.placeholder=ph;i.id=id||"";
+    i.style.cssText="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'Courier New',monospace;font-size:12px;padding:8px 12px;border-radius:3px;outline:none;";
+    i.onfocus=function(){this.style.borderColor="var(--accent)";};
+    i.onblur=function(){this.style.borderColor="var(--border)";};
+    return i;
+  }
+  function flbl(t){var l=div();l.style.cssText="font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:5px;";l.textContent=t;return l;}
+  function fw(lbTxt,inp){var w=div();w.style.cssText="flex:1;min-width:160px;";w.appendChild(flbl(lbTxt));w.appendChild(inp);return w;}
+
+  var nameInp=fi("e.g. Mula Live ES","af-name");
+  var balInp=fi("e.g. 50000","af-bal");
+  var numInp=fi("e.g. TRD-00123 (optional)","af-num");
+  var notesInp=fi("Optional notes","af-notes");
+
+  // Broker selector
+  var brokerWrap=div();brokerWrap.style.cssText="flex:1;min-width:160px;";brokerWrap.appendChild(flbl("Broker"));
+  var brokerBtns=div();brokerBtns.style.cssText="display:flex;flex-wrap:wrap;gap:5px;";
+  var _selBroker=BROKERS[0];
+  function highlightBroker(){brokerBtns.querySelectorAll("button").forEach(function(x){var on=x.dataset.val===_selBroker;x.style.borderColor=on?"var(--ca)":"var(--border)";x.style.color=on?"var(--ca)":"var(--text3)";x.style.background=on?"var(--ca15)":"var(--panel2)";});}
+  BROKERS.forEach(function(b){
+    var btn=document.createElement("button");btn.textContent=b;btn.dataset.val=b;
+    btn.style.cssText="padding:5px 10px;border-radius:3px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;cursor:pointer;border:1px solid var(--border);background:var(--panel2);color:var(--text3);";
+    btn.onclick=function(){_selBroker=b;highlightBroker();};
+    brokerBtns.appendChild(btn);
+  });
+  brokerWrap.appendChild(brokerBtns);
+
+  // Type selector
+  var typeWrap=div();typeWrap.style.cssText="flex:1;min-width:160px;";typeWrap.appendChild(flbl("Account Type"));
+  var typeBtns=div();typeBtns.style.cssText="display:flex;gap:5px;";
+  var _selType=ACCT_TYPES[0];
+  function highlightType(){typeBtns.querySelectorAll("button").forEach(function(x){var on=x.dataset.val===_selType;var sc=tCol(_selType);x.style.borderColor=on?sc:"var(--border)";x.style.color=on?sc:"var(--text3)";x.style.background=on?"var(--panel3)":"var(--panel2)";});}
+  ACCT_TYPES.forEach(function(t){
+    var btn=document.createElement("button");btn.textContent=t;btn.dataset.val=t;
+    btn.style.cssText="padding:5px 10px;border-radius:3px;font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;cursor:pointer;border:1px solid var(--border);background:var(--panel2);color:var(--text3);";
+    btn.onclick=function(){_selType=t;highlightType();};
+    typeBtns.appendChild(btn);
+  });
+  typeWrap.appendChild(typeBtns);
+
+  var r1=div();r1.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;";r1.appendChild(fw("Account Name",nameInp));r1.appendChild(fw("Balance ($)",balInp));
+  var r2=div();r2.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;";r2.appendChild(brokerWrap);r2.appendChild(typeWrap);
+  var r3=div();r3.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;";r3.appendChild(fw("Account Number",numInp));r3.appendChild(fw("Notes",notesInp));
+  formCard.appendChild(r1);formCard.appendChild(r2);formCard.appendChild(r3);
+
+  var fbRow=div("row gap8");
+  var saveBtn=document.createElement("button");saveBtn.id="af-save";
+  saveBtn.textContent="SAVE ACCOUNT";
+  saveBtn.style.cssText="flex:1;padding:9px;border-radius:3px;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1.5px;cursor:pointer;background:none;border:1px solid var(--accent);color:var(--accent);";
+  saveBtn.onmouseover=function(){this.style.background="var(--accentglow)";};
+  saveBtn.onmouseout=function(){this.style.background="none";};
+  var cancelBtn=document.createElement("button");cancelBtn.id="af-cancel";
+  cancelBtn.textContent="CANCEL";
+  cancelBtn.style.cssText="padding:9px 18px;border-radius:3px;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1.5px;cursor:pointer;background:none;border:1px solid var(--border2);color:var(--text3);display:none;";
+  cancelBtn.onmouseover=function(){this.style.borderColor="var(--red)";this.style.color="var(--red)";};
+  cancelBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
+  fbRow.appendChild(saveBtn);fbRow.appendChild(cancelBtn);
+  formCard.appendChild(fbRow);
+  el.appendChild(formCard);
+
+  var _editId=null;
+
+  function openForm(existing){
+    _editId=existing?existing.id:null;
+    formTitle.textContent=existing?"\u270F  EDIT ACCOUNT":"+ ADD ACCOUNT";
+    nameInp.value=existing?existing.name:"";
+    balInp.value=existing?existing.balance:"";
+    numInp.value=existing?existing.accountNum||"":"";
+    notesInp.value=existing?existing.notes||"":"";
+    _selBroker=existing?existing.broker||BROKERS[0]:BROKERS[0];
+    _selType=existing?existing.type||ACCT_TYPES[0]:ACCT_TYPES[0];
+    highlightBroker();highlightType();
+    cancelBtn.style.display=existing?"":"none";
+    saveBtn.textContent=existing?"UPDATE ACCOUNT":"SAVE ACCOUNT";
+    formCard.scrollIntoView({behavior:"smooth",block:"nearest"});
+    setTimeout(function(){nameInp.focus();},100);
+  }
+
+  // Init button highlights
+  highlightBroker();highlightType();
+
+  cancelBtn.onclick=function(){
+    _editId=null;nameInp.value="";balInp.value="";numInp.value="";notesInp.value="";
+    _selBroker=BROKERS[0];_selType=ACCT_TYPES[0];highlightBroker();highlightType();
+    cancelBtn.style.display="none";saveBtn.textContent="SAVE ACCOUNT";
+    formTitle.textContent="+ ADD ACCOUNT";
+  };
+
+  saveBtn.onclick=function(){
+    var name=(nameInp.value||"").trim();
+    if(!name){nameInp.style.borderColor="var(--red)";setTimeout(function(){nameInp.style.borderColor="var(--border)";},1200);return;}
+    if(_editId){
+      var idx=-1;State.accounts.forEach(function(a,i){if(a.id===_editId)idx=i;});
+      if(idx>-1){
+        State.accounts[idx].name=name;State.accounts[idx].broker=_selBroker;
+        State.accounts[idx].type=_selType;State.accounts[idx].balance=(balInp.value||"").trim();
+        State.accounts[idx].accountNum=(numInp.value||"").trim();State.accounts[idx].notes=(notesInp.value||"").trim();
+      }
+    } else {
+      var na={id:"acct_"+Date.now(),name:name,broker:_selBroker,type:_selType,balance:(balInp.value||"").trim(),accountNum:(numInp.value||"").trim(),notes:(notesInp.value||"").trim(),createdAt:new Date().toISOString()};
+      State.accounts.push(na);
+      if(!State.activeAccount){State.activeAccount=na.id;ss("activeAccount",na.id);}
+    }
+    ss("accounts",State.accounts);
+    saveBtn.textContent="\u2713 SAVED";
+    setTimeout(function(){render();},600);
+  };
+
+  return el;
+}
+
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,opps:oppsTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
