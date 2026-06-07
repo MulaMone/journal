@@ -4713,11 +4713,13 @@ function accountsTab(){
       delBtn.onmouseover=function(){this.style.borderColor="var(--red)";this.style.color="var(--red)";};
       delBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";};
       (function(a){
+        // Hide delete button if this is the only account
+        if(State.accounts.length<=1){ delBtn.style.display="none"; }
         delBtn.onclick=function(){
           if(!confirm('Delete account "'+a.name+'"? Trades assigned to it will remain but become unfiltered.')) return;
           State.accounts=State.accounts.filter(function(x){return x.id!==a.id;});
           if(State.activeAccount===a.id) State.activeAccount=State.accounts.length?State.accounts[0].id:null;
-          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);render();
+          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);syncToCloud();render();
         };
         editBtn.onclick=function(){openForm(a);};
       })(acct);
