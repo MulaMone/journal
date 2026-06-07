@@ -4876,9 +4876,21 @@ function accountsTab(){
     } else {
       var na={id:"acct_"+Date.now(),name:name,broker:_selBroker,type:_selType,balance:(balInp.value||"").trim(),accountNum:(numInp.value||"").trim(),notes:(notesInp.value||"").trim(),createdAt:new Date().toISOString()};
       State.accounts.push(na);
-      if(!State.activeAccount){State.activeAccount=na.id;ss("activeAccount",na.id);}
+      // If this is the first account OR there is no active account, set it as active
+      // and auto-assign ALL existing untagged trades to it so they don't disappear
+      var isFirstAcct=State.accounts.length===1||!State.activeAccount;
+      if(isFirstAcct){
+        State.activeAccount=na.id;ss("activeAccount",na.id);
+        var tagged=0;
+        State.trades=State.trades.map(function(t){
+          if(!t.accountId){tagged++;return Object.assign({},t,{accountId:na.id});}
+          return t;
+        });
+        if(tagged>0){ss("trades",State.trades);}
+      }
     }
     ss("accounts",State.accounts);
+    syncToCloud();
     saveBtn.textContent="\u2713 SAVED";
     setTimeout(function(){render();},600);
   };
