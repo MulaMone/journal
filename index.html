@@ -5022,7 +5022,7 @@ function openAnalysisTab(){
   locs.forEach(function(l){var c=div();c.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px;text-align:center;";c.innerHTML="<div style='font-size:22px;font-weight:700;color:"+l.col+";font-family:Courier New,monospace;margin-bottom:6px;'>"+l.num+"</div><div style='font-size:13px;color:var(--text2);line-height:1.5;'>"+l.title+"</div>";locGrid.appendChild(c);});
   s0.appendChild(locGrid);
   var kq=div();kq.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-bottom:8px;";kq.innerHTML="<div style='font-size:13px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Key Question</div><div style='font-size:16px;color:var(--text2);font-style:italic;'>Is the market <span style='color:var(--accent);font-weight:700;'>accepting</span> or <span style='color:var(--red);font-weight:700;'>rejecting</span> yesterday\'s value?</div>";
-  s0.appendChild(kq);el.appendChild(s0);
+  s0.appendChild(kq);
 
   // ── OPENING LOCATION REFERENCE ──
   var s1=sec("Opening Location Reference");
@@ -5060,7 +5060,7 @@ function openAnalysisTab(){
   c4.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'><span style='font-size:13px;background:#00d4d420;border:1px solid #00d4d440;color:var(--accent);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>4</span><span style='font-size:15px;font-weight:700;color:var(--text2);'>Open Above Yesterday\'s Range</span></div><div style='font-size:13px;color:var(--accent);font-weight:700;letter-spacing:1px;margin-bottom:8px;'>HIGHEST BULLISH CONTEXT</div><div style='font-size:14px;color:#ffffff;line-height:1.6;margin-bottom:10px;'>Price is not only above value, but above all of yesterday\'s trading.</div><div style='font-size:13px;color:var(--text3);margin-bottom:6px;'>Is the gap accepted? Is new value being created higher?</div><div style='font-size:14px;color:var(--text2);line-height:1.6;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--green);'>If accepted:</span> Trend day possible &middot; Gap-and-go environment</div>";
   var c5=div();c5.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--ca);border-radius:4px;padding:16px 18px;";
   c5.innerHTML="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'><span style='font-size:13px;background:var(--ca15);border:1px solid var(--ca30);color:var(--ca);padding:2px 10px;border-radius:2px;letter-spacing:2px;'>5</span><span style='font-size:15px;font-weight:700;color:var(--text2);'>Open Below Yesterday\'s Range</span></div><div style='font-size:13px;color:var(--ca);font-weight:700;letter-spacing:1px;margin-bottom:8px;'>HIGHEST BEARISH CONTEXT</div><div style='font-size:14px;color:#ffffff;line-height:1.6;margin-bottom:10px;'>Price is trading where yesterday never traded.</div><div style='font-size:13px;color:var(--text3);margin-bottom:6px;'>Are sellers committed? Is the gap accepted?</div><div style='font-size:14px;color:var(--text2);line-height:1.6;border-top:1px solid var(--border);padding-top:8px;'><span style='color:var(--red);'>If accepted:</span> Strong downside continuation &middot; Trend day potential</div>";
-  row45.appendChild(c4);row45.appendChild(c5);s1.appendChild(row45);el.appendChild(s1);
+  row45.appendChild(c4);row45.appendChild(c5);s1.appendChild(row45);
 
   // ── OPEN TYPE FRAMEWORK ──
   var s2=sec("Open Type Framework");
@@ -5216,7 +5216,7 @@ function openAnalysisTab(){
     });
     otGrid.appendChild(c);
   });
-  s2.appendChild(otGrid);el.appendChild(s2);
+  s2.appendChild(otGrid);el.appendChild(s2);el.appendChild(s0);el.appendChild(s1);
 
   // ── CHEAT SHEET TABLE ──
   var s3=sec("Cheat Sheet");
