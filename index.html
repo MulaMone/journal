@@ -278,9 +278,64 @@ svg text{font-family:'Courier New',monospace}
   .m-tc-pnl{font-size:16px}
   .m-kpi-val{font-size:16px}
 }
+/* ── LOCK SCREEN ── */
+#edge-lock{position:fixed;inset:0;background:#040d1a;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:'Courier New',monospace}
+#edge-lock .lk-box{border:1px solid #00d4d4;border-radius:8px;padding:2rem 2rem 1.75rem;width:320px;max-width:90vw;background:#071428}
+#edge-lock .lk-brand{text-align:center;margin-bottom:1.5rem}
+#edge-lock .lk-logo{font-size:28px;font-weight:700;color:#00d4d4;letter-spacing:.25em}
+#edge-lock .lk-sub{font-size:10px;color:#7a8aaa;letter-spacing:.2em;margin-top:4px}
+#edge-lock .lk-icon{text-align:center;font-size:28px;margin-bottom:.75rem;color:#00d4d4}
+#edge-lock .lk-prompt{font-size:11px;color:#7a8aaa;text-align:center;letter-spacing:.08em;margin-bottom:1rem}
+#edge-lock .lk-dots{display:flex;gap:10px;justify-content:center;margin-bottom:1.25rem}
+#edge-lock .lk-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #00d4d4;background:transparent;transition:background .12s}
+#edge-lock .lk-dot.on{background:#00d4d4}
+#edge-lock .lk-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+#edge-lock .lk-key{background:transparent;border:0.5px solid #1e2d45;border-radius:6px;padding:12px;font-family:'Courier New',monospace;font-size:17px;font-weight:500;color:#c8d4e8;cursor:pointer;text-align:center;transition:border-color .12s,color .12s;user-select:none;-webkit-tap-highlight-color:transparent}
+#edge-lock .lk-key:hover{border-color:#00d4d4;color:#00d4d4}
+#edge-lock .lk-key:active{background:#00d4d415}
+#edge-lock .lk-key.sm{font-size:12px;color:#7a8aaa}
+#edge-lock .lk-divider{height:0.5px;background:#1e2d45;margin:.75rem 0}
+#edge-lock .lk-trust{display:flex;align-items:center;gap:8px;justify-content:center;cursor:pointer;user-select:none}
+#edge-lock .lk-toggle{width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;flex-shrink:0;background:#1e2d45;transition:background .2s}
+#edge-lock .lk-toggle.on{background:#00d4d4}
+#edge-lock .lk-thumb{width:16px;height:16px;border-radius:50%;background:#c8d4e8;position:absolute;top:2px;left:2px;transition:left .2s}
+#edge-lock .lk-toggle.on .lk-thumb{left:18px;background:#040d1a}
+#edge-lock .lk-tlabel{font-size:10px;color:#7a8aaa;letter-spacing:.06em}
+#edge-lock .lk-err{text-align:center;font-size:11px;color:#ff4444;letter-spacing:.06em;margin-top:.5rem;min-height:16px}
 </style>
 </head>
 <body>
+<!-- ── EDGE LOCK SCREEN ── -->
+<div id="edge-lock" style="display:none">
+  <div class="lk-box">
+    <div class="lk-brand"><div class="lk-logo">EDGE</div><div class="lk-sub">TERMINAL // BILLION$</div></div>
+    <div class="lk-icon">&#128274;</div>
+    <div class="lk-prompt" id="lk-prompt">SESSION EXPIRED &mdash; ENTER PIN</div>
+    <div class="lk-dots" id="lk-dots">
+      <div class="lk-dot"></div><div class="lk-dot"></div><div class="lk-dot"></div><div class="lk-dot"></div>
+    </div>
+    <div class="lk-pad">
+      <div class="lk-key" onclick="lkKey('1')">1</div>
+      <div class="lk-key" onclick="lkKey('2')">2</div>
+      <div class="lk-key" onclick="lkKey('3')">3</div>
+      <div class="lk-key" onclick="lkKey('4')">4</div>
+      <div class="lk-key" onclick="lkKey('5')">5</div>
+      <div class="lk-key" onclick="lkKey('6')">6</div>
+      <div class="lk-key" onclick="lkKey('7')">7</div>
+      <div class="lk-key" onclick="lkKey('8')">8</div>
+      <div class="lk-key" onclick="lkKey('9')">9</div>
+      <div class="lk-key sm" onclick="lkClear()">CLR</div>
+      <div class="lk-key" onclick="lkKey('0')">0</div>
+      <div class="lk-key sm" onclick="lkBack()">&#9003;</div>
+    </div>
+    <div class="lk-err" id="lk-err"></div>
+    <div class="lk-divider"></div>
+    <div class="lk-trust" id="lk-trust-row" onclick="lkToggleTrust()">
+      <div class="lk-toggle" id="lk-toggle"><div class="lk-thumb"></div></div>
+      <div class="lk-tlabel">TRUST THIS DEVICE FOR 15 DAYS</div>
+    </div>
+  </div>
+</div>
 <div id="app">
   <div id="topbar">
     <div id="topbar-left"><div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
@@ -305,6 +360,156 @@ svg text{font-family:'Courier New',monospace}
 </div>
 
 <script>
+// ─── LOCK SCREEN ──────────────────────────────────────────────────
+(function(){
+  var DEFAULT_PIN="1591";
+  var TRUST_MS=15*24*60*60*1000; // 15 days
+  var LK_LAST="edge_lk_last";
+  var LK_TRUST="edge_lk_trust";
+  var LK_TRUST_EXP="edge_lk_trust_exp";
+  var LK_PIN="edge_lk_pin";
+  var LK_TIMEOUT="edge_lk_timeout";
+
+  function getPin(){ try{ return localStorage.getItem(LK_PIN)||DEFAULT_PIN; }catch(e){ return DEFAULT_PIN; } }
+  function getTimeoutMs(){ try{ var h=parseInt(localStorage.getItem(LK_TIMEOUT)||"24",10); return h*60*60*1000; }catch(e){ return 24*60*60*1000; } }
+
+  var _pin="";
+  var _trustOn=false;
+
+  function lkStamp(){
+    try{ localStorage.setItem(LK_LAST, Date.now().toString()); }catch(e){}
+  }
+
+  function lkShouldLock(){
+    var INACTIVE_MS=getTimeoutMs();
+    // Trusted device check
+    try{
+      var trusted=localStorage.getItem(LK_TRUST);
+      var exp=parseInt(localStorage.getItem(LK_TRUST_EXP)||"0",10);
+      if(trusted==="1" && Date.now() < exp){
+        var last=parseInt(localStorage.getItem(LK_LAST)||"0",10);
+        if(last && (Date.now()-last) < INACTIVE_MS) return false;
+        return true;
+      }
+    }catch(e){}
+    try{
+      var last2=parseInt(localStorage.getItem(LK_LAST)||"0",10);
+      if(!last2) return true;
+      return (Date.now()-last2) >= INACTIVE_MS;
+    }catch(e){ return false; }
+  }
+
+  function lkShow(){
+    var el=document.getElementById("edge-lock");
+    if(el) el.style.display="flex";
+    // Hide the sync loader so it doesn't cover the lock screen
+    var ldr=document.getElementById("edge-loader");
+    if(ldr) ldr.style.display="none";
+  }
+
+  function lkHide(){
+    var el=document.getElementById("edge-lock");
+    if(el) el.style.display="none";
+    lkStamp();
+    if(_trustOn){
+      try{
+        localStorage.setItem(LK_TRUST,"1");
+        localStorage.setItem(LK_TRUST_EXP,(Date.now()+TRUST_MS).toString());
+      }catch(e){}
+    }
+    // Trigger render after unlock — render() blocks while locked so this is safe
+    if(typeof render==="function") setTimeout(render, 0);
+  }
+
+  function lkUpdateDots(){
+    var dots=document.querySelectorAll("#lk-dots .lk-dot");
+    dots.forEach(function(d,i){ d.classList.toggle("on",i<_pin.length); });
+  }
+
+  var _locked=false;
+  var _errTimer=null;
+
+  function lkErr(msg){
+    var el=document.getElementById("lk-err");
+    if(!el) return;
+    if(_errTimer){ clearTimeout(_errTimer); _errTimer=null; }
+    el.textContent=msg;
+    if(msg) _errTimer=setTimeout(function(){ el.textContent=""; _errTimer=null; },1500);
+  }
+
+  window.lkKey=function(k){
+    if(_pin.length>=4||_locked) return;
+    _pin+=k;
+    lkUpdateDots();
+    if(_pin.length===4){
+      if(_pin===getPin()){
+        lkHide();
+      } else {
+        lkErr("INVALID PIN");
+        _locked=true;
+        setTimeout(function(){ _pin=""; _locked=false; lkUpdateDots(); },700);
+      }
+    }
+  };
+
+  window.lkBack=function(){
+    if(_locked) return;
+    _pin=_pin.slice(0,-1);
+    lkUpdateDots();
+    lkErr("");
+  };
+
+  window.lkClear=function(){
+    if(_locked) return;
+    _pin="";
+    lkUpdateDots();
+    lkErr("");
+  };
+
+  // Re-check lock when user returns to the tab after being away
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState==="visible" && lkShouldLock()){
+      _pin=""; _locked=false; _trustOn=false;
+      lkUpdateDots(); lkErr("");
+      var tog=document.getElementById("lk-toggle");
+      if(tog) tog.classList.remove("on");
+      lkShow();
+    }
+  });
+
+  window.lkToggleTrust=function(){
+    _trustOn=!_trustOn;
+    var tog=document.getElementById("lk-toggle");
+    if(tog) tog.classList.toggle("on",_trustOn);
+  };
+
+  // Keyboard support for lock screen
+  function lkKeyHandler(e){
+    var lk=document.getElementById("edge-lock");
+    if(!lk||lk.style.display==="none") return;
+    if(e.key>="0"&&e.key<="9"){ e.preventDefault(); lkKey(e.key); }
+    else if(e.key==="Backspace"){ e.preventDefault(); lkBack(); }
+    else if(e.key==="Escape"||e.key==="Delete"){ e.preventDefault(); lkClear(); }
+  }
+  document.addEventListener("keydown", lkKeyHandler, true);
+
+  // Stamp activity on any user interaction
+  ["click","keydown","touchstart"].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      // Don't stamp if lock screen is visible
+      var lk=document.getElementById("edge-lock");
+      if(lk && lk.style.display!=="none") return;
+      lkStamp();
+    }, {passive:true, capture:true});
+  });
+
+  // Check on load
+  if(lkShouldLock()){
+    lkShow();
+  } else {
+    lkStamp();
+  }
+})();
 // ─── SUPABASE SYNC (direct REST) ──────────────────────────────────
 var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
 // Key stored in parts to avoid plain-text exposure in source
@@ -1438,7 +1643,7 @@ function openSettings(){
   }));
   body.appendChild(actionRow("Clear Local Cache","Wipe localStorage & reload from cloud","CLEAR","var(--red)",function(){
     if(confirm("Clear all local cache? Data will reload from Supabase.")){
-      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss"];
+      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp"];
       Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
       localStorage.setItem("edge_tab",JSON.stringify("home"));
       closeSettings();window.location.reload();
@@ -1446,6 +1651,87 @@ function openSettings(){
   }));
 
 
+
+  // ── SECURITY ──
+  body.appendChild(sectionLabel("Security"));
+
+  // Change PIN row
+  var pinRow=document.createElement("div");
+  pinRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var pinInfo=document.createElement("div");
+  var pinLbl=document.createElement("div");pinLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";pinLbl.textContent="Change PIN";
+  var pinDesc=document.createElement("div");pinDesc.style.cssText="font-size:10px;color:var(--text3);";pinDesc.textContent="4-digit lock screen PIN";
+  pinInfo.appendChild(pinLbl);pinInfo.appendChild(pinDesc);
+  var pinRight=document.createElement("div");pinRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
+  var pinInp=document.createElement("input");
+  pinInp.type="password";pinInp.maxLength=4;pinInp.placeholder="new PIN";pinInp.inputMode="numeric";pinInp.addEventListener("keydown",function(e){if(!/^\d$/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight"].includes(e.key))e.preventDefault();});pinInp.addEventListener("input",function(){pinInp.value=pinInp.value.replace(/\D/g,"");});
+  pinInp.style.cssText="width:72px;background:var(--panel3);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:14px;padding:5px 8px;border-radius:3px;text-align:center;letter-spacing:4px;";
+  var pinSave=document.createElement("button");
+  pinSave.textContent="SET";
+  pinSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 8px;border-radius:3px;cursor:pointer;";
+  pinSave.onclick=function(){
+    var v=pinInp.value.replace(/\D/g,"");
+    if(v.length!==4){pinInp.style.borderColor="var(--red)";setTimeout(function(){pinInp.style.borderColor="var(--border2)";},1200);return;}
+    try{localStorage.setItem("edge_lk_pin",v);}catch(e){}
+    pinInp.value="";pinSave.textContent="✓";
+    setTimeout(function(){pinSave.textContent="SET";},1500);
+  };
+  pinRight.appendChild(pinInp);pinRight.appendChild(pinSave);
+  pinRow.appendChild(pinInfo);pinRow.appendChild(pinRight);
+  body.appendChild(pinRow);
+
+  // Lock timeout row
+  var toRow=document.createElement("div");
+  toRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var toInfo=document.createElement("div");
+  var toLbl=document.createElement("div");toLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";toLbl.textContent="Lock Timeout";
+  var toDesc=document.createElement("div");toDesc.style.cssText="font-size:10px;color:var(--text3);";toDesc.textContent="Lock after this many hours of inactivity";
+  toInfo.appendChild(toLbl);toInfo.appendChild(toDesc);
+  var toSel=document.createElement("select");
+  toSel.style.cssText="background:var(--panel3);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:5px 8px;border-radius:3px;cursor:pointer;";
+  var toOpts=[["12","12 hours"],["24","24 hours"],["48","48 hours"],["168","7 days"]];
+  var curTo=localStorage.getItem("edge_lk_timeout")||"24";
+  toOpts.forEach(function(o){
+    var opt=document.createElement("option");opt.value=o[0];opt.textContent=o[1];
+    if(o[0]===curTo) opt.selected=true;
+    toSel.appendChild(opt);
+  });
+  toSel.onchange=function(){try{localStorage.setItem("edge_lk_timeout",toSel.value);}catch(e){}};
+  toRow.appendChild(toInfo);toRow.appendChild(toSel);
+  body.appendChild(toRow);
+
+  // Trusted device status row
+  var trustRow=document.createElement("div");
+  trustRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var trustInfo=document.createElement("div");
+  var trustLbl=document.createElement("div");trustLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";trustLbl.textContent="This Device";
+  var isTrusted=false;
+  try{
+    var _tt=parseInt(localStorage.getItem("edge_lk_trust_exp")||"0",10);
+    isTrusted=localStorage.getItem("edge_lk_trust")==="1"&&Date.now()<_tt;
+  }catch(e){}
+  var trustDesc=document.createElement("div");trustDesc.style.cssText="font-size:10px;color:var(--text3);";
+  if(isTrusted){
+    var daysLeft=Math.ceil((parseInt(localStorage.getItem("edge_lk_trust_exp")||"0",10)-Date.now())/(1000*60*60*24));
+    trustDesc.textContent="Trusted — "+daysLeft+" day"+(daysLeft===1?"":"s")+" remaining";
+    trustDesc.style.color="var(--green)";
+  } else {
+    trustDesc.textContent="Not trusted on this device";
+  }
+  trustInfo.appendChild(trustLbl);trustInfo.appendChild(trustDesc);
+  var trustBtn=document.createElement("button");
+  trustBtn.textContent=isTrusted?"REVOKE":"—";
+  trustBtn.style.cssText="background:none;border:1px solid "+(isTrusted?"var(--red)":"var(--border)")+";color:"+(isTrusted?"var(--red)":"var(--text3)")+";font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:"+(isTrusted?"pointer":"default")+";";
+  if(isTrusted){
+    trustBtn.onclick=function(){
+      try{localStorage.removeItem("edge_lk_trust");localStorage.removeItem("edge_lk_trust_exp");}catch(e){}
+      trustDesc.textContent="Not trusted on this device";
+      trustDesc.style.color="var(--text3)";
+      trustBtn.textContent="—";trustBtn.style.borderColor="var(--border)";trustBtn.style.color="var(--text3)";trustBtn.style.cursor="default";trustBtn.onclick=null;
+    };
+  }
+  trustRow.appendChild(trustInfo);trustRow.appendChild(trustBtn);
+  body.appendChild(trustRow);
 
   // Version
   var ver=document.createElement("div");
@@ -5156,6 +5442,9 @@ var _lastRenderedTab=null;
 var _firstRender=true;
 
 function render(){
+  // Don't render while lock screen is active — prevents data exposure
+  var _lk=document.getElementById("edge-lock");
+  if(_lk&&_lk.style.display!=="none") return;
   renderTabs();
   renderTopbar();
   var content=document.getElementById("content");
@@ -5218,7 +5507,7 @@ initAutoSync();
   var content=document.getElementById("content");
   var loader=document.createElement("div");
   loader.id="edge-loader";
-  loader.style.cssText="position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px;";
+  loader.style.cssText="position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9998;gap:16px;";
   loader.innerHTML="<div style='font-size:26px;font-weight:700;letter-spacing:6px;color:var(--accent)'>EDGE</div>"+
     "<div style='font-size:11px;letter-spacing:3px;color:var(--text3)'>SYNCING DATA...</div>"+
     "<div id='edge-loader-dots' style='display:flex;gap:6px;margin-top:4px'>"+
