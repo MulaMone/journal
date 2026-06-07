@@ -351,7 +351,9 @@ function syncToCloud(){
       notes_lessons:ls("notes_lessons",[]),
       notes_mantras:ls("notes_mantras",[]),
       notes_pad:ls("notes_pad",""),
-      playbook_custom:ls("playbook_custom",[])
+      playbook_custom:ls("playbook_custom",[]),
+      accounts:State.accounts,
+      activeAccount:State.activeAccount
     },
     updated_at:new Date().toISOString()
   };
@@ -414,6 +416,8 @@ function loadFromCloud(syncId,callback){
       if(s.notes_mantras&&s.notes_mantras.length) ss("notes_mantras",s.notes_mantras);
       if(s.notes_pad!==undefined) ss("notes_pad",s.notes_pad);
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
+      if(s.accounts&&s.accounts.length){State.accounts=s.accounts;ss("accounts",s.accounts);}
+      if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
