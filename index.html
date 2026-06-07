@@ -444,6 +444,18 @@ function loadFromCloud(syncId,callback){
       return 0;
     });
     ss("trades",State.trades);ss("levels",State.levels);ss("weekLevels",State.weekLevels);
+    // Auto-tag untagged trades to active account after cloud load
+    if(State.activeAccount&&State.accounts&&State.accounts.length){
+      var _untagged=State.trades.filter(function(t){return !t.accountId;});
+      if(_untagged.length){
+        State.trades=State.trades.map(function(t){
+          if(!t.accountId) return Object.assign({},t,{accountId:State.activeAccount});
+          return t;
+        });
+        ss("trades",State.trades);
+        syncToCloud();
+      }
+    }
     if(callback) callback(true);
   })
   .catch(function(){if(callback) callback(false);});
