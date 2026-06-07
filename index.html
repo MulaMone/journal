@@ -856,7 +856,6 @@ var State={
   rv_year:undefined,
   rv_month:undefined,
   rv_selected_day:null,
-  imp_platform:"tradovate",
   imp_preview:null,
   imp_msg:"",
   tv_creds:ls("tv_creds",{user:"",pass:"",cid:"",sec:"",env:"live"}),
@@ -3893,12 +3892,10 @@ function importTab(){
     if(State.tv_lastSync){var lsText=span("xs m");lsText.style.marginLeft="auto";lsText.textContent="Last sync: "+State.tv_lastSync;statusRow.appendChild(lsText);}
     tvH.appendChild(statusRow);
     tvCard.appendChild(tvH);
-
     var tvInfo=div("imp-info imp-msg mb12");
     tvInfo.style.fontSize="10px";tvInfo.style.lineHeight="1.7";
     tvInfo.innerHTML="To connect Tradovate: you need your <b>username</b>, <b>password</b>, and API credentials (CID + Secret) from <a href='https://trader.tradovate.com' style='color:var(--ca)'>trader.tradovate.com</a> under Settings → API. Choose Demo or Live environment.";
     tvCard.appendChild(tvInfo);
-
     var tvFg=div("fg");
     function tvField(id,lbl,type,placeholder,val){
       var w=div();w.appendChild(h("label",{},[lbl]));
@@ -3922,7 +3919,6 @@ function importTab(){
     var daysInp=h("input",{id:"tv_days",type:"text"});daysInp.value="30";daysDiv.appendChild(daysInp);
     tvFg.appendChild(daysDiv);
     tvCard.appendChild(tvFg);
-
     var tvBtnRow=div("row gap8 mt12");
     var tvConnect=h("button",{className:"btn btn-g",style:"flex:1"});tvConnect.textContent="CONNECT & SYNC";
     tvConnect.addEventListener("click",function(){
@@ -3964,14 +3960,11 @@ function importTab(){
     if(State.nt_lastSync){var nlText=span("xs m");nlText.style.marginLeft="auto";nlText.textContent="Last load: "+State.nt_lastSync;ntStatusRow.appendChild(nlText);}
     ntH.appendChild(ntStatusRow);
     ntCard.appendChild(ntH);
-
     var ntInfo=div("imp-info imp-msg mb12");
     ntInfo.style.fontSize="10px";ntInfo.style.lineHeight="1.8";
     ntInfo.innerHTML="<b>Setup NinjaTrader auto-export:</b><br>1. Open NinjaTrader → Control Center → Account Performance<br>2. Select Trade Performance tab<br>3. Right-click → Export → Save as CSV to a fixed location<br>4. Click SELECT FILE below and point to that CSV<br>5. Hit RELOAD anytime to pull the latest trades<br><br><b>Works in Chrome and Edge only</b> (File System Access API)";
     ntCard.appendChild(ntInfo);
-
     var ntBtnRow=div("row gap8 mt8");
-
     var ntSelect=h("button",{className:"btn btn-g",style:"flex:1"});
     ntSelect.textContent=ntConnected?"CHANGE FILE":"SELECT NT EXPORT FILE";
     ntSelect.addEventListener("click",function(){
@@ -3984,7 +3977,6 @@ function importTab(){
       }).catch(function(){});
     });
     ntBtnRow.appendChild(ntSelect);
-
     if(ntConnected){
       var ntLoad=h("button",{className:"btn",style:"flex:1"});ntLoad.textContent="LOAD TRADES";
       ntLoad.addEventListener("click",function(){loadNTFile();});
@@ -4074,12 +4066,10 @@ function syncTradovate(creds,days){
     }
     ss("tv_token",data);State.tv_token=data;
     var token=data.accessToken;
-    // Fetch fills
     return fetch(base+"/fill/list",{headers:{"Authorization":"Bearer "+token}})
     .then(function(r){return r.json();})
     .then(function(fills){
       if(!Array.isArray(fills)){State.imp_msg={type:"err",text:"Could not fetch fills. "+(fills.errorText||"")};render();return;}
-      // Convert fills to paired trades
       var cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
       var trades=parseTradovateFills(fills.filter(function(f){return new Date(f.timestamp)>=cutoff;}));
       State.imp_preview=trades;
@@ -4093,7 +4083,6 @@ function syncTradovate(creds,days){
 }
 
 function parseTradovateFills(fills){
-  // Group fills by orderId or pair buys/sells by contract
   var trades=[];
   var byContract={};
   fills.forEach(function(f){
@@ -5562,69 +5551,6 @@ initAutoSync();
     render();
   }
 })();
-
-// ── Poll tv_trades table every 5 seconds for new TradingView trades ──
-function pollTVTrades(){
-  var userId=getSyncId();
-  supaFetch("GET","tv_trades?user_id=eq."+encodeURIComponent(userId)+"&processed=eq.false&select=*")
-  .then(function(r){return r.json();})
-  .then(function(rows){
-    if(!Array.isArray(rows)||!rows.length) return;
-    var added=0;
-    rows.forEach(function(row){
-      // Convert to dashboard trade format
-      var inst=detectInstrument(row.instrument||"ES");
-      var tv2=TICK[inst]||1;
-      var newTrade={
-        id:Date.now()+Math.floor(Math.random()*1000),
-        date:fmtImportDate((row.time||"").split("T")[0]),
-        time:fmtImportTime(row.time||""),
-        inst:inst,
-        dir:row.direction||"Long",
-        entry:(row.entry||0).toString(),
-        exit:"",
-        ctr:"1",
-        setup:"",
-        sess:row.session||"RTH Open",
-        conf:"",post:"",
-        ex:"B",ru:"B",emo:3,
-        right:"",wrong:"",
-        pts:0,d:0,hl:false,
-        tv_id:row.id
-      };
-      // Check not already imported
-      var exists=State.trades.some(function(t){return t.tv_id===row.id;});
-      if(!exists){
-        State.trades.unshift(newTrade);
-        added++;
-      }
-    });
-    if(added>0){
-      ss("trades",State.trades);
-      // Mark as processed
-      var ids=rows.map(function(r){return r.id;}).join(",");
-      supaFetch("PATCH","tv_trades?id=in.("+ids+")",{processed:true});
-      render();
-      // Show notification
-      showTVNotification(added);
-    }
-  })
-  .catch(function(){});
-}
-
-function showTVNotification(count){
-  var existing=document.getElementById("tv-notify");
-  if(existing) existing.remove();
-  var n=document.createElement("div");
-  n.id="tv-notify";
-  n.style.cssText="position:fixed;bottom:20px;right:20px;background:#112444;border:1px solid var(--ca);color:var(--ca);font-family:monospace;font-size:12px;padding:10px 16px;border-radius:4px;z-index:9999;box-shadow:0 4px 20px #00000060;";
-  n.textContent="⬆ "+count+" new trade"+(count>1?"s":"")+" from TradingView";
-  document.body.appendChild(n);
-  setTimeout(function(){if(n.parentNode) n.remove();},4000);
-}
-
-// Start polling every 5 seconds only if TradingView credentials are configured
-if(supaClient&&State.tv_creds&&(State.tv_creds.user||State.tv_creds.cid)) setInterval(pollTVTrades,5000);
 
 // Poll edge_data every 10 seconds to stay in sync across computers
 // Guard: skip if user has a form open or a sync is in-flight to avoid wiping unsaved changes
