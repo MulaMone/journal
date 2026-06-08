@@ -5621,7 +5621,24 @@ initAutoSync();
 
   var currentId=getSyncId();
   // Timeout: if cloud takes >4s, just render with local data anyway
-  var loadTimer=setTimeout(function(){ dismissLoader(); render(); },4000);
+  var loadTimer=setTimeout(function(){ dismissLoader(); if(State.accounts&&State.accounts.length) recoverOrphanedTrades(); else ensureDefaultAccount(); render(); },4000);
+
+  // Reassign trades whose accountId doesn't match any known account to the active account.
+  // This recovers trades that became invisible after an account ID mismatch (e.g. from the
+  // ensureDefaultAccount race condition that previously ran unconditionally on every cloud load).
+  function recoverOrphanedTrades(){
+    if(!State.accounts||!State.accounts.length) return;
+    var knownIds=State.accounts.map(function(a){return a.id;});
+    var orphans=State.trades.filter(function(t){return t.accountId&&knownIds.indexOf(t.accountId)===-1;});
+    if(!orphans.length) return;
+    var target=State.activeAccount||knownIds[0];
+    State.trades=State.trades.map(function(t){
+      if(t.accountId&&knownIds.indexOf(t.accountId)===-1) return Object.assign({},t,{accountId:target});
+      return t;
+    });
+    ss("trades",State.trades);
+    syncToCloud();
+  }
 
   function ensureDefaultAccount(){
     if(State.accounts&&State.accounts.length) return; // already has accounts
@@ -5644,7 +5661,8 @@ initAutoSync();
     loadFromCloud(currentId,function(ok){
       clearTimeout(loadTimer);
       dismissLoader();
-      ensureDefaultAccount();
+      if(!ok) ensureDefaultAccount(); // only create default account when cloud load failed
+      else recoverOrphanedTrades();   // on successful load, reassign trades with unknown accountId
       if(ok) render();
       else{ syncToCloud(); render(); }
     });
