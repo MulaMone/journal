@@ -3634,7 +3634,7 @@ function reviewTab(){
           var lEl=span("xs fw7");lEl.style.color="var(--red)";lEl.textContent=d.losses+"L";wlEl.appendChild(lEl);
           left.appendChild(wlEl);
           // Win%
-          var wrEl=span("xs fw7");wrEl.style.cssText="min-width:40px;color:"+(d.wr>=50?"var(--green)":"var(--red)")+";";wrEl.textContent=d.wr+"%";left.appendChild(wrEl);
+          var wrEl=span("xs fw7");wrEl.style.cssText="min-width:40px;color:var(--accent);";wrEl.textContent=d.wr+"%";left.appendChild(wrEl);
         }
         else{var none=span("xs m");none.style.opacity="0.35";none.textContent="—";left.appendChild(none);}
         row.appendChild(left);
