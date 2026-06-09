@@ -1001,7 +1001,6 @@ var SETUP_COLORS={
   "2min POC":"#a5ff32",
   "VWAP Fade":"#b06aff",
   "POC":"#ffd700",
-  "Dual POC":"#ff9500",
   "VAH/VAL":"#40e0d0",
   "RTH VWAP":"#ff4444",
   "Bizz Level":"#4da6ff"
@@ -3606,17 +3605,37 @@ function reviewTab(){
         var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
         return dt.getDay()===di;
       });
-      return{l:dn,pnl:dayTs.reduce(function(a,t){return a+t.d},0),n:dayTs.length};
+      var wins=dayTs.filter(function(t){return t.d>0;}).length;
+      var losses=dayTs.filter(function(t){return t.d<0;}).length;
+      var wr=dayTs.length?Math.round(wins/dayTs.length*100):0;
+      // session breakdown
+      var SESS_LIST=["Overnight","London","RTH Open","Full RTH","Post-Market"];
+      var sessions=SESS_LIST.map(function(sn){
+        var sts=dayTs.filter(function(t){return (t.sess||"")=== sn;});
+        return{name:sn,n:sts.length,pnl:sts.reduce(function(a,t){return a+t.d;},0)};
+      }).filter(function(s){return s.n>0;});
+      return{l:dn,pnl:dayTs.reduce(function(a,t){return a+t.d},0),n:dayTs.length,wins:wins,losses:losses,wr:wr,sessions:sessions};
     });
     var hasAnyDay=dayData.some(function(d){return d.n>0;});
     if(!hasAnyDay){var ndm=span("xs m");ndm.textContent="No trades this week.";dayCard.appendChild(ndm);}
     else{
       var maxAbs=dayData.map(function(x){return Math.abs(x.pnl);}).reduce(function(a,b){return a>b?a:b;},0);
       dayData.forEach(function(d){
-        var row=div("rjb");row.style.cssText="padding:7px 0;border-bottom:1px solid var(--border);";
-        var left=div("row gap8");
+        var wrap=div();wrap.style.cssText="border-bottom:1px solid var(--border);";
+        var row=div("rjb");row.style.cssText="padding:7px 0;align-items:center;";
+        var left=div("row gap8");left.style.flex="1";
         var lbl=span("sm fw7");lbl.style.color="var(--text2)";lbl.textContent=d.l;left.appendChild(lbl);
-        if(d.n>0){var cnt=span("xs m");cnt.textContent=d.n+(d.n===1?" trade":" trades");left.appendChild(cnt);}
+        if(d.n>0){
+          var cnt=span("xs m");cnt.textContent=d.n+(d.n===1?" trade":" trades");left.appendChild(cnt);
+          // W/L
+          var wlEl=div("row");wlEl.style.cssText="gap:2px;min-width:60px;";
+          var wEl=span("xs fw7");wEl.style.color="var(--green)";wEl.textContent=d.wins+"W";wlEl.appendChild(wEl);
+          var sepEl=span("xs m");sepEl.textContent="/";wlEl.appendChild(sepEl);
+          var lEl=span("xs fw7");lEl.style.color="var(--red)";lEl.textContent=d.losses+"L";wlEl.appendChild(lEl);
+          left.appendChild(wlEl);
+          // Win%
+          var wrEl=span("xs fw7");wrEl.style.cssText="min-width:40px;color:"+(d.wr>=50?"var(--green)":"var(--red)")+";";wrEl.textContent=d.wr+"%";left.appendChild(wrEl);
+        }
         else{var none=span("xs m");none.style.opacity="0.35";none.textContent="—";left.appendChild(none);}
         row.appendChild(left);
         if(d.n>0){
@@ -3628,7 +3647,23 @@ function reviewTab(){
           barWrap.appendChild(barFill);right.appendChild(barWrap);
           row.appendChild(right);
         } else {row.appendChild(span(""));}
-        dayCard.appendChild(row);
+        wrap.appendChild(row);
+        // Session cards — hidden, reveal on hover
+        if(d.n>0&&d.sessions.length){
+          var sessWrap=div("row gap8");sessWrap.style.cssText="max-height:0;overflow:hidden;transition:max-height 0.25s ease,margin-bottom 0.25s ease;margin-bottom:0;flex-wrap:wrap;";
+          d.sessions.forEach(function(s){
+            var sc=div();sc.style.cssText="flex:1;min-width:80px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;display:flex;flex-direction:column;gap:3px;";
+            var sn=span("xs");sn.style.cssText="letter-spacing:1.5px;color:var(--text2);text-transform:uppercase;font-size:9px;";sn.textContent=s.name;sc.appendChild(sn);
+            var sb=div("rjb");
+            var stc=span("xs m");stc.textContent=s.n+(s.n===1?" trade":" trades");sb.appendChild(stc);
+            var sp=span("xs fw7 "+clr(s.pnl));sp.textContent=dol(s.pnl);sb.appendChild(sp);
+            sc.appendChild(sb);sessWrap.appendChild(sc);
+          });
+          wrap.appendChild(sessWrap);
+          wrap.addEventListener("mouseenter",function(){sessWrap.style.maxHeight="80px";sessWrap.style.marginBottom="8px";});
+          wrap.addEventListener("mouseleave",function(){sessWrap.style.maxHeight="0";sessWrap.style.marginBottom="0";});
+        }
+        dayCard.appendChild(wrap);
       });
     }
     wg2.appendChild(dayCard);
