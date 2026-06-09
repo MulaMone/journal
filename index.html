@@ -629,7 +629,7 @@ function loadFromCloud(syncId,callback){
       if(s.notes_mantras&&s.notes_mantras.length) ss("notes_mantras",s.notes_mantras);
       if(s.notes_pad!==undefined) ss("notes_pad",s.notes_pad);
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
-      if(s.accounts&&s.accounts.length){State.accounts=s.accounts;ss("accounts",s.accounts);}
+      if(s.accounts&&s.accounts.length){var _merged=s.accounts.map(function(ca){var la=State.accounts?State.accounts.find(function(x){return x.id===ca.id;}):null;return(la&&la.commission!==undefined&&ca.commission===undefined)?Object.assign({},ca,{commission:la.commission}):ca;});State.accounts=_merged;ss("accounts",_merged);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
     }
