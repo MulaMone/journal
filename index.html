@@ -2990,7 +2990,7 @@ function logTab(){
       var exDiv=div("exp");
       var eg2=div();eg2.style.cssText="display:grid;grid-template-columns:1.3fr 1.3fr 1fr;gap:18px;padding:14px;";
       var l=div();
-      var c1=div("xs m mb8");c1.textContent="CONFLUENCES";l.appendChild(c1);var c2=div("xs mb8");c2.style.color="#e0c97a";c2.style.lineHeight="1.7";c2.textContent=t.conf||"—";l.appendChild(c2);
+      var c1=div("xs m mb8");c1.textContent="CONFLUENCES";l.appendChild(c1);var c2=div("xs mb8");c2.style.color="#00E5FF";c2.style.lineHeight="1.7";c2.textContent=t.conf||"—";l.appendChild(c2);
       var p1=div("xs m mt8 mb8");p1.textContent="POST-TRADE NOTES";l.appendChild(p1);var p2=div("xs");p2.style.color="#e0c97a";p2.style.lineHeight="1.7";p2.textContent=t.post||"—";l.appendChild(p2);
       if(t.r!=null){var rLine=div("xs mt8");rLine.style.cssText="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);";var rLbl=div("xs m");rLbl.textContent="RISK/REWARD";rLine.appendChild(rLbl);var rVal=div();var rCol2=t.r>=1?"var(--green)":t.r>=0?"var(--amber)":"var(--red)";rVal.style.cssText="font-weight:700;font-size:13px;color:"+rCol2+";";rVal.textContent=(t.r>=0?"+":"")+t.r.toFixed(2)+"R";rLine.appendChild(rVal);if(t.stopPts){var sPts=div("xs m");sPts.textContent="· "+t.stopPts+"pt stop · $"+t.riskUsd+" risk";rLine.appendChild(sPts);}l.appendChild(rLine);}
       var r=div();
