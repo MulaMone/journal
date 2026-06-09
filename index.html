@@ -2913,7 +2913,7 @@ function tradeForm(existing){
 // ─── LOG TAB ──────────────────────────────────────────────────────────
 function logTab(){
   if(isMobile()) return mobileLogTab();
-  var _allTrades=activeTrades();
+  var _allTrades=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
   var _pageSize=State.logPageSize||50;
   var _totalPages=Math.max(1,Math.ceil(_allTrades.length/_pageSize));
   if(State.logPage>=_totalPages) State.logPage=_totalPages-1;
