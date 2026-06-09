@@ -3828,7 +3828,7 @@ function parseCSV(text){
     }
     return "";
   }
-  function cleanNum(s){return (s||"").replace(/[$]/g,"").replace(/,/g,"").trim();}
+  function cleanNum(s){var v=(s||"").replace(/[$]/g,"").replace(/,/g,"").trim();if(/^\(.*\)$/.test(v))v="-"+v.slice(1,-1);return v;}
 
   var isTVPos=(header.indexOf("boughttimestamp")>-1||header.indexOf("bought timestamp")>-1)&&(header.indexOf("soldtimestamp")>-1||header.indexOf("sold timestamp")>-1)&&(header.indexOf("buyprice")>-1||header.indexOf("avg. buy")>-1||header.indexOf("buy price")>-1);
   var isNT=!isTVPos&&(header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1));
