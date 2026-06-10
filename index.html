@@ -1446,7 +1446,8 @@ function renderTopbar(){
   var _acctName=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length) return null;var a=State.accounts.find(function(x){return x.id===State.activeAccount;});return a?a.name:null;})();
   var el=document.getElementById("topbar-stats");
   if(isMobile()){
-    el.innerHTML='<b class="'+(tPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b>';
+    var _atPnl=s.total;
+    el.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;"><span style="font-size:8px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:1px;">'+(_acctName?_acctName:"ALL TIME")+'</span><b class="'+(_atPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(_atPnl)+'</b></div>';
   } else {
     el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
     var dlEl=document.getElementById("topbar-dl");
