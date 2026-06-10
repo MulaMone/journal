@@ -2090,10 +2090,9 @@ function homeTab(){
   streakVal.innerHTML=streak>0?'<span class="'+(streakType==="W"?"g":"r")+'" style="font-size:22px;font-weight:700">'+streak+streakType+'</span>':'<span class="m" style="font-size:22px;font-weight:700">—</span>';
   g4.appendChild(makeChip("STREAK",streakVal,"","current"));
   // Max Drawdown
-  var eq2=[0];
-  State.trades.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
-  var peak=0,maxDD=0;
-  eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
+  var _ddTrades=activeTrades().slice().reverse();
+  var _ddEq=0,_ddPeak=0,maxDD=0;
+  _ddTrades.forEach(function(t){_ddEq+=t.d;if(_ddEq>_ddPeak)_ddPeak=_ddEq;var dd=_ddPeak-_ddEq;if(dd>maxDD)maxDD=dd;});
   var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
   g4.appendChild(makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time"));
   // Mindset chip — last
@@ -4654,8 +4653,8 @@ function mobileAnalyticsTab(){
   var s=calcStats(_aat);
 
   // ── KPI grid ──
-  var eq2=[0];_aat.slice().reverse().forEach(function(t){eq2.push(eq2[eq2.length-1]+t.d);});
-  var peak=0,maxDD=0;eq2.forEach(function(v){if(v>peak)peak=v;var dd=peak-v;if(dd>maxDD)maxDD=dd;});
+  var _ddEq2=0,_ddPeak2=0,maxDD=0;
+  _aat.slice().reverse().forEach(function(t){_ddEq2+=t.d;if(_ddEq2>_ddPeak2)_ddPeak2=_ddEq2;var dd=_ddPeak2-_ddEq2;if(dd>maxDD)maxDD=dd;});
   var profitFactor=Math.abs(s.avgL)>0?Math.abs(s.avgW/s.avgL):0;
   var bestStreak=0,curStreak=0,streakType2="";
   _aat.slice().reverse().forEach(function(t){
