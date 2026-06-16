@@ -633,7 +633,7 @@ function loadFromCloud(syncId,callback){
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
       if(s.sdesc_overrides){ss("sdesc_overrides",s.sdesc_overrides);Object.keys(s.sdesc_overrides).forEach(function(k){SDESC[k]=s.sdesc_overrides[k];});}
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);}
-      if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);return Object.assign({},ca,comm!==undefined?{commission:comm}:{});});State.accounts=_merged;ss("accounts",_merged);}
+      if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
     }
@@ -3870,7 +3870,7 @@ function parseCSV(text){
     }
     return "";
   }
-  function getActiveCommission(){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;return(a&&a.commission>0)?parseFloat(a.commission):0;}
+  function getActiveCommission(inst){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;if(!a)return 0;var cm=a.commissions;if(cm&&typeof cm==="object"){var rate=inst&&cm[inst]!==undefined?cm[inst]:cm["default"];return rate!==undefined&&rate!==null&&rate!==""?parseFloat(rate):0;}return(a.commission>0)?parseFloat(a.commission):0;}
   function cleanNum(s){var v=(s||"").replace(/[$]/g,"").replace(/,/g,"").trim();if(/^\(.*\)$/.test(v))v="-"+v.slice(1,-1);return v;}
 
   var isTVPos=(header.indexOf("boughttimestamp")>-1||header.indexOf("bought timestamp")>-1)&&(header.indexOf("soldtimestamp")>-1||header.indexOf("sold timestamp")>-1)&&(header.indexOf("buyprice")>-1||header.indexOf("avg. buy")>-1||header.indexOf("buy price")>-1);
@@ -3901,7 +3901,7 @@ function parseCSV(text){
       var tvPnlRaw=cleanNum(col(row,["pnl","p/l","p&l","profit"]));
       var tvPts=tvEntry&&tvExit?(parseFloat(tvExit)-parseFloat(tvEntry))*(tvDir==="Long"?1:-1):0;
       var tvTick=TICK[tvInst]||1;
-      var tvDollar=tvPnlRaw?parseFloat(parseFloat(tvPnlRaw).toFixed(2)):parseFloat((tvPts*tvTick*parseFloat(tvQty)).toFixed(2));tvDollar=parseFloat((tvDollar-getActiveCommission()*parseFloat(tvQty)).toFixed(2));
+      var tvDollar=tvPnlRaw?parseFloat(parseFloat(tvPnlRaw).toFixed(2)):parseFloat((tvPts*tvTick*parseFloat(tvQty)).toFixed(2));tvDollar=parseFloat((tvDollar-getActiveCommission(tvInst)*parseFloat(tvQty)).toFixed(2));
       var tvTime=fmtImportTime(entryTs);
       var tvDate=fmtImportDate(entryTs);
       t={id:newId,date:tvDate,time:tvTime,inst:tvInst,dir:tvDir,entry:tvEntry,exit:tvExit,ctr:tvQty,setup:"",sess:autoSession(tvTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(tvPts.toFixed(2)),d:tvDollar,hl:false};
@@ -3920,7 +3920,7 @@ function parseCSV(text){
       var ntTime=fmtImportTime(entryTime);
       var ntPts=ntEntry&&ntExit?(parseFloat(ntExit)-parseFloat(ntEntry))*(ntDir==="Long"?1:-1):0;
       var ntTick=TICK[ntInst]||1;
-      var ntDollar=ntProfit?parseFloat(parseFloat(ntProfit).toFixed(2)):parseFloat((ntPts*ntTick*parseFloat(ntQty)).toFixed(2));ntDollar=parseFloat((ntDollar-getActiveCommission()*parseFloat(ntQty)).toFixed(2));
+      var ntDollar=ntProfit?parseFloat(parseFloat(ntProfit).toFixed(2)):parseFloat((ntPts*ntTick*parseFloat(ntQty)).toFixed(2));ntDollar=parseFloat((ntDollar-getActiveCommission(ntInst)*parseFloat(ntQty)).toFixed(2));
       t={id:newId,date:fmtImportDate(ntDateStr),time:ntTime,inst:ntInst,dir:ntDir,entry:ntEntry,exit:ntExit,ctr:ntQty,setup:"",sess:autoSession(ntTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(ntPts.toFixed(2)),d:ntDollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
@@ -3939,7 +3939,7 @@ function parseCSV(text){
       var parsedTime=fmtImportTime(timeRaw);
       var pts2=entryP&&exitP?(parseFloat(exitP)-parseFloat(entryP))*(dir2==="Long"?1:-1):0;
       var tv3=TICK[inst2]||1;
-      var dollar2=csvPnl?parseFloat(parseFloat(csvPnl).toFixed(2)):parseFloat((pts2*tv3*parseFloat(qty2)).toFixed(2));dollar2=parseFloat((dollar2-getActiveCommission()*parseFloat(qty2)).toFixed(2));
+      var dollar2=csvPnl?parseFloat(parseFloat(csvPnl).toFixed(2)):parseFloat((pts2*tv3*parseFloat(qty2)).toFixed(2));dollar2=parseFloat((dollar2-getActiveCommission(inst2)*parseFloat(qty2)).toFixed(2));
       t={id:newId,date:fmtImportDate(dateRaw),time:parsedTime,inst:inst2,dir:dir2,entry:entryP,exit:exitP,ctr:qty2,setup:"",sess:autoSession(parsedTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat((pts2).toFixed(2)),d:dollar2,hl:false};
     }
     if(t.inst) trades.push(t);
@@ -5459,7 +5459,21 @@ function accountsTab(){
   var balInp=fi("e.g. 50000","af-bal");
   var numInp=fi("e.g. TRD-00123 (optional)","af-num");
   var notesInp=fi("Optional notes","af-notes");
-  var commInp=fi("e.g. 4.02","af-comm");commInp.type="number";commInp.min="0";commInp.step="0.01";
+  // Per-instrument commission inputs
+  var COMM_INSTS=["ES","NQ","MES","MNQ","CL","GC","Other"];
+  var commInputs={};
+  var commGrid=div();commGrid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:7px;margin-bottom:14px;";
+  var commLbl=div();commLbl.style.cssText="grid-column:1/-1;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:2px;";commLbl.textContent="COMMISSION / CONTRACT RT ($)";commGrid.appendChild(commLbl);
+  COMM_INSTS.forEach(function(inst){
+    var wrap=div();wrap.style.cssText="display:flex;flex-direction:column;gap:3px;";
+    var lbl=document.createElement("label");lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);";lbl.textContent=inst;
+    var inp=document.createElement("input");inp.type="number";inp.min="0";inp.step="0.01";inp.placeholder="e.g. 4.02";
+    inp.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Courier New',monospace;font-size:12px;padding:5px 7px;width:100%;";
+    inp.onfocus=function(){this.style.borderColor="var(--accent)";};
+    inp.onblur=function(){this.style.borderColor="var(--border)";};
+    wrap.appendChild(lbl);wrap.appendChild(inp);commGrid.appendChild(wrap);
+    commInputs[inst]=inp;
+  });
 
   // Broker selector
   var brokerWrap=div();brokerWrap.style.cssText="flex:1;min-width:160px;";brokerWrap.appendChild(flbl("Broker"));
@@ -5489,8 +5503,8 @@ function accountsTab(){
 
   var r1=div();r1.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;";r1.appendChild(fw("Account Name",nameInp));r1.appendChild(fw("Balance ($)",balInp));
   var r2=div();r2.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;";r2.appendChild(brokerWrap);r2.appendChild(typeWrap);
-  var r3=div();r3.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;";r3.appendChild(fw("Account Number",numInp));r3.appendChild(fw("Commission / Contract RT ($)",commInp));r3.appendChild(fw("Notes",notesInp));
-  formCard.appendChild(r1);formCard.appendChild(r2);formCard.appendChild(r3);
+  var r3=div();r3.style.cssText="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;";r3.appendChild(fw("Account Number",numInp));r3.appendChild(fw("Notes",notesInp));
+  formCard.appendChild(r1);formCard.appendChild(r2);formCard.appendChild(r3);formCard.appendChild(commGrid);
 
   var fbRow=div("row gap8");
   var saveBtn=document.createElement("button");saveBtn.id="af-save";
@@ -5515,8 +5529,19 @@ function accountsTab(){
     nameInp.value=existing?existing.name:"";
     balInp.value=existing?existing.balance:"";
     numInp.value=existing?existing.accountNum||"":"";
-    commInp.value=existing?(existing.commission!==undefined?existing.commission:""):"";
     notesInp.value=existing?existing.notes||"":"";
+    // Populate per-instrument commissions
+    COMM_INSTS.forEach(function(inst){commInputs[inst].value="";});
+    if(existing){
+      if(existing.commissions&&typeof existing.commissions==="object"){
+        COMM_INSTS.forEach(function(inst){var v=existing.commissions[inst];if(v!==undefined&&v!=="")commInputs[inst].value=v;});
+        // If there's a legacy scalar, pre-fill any blank slots with it
+        if(existing.commission>0){COMM_INSTS.forEach(function(inst){if(commInputs[inst].value==="")commInputs[inst].value=existing.commission;});}
+      } else if(existing.commission!==undefined&&existing.commission!==""){
+        // Migrate: fill all inputs with old scalar value
+        COMM_INSTS.forEach(function(inst){commInputs[inst].value=existing.commission;});
+      }
+    }
     _selBroker=existing?existing.broker||BROKERS[0]:BROKERS[0];
     _selType=existing?existing.type||ACCT_TYPES[0]:ACCT_TYPES[0];
     highlightBroker();highlightType();
@@ -5530,7 +5555,8 @@ function accountsTab(){
   highlightBroker();highlightType();
 
   cancelBtn.onclick=function(){
-    _editId=null;nameInp.value="";balInp.value="";numInp.value="";commInp.value="";notesInp.value="";
+    _editId=null;nameInp.value="";balInp.value="";numInp.value="";notesInp.value="";
+    COMM_INSTS.forEach(function(inst){commInputs[inst].value="";});
     _selBroker=BROKERS[0];_selType=ACCT_TYPES[0];highlightBroker();highlightType();
     cancelBtn.style.display="none";saveBtn.textContent="SAVE ACCOUNT";
     formTitle.textContent="+ ADD ACCOUNT";
@@ -5544,10 +5570,14 @@ function accountsTab(){
       if(idx>-1){
         State.accounts[idx].name=name;State.accounts[idx].broker=_selBroker;
         State.accounts[idx].type=_selType;State.accounts[idx].balance=(balInp.value||"").trim();
-        State.accounts[idx].accountNum=(numInp.value||"").trim();State.accounts[idx].commission=commInp.value!==""?parseFloat(commInp.value):undefined;State.accounts[idx].notes=(notesInp.value||"").trim();
+        State.accounts[idx].accountNum=(numInp.value||"").trim();
+        var _cm={};COMM_INSTS.forEach(function(inst){var v=commInputs[inst].value;if(v!=="")_cm[inst]=parseFloat(v);});
+        State.accounts[idx].commissions=_cm;
+        State.accounts[idx].notes=(notesInp.value||"").trim();
       }
     } else {
-      var na={id:"acct_"+Date.now(),name:name,broker:_selBroker,type:_selType,balance:(balInp.value||"").trim(),accountNum:(numInp.value||"").trim(),commission:commInp.value!==""?parseFloat(commInp.value):undefined,notes:(notesInp.value||"").trim(),createdAt:new Date().toISOString()};
+      var _ncm={};COMM_INSTS.forEach(function(inst){var v=commInputs[inst].value;if(v!=="")_ncm[inst]=parseFloat(v);});
+      var na={id:"acct_"+Date.now(),name:name,broker:_selBroker,type:_selType,balance:(balInp.value||"").trim(),accountNum:(numInp.value||"").trim(),commissions:_ncm,notes:(notesInp.value||"").trim(),createdAt:new Date().toISOString()};
       State.accounts.push(na);
       // First account: set active and tag ALL trades before anything else
       var isFirstAcct=State.accounts.length===1||!State.activeAccount;
