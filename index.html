@@ -279,35 +279,42 @@ svg text{font-family:'Courier New',monospace}
   .m-kpi-val{font-size:16px}
 }
 /* ── LOCK SCREEN ── */
-#edge-lock{position:fixed;inset:0;background:#040d1a;z-index:99999;display:flex;align-items:flex-start;justify-content:center;flex-direction:column;font-family:'Courier New',monospace;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-#edge-lock .lk-box{border:1px solid #00d4d4;border-radius:8px;padding:1.5rem 1.75rem;width:320px;max-width:92vw;background:#071428;margin:auto}
-#edge-lock .lk-brand{text-align:center;margin-bottom:1rem}
+#edge-lock{position:fixed;inset:0;background:#040d1a;z-index:99999;display:flex;flex-direction:column;font-family:'Courier New',monospace;overflow:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#edge-lock .lk-box{display:flex;flex-direction:column;flex:1;width:100%;max-width:460px;margin:0 auto;padding:0 20px 16px}
+#edge-lock .lk-brand{text-align:center;padding:20px 0 8px}
 #edge-lock .lk-logo{font-size:28px;font-weight:700;color:#00d4d4;letter-spacing:.25em}
 #edge-lock .lk-sub{font-size:10px;color:#7a8aaa;letter-spacing:.2em;margin-top:4px}
-#edge-lock .lk-icon{text-align:center;font-size:24px;margin-bottom:.5rem;color:#00d4d4}
-#edge-lock .lk-prompt{font-size:11px;color:#7a8aaa;text-align:center;letter-spacing:.08em;margin-bottom:.75rem}
-#edge-lock .lk-dots{display:flex;gap:10px;justify-content:center;margin-bottom:1rem}
-#edge-lock .lk-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #00d4d4;background:transparent;transition:background .12s}
+#edge-lock .lk-icon{text-align:center;font-size:22px;margin-bottom:4px;color:#00d4d4}
+#edge-lock .lk-prompt{font-size:12px;color:#7a8aaa;text-align:center;letter-spacing:.1em;margin-bottom:12px}
+#edge-lock .lk-dots{display:flex;gap:14px;justify-content:center;margin-bottom:16px}
+#edge-lock .lk-dot{width:16px;height:16px;border-radius:50%;border:2px solid #00d4d4;background:transparent;transition:background .12s}
 #edge-lock .lk-dot.on{background:#00d4d4}
-#edge-lock .lk-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:.75rem}
-#edge-lock .lk-key{background:transparent;border:0.5px solid #1e2d45;border-radius:6px;padding:11px;font-family:'Courier New',monospace;font-size:17px;font-weight:500;color:#c8d4e8;cursor:pointer;text-align:center;transition:border-color .12s,color .12s;user-select:none;-webkit-tap-highlight-color:transparent}
-#edge-lock .lk-key:hover{border-color:#00d4d4;color:#00d4d4}
-#edge-lock .lk-key:active{background:#00d4d415}
-#edge-lock .lk-key.sm{font-size:12px;color:#7a8aaa}
-#edge-lock .lk-divider{height:0.5px;background:#1e2d45;margin:.6rem 0}
-#edge-lock .lk-trust{display:flex;align-items:center;gap:8px;justify-content:center;cursor:pointer;user-select:none}
+#edge-lock .lk-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:1}
+#edge-lock .lk-key{background:#071e3d;border:1px solid #1e3560;border-radius:10px;font-family:'Courier New',monospace;font-size:28px;font-weight:600;color:#e8f0ff;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;min-height:72px;transition:border-color .1s,background .1s;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#edge-lock .lk-key:active{background:#0a2a52;border-color:#00d4d4;color:#00d4d4}
+#edge-lock .lk-key.sm{font-size:13px;font-weight:500;color:#7a8aaa;min-height:72px}
+#edge-lock .lk-key.sm:active{color:#00d4d4;border-color:#00d4d4}
+#edge-lock .lk-divider{height:0.5px;background:#1e2d45;margin:12px 0}
+#edge-lock .lk-trust{display:flex;align-items:center;gap:8px;justify-content:center;cursor:pointer;user-select:none;padding:8px 0 4px}
 #edge-lock .lk-toggle{width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;flex-shrink:0;background:#1e2d45;transition:background .2s}
 #edge-lock .lk-toggle.on{background:#00d4d4}
 #edge-lock .lk-thumb{width:16px;height:16px;border-radius:50%;background:#c8d4e8;position:absolute;top:2px;left:2px;transition:left .2s}
 #edge-lock .lk-toggle.on .lk-thumb{left:18px;background:#040d1a}
-#edge-lock .lk-tlabel{font-size:10px;color:#7a8aaa;letter-spacing:.06em}
-#edge-lock .lk-err{text-align:center;font-size:11px;color:#ff4444;letter-spacing:.06em;margin-top:.4rem;min-height:16px}
-@media(max-height:650px){
-  #edge-lock .lk-brand{margin-bottom:.5rem}
+#edge-lock .lk-tlabel{font-size:11px;color:#7a8aaa;letter-spacing:.06em}
+#edge-lock .lk-err{text-align:center;font-size:12px;color:#ff4444;letter-spacing:.06em;margin-top:6px;min-height:18px;padding-bottom:4px}
+@media(min-width:600px){
+  #edge-lock .lk-box{border:1px solid #00d4d430;border-radius:12px;padding:2rem;max-width:380px;background:#071428;margin:auto;flex:none}
+  #edge-lock{align-items:center;justify-content:center}
+  #edge-lock .lk-pad{gap:10px}
+  #edge-lock .lk-key{min-height:62px;font-size:22px}
+  #edge-lock .lk-key.sm{min-height:62px}
+}
+@media(max-height:650px) and (max-width:599px){
+  #edge-lock .lk-brand{padding:10px 0 4px}
   #edge-lock .lk-logo{font-size:22px}
   #edge-lock .lk-sub{display:none}
   #edge-lock .lk-icon{display:none}
-  #edge-lock .lk-box{padding:1rem 1.5rem}
+  #edge-lock .lk-key{min-height:58px;font-size:24px}
 }
 </style>
 </head>
