@@ -985,8 +985,9 @@ var State={
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
-function dol(n){n=n||0;var abs=Math.abs(n);var str=(abs%1===0)?abs.toFixed(0):abs.toFixed(2);return(n<0?"-":"")+"$"+str;}
+function dol(n){n=n||0;var abs=Math.abs(n);var str=abs.toFixed(2);return(n<0?"-":"")+"$"+str;}
 function clr(n){return (n||0)>=0?"g":"r"}
+function getActiveCommission(inst){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;if(!a)return 0;var cm=a.commissions;if(cm&&typeof cm==="object"){var rate=inst&&cm[inst]!==undefined?cm[inst]:cm["default"];return rate!==undefined&&rate!==null&&rate!==""?parseFloat(rate):0;}return(a.commission>0)?parseFloat(a.commission):0;}
 function parseGoal(str,def){
   if(!str) return def;
   // Match first dollar amount like $8,000 or $8k or 8000 or 8k
@@ -1081,7 +1082,7 @@ function fmtAxisDollar(v){
 
 function equitySVG(trades,w,h2){
   var eq=[0];
-  trades.slice().reverse().forEach(function(t){eq.push(eq[eq.length-1]+t.d)});
+  trades.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return da>db?1:da<db?-1:0;}).forEach(function(t){eq.push(eq[eq.length-1]+t.d)});
   if(eq.length<2){
     var empty=div("chart-wrap");
     empty.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:10px;font-family:Courier New,monospace">No trades yet</div>';
@@ -1839,7 +1840,7 @@ function mobileTradeCard(t){
 // Build mobile equity SVG
 function mobileEquitySVG(trades){
   var eq=[0];
-  trades.slice().reverse().forEach(function(t){eq.push(eq[eq.length-1]+t.d);});
+  trades.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return da>db?1:da<db?-1:0;}).forEach(function(t){eq.push(eq[eq.length-1]+t.d);});
   var W=document.getElementById("content")?document.getElementById("content").clientWidth-48:300;
   var H=60;
   if(eq.length<2){
@@ -2784,7 +2785,7 @@ function tradeForm(existing){
       var tv=TICK[instEl.value]||1;
       var ctrs=parseFloat(ctrEl.value)||1;
       var pts=(parseFloat(ex.value)-parseFloat(ent.value))*(dirEl.value==="Long"?1:-1);
-      var dv=parseFloat((pts*tv*ctrs).toFixed(2));
+      var dv=parseFloat((pts*tv*ctrs-getActiveCommission(instEl.value)*ctrs).toFixed(2));
       pvEl.innerHTML='<span class="'+(pts>=0?"g":"r")+'">'+dol(dv)+'</span> <span class="m">'+pts.toFixed(2)+" pts</span>";
       // R calc: if stop pts entered, auto-fill risk USD
       var stopPts=parseFloat(stopEl.value)||0;
@@ -2899,7 +2900,7 @@ function tradeForm(existing){
     var pts=(exitSnapped-entrySnapped)*(dir==="Long"?1:-1);
     var setupsArr=suWrap._getSelected();
     var setupStr=setupsArr.join(", ");
-    var dv=parseFloat((pts*tv*parseFloat(ctr)).toFixed(2));
+    var dv=parseFloat((pts*tv*parseFloat(ctr)-getActiveCommission(inst)*parseFloat(ctr)).toFixed(2));
     var stopPts=parseFloat(gv("stop_pts"))||0;
     var riskUsd=parseFloat(gv("risk_usd"))||0;
     var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
@@ -3870,7 +3871,6 @@ function parseCSV(text){
     }
     return "";
   }
-  function getActiveCommission(inst){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;if(!a)return 0;var cm=a.commissions;if(cm&&typeof cm==="object"){var rate=inst&&cm[inst]!==undefined?cm[inst]:cm["default"];return rate!==undefined&&rate!==null&&rate!==""?parseFloat(rate):0;}return(a.commission>0)?parseFloat(a.commission):0;}
   function cleanNum(s){var v=(s||"").replace(/[$]/g,"").replace(/,/g,"").trim();if(/^\(.*\)$/.test(v))v="-"+v.slice(1,-1);return v;}
 
   var isTVPos=(header.indexOf("boughttimestamp")>-1||header.indexOf("bought timestamp")>-1)&&(header.indexOf("soldtimestamp")>-1||header.indexOf("sold timestamp")>-1)&&(header.indexOf("buyprice")>-1||header.indexOf("avg. buy")>-1||header.indexOf("buy price")>-1);
@@ -4222,7 +4222,7 @@ function parseTradovateFills(fills){
         var qty=(entry.qty||1).toString();
         var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
         var tv2=TICK[inst]||1;
-        var dollar=parseFloat((pts*tv2*parseFloat(qty)).toFixed(2));
+        var dollar=parseFloat((pts*tv2*parseFloat(qty)-getActiveCommission(inst)*parseFloat(qty)).toFixed(2));
         trades.push({id:Date.now()+i,accountId:State.activeAccount||null,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
         i+=2;
       } else { i++; }
