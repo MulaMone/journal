@@ -3335,7 +3335,7 @@ function reviewTab(){
     // Monthly open reminder banner
     var moReminder=div("card mb12");moReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
     var moIcon=span("");moIcon.style.cssText="font-size:16px;flex-shrink:0;";moIcon.textContent="📌";
-    var moRText=span("sm");moRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";moRText.textContent="Reminder — mark out the monthly open on your chart";
+    var moRText=span("sm");moRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";moRText.textContent="Reminder — mark out the monthly open and POC on your chart";
     moReminder.appendChild(moIcon);moReminder.appendChild(moRText);
     el.appendChild(moReminder);
 
@@ -4579,7 +4579,7 @@ function mobileHomeTab(){
   if(!_mat.length){
     var noop=document.createElement("div");noop.style.cssText="color:#1a3260;font-size:11px;text-align:center;padding:20px;font-family:monospace;";noop.textContent="No trades yet — tap + to add your first trade";el.appendChild(noop);
   } else {
-    _mat.slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
+    _mat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;}).slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
   return el;
