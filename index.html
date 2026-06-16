@@ -451,7 +451,10 @@ svg text{font-family:'Courier New',monospace}
     if(msg) _errTimer=setTimeout(function(){ el.textContent=""; _errTimer=null; },1500);
   }
 
+  function lkClick(type){try{var ac=new(window.AudioContext||window.webkitAudioContext)();var o=ac.createOscillator();var g=ac.createGain();o.connect(g);g.connect(ac.destination);o.type="sine";if(type==="del"){o.frequency.setValueAtTime(600,ac.currentTime);g.gain.setValueAtTime(0.08,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.06);}else{o.frequency.setValueAtTime(1100,ac.currentTime);o.frequency.exponentialRampToValueAtTime(900,ac.currentTime+0.04);g.gain.setValueAtTime(0.07,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.05);}o.start(ac.currentTime);o.stop(ac.currentTime+0.08);}catch(e){}}
+
   window.lkKey=function(k){
+    lkClick("tap");
     if(_pin.length>=4||_locked) return;
     _pin+=k;
     lkUpdateDots();
@@ -467,6 +470,7 @@ svg text{font-family:'Courier New',monospace}
   };
 
   window.lkBack=function(){
+    lkClick("del");
     if(_locked) return;
     _pin=_pin.slice(0,-1);
     lkUpdateDots();
@@ -474,6 +478,7 @@ svg text{font-family:'Courier New',monospace}
   };
 
   window.lkClear=function(){
+    lkClick("del");
     if(_locked) return;
     _pin="";
     lkUpdateDots();
