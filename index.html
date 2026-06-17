@@ -4485,12 +4485,19 @@ function mobileHomeTab(){
 
   // ── Weekly Scoreboard ──
   var nowD2=new Date();
-  var wkDay=nowD2.getDay(); // 0=Sun
-  // Build YYYYMMDD integers for comparison — immune to timezone/string issues
-  function dateToInt(d){var p=d.split("/");if(p.length!==3)return 0;var yr=p[2].length===4?parseInt(p[2]):2000+parseInt(p[2]);return yr*10000+parseInt(p[0])*100+parseInt(p[1]);}
-  var wkStartD=new Date(nowD2.getFullYear(),nowD2.getMonth(),nowD2.getDate()-wkDay);
-  var wkStartInt=(wkStartD.getFullYear())*10000+(wkStartD.getMonth()+1)*100+wkStartD.getDate();
-  var wkTrades3=_mat.filter(function(t){return dateToInt(t.date)>=wkStartInt;});
+  var wkDay=nowD2.getDay();
+  var wkStartDay=nowD2.getDate()-wkDay;
+  var wkStartD=new Date(nowD2.getFullYear(),nowD2.getMonth(),wkStartDay);
+  var wkStartMo=wkStartD.getMonth()+1;
+  var wkStartDt=wkStartD.getDate();
+  var wkStartYr=wkStartD.getFullYear();
+  var wkTrades3=_mat.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
+    if(tYr!==wkStartYr) return tYr>wkStartYr;
+    if(tMo!==wkStartMo) return tMo>wkStartMo;
+    return tDt>=wkStartDt;
+  });
 
   var ws3=calcStats(wkTrades3);
   var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
