@@ -2240,18 +2240,16 @@ function homeTab(){
   combCard.appendChild(combH);
 
   // This week's trades (Sun–Sat calendar week)
-  function tradeDateObj(dateStr){
-    if(!dateStr) return null;
-    var p=dateStr.split("/");
-    if(p.length!==3) return null;
-    var month=parseInt(p[0],10)-1;
-    var day=parseInt(p[1],10);
-    var year=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
-    return new Date(year,month,day);
-  }
   var weekStart=new Date();weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-weekStart.getDay());
-  var weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+7);
-  var wkTrades2=_at.filter(function(t){var td=tradeDateObj(t.date);return td&&td>=weekStart&&td<weekEnd;});
+  var wkTrades2=_at.filter(function(t){
+    if(!t.date) return false;
+    var p=t.date.split("/");
+    if(p.length!==3) return false;
+    var yr=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
+    var td=new Date(yr,parseInt(p[0],10)-1,parseInt(p[1],10));
+    td.setHours(0,0,0,0);
+    return td>=weekStart;
+  });
   var ws2=calcStats(wkTrades2);
 
   // P&L + W/L row
