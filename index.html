@@ -4467,7 +4467,8 @@ function mobileHomeTab(){
   el.appendChild(eqCard);
 
   // ── Streak dots ──
-  var sdResult=mobileStreakDots(_mat,10);
+  var _matSorted=_mat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
+  var sdResult=mobileStreakDots(_matSorted,10);
   var streakCard=document.createElement("div");streakCard.className="m-eq-card";streakCard.style.padding="10px 12px";
   var sdHdr=document.createElement("div");sdHdr.className="m-card-hdr";sdHdr.style.marginBottom="0";
   var sdTitle=document.createElement("div");sdTitle.className="m-card-title";sdTitle.textContent="Last 10 Trades";
