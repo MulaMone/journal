@@ -4501,6 +4501,9 @@ function mobileHomeTab(){
     if(yr!==wkYr) return yr>wkYr;
     return norm>=wkStartStr3;
   });
+  // DEBUG — remove after confirming
+  console.log("[WK] wkStart="+wkStartStr3+" today="+td+" _mat="+_mat.length+" wkTrades="+wkTrades3.length);
+  if(_mat.length) console.log("[WK] first trade date='"+_mat[0].date+"' last='"+_mat[_mat.length-1].date+"'");
   var ws3=calcStats(wkTrades3);
   var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct3=goalAmt3?Math.min(100,Math.round(Math.max(0,ws3.total)/goalAmt3*100)):0;
