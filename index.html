@@ -2240,17 +2240,18 @@ function homeTab(){
   combCard.appendChild(combH);
 
   // This week's trades (Sun–Sat calendar week)
-  var wkStartD2=new Date(nowD.getFullYear(),nowD.getMonth(),nowD.getDate()-nowD.getDay());
-  var wkStartMo2=wkStartD2.getMonth()+1;
-  var wkStartDt2=wkStartD2.getDate();
-  var wkStartYr2=wkStartD2.getFullYear();
-  var wkTrades2=_at.filter(function(t){
-    var p=t.date.split("/");if(p.length!==3)return false;
-    var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
-    if(tYr!==wkStartYr2) return tYr>wkStartYr2;
-    if(tMo!==wkStartMo2) return tMo>wkStartMo2;
-    return tDt>=wkStartDt2;
-  });
+  function tradeDateObj(dateStr){
+    if(!dateStr) return null;
+    var p=dateStr.split("/");
+    if(p.length!==3) return null;
+    var month=parseInt(p[0],10)-1;
+    var day=parseInt(p[1],10);
+    var year=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
+    return new Date(year,month,day);
+  }
+  var weekStart=new Date();weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-weekStart.getDay());
+  var weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+7);
+  var wkTrades2=_at.filter(function(t){var td=tradeDateObj(t.date);return td&&td>=weekStart&&td<weekEnd;});
   var ws2=calcStats(wkTrades2);
 
   // P&L + W/L row
@@ -2300,8 +2301,7 @@ function homeTab(){
   var moNow=new Date();
   var moTrades=_at.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
-    var tYrM=p[2].length===4?parseInt(p[2]):2000+parseInt(p[2]);
-    return parseInt(p[0])-1===moNow.getMonth()&&tYrM===moNow.getFullYear();
+    return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
   });
   var moS=calcStats(moTrades);
   var MNAMES2=["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -3907,7 +3907,7 @@ function parseCSV(text){
   var trades=[];
 
   rows.forEach(function(line,ri){
-    var row=splitCSVRow(line);
+    var row=line.split(",");
     var t={};
     // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
     var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
