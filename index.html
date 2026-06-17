@@ -2240,10 +2240,17 @@ function homeTab(){
   combCard.appendChild(combH);
 
   // This week's trades (Sun–Sat calendar week)
-  function dateToInt2(d){var p=d.split("/");if(p.length!==3)return 0;var yr=p[2].length===4?parseInt(p[2]):2000+parseInt(p[2]);return yr*10000+parseInt(p[0])*100+parseInt(p[1]);}
   var wkStartD2=new Date(nowD.getFullYear(),nowD.getMonth(),nowD.getDate()-nowD.getDay());
-  var wkStartInt2=(wkStartD2.getFullYear())*10000+(wkStartD2.getMonth()+1)*100+wkStartD2.getDate();
-  var wkTrades2=_at.filter(function(t){return dateToInt2(t.date)>=wkStartInt2;});
+  var wkStartMo2=wkStartD2.getMonth()+1;
+  var wkStartDt2=wkStartD2.getDate();
+  var wkStartYr2=wkStartD2.getFullYear();
+  var wkTrades2=_at.filter(function(t){
+    var p=t.date.split("/");if(p.length!==3)return false;
+    var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
+    if(tYr!==wkStartYr2) return tYr>wkStartYr2;
+    if(tMo!==wkStartMo2) return tMo>wkStartMo2;
+    return tDt>=wkStartDt2;
+  });
   var ws2=calcStats(wkTrades2);
 
   // P&L + W/L row
@@ -2293,7 +2300,8 @@ function homeTab(){
   var moNow=new Date();
   var moTrades=_at.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
-    return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
+    var tYrM=p[2].length===4?parseInt(p[2]):2000+parseInt(p[2]);
+    return parseInt(p[0])-1===moNow.getMonth()&&tYrM===moNow.getFullYear();
   });
   var moS=calcStats(moTrades);
   var MNAMES2=["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -3899,7 +3907,7 @@ function parseCSV(text){
   var trades=[];
 
   rows.forEach(function(line,ri){
-    var row=line.split(",");
+    var row=splitCSVRow(line);
     var t={};
     // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
     var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
