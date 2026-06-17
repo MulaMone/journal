@@ -2104,7 +2104,7 @@ function homeTab(){
   // Current streak
   var streak=0;var streakType="";
   if(State.trades.length){
-    var _st=activeTrades();var first=_st[0];streakType=first&&first.d>0?"W":"L";
+    var _st=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});var first=_st[0];streakType=first&&first.d>0?"W":"L";
     for(var si=0;si<_st.length;si++){
       if((_st[si].d>0&&streakType==="W")||(_st[si].d<0&&streakType==="L")) streak++;
       else break;
@@ -2114,7 +2114,7 @@ function homeTab(){
   streakVal.innerHTML=streak>0?'<span class="'+(streakType==="W"?"g":"r")+'" style="font-size:22px;font-weight:700">'+streak+streakType+'</span>':'<span class="m" style="font-size:22px;font-weight:700">—</span>';
   g4.appendChild(makeChip("STREAK",streakVal,"","current"));
   // Max Drawdown
-  var _ddTrades=activeTrades().slice().reverse();
+  var _ddTrades=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return da>db?1:da<db?-1:0;}).reverse();
   var _ddEq=0,_ddPeak=0,maxDD=0;
   _ddTrades.forEach(function(t){_ddEq+=t.d;if(_ddEq>_ddPeak)_ddPeak=_ddEq;var dd=_ddPeak-_ddEq;if(dd>maxDD)maxDD=dd;});
   var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
@@ -3905,7 +3905,7 @@ function parseCSV(text){
   var trades=[];
 
   rows.forEach(function(line,ri){
-    var row=line.split(",");
+    var row=splitCSVRow(line);
     var t={};
     // Use a unique ID: timestamp base + row index*13 + random offset avoids collisions on bulk import
     var newId=Date.now()+ri*13+Math.floor(Math.random()*7);
@@ -4494,20 +4494,26 @@ function mobileHomeTab(){
   el.appendChild(streakCard);
 
   // ── Weekly Scoreboard ──
-  var weekStartM=new Date();weekStartM.setHours(0,0,0,0);weekStartM.setDate(weekStartM.getDate()-weekStartM.getDay());
+  var nowD2=new Date();
+  var wkDay=nowD2.getDay();
+  var wkStartDay=nowD2.getDate()-wkDay;
+  var wkStartD=new Date(nowD2.getFullYear(),nowD2.getMonth(),wkStartDay);
+  var wkStartMo=wkStartD.getMonth()+1;
+  var wkStartDt=wkStartD.getDate();
+  var wkStartYr=wkStartD.getFullYear();
   var wkTrades3=_mat.filter(function(t){
-    if(!t.date) return false;
-    var p=t.date.split("/");if(p.length!==3) return false;
-    var yr=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
-    var td=new Date(yr,parseInt(p[0],10)-1,parseInt(p[1],10));
-    td.setHours(0,0,0,0);
-    return td>=weekStartM;
+    var p=t.date.split("/");if(p.length!==3)return false;
+    var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
+    if(tYr!==wkStartYr) return tYr>wkStartYr;
+    if(tMo!==wkStartMo) return tMo>wkStartMo;
+    return tDt>=wkStartDt;
   });
 
   var ws3=calcStats(wkTrades3);
   var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct3=goalAmt3?Math.min(100,Math.round(Math.max(0,ws3.total)/goalAmt3*100)):0;
-  var wkLabelM="Wk of "+(weekStartM.getMonth()+1)+"/"+weekStartM.getDate();
+  var sunday3=new Date(nowD2);sunday3.setDate(nowD2.getDate()-nowD2.getDay());
+  var wkLabelM="Wk of "+(sunday3.getMonth()+1)+"/"+sunday3.getDate();
 
   var wkCard=document.createElement("div");wkCard.className="m-eq-card";wkCard.style.marginBottom="10px";
   var wkCardHdr=document.createElement("div");wkCardHdr.className="m-card-hdr";
@@ -4683,11 +4689,12 @@ function mobileAnalyticsTab(){
   var s=calcStats(_aat);
 
   // ── KPI grid ──
+  var _aatSorted=_aat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return da>db?1:da<db?-1:0;}).reverse();
   var _ddEq2=0,_ddPeak2=0,maxDD=0;
-  _aat.slice().reverse().forEach(function(t){_ddEq2+=t.d;if(_ddEq2>_ddPeak2)_ddPeak2=_ddEq2;var dd=_ddPeak2-_ddEq2;if(dd>maxDD)maxDD=dd;});
+  _aatSorted.forEach(function(t){_ddEq2+=t.d;if(_ddEq2>_ddPeak2)_ddPeak2=_ddEq2;var dd=_ddPeak2-_ddEq2;if(dd>maxDD)maxDD=dd;});
   var profitFactor=Math.abs(s.avgL)>0?Math.abs(s.avgW/s.avgL):0;
   var bestStreak=0,curStreak=0,streakType2="";
-  _aat.slice().reverse().forEach(function(t){
+  _aatSorted.forEach(function(t){
     var type=t.d>0?"W":"L";if(type===streakType2){curStreak++;}else{streakType2=type;curStreak=1;}
     if(curStreak>bestStreak) bestStreak=curStreak;
   });
