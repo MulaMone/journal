@@ -2229,11 +2229,15 @@ function homeTab(){
   combCard.appendChild(combH);
 
   // This week's trades (Sun–Sat calendar week)
-  var wkStart2=new Date(nowD);wkStart2.setDate(nowD.getDate()-nowD.getDay());wkStart2.setHours(0,0,0,0);
+  var wkStartDate2=new Date(nowD);wkStartDate2.setDate(nowD.getDate()-nowD.getDay());
+  var wkStartStr2=pad(wkStartDate2.getMonth()+1)+"/"+pad(wkStartDate2.getDate())+"/"+String(wkStartDate2.getFullYear()).slice(2);
   var wkTrades2=_at.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
-    var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-    return td3>=wkStart2;
+    var yr=p[2].length===4?p[2].slice(2):p[2];
+    var norm=pad(parseInt(p[0]))+"/"+pad(parseInt(p[1]))+"/"+yr;
+    var wkYr=wkStartStr2.split("/")[2];
+    if(yr!==wkYr) return yr>wkYr;
+    return norm>=wkStartStr2;
   });
   var ws2=calcStats(wkTrades2);
 
@@ -4480,11 +4484,15 @@ function mobileHomeTab(){
 
   // ── Weekly Scoreboard ──
   var nowD2=new Date();
-  var wkStart3=new Date(nowD2);wkStart3.setDate(nowD2.getDate()-nowD2.getDay());wkStart3.setHours(0,0,0,0);
+  var wkStartDate3=new Date(nowD2);wkStartDate3.setDate(nowD2.getDate()-nowD2.getDay());
+  var wkStartStr3=pad(wkStartDate3.getMonth()+1)+"/"+pad(wkStartDate3.getDate())+"/"+String(wkStartDate3.getFullYear()).slice(2);
   var wkTrades3=_mat.filter(function(t){
     var p=t.date.split("/");if(p.length!==3)return false;
-    var td4=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
-    return td4>=wkStart3;
+    var yr=p[2].length===4?p[2].slice(2):p[2];
+    var norm=pad(parseInt(p[0]))+"/"+pad(parseInt(p[1]))+"/"+yr;
+    var wkYr=wkStartStr3.split("/")[2];
+    if(yr!==wkYr) return yr>wkYr;
+    return norm>=wkStartStr3;
   });
   var ws3=calcStats(wkTrades3);
   var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
