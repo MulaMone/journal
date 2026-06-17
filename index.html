@@ -3791,10 +3791,10 @@ function fmtImportDate(raw){
   // Strip time component after space (e.g. "05/28/2026 9:42 AM" → "05/28/2026")
   raw=raw.split(" ")[0];
   var p;
-  // YYYY-MM-DD or YYYY/MM/DD
+  // YYYY-MM-DD or YYYY/MM/DD — only when first segment is 4-digit year
   if(raw.length>=8&&(raw[4]==="-"||raw[4]==="/")){
     p=raw.split(raw[4]);
-    if(p.length>=3) return pad(parseInt(p[1]))+"/"+pad(parseInt(p[2]))+"/"+p[0].slice(2);
+    if(p.length>=3&&p[0].length===4) return pad(parseInt(p[1]))+"/"+pad(parseInt(p[2]))+"/"+p[0].slice(2);
   }
   // MM/DD/YYYY or M/D/YYYY
   p=raw.split("/");
