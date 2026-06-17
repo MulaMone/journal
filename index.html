@@ -584,12 +584,19 @@ function syncToCloud(){
     },
     updated_at:new Date().toISOString()
   };
+  // Hold the poll off until upload actually settles
+  _syncInFlight=true;
+  clearTimeout(_syncInFlightTimer);
   supaFetch("POST","edge_data",payload)
   .then(function(r){
     if(r.ok||r.status===201||r.status===204) updateSyncStatus("synced");
     else updateSyncStatus("error");
   })
-  .catch(function(){updateSyncStatus("error");});
+  .catch(function(){updateSyncStatus("error");})
+  .finally(function(){
+    _syncInFlight=false;
+    clearTimeout(_syncInFlightTimer);
+  });
 }
 
 function loadFromCloud(syncId,callback){
