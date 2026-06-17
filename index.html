@@ -4494,26 +4494,20 @@ function mobileHomeTab(){
   el.appendChild(streakCard);
 
   // ── Weekly Scoreboard ──
-  var nowD2=new Date();
-  var wkDay=nowD2.getDay();
-  var wkStartDay=nowD2.getDate()-wkDay;
-  var wkStartD=new Date(nowD2.getFullYear(),nowD2.getMonth(),wkStartDay);
-  var wkStartMo=wkStartD.getMonth()+1;
-  var wkStartDt=wkStartD.getDate();
-  var wkStartYr=wkStartD.getFullYear();
+  var weekStartM=new Date();weekStartM.setHours(0,0,0,0);weekStartM.setDate(weekStartM.getDate()-weekStartM.getDay());
   var wkTrades3=_mat.filter(function(t){
-    var p=t.date.split("/");if(p.length!==3)return false;
-    var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
-    if(tYr!==wkStartYr) return tYr>wkStartYr;
-    if(tMo!==wkStartMo) return tMo>wkStartMo;
-    return tDt>=wkStartDt;
+    if(!t.date) return false;
+    var p=t.date.split("/");if(p.length!==3) return false;
+    var yr=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
+    var td=new Date(yr,parseInt(p[0],10)-1,parseInt(p[1],10));
+    td.setHours(0,0,0,0);
+    return td>=weekStartM;
   });
 
   var ws3=calcStats(wkTrades3);
   var goalAmt3=State.wkGoal?parseGoal(State.wkGoal,2000):2000;
   var goalPct3=goalAmt3?Math.min(100,Math.round(Math.max(0,ws3.total)/goalAmt3*100)):0;
-  var sunday3=new Date(nowD2);sunday3.setDate(nowD2.getDate()-nowD2.getDay());
-  var wkLabelM="Wk of "+(sunday3.getMonth()+1)+"/"+sunday3.getDate();
+  var wkLabelM="Wk of "+(weekStartM.getMonth()+1)+"/"+weekStartM.getDate();
 
   var wkCard=document.createElement("div");wkCard.className="m-eq-card";wkCard.style.marginBottom="10px";
   var wkCardHdr=document.createElement("div");wkCardHdr.className="m-card-hdr";
