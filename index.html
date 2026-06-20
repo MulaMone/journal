@@ -852,7 +852,7 @@ var DEFAULT_TRADES=[
   {id:2,date:"05/28/26",time:"10:15",inst:"NQ",dir:"Short",entry:"18740.00",exit:"18712.50",ctr:"1",setup:"VWAP Fade",sess:"RTH Open",conf:"Extended above VWAP 2SD, rejected at VAH",post:"Quick fade, covered too early",ex:"B",ru:"A",emo:4,right:"Identified setup correctly",wrong:"Covered 15pts early, left $300 on table",pts:27.5,d:550,hl:false},
   {id:3,date:"05/27/26",time:"08:22",inst:"ES",dir:"Long",entry:"5265.00",exit:"5260.25",ctr:"2",setup:"POC",sess:"London",conf:"POC test overnight, EU session momentum",post:"Stopped out, structure broke below POC",ex:"C",ru:"B",emo:2,right:"Setup was valid pre-entry",wrong:"Ignored divergence in order flow before entry",pts:-4.75,d:-475,hl:false}
 ];
-var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"RTH VWAP",imp:"medium",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
+var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PDL",imp:"high",sess:"",builtin:true},{l:"GEx Gamma",imp:"high",sess:"Full RTH",builtin:true},{l:"RTH VWAP",imp:"medium",sess:"",builtin:true},{l:"VWAP",imp:"medium",sess:"",builtin:true},{l:"BIZZ",imp:"medium",sess:"Full RTH",builtin:true},{l:"ONH/ONL",imp:"low",sess:"Overnight",builtin:true},{l:"OPEN",imp:"low",sess:"RTH Open",builtin:true}];
 
 // ─── STATE ───────────────────────────────────────────────────────────
 function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn,ms);};}
@@ -935,7 +935,7 @@ var State={
   if(changed){State.levels=lvls;ss("levels",lvls);}
 
   // Update importances and rename VAH/VAL → VAH/VAL POC, remove POC
-  var BUILTIN_NAMES=["VAH/VAL/POC","PDH/PDL","RTH VWAP","VWAP","BIZZ","ONH/ONL","OPEN"];
+  var BUILTIN_NAMES=["VAH/VAL/POC","PDH/PDL","GEx Gamma","RTH VWAP","VWAP","BIZZ","ONH/ONL","OPEN"];
   State.levels.forEach(function(l){
     if(l.l==="VAH/VAL"||l.l==="VAH/VAL POC"||l.l==="VAH/VAL/POC"){l.l="VAH/VAL/POC";l.imp="high";}
     if(l.l==="VWAP") l.imp="medium";
@@ -948,6 +948,12 @@ var State={
     var pdhIdx=State.levels.findIndex(function(l){return l.l==="PDH/PDL";});
     var insertAt=pdhIdx>-1?pdhIdx+1:1;
     State.levels.splice(insertAt,0,{l:"RTH VWAP",imp:"medium",sess:"",builtin:true});
+  }
+  // Inject GEx Gamma at position #3 (after PDH/PDL) if missing
+  if(!State.levels.some(function(l){return l.l==="GEx Gamma";})){
+    var pdhIdx2=State.levels.findIndex(function(l){return l.l==="PDH/PDL";});
+    var gexAt=pdhIdx2>-1?pdhIdx2+1:2;
+    State.levels.splice(gexAt,0,{l:"GEx Gamma",imp:"high",sess:"Full RTH",builtin:true});
   }
   // Put VAH/VAL/POC first
   var vahIdx=State.levels.findIndex(function(l){return l.l==="VAH/VAL/POC";});
