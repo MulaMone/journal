@@ -3396,10 +3396,13 @@ function reviewTab(){
     // Day headers
     var DNAMES=["SUN","MON","TUE","WED","THU","FRI","SAT"];
     var _mob=isMobile();
-    var grid=div();grid.style.display="grid";grid.style.gridTemplateColumns="repeat(7,1fr)";grid.style.gap=_mob?"2px":"4px";
+    // On mobile, hide SAT column — 6-col grid Sun–Fri
+    var _cols=_mob?6:7;
+    var grid=div();grid.style.display="grid";grid.style.gridTemplateColumns="repeat("+_cols+",1fr)";grid.style.gap=_mob?"2px":"4px";
     DNAMES.forEach(function(d,di){
       var isSat=(di===6);var isSun=(di===0);
-      var dh=div();dh.style.cssText="text-align:center;font-size:"+(_mob?"10px":"16px")+";letter-spacing:"+(_mob?"0px":"2px")+";padding:"+(_mob?"5px 0":"8px 0")+";color:"+(isSat?"#ff6b3d":"var(--text3)")+";font-weight:700;";dh.textContent=d;grid.appendChild(dh);
+      if(_mob&&isSat) return; // skip SAT header on mobile
+      var dh=div();dh.style.cssText="text-align:center;font-size:"+(_mob?"11px":"16px")+";letter-spacing:"+(_mob?"0px":"2px")+";padding:"+(_mob?"5px 0":"8px 0")+";color:"+(isSat?"#ff6b3d":"var(--text3)")+";font-weight:700;";dh.textContent=d;grid.appendChild(dh);
     });
 
     // First day of month
@@ -3408,8 +3411,9 @@ function reviewTab(){
     var todayObj=new Date();
     var isCurrentMonth=todayObj.getMonth()===calMonth&&todayObj.getFullYear()===calYear;
 
-    // Empty cells before first day
-    for(var i=0;i<firstDay;i++){grid.appendChild(div());}
+    // Empty cells before first day (on mobile, SAT col removed so offset is same — Sun is still col 0)
+    var _emptyCount=_mob?Math.min(firstDay,6):firstDay;
+    for(var i=0;i<_emptyCount;i++){grid.appendChild(div());}
 
     // Day cells
     for(var d=1;d<=daysInMonth;d++){
@@ -3418,6 +3422,8 @@ function reviewTab(){
         var dow=(firstDay+day-1)%7; // 0=Sun,6=Sat
         var isSat=dow===6;
         var isSun=dow===0;
+        // On mobile skip Saturday cells entirely
+        if(_mob&&isSat) return;
         var isToday=isCurrentMonth&&todayObj.getDate()===day;
         var data=dayMap[day];
         var holiday=(!isSat&&!isSun)?getMarketHoliday(calMonth,day,calYear):null;
@@ -3439,7 +3445,7 @@ function reviewTab(){
         if(isToday){border="2px solid var(--ca)";}
         // Holiday + trade: thicker holiday-colored left accent
         var extraStyle=(data&&holiday)?"border-left:3px solid "+holCol+";":"";
-        cell.style.cssText="background:"+bg+";border:"+border+";"+extraStyle+"border-radius:4px;padding:"+(_mob?"5px 3px":"8px 6px")+";min-height:"+(_mob?"58px":"72px")+";cursor:"+(data?"pointer":"default")+";position:relative;";
+        cell.style.cssText="background:"+bg+";border:"+border+";"+extraStyle+"border-radius:4px;padding:"+(_mob?"5px 3px":"8px 6px")+";min-height:"+(_mob?"62px":"72px")+";cursor:"+(data?"pointer":"default")+";position:relative;";
 
         // Holiday indicator badge in top-right corner — shows when both data + holiday
         if(holiday&&data){
@@ -3450,20 +3456,20 @@ function reviewTab(){
         }
 
         var dnumColor=isToday?"var(--ca)":isSat?"#ff6b3d":(holiday&&!data?holCol:"var(--text2)");
-        var dnum=div();dnum.style.cssText="font-size:"+(_mob?"11px":"14px")+";font-weight:700;color:"+dnumColor+";margin-bottom:"+(_mob?"2px":"4px")+";";dnum.textContent=day;cell.appendChild(dnum);
+        var dnum=div();dnum.style.cssText="font-size:"+(_mob?"12px":"14px")+";font-weight:700;color:"+dnumColor+";margin-bottom:"+(_mob?"2px":"4px")+";";dnum.textContent=day;cell.appendChild(dnum);
         if(isSat&&!data){var closedLbl=div();closedLbl.style.cssText="font-size:9px;color:#ff6b3d50;letter-spacing:1px;margin-top:3px;";closedLbl.textContent="CLOSED";cell.appendChild(closedLbl);}
         if(holiday&&!data){
           var holLbl=div();holLbl.style.cssText="font-size:9px;color:"+holCol+";letter-spacing:1px;margin-top:3px;font-weight:700;";holLbl.textContent=holiday.type==="closed"?"CLOSED":"EARLY 1PM";cell.appendChild(holLbl);
           var holName=div();holName.style.cssText="font-size:8px;color:"+holCol+"99;letter-spacing:.5px;margin-top:2px;line-height:1.2;";holName.textContent=holiday.name;cell.appendChild(holName);
         }
         if(data){
-          var dpnl=div();dpnl.style.cssText="font-size:"+(_mob?"10px":"12px")+";font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
+          var dpnl=div();dpnl.style.cssText="font-size:"+(_mob?"11px":"12px")+";font-weight:700;color:"+pnlCol+";";dpnl.textContent=dol(data.pnl);cell.appendChild(dpnl);
           var wins=data.trades.filter(function(t){return t.d>0}).length;
           var losses=data.trades.filter(function(t){return t.d<0}).length;
           var wlRow=div();wlRow.style.cssText="display:flex;gap:"+(_mob?"2px":"4px")+";margin-top:2px;align-items:center;";
-          if(wins>0){var wEl=span();wEl.style.cssText="font-size:"+(_mob?"9px":"11px")+";font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
-          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:"+(_mob?"8px":"10px")+";color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
-          if(losses>0){var lEl=span();lEl.style.cssText="font-size:"+(_mob?"9px":"11px")+";font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
+          if(wins>0){var wEl=span();wEl.style.cssText="font-size:"+(_mob?"10px":"11px")+";font-weight:700;color:#00e676;";wEl.textContent=wins+"W";wlRow.appendChild(wEl);}
+          if(wins>0&&losses>0){var sep2=span();sep2.style.cssText="font-size:"+(_mob?"9px":"10px")+";color:var(--text3);";sep2.textContent="/";wlRow.appendChild(sep2);}
+          if(losses>0){var lEl=span();lEl.style.cssText="font-size:"+(_mob?"10px":"11px")+";font-weight:700;color:#ff4444;";lEl.textContent=losses+"L";wlRow.appendChild(lEl);}
           cell.appendChild(wlRow);
           // Holiday name footer when both
           if(holiday){
