@@ -1030,6 +1030,30 @@ function parseGoal(str,def){
 function grc(g){return "gr"+g}
 function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
 function pad(n){return n<10?"0"+n:n}
+// Returns the futures session date for a trade (rolls forward if time >= 17:00 ET)
+function tradingDay(t){
+  if(!t||!t.date) return t?t.date:"";
+  var p=t.date.split("/");if(p.length!==3) return t.date;
+  var m=parseInt(p[0],10)-1,dy=parseInt(p[1],10),yr=2000+parseInt(p[2],10);
+  var mins=0;
+  if(t.time){var tm=t.time.match(/(\d{1,2}):(\d{2})/);if(tm) mins=parseInt(tm[1],10)*60+parseInt(tm[2],10);}
+  // Futures session opens at 17:00 ET — trades at/after 17:00 belong to next calendar day
+  if(mins>=1020){ // 17*60=1020
+    var d2=new Date(yr,m,dy+1);
+    return pad(d2.getMonth()+1)+"/"+pad(d2.getDate())+"/"+String(d2.getFullYear()).slice(2);
+  }
+  return t.date;
+}
+// Returns today's session date (tomorrow's date if current time >= 17:00 ET)
+function sessionToday(){
+  var now=new Date();
+  var mins=now.getHours()*60+now.getMinutes();
+  if(mins>=1020){
+    var d2=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+    return pad(d2.getMonth()+1)+"/"+pad(d2.getDate())+"/"+String(d2.getFullYear()).slice(2);
+  }
+  return today();
+}
 
 // ─── SETUP HELPERS (multi-setup support) ─────────────────────────────
 var SETUP_COLORS={
@@ -1467,9 +1491,9 @@ function startClock(){
 }
 
 function renderTopbar(){
-  var td=today();
+  var td=sessionToday();
   var _at=activeTrades();
-  var todayTrades=_at.filter(function(t){return t.date===td});
+  var todayTrades=_at.filter(function(t){return tradingDay(t)===td});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
   var tW=todayTrades.filter(function(t){return t.d>0}).length;
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
@@ -1923,7 +1947,8 @@ function mobilePnlHeatmap(trades){
   var byDate={};
   trades.forEach(function(t){
     if(!t.date) return;
-    var p=t.date.split("/");if(p.length!==3)return;
+    var td=tradingDay(t);
+    var p=td.split("/");if(p.length!==3)return;
     if(parseInt(p[0])-1!==mo||2000+parseInt(p[2])!==yr) return;
     var key=p[0]+"/"+p[1];
     byDate[key]=(byDate[key]||0)+t.d;
@@ -2012,9 +2037,9 @@ function mobileStreakDots(trades,n){
 function homeTab(){
   if(isMobile()) return mobileHomeTab();
   var el=div();
-  var td=today();
+  var td=sessionToday();
   var _at=activeTrades();
-  var todayTrades=_at.filter(function(t){return t.date===td});
+  var todayTrades=_at.filter(function(t){return tradingDay(t)===td});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d},0);
   var tW=todayTrades.filter(function(t){return t.d>0}).length;
   var tL=todayTrades.filter(function(t){return t.d<0}).length;
@@ -2250,12 +2275,13 @@ function homeTab(){
   var weekStart=new Date();weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-weekStart.getDay());
   var wkTrades2=_at.filter(function(t){
     if(!t.date) return false;
-    var p=t.date.split("/");
+    var td2=tradingDay(t);
+    var p=td2.split("/");
     if(p.length!==3) return false;
     var yr=p[2].length===4?parseInt(p[2],10):2000+parseInt(p[2],10);
-    var td=new Date(yr,parseInt(p[0],10)-1,parseInt(p[1],10));
-    td.setHours(0,0,0,0);
-    return td>=weekStart;
+    var d2=new Date(yr,parseInt(p[0],10)-1,parseInt(p[1],10));
+    d2.setHours(0,0,0,0);
+    return d2>=weekStart;
   });
   var ws2=calcStats(wkTrades2);
 
@@ -2305,7 +2331,7 @@ function homeTab(){
   // Monthly Scoreboard
   var moNow=new Date();
   var moTrades=_at.filter(function(t){
-    var p=t.date.split("/");if(p.length!==3)return false;
+    var p=tradingDay(t).split("/");if(p.length!==3)return false;
     return parseInt(p[0])-1===moNow.getMonth()&&2000+parseInt(p[2])===moNow.getFullYear();
   });
   var moS=calcStats(moTrades);
@@ -3383,11 +3409,12 @@ function reviewTab(){
     // Build day→trades map using MM/DD/YY format
     var dayMap={};
     _at.forEach(function(t){
-      // parse MM/DD/YY
-      var parts=t.date.split("/");if(parts.length!==3)return;
-      var tm=parseInt(parts[0])-1,td2=parseInt(parts[1]),ty=2000+parseInt(parts[2]);
+      // parse MM/DD/YY using trading session date
+      var td2=tradingDay(t);
+      var parts=td2.split("/");if(parts.length!==3)return;
+      var tm=parseInt(parts[0])-1,tday=parseInt(parts[1]),ty=2000+parseInt(parts[2]);
       if(tm===calMonth&&ty===calYear){
-        var key=td2;
+        var key=tday;
         if(!dayMap[key])dayMap[key]={pnl:0,count:0,trades:[]};
         dayMap[key].pnl+=t.d;dayMap[key].count++;dayMap[key].trades.push(t);
       }
@@ -3513,7 +3540,7 @@ function reviewTab(){
     el.appendChild(calCard);
 
     // Equity curve for the month
-    var monthTrades=_at.filter(function(t){var p=t.date.split("/");return p.length===3&&parseInt(p[0])-1===calMonth&&2000+parseInt(p[2])===calYear;});
+    var monthTrades=_at.filter(function(t){var p=tradingDay(t).split("/");return p.length===3&&parseInt(p[0])-1===calMonth&&2000+parseInt(p[2])===calYear;});
     if(monthTrades.length){
       var eqCard=div("card mb12");var eqH=div("card-h");var eqT=div("card-t");eqT.textContent=MNAMES[calMonth]+" Equity Curve";eqH.appendChild(eqT);eqCard.appendChild(eqH);eqCard.appendChild(equitySVG(monthTrades,760,170));el.appendChild(eqCard);
     }
@@ -3530,7 +3557,8 @@ function reviewTab(){
     function swkKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
     var swkMap={};
     _at.forEach(function(t){
-      var p=t.date.split("/");if(p.length!==3)return;
+      var td3str=tradingDay(t);
+      var p=td3str.split("/");if(p.length!==3)return;
       var td3=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
       var ws3=swkStart(td3);var k=swkKey(ws3);
       if(!swkMap[k])swkMap[k]={start:ws3,trades:[]};
@@ -3649,7 +3677,7 @@ function reviewTab(){
     var DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri"];
     var dayData=DAY_NAMES.map(function(dn,di){
       var dayTs=wkTrades.filter(function(t){
-        if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;
+        if(!t.date)return false;var p=tradingDay(t).split("/");if(p.length!==3)return false;
         var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
         return dt.getDay()===di;
       });
@@ -3760,13 +3788,13 @@ function reviewTab(){
     el.appendChild(dg2);
 
     var dDOWS=["Sun","Mon","Tue","Wed","Thu","Fri"];
-    var dDowData=dDOWS.map(function(dw,di){var ts=_at.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return dt.getDay()===di;});return{l:dw,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};});
+    var dDowData=dDOWS.map(function(dw,di){var ts=_at.filter(function(t){if(!t.date)return false;var p=tradingDay(t).split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return dt.getDay()===di;});return{l:dw,v:ts.reduce(function(a,t){return a+t.d},0),n:ts.length};});
     var ddowCard=div("card mt12");var ddowH=div("card-h");var ddowT=div("card-t");ddowT.textContent="P&L by Day of Week";ddowH.appendChild(ddowT);ddowCard.appendChild(ddowH);
     ddowCard.appendChild(barSVG(dDowData,760,200));
     var ddowTbl=h("table",{className:"tbl"});var ddowThead=h("thead");var ddowHr=h("tr");
     ["DAY","TRADES","WIN RATE","TOTAL P&L","AVG TRADE"].forEach(function(hd){ddowHr.appendChild(h("th",{},[hd]));});ddowThead.appendChild(ddowHr);ddowTbl.appendChild(ddowThead);
     var ddowTbody=h("tbody");
-    dDowData.forEach(function(dw){var ts=_at.filter(function(t){if(!t.date)return false;var p=t.date.split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(dw.l)===dt.getDay();});var wins=ts.filter(function(t){return t.d>0}).length;var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";var avg=ts.length?(dw.v/ts.length).toFixed(0):0;var dr=h("tr");dr.appendChild(h("td",{className:"fw7"},[dw.l]));dr.appendChild(h("td",{className:"m"},[ts.length]));dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));var dptd=h("td",{className:"fw7 "+clr(dw.v)});dptd.textContent=dol(dw.v);dptd.style.cssText=dw.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":dw.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(dptd);var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(aptd);ddowTbody.appendChild(dr);});
+    dDowData.forEach(function(dw){var ts=_at.filter(function(t){if(!t.date)return false;var p=tradingDay(t).split("/");if(p.length!==3)return false;var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));return ["Sun","Mon","Tue","Wed","Thu","Fri"].indexOf(dw.l)===dt.getDay();});var wins=ts.filter(function(t){return t.d>0}).length;var wr=ts.length?(wins/ts.length*100).toFixed(0):"—";var avg=ts.length?(dw.v/ts.length).toFixed(0):0;var dr=h("tr");dr.appendChild(h("td",{className:"fw7"},[dw.l]));dr.appendChild(h("td",{className:"m"},[ts.length]));dr.appendChild(h("td",{className:wr>=50?"ac":"r"},[wr+"%"]));var dptd=h("td",{className:"fw7 "+clr(dw.v)});dptd.textContent=dol(dw.v);dptd.style.cssText=dw.v>0?"background:#00e67630;border-radius:3px;padding:8px 10px":dw.v<0?"background:#ff444430;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(dptd);var aptd=h("td",{className:clr(avg)});aptd.textContent=dol(avg);aptd.style.cssText=avg>0?"background:#00e67618;border-radius:3px;padding:8px 10px":avg<0?"background:#ff444418;border-radius:3px;padding:8px 10px":"padding:8px 10px";dr.appendChild(aptd);ddowTbody.appendChild(dr);});
     ddowTbl.appendChild(ddowTbody);var ddowWrap=div("tbl-wrap");ddowWrap.appendChild(ddowTbl);ddowCard.appendChild(ddowWrap);el.appendChild(ddowCard);
 
     var dsessCard=div("card mt12");var dsessH=div("card-h");var dsessT=div("card-t");dsessT.textContent="P&L by Session";dsessH.appendChild(dsessT);dsessCard.appendChild(dsessH);
@@ -4468,8 +4496,8 @@ function updateTVWidget(){render();}
 // ─── MOBILE HOME TAB ─────────────────────────────────────────────────
 function mobileHomeTab(){
   var el=document.createElement("div");
-  var td=today();
-  var _mat=activeTrades();var todayTrades=_mat.filter(function(t){return t.date===td;});
+  var td=sessionToday();
+  var _mat=activeTrades();var todayTrades=_mat.filter(function(t){return tradingDay(t)===td;});
   var tPnl=todayTrades.reduce(function(a,t){return a+t.d;},0);
   var tW=todayTrades.filter(function(t){return t.d>0;}).length;
   var tL=todayTrades.filter(function(t){return t.d<0;}).length;
@@ -4516,7 +4544,7 @@ function mobileHomeTab(){
   var wkStartDt=wkStartD.getDate();
   var wkStartYr=wkStartD.getFullYear();
   var wkTrades3=_mat.filter(function(t){
-    var p=t.date.split("/");if(p.length!==3)return false;
+    var p=tradingDay(t).split("/");if(p.length!==3)return false;
     var tMo=parseInt(p[0]),tDt=parseInt(p[1]),tYr=2000+parseInt(p[2]);
     if(tYr!==wkStartYr) return tYr>wkStartYr;
     if(tMo!==wkStartMo) return tMo>wkStartMo;
@@ -4559,7 +4587,7 @@ function mobileHomeTab(){
   // ── Monthly Scoreboard ──
   var moNow2=new Date();
   var moTrades2=_mat.filter(function(t){
-    var p=t.date.split("/");if(p.length!==3)return false;
+    var p=tradingDay(t).split("/");if(p.length!==3)return false;
     return parseInt(p[0])-1===moNow2.getMonth()&&2000+parseInt(p[2])===moNow2.getFullYear();
   });
   var moS2=calcStats(moTrades2);
@@ -4655,7 +4683,7 @@ function mobileLogTab(){
   // Group by date
   var dates=[];var byDate={};
   _logAt.forEach(function(t){
-    var d=t.date||"Unknown";
+    var d=tradingDay(t)||"Unknown";
     if(!byDate[d]){byDate[d]=[];dates.push(d);}
     byDate[d].push(t);
   });
@@ -4782,7 +4810,7 @@ function mobileAnalyticsTab(){
   var dowData2=DOWS2.map(function(d){
     var ts=_aat.filter(function(t){
       if(!t.date) return false;
-      var p=t.date.split("/");if(p.length!==3)return false;
+      var p=tradingDay(t).split("/");if(p.length!==3)return false;
       var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
       return dt.getDay()===DOW_IDX[d];
     });
