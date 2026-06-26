@@ -605,10 +605,10 @@ function loadFromCloud(syncId,callback){
   .then(function(data){
     if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
     var d=data[0];
-    // Never overwrite local trades with fewer cloud trades — protects against poll eating a just-saved trade
+    // Never overwrite local trades while a sync upload is still in flight — protects against poll eating a just-saved trade
     if(d.trades){
       if(_syncInFlight){if(callback) callback(false);return;}
-      if(d.trades.length>=State.trades.length) State.trades=d.trades;
+      State.trades=d.trades;
     }
     if(d.levels) State.levels=d.levels;
     if(d.week_levels) State.weekLevels=d.week_levels;
