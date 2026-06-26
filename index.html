@@ -591,9 +591,11 @@ function syncToCloud(){
   .then(function(r){
     if(r.ok||r.status===201||r.status===204) updateSyncStatus("synced");
     else updateSyncStatus("error");
+    _syncInFlight=false;
+    clearTimeout(_syncInFlightTimer);
   })
-  .catch(function(){updateSyncStatus("error");})
-  .finally(function(){
+  .catch(function(){
+    updateSyncStatus("error");
     _syncInFlight=false;
     clearTimeout(_syncInFlightTimer);
   });
