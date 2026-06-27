@@ -2132,7 +2132,7 @@ function homeTab(){
   var rthLeft=div();rthLeft.style.cssText="display:flex;flex-direction:column;gap:5px;";
   rthLeft.innerHTML='<div style="color:var(--accent)">2–3 trades daily</div><div style="color:#b06aff">Mark 30min &amp; 1hr POC</div>';
   var rthRight=div();rthRight.style.cssText="display:flex;flex-direction:column;gap:5px;text-align:right;";
-  rthRight.innerHTML='<div style="color:var(--green)">9:30–12pm &nbsp;Hi R:R</div><div style="color:var(--amber)">After 12pm &nbsp;Lo R:R</div>';
+  rthRight.innerHTML='<div style="color:var(--green)">9:30–12pm &nbsp;Hi R:R</div><div style="color:var(--amber)">Wait for 30min session close</div>';
   rthDiv.appendChild(rthLeft);rthDiv.appendChild(rthRight);
   g4.appendChild(makeChip("RTH RULES",rthDiv,"",""));
   // Current streak
