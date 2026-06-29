@@ -3078,7 +3078,35 @@ function logTab(){
   thead.appendChild(hr);tbl.appendChild(thead);
   var tbody=h("tbody");
 
+  // Group by trading day
+  var _logDates=[];var _logByDate={};
   _pageTrades.forEach(function(t){
+    var d=tradingDay(t)||"Unknown";
+    if(!_logByDate[d]){_logByDate[d]=[];_logDates.push(d);}
+    _logByDate[d].push(t);
+  });
+
+  _logDates.forEach(function(dateKey){
+    // Day separator row
+    var parts=dateKey.split("/");var dowStr="";
+    if(parts.length===3){try{var dt=new Date(2000+parseInt(parts[2]),parseInt(parts[0])-1,parseInt(parts[1]));dowStr=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getDay()];}catch(e){}}
+    var dayPnl=_logByDate[dateKey].reduce(function(a,t){return a+t.d;},0);
+    var dayCount=_logByDate[dateKey].length;
+    var sepTr=h("tr");
+    var sepTd=h("td");sepTd.colSpan=15;
+    sepTd.style.cssText="background:#060f20;border-top:1px solid #1a3260;border-bottom:1px solid #1a3260;padding:4px 10px;";
+    var sepInner=div();sepInner.style.cssText="display:flex;align-items:center;justify-content:space-between;";
+    var sepLeft=div();sepLeft.style.cssText="display:flex;align-items:center;gap:10px;";
+    var sepDate=div();sepDate.style.cssText="font-size:11px;letter-spacing:2px;color:#c9a84c;font-weight:700;";sepDate.textContent=dateKey;
+    var sepDow=div();sepDow.style.cssText="font-size:10px;color:#1e3d73;letter-spacing:1px;";sepDow.textContent=dowStr;
+    var sepCt=div();sepCt.style.cssText="font-size:10px;color:#1a3260;letter-spacing:1px;";sepCt.textContent="· "+dayCount+" trade"+(dayCount!==1?"s":"");
+    sepLeft.appendChild(sepDate);if(dowStr)sepLeft.appendChild(sepDow);sepLeft.appendChild(sepCt);
+    var sepPnl=div();sepPnl.style.cssText="font-size:12px;font-weight:700;letter-spacing:1px;color:"+(dayPnl>=0?"#00e676":"#ff4444")+";";
+    sepPnl.textContent=(dayPnl>=0?"+":"")+dol(dayPnl);
+    sepInner.appendChild(sepLeft);sepInner.appendChild(sepPnl);
+    sepTd.appendChild(sepInner);sepTr.appendChild(sepTd);tbody.appendChild(sepTr);
+
+    _logByDate[dateKey].forEach(function(t){
     var tr=h("tr",{className:"tr-click"+(State.expanded===t.id?" exp-open":"")});
     tr.addEventListener("click",function(){State.expanded=State.expanded===t.id?null:t.id;render();});
     tr.appendChild(h("td",{},[t.date]));
@@ -3170,7 +3198,8 @@ function logTab(){
       eg2.appendChild(l);eg2.appendChild(r);eg2.appendChild(sp);exDiv.appendChild(eg2);
       exTd.appendChild(exDiv);exRow.appendChild(exTd);tbody.appendChild(exRow);
     }
-  });
+    });  // end inner trade forEach
+  });  // end _logDates forEach
   tbl.appendChild(tbody);var tblWrap=div("tbl-wrap");tblWrap.appendChild(tbl);tcard.appendChild(tblWrap);el.appendChild(tcard);
 
   // ── Pagination bar ──
