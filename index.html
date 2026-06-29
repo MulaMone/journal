@@ -777,7 +777,13 @@ var SETUP_GROUPS=[
   {label:"Live Reads",setups:["Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion"]},
   {label:"Tape Reads",setups:["Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"]}
 ];
-var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,Other:1};
+var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,
+// Forex majors/minors — standard lot pip value in USD
+EURUSD:10,GBPUSD:10,AUDUSD:10,NZDUSD:10,USDCAD:10,USDCHF:10,USDJPY:9.09,
+EURGBP:10,EURJPY:9.09,GBPJPY:9.09,AUDJPY:9.09,EURAUD:10,EURNZD:10,GBPAUD:10,GBPCAD:10,GBPCHF:10,GBPNZD:10,CADJPY:9.09,CHFJPY:9.09,AUDCAD:10,AUDCHF:10,AUDNZD:10,NZDJPY:9.09,NZDCAD:10,NZDCHF:10,EURCAD:10,EURCHF:10,CADCHF:10,
+// CFD indices (per-point value per lot — approximate, broker-dependent)
+US500:1,US30:1,US100:1,UK100:1,GER40:1,FRA40:1,AUS200:1,JPN225:1,HKG50:1,
+Other:1};
 // CME minimum price increments (snap entry/exit to valid tick)
 var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
 function snapToTick(val,inst){
@@ -3824,6 +3830,7 @@ function reviewTab(){
 
 function detectInstrument(s){
   var c=(s||"").toUpperCase().split(" ").join("").split(".")[0];
+  // CME Futures (micro first)
   if(c.indexOf("MES")===0) return "MES";
   if(c.indexOf("MNQ")===0) return "MNQ";
   if(c.indexOf("M2K")===0) return "M2K";
@@ -3834,6 +3841,23 @@ function detectInstrument(s){
   if(c.indexOf("YM")===0)  return "YM";
   if(c.indexOf("CL")===0)  return "CL";
   if(c.indexOf("GC")===0)  return "GC";
+  // CFD Indices (broker suffixes like .M .cash stripped above)
+  if(c==="US500"||c==="SP500"||c==="SPX500") return "US500";
+  if(c==="US30"||c==="DOW"||c==="DJ30")      return "US30";
+  if(c==="US100"||c==="NAS100"||c==="NDX")   return "US100";
+  if(c==="UK100"||c==="FTSE")                return "UK100";
+  if(c==="GER40"||c==="GER30"||c==="DAX")    return "GER40";
+  if(c==="FRA40"||c==="CAC40")               return "FRA40";
+  if(c==="AUS200"||c==="ASX200")             return "AUS200";
+  if(c==="JPN225"||c==="JP225")              return "JPN225";
+  if(c==="HKG50"||c==="HK50")               return "HKG50";
+  // Forex pairs
+  var fc=c.replace(/[^A-Z]/g,"");
+  var FOREX_PAIRS=["EURUSD","GBPUSD","AUDUSD","NZDUSD","USDCAD","USDCHF","USDJPY",
+    "EURGBP","EURJPY","GBPJPY","AUDJPY","EURAUD","EURNZD","GBPAUD","GBPCAD","GBPCHF",
+    "GBPNZD","CADJPY","CHFJPY","AUDCAD","AUDCHF","AUDNZD","NZDJPY","NZDCAD","NZDCHF",
+    "EURCAD","EURCHF","CADCHF"];
+  for(var i=0;i<FOREX_PAIRS.length;i++){if(fc===FOREX_PAIRS[i]) return FOREX_PAIRS[i];}
   return "Other";
 }
 
@@ -3946,6 +3970,30 @@ function parseCSV(text){
 
   var isTVPos=(header.indexOf("boughttimestamp")>-1||header.indexOf("bought timestamp")>-1)&&(header.indexOf("soldtimestamp")>-1||header.indexOf("sold timestamp")>-1)&&(header.indexOf("buyprice")>-1||header.indexOf("avg. buy")>-1||header.indexOf("buy price")>-1);
   var isNT=!isTVPos&&(header.indexOf("market pos.")>-1||header.indexOf("entry time")>-1||(header.indexOf("entry price")>-1&&header.indexOf("exit price")>-1&&header.indexOf("profit")>-1));
+  // Forex/CFD broker CSV: open time + close time + side + lots + net p&l
+  var isForex=!isTVPos&&!isNT&&(header.indexOf("open time")>-1||header.indexOf("open price")>-1)&&(header.indexOf("close time")>-1||header.indexOf("close price")>-1)&&(header.indexOf("lots")>-1||header.indexOf("volume")>-1);
+  // Parse "Jun 28, 2026, 10:52 PM UTC" → ET date/time
+  function parseForexDT(raw){
+    if(!raw) return {date:today(),time:""};
+    raw=(raw+"").trim().replace(/^"|"$/g,"");
+    var m=raw.match(/(\w{3})\s+(\d{1,2}),\s*(\d{4}),?\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?\s*(\w+)?/i);
+    if(m){
+      var MONTHS={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      var mo=MONTHS[(m[1]||"jan").toLowerCase()]||0;
+      var dy=parseInt(m[2]);var yr=parseInt(m[3]);
+      var hh=parseInt(m[4]);var mm=m[5];
+      var ampm=(m[6]||"").toUpperCase();var tz=(m[7]||"").toUpperCase();
+      if(ampm==="PM"&&hh<12) hh+=12;
+      if(ampm==="AM"&&hh===12) hh=0;
+      // UTC to ET offset: -4 (summer DST), -5 (winter)
+      var utcMs=Date.UTC(yr,mo,dy,hh,parseInt(mm),0);
+      var etOffset=(function(){var d=new Date(utcMs);var jan=new Date(Date.UTC(d.getUTCFullYear(),0,1));var jul=new Date(Date.UTC(d.getUTCFullYear(),6,1));var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;return isDST?4:5;})();
+      var etMs=utcMs-(etOffset*3600000);
+      var ed=new Date(etMs);
+      return {date:pad(ed.getUTCMonth()+1)+"/"+pad(ed.getUTCDate())+"/"+String(ed.getUTCFullYear()).slice(2),time:pad(ed.getUTCHours())+":"+pad(ed.getUTCMinutes())};
+    }
+    return {date:fmtImportDate(raw),time:fmtImportTime(raw)};
+  }
   var trades=[];
 
   rows.forEach(function(line,ri){
@@ -3995,6 +4043,27 @@ function parseCSV(text){
       t={id:newId,date:fmtImportDate(ntDateStr),time:ntTime,inst:ntInst,dir:ntDir,entry:ntEntry,exit:ntExit,ctr:ntQty,setup:"",sess:autoSession(ntTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(ntPts.toFixed(2)),d:ntDollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
+    } else if(isForex){
+      // ── Forex / CFD Broker CSV ──
+      var fxSym=col(row,["symbol","instrument","currency pair","pair"]);
+      var fxInst=detectInstrument(fxSym)||"Other";
+      var fxSideRaw=col(row,["side","type","direction","buy/sell","action"]).toUpperCase();
+      var fxDir=fxSideRaw.indexOf("BUY")>-1||fxSideRaw.indexOf("LONG")>-1?"Long":"Short";
+      var fxLots=cleanNum(col(row,["lots","volume","size","qty","quantity"]))||"1";
+      var fxEntry=cleanNum(col(row,["open price","entry price","entry","open"]));
+      var fxExit=cleanNum(col(row,["close price","exit price","exit","close"]));
+      var fxOpenRaw=col(row,["open time","entry time","open","time"]);
+      var fxCloseRaw=col(row,["close time","exit time","close time"]);
+      var fxDT=parseForexDT(fxOpenRaw||fxCloseRaw);
+      // Use net P&L directly (already includes commission/swap); don't re-subtract commission
+      var fxNetPnl=cleanNum(col(row,["net profit/loss","net p/l","net profit","net p&l","profit/loss","profit","p&l","pnl"]));
+      var fxGrossPnl=cleanNum(col(row,["gross profit/loss","gross p/l","gross profit"]));
+      var fxPnl=fxNetPnl||fxGrossPnl;
+      // pts = raw price diff (pips for forex, points for indices)
+      var fxPts=fxEntry&&fxExit?(parseFloat(fxExit)-parseFloat(fxEntry))*(fxDir==="Long"?1:-1):0;
+      var fxDollar=fxPnl?parseFloat(parseFloat(fxPnl).toFixed(2)):parseFloat((fxPts*((TICK[fxInst]||1)*parseFloat(fxLots))).toFixed(2));
+      t={id:newId,date:fxDT.date,time:fxDT.time,inst:fxInst,dir:fxDir,entry:fxEntry,exit:fxExit,ctr:fxLots,setup:"",sess:autoSession(fxDT.time),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(fxPts.toFixed(4)),d:fxDollar,hl:false};
+      if(!t.inst||t.inst==="") t.inst="Other";
     } else {
       var contract2=col(row,["contract","symbol","instrument","product"]);
       var inst2=detectInstrument(contract2);
