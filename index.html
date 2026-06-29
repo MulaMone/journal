@@ -3098,8 +3098,8 @@ function logTab(){
     var sepInner=div();sepInner.style.cssText="display:flex;align-items:center;justify-content:space-between;";
     var sepLeft=div();sepLeft.style.cssText="display:flex;align-items:center;gap:10px;";
     var sepDate=div();sepDate.style.cssText="font-size:11px;letter-spacing:2px;color:#c9a84c;font-weight:700;";sepDate.textContent=dateKey;
-    var sepDow=div();sepDow.style.cssText="font-size:10px;color:#1e3d73;letter-spacing:1px;";sepDow.textContent=dowStr;
-    var sepCt=div();sepCt.style.cssText="font-size:10px;color:#1a3260;letter-spacing:1px;";sepCt.textContent="· "+dayCount+" trade"+(dayCount!==1?"s":"");
+    var sepDow=div();sepDow.style.cssText="font-size:10px;color:#4a6fa5;letter-spacing:1px;";sepDow.textContent=dowStr;
+    var sepCt=div();sepCt.style.cssText="font-size:10px;color:#4a6fa5;letter-spacing:1px;";sepCt.textContent="· "+dayCount+" trade"+(dayCount!==1?"s":"");
     sepLeft.appendChild(sepDate);if(dowStr)sepLeft.appendChild(sepDow);sepLeft.appendChild(sepCt);
     var sepPnl=div();sepPnl.style.cssText="font-size:12px;font-weight:700;letter-spacing:1px;color:"+(dayPnl>=0?"#00e676":"#ff4444")+";";
     sepPnl.textContent=(dayPnl>=0?"+":"")+dol(dayPnl);
