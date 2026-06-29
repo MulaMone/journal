@@ -919,7 +919,9 @@ var State={
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
   moGoal:ls("moGoal","$8,000 net P&L. Build out playbook with 20+ tagged trades per setup."),
   accounts:ls("accounts",[]),
-  activeAccount:ls("activeAccount",null)
+  activeAccount:ls("activeAccount",null),
+  mLogFilter:{dir:"",setup:"",sess:"",inst:""},
+  mLogFilterOpen:false
 };
 // Migrate old PDH/PDL split levels to combined
 (function(){
@@ -4726,7 +4728,17 @@ function mobileHomeTab(){
 function mobileLogTab(){
   var el=document.createElement("div");
 
-  var _allLogAt=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
+  // Apply filters
+  var _f=State.mLogFilter||{};
+  var _baseAt=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
+  var _allLogAt=_baseAt.filter(function(t){
+    if(_f.dir&&t.dir!==_f.dir) return false;
+    if(_f.setup&&t.setup!==_f.setup) return false;
+    if(_f.sess&&t.sess!==_f.sess) return false;
+    if(_f.inst&&t.inst!==_f.inst) return false;
+    return true;
+  });
+  var _activeFilters=(_f.dir?1:0)+(_f.setup?1:0)+(_f.sess?1:0)+(_f.inst?1:0);
   var _mPageSize=State.logPageSize||50;
   var _mTotalPages=Math.max(1,Math.ceil(_allLogAt.length/_mPageSize));
   if(State.logPage>=_mTotalPages) State.logPage=_mTotalPages-1;
@@ -4735,10 +4747,71 @@ function mobileLogTab(){
 
   // Header row
   var hdr=document.createElement("div");hdr.className="m-sh";
-  hdr.innerHTML='<span>Trade Log — '+_allLogAt.length+' trades</span>';
-  var filterBtn=document.createElement("span");filterBtn.style.cssText="font-size:8px;color:#00d4d4;border:1px solid #00d4d430;padding:2px 9px;border-radius:4px;cursor:pointer;";filterBtn.textContent="FILTER";
+  hdr.innerHTML='<span>Trade Log — '+_allLogAt.length+' trades'+('<span style="color:var(--text3);font-size:9px;"> / '+_baseAt.length+' total</span>')+'</span>';
+  var filterBtn=document.createElement("span");
+  filterBtn.style.cssText="font-size:8px;border:1px solid "+(_activeFilters?"var(--ca)":"#00d4d430")+";color:"+(_activeFilters?"var(--ca)":"#00d4d4")+";padding:2px 9px;border-radius:4px;cursor:pointer;background:"+(_activeFilters?"var(--ca15)":"transparent")+";";
+  filterBtn.textContent=_activeFilters?"FILTER ("+_activeFilters+")":"FILTER";
+  filterBtn.onclick=function(){State.mLogFilterOpen=!State.mLogFilterOpen;render();};
   hdr.appendChild(filterBtn);
   el.appendChild(hdr);
+
+  // Filter panel
+  if(State.mLogFilterOpen){
+    var fp=document.createElement("div");
+    fp.style.cssText="background:var(--panel2);border:1px solid var(--border2);border-radius:6px;padding:12px;margin-bottom:10px;";
+
+    // Collect unique values from ALL trades (not filtered)
+    var allInsts=[],allSetups=[],allSess=[];
+    _baseAt.forEach(function(t){
+      if(t.inst&&allInsts.indexOf(t.inst)===-1) allInsts.push(t.inst);
+      if(t.setup&&allSetups.indexOf(t.setup)===-1) allSetups.push(t.setup);
+      if(t.sess&&allSess.indexOf(t.sess)===-1) allSess.push(t.sess);
+    });
+    allInsts.sort();allSetups.sort();allSess.sort();
+
+    function filterRow(label,key,opts){
+      var row=document.createElement("div");
+      row.style.cssText="margin-bottom:8px;";
+      var lbl=document.createElement("div");
+      lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:5px;";
+      lbl.textContent=label;
+      row.appendChild(lbl);
+      var btns=document.createElement("div");
+      btns.style.cssText="display:flex;flex-wrap:wrap;gap:5px;";
+      // "All" chip
+      var allChip=document.createElement("span");
+      var isAll=!_f[key];
+      allChip.style.cssText="font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;border:1px solid "+(isAll?"var(--ca)":"var(--border)")+";color:"+(isAll?"var(--ca)":"var(--text3)")+";background:"+(isAll?"var(--ca15)":"var(--panel3)")+";";
+      allChip.textContent="ALL";
+      allChip.onclick=function(){State.mLogFilter[key]="";State.logPage=0;render();};
+      btns.appendChild(allChip);
+      opts.forEach(function(v){
+        var chip=document.createElement("span");
+        var sel=_f[key]===v;
+        chip.style.cssText="font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;border:1px solid "+(sel?"var(--ca)":"var(--border)")+";color:"+(sel?"var(--ca)":"var(--text2)")+";background:"+(sel?"var(--ca15)":"var(--panel3)")+";";
+        chip.textContent=v;
+        chip.onclick=function(){State.mLogFilter[key]=v;State.logPage=0;render();};
+        btns.appendChild(chip);
+      });
+      row.appendChild(btns);
+      fp.appendChild(row);
+    }
+
+    filterRow("Direction","dir",["Long","Short"]);
+    if(allInsts.length>1) filterRow("Instrument","inst",allInsts);
+    if(allSess.length>1) filterRow("Session","sess",allSess);
+    if(allSetups.length>0) filterRow("Setup","setup",allSetups);
+
+    // Clear all
+    if(_activeFilters){
+      var clrBtn=document.createElement("button");
+      clrBtn.style.cssText="margin-top:4px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--red);color:var(--red);padding:4px 14px;border-radius:3px;cursor:pointer;font-family:'Courier New',monospace;";
+      clrBtn.textContent="CLEAR ALL FILTERS";
+      clrBtn.onclick=function(){State.mLogFilter={dir:"",setup:"",sess:"",inst:""};State.logPage=0;render();};
+      fp.appendChild(clrBtn);
+    }
+    el.appendChild(fp);
+  }
 
   // Add/edit form (reuse existing tradeForm)
   if(State.adding||State.editing){
