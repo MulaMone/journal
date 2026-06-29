@@ -2989,7 +2989,16 @@ function tradeForm(existing){
 // ─── LOG TAB ──────────────────────────────────────────────────────────
 function logTab(){
   if(isMobile()) return mobileLogTab();
-  var _allTrades=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
+  var _f=State.mLogFilter||{};
+  var _baseTrades=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
+  var _allTrades=_baseTrades.filter(function(t){
+    if(_f.dir&&t.dir!==_f.dir) return false;
+    if(_f.setup&&t.setup!==_f.setup) return false;
+    if(_f.sess&&t.sess!==_f.sess) return false;
+    if(_f.inst&&t.inst!==_f.inst) return false;
+    return true;
+  });
+  var _activeFilters=(_f.dir?1:0)+(_f.setup?1:0)+(_f.sess?1:0)+(_f.inst?1:0);
   var _pageSize=State.logPageSize||50;
   var _totalPages=Math.max(1,Math.ceil(_allTrades.length/_pageSize));
   if(State.logPage>=_totalPages) State.logPage=_totalPages-1;
@@ -2997,12 +3006,69 @@ function logTab(){
   var _pageTrades=_allTrades.slice(_start,_start+_pageSize);
   var el=div();
   var hrow=div("rjb mb12");
-  var sh=div("sh");sh.style.marginBottom="0";sh.innerHTML="Trade Log — "+_allTrades.length+" entries ("+State.trades.length+" total)";hrow.appendChild(sh);
+  var sh=div("sh");sh.style.marginBottom="0";
+  sh.innerHTML="Trade Log &mdash; <b style='color:var(--text)'>"+_allTrades.length+"</b> entries"+(_activeFilters?" <span style='color:var(--text3);font-size:11px;'>/ "+_baseTrades.length+" total</span>":"");
+  hrow.appendChild(sh);
   var btnRow=div("row gap8");
+  // Filter toggle button
+  var fToggle=h("button",{className:"btn",style:"border-color:"+(_activeFilters?"var(--ca)":"var(--border2)")+";color:"+(_activeFilters?"var(--ca)":"var(--text3)")+";background:"+(_activeFilters?"var(--ca15)":"transparent")+";"});
+  fToggle.textContent=_activeFilters?"▼ FILTER ("+_activeFilters+")":"▼ FILTER";
+  fToggle.onclick=function(){State.mLogFilterOpen=!State.mLogFilterOpen;render();};
+  btnRow.appendChild(fToggle);
   var nb=h("button",{className:"btn",onClick:function(){State.adding=!State.adding;State.editing=null;render();}});nb.textContent="+ NEW TRADE";btnRow.appendChild(nb);
   var impLink=h("button",{className:"btn",style:"border-color:var(--text3);color:var(--text3)",onClick:function(){State.tab="import";render();}});impLink.textContent="⬆ IMPORT CSV";btnRow.appendChild(impLink);
   hrow.appendChild(btnRow);
   el.appendChild(hrow);
+
+  // ── Filter panel ──
+  if(State.mLogFilterOpen){
+    var fp=div("card");fp.style.cssText="padding:14px 18px;margin-bottom:12px;border-color:var(--border2);";
+    var allInsts=[],allSetups=[],allSess=[];
+    _baseTrades.forEach(function(t){
+      if(t.inst&&allInsts.indexOf(t.inst)===-1) allInsts.push(t.inst);
+      if(t.setup&&allSetups.indexOf(t.setup)===-1) allSetups.push(t.setup);
+      if(t.sess&&allSess.indexOf(t.sess)===-1) allSess.push(t.sess);
+    });
+    allInsts.sort();allSetups.sort();allSess.sort();
+
+    var fpRows=div();fpRows.style.cssText="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;";
+
+    function deskFilterRow(label,key,opts){
+      var col=div();col.style.cssText="display:flex;flex-direction:column;gap:5px;";
+      var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;";lbl.textContent=label;col.appendChild(lbl);
+      var chips=div();chips.style.cssText="display:flex;flex-wrap:wrap;gap:4px;";
+      // ALL chip
+      var allChip=h("button");allChip.textContent="ALL";
+      var isAll=!_f[key];
+      allChip.style.cssText="font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:'Courier New',monospace;letter-spacing:.5px;border:1px solid "+( isAll?"var(--ca)":"var(--border)")+";color:"+(isAll?"var(--ca)":"var(--text3)")+";background:"+(isAll?"var(--ca15)":"transparent")+";";
+      allChip.onclick=function(){State.mLogFilter[key]="";State.logPage=0;render();};
+      chips.appendChild(allChip);
+      opts.forEach(function(v){
+        var chip=h("button");chip.textContent=v;
+        var sel=_f[key]===v;
+        chip.style.cssText="font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:'Courier New',monospace;letter-spacing:.5px;border:1px solid "+(sel?"var(--ca)":"var(--border)")+";color:"+(sel?"var(--ca)":"var(--text2)")+";background:"+(sel?"var(--ca15)":"transparent")+";";
+        chip.onclick=function(){State.mLogFilter[key]=v;State.logPage=0;render();};
+        chips.appendChild(chip);
+      });
+      col.appendChild(chips);
+      fpRows.appendChild(col);
+    }
+
+    deskFilterRow("Direction","dir",["Long","Short"]);
+    if(allInsts.length>1) deskFilterRow("Instrument","inst",allInsts);
+    if(allSess.length>1) deskFilterRow("Session","sess",allSess);
+    if(allSetups.length>0) deskFilterRow("Setup","setup",allSetups);
+
+    fp.appendChild(fpRows);
+
+    if(_activeFilters){
+      var clrBtn=h("button");clrBtn.textContent="CLEAR ALL";
+      clrBtn.style.cssText="margin-top:10px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--red);color:var(--red);padding:3px 12px;border-radius:3px;cursor:pointer;font-family:'Courier New',monospace;";
+      clrBtn.onclick=function(){State.mLogFilter={dir:"",setup:"",sess:"",inst:""};State.logPage=0;render();};
+      fp.appendChild(clrBtn);
+    }
+    el.appendChild(fp);
+  }
   if(State.adding) el.appendChild(tradeForm(null));
   if(State.editing) el.appendChild(tradeForm(State.editing));
   var tcard=div("card mt12");tcard.style.overflowX="auto";
