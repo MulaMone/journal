@@ -629,7 +629,14 @@ function loadFromCloud(syncId,callback){
         if(l.l==="Daily Naked POC") l.imp="medium";
         if(l.l==="4hr Naked POC"){l.l="HTF Gaps";l.imp="low";}
         if(l.l==="HTF Gaps") l.imp="low";
+        if(l.l==="GEX GAMMA Weekly Exp") l.l="CALL/PUT Wall Weekly Exp";
       });
+      if(!State.weekLevels.some(function(l){return l.l==="CALL/PUT Wall Weekly Exp";})){
+        var _wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="Weekly Open";});
+        var _wkGexAt=_wkOpenIdx>-1?_wkOpenIdx+1:1;
+        State.weekLevels.splice(_wkGexAt,0,{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true});
+      }
+      ss("weekLevels",State.weekLevels);
     }
     if(d.settings){
       var s=d.settings;
@@ -883,7 +890,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"GEX GAMMA Weekly Exp",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"HTF Gaps",imp:"low",builtin:true}]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"Weekly Open",imp:"high",builtin:true},{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"HTF Gaps",imp:"low",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   weekLevelChecks:ls("weekLevelChecks",{}),
@@ -976,20 +983,21 @@ var State={
   State.levels.forEach(function(l){if(l.l==="OPEN"&&!l.sess) l.sess="RTH Open";});
   ss("levels",State.levels);
   // Mark builtin week levels
-  var WK_BUILTIN=["Weekly VAH/VAL/POC","Weekly Open","GEX GAMMA Weekly Exp","Weekly VWAP","Weekly Naked POC","Daily Naked POC","HTF Gaps"];
+  var WK_BUILTIN=["Weekly VAH/VAL/POC","Weekly Open","CALL/PUT Wall Weekly Exp","Weekly VWAP","Weekly Naked POC","Daily Naked POC","HTF Gaps"];
   var wkChanged=false;
   State.weekLevels.forEach(function(l){
     if(l.l==="4hr Naked POC"){l.l="HTF Gaps";wkChanged=true;}
+    if(l.l==="GEX GAMMA Weekly Exp"){l.l="CALL/PUT Wall Weekly Exp";wkChanged=true;}
     if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
     if(l.l==="Weekly VWAP"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
     if(l.l==="Daily Naked POC"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
     if(l.l==="HTF Gaps"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
   });
-  // Inject GEX GAMMA Weekly Exp after Weekly Open if missing
-  if(!State.weekLevels.some(function(l){return l.l==="GEX GAMMA Weekly Exp";})){
+  // Inject CALL/PUT Wall Weekly Exp after Weekly Open if missing
+  if(!State.weekLevels.some(function(l){return l.l==="CALL/PUT Wall Weekly Exp";})){
     var wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="Weekly Open";});
     var wkGexAt=wkOpenIdx>-1?wkOpenIdx+1:1;
-    State.weekLevels.splice(wkGexAt,0,{l:"GEX GAMMA Weekly Exp",imp:"high",builtin:true});
+    State.weekLevels.splice(wkGexAt,0,{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true});
     wkChanged=true;
   }
   if(wkChanged) ss("weekLevels",State.weekLevels);
