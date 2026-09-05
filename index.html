@@ -1307,7 +1307,8 @@ var TABS=[
   {id:"analytics",icon:"⟁",label:"STATS"},
   {id:"import",icon:"⬆",label:"IMPORT"},
   {id:"notes",icon:"✎",label:"NOTES"},
-  {id:"openanalysis",icon:"◉",label:"OPEN"}
+  {id:"openanalysis",icon:"◉",label:"OPEN"},
+  {id:"chart",icon:"▤",label:"CHART"}
 ];
 
 function renderTabs(){
@@ -1352,9 +1353,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","playbook","import","notes"];
-var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes"};
-var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎"};
+var MORE_TABS=["home","playbook","import","notes","chart"];
+var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart"};
+var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -3182,7 +3183,17 @@ function logTab(){
       btnRow.appendChild(editBtn2);
       var delBtn=h("button",{className:"btn btn-r",style:"padding:4px 10px;font-size:9px"});delBtn.textContent="DELETE";
       delBtn.addEventListener("click",function(e){e.stopPropagation();if(confirm("Delete this trade?")){State.trades=State.trades.filter(function(x){return x.id!==t.id});ss("trades",State.trades);syncToCloud();State.expanded=null;State.editing=null;render();}});
-      btnRow.appendChild(delBtn);r.appendChild(btnRow);
+      btnRow.appendChild(delBtn);
+      var chartBtn=h("button",{className:"btn",style:"padding:4px 10px;font-size:9px"});chartBtn.textContent="VIEW ON CHART";
+      (function(trade){chartBtn.addEventListener("click",function(e){
+        e.stopPropagation();
+        var ts=tradeTs(trade);
+        State.chart_symbol=trade.inst;
+        State.chart_focus_ts=ts?Math.floor(ts.getTime()/1000):null;
+        switchTab("chart");
+      });})(t);
+      btnRow.appendChild(chartBtn);
+      r.appendChild(btnRow);
 
       // Setups column on the right
       var sp=div();sp.style.cssText="border-left:1px solid var(--border);padding-left:14px;";
@@ -4131,6 +4142,8 @@ function parseCSV(text){
       var tvTime=fmtImportTime(entryTs);
       var tvDate=fmtImportDate(entryTs);
       t={id:newId,date:tvDate,time:tvTime,inst:tvInst,dir:tvDir,entry:tvEntry,exit:tvExit,ctr:tvQty,setup:"",sess:autoSession(tvTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(tvPts.toFixed(2)),d:tvDollar,hl:false};
+      var tvExitTs=tvIsShort?boughtTs:soldTs; // the other side of the round-trip — previously parsed and discarded
+      if(tvExitTs){t.xdate=fmtImportDate(tvExitTs);t.xtime=fmtImportTime(tvExitTs);}
     } else if(isNT){
       var ntInst=detectInstrument(col(row,["instrument","symbol"]));
       var ntDirRaw=col(row,["market pos.","market pos","direction","side"]).toLowerCase();
@@ -4139,6 +4152,7 @@ function parseCSV(text){
       var ntEntry=cleanNum(col(row,["entry price","entryprice"]));
       var ntExit=cleanNum(col(row,["exit price","exitprice"]));
       var entryTime=col(row,["entry time","entrytime","time"]);
+      var exitTimeRaw=col(row,["exit time","exittime"]);
       var ntProfit=cleanNum(col(row,["profit","p&l","pnl","net profit"]));
       var mae=cleanNum(col(row,["mae"]));
       var mfe=cleanNum(col(row,["mfe"]));
@@ -4150,6 +4164,7 @@ function parseCSV(text){
       t={id:newId,date:fmtImportDate(ntDateStr),time:ntTime,inst:ntInst,dir:ntDir,entry:ntEntry,exit:ntExit,ctr:ntQty,setup:"",sess:autoSession(ntTime),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(ntPts.toFixed(2)),d:ntDollar,hl:false};
       if(mae) t.mae=mae;
       if(mfe) t.mfe=mfe;
+      if(exitTimeRaw){t.xdate=fmtImportDate(exitTimeRaw.split(" ")[0]||exitTimeRaw);t.xtime=fmtImportTime(exitTimeRaw);}
     } else if(isForex){
       // ── Forex / CFD Broker CSV ──
       var fxSym=col(row,["symbol","instrument","currency pair","pair"]);
@@ -4171,6 +4186,7 @@ function parseCSV(text){
       var fxDollar=fxPnl?parseFloat(parseFloat(fxPnl).toFixed(2)):parseFloat((fxPts*((TICK[fxInst]||1)*parseFloat(fxLots))).toFixed(2));
       t={id:newId,date:fxDT.date,time:fxDT.time,inst:fxInst,dir:fxDir,entry:fxEntry,exit:fxExit,ctr:fxLots,setup:"",sess:autoSession(fxDT.time),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(fxPts.toFixed(4)),d:fxDollar,hl:false};
       if(!t.inst||t.inst==="") t.inst="Other";
+      if(fxCloseRaw){var fxExitDT=parseForexDT(fxCloseRaw);t.xdate=fxExitDT.date;t.xtime=fxExitDT.time;}
     } else {
       var contract2=col(row,["contract","symbol","instrument","product"]);
       var inst2=detectInstrument(contract2);
@@ -4385,13 +4401,24 @@ function importTab(){
     var pvT3=div("card-t");pvT3.textContent="Preview — "+State.imp_preview.length+" trades";pvH2.appendChild(pvT3);
     var impBtn=h("button",{className:"btn btn-g"});impBtn.textContent="IMPORT ALL";
     impBtn.addEventListener("click",function(){
-      var dupes=0;
-      var keys=State.trades.map(function(t){return t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;});
-      var toAdd=State.imp_preview.filter(function(t){var k=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;if(keys.indexOf(k)>-1){dupes++;return false;}return true;});
+      var dupes=0,backfilled=0;
+      var existingByKey={};
+      State.trades.forEach(function(x){existingByKey[x.date+"_"+x.time+"_"+x.inst+"_"+x.entry]=x;});
+      var toAdd=[];
+      State.imp_preview.forEach(function(t){
+        var k=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;
+        var existing=existingByKey[k];
+        if(existing){
+          dupes++;
+          if(t.xdate&&t.xtime&&!existing.xdate){existing.xdate=t.xdate;existing.xtime=t.xtime;backfilled++;}
+        } else {
+          toAdd.push(t);
+        }
+      });
       toAdd=toAdd.map(function(t){return Object.assign({},t,{accountId:t.accountId||State.activeAccount||null});});
       State.trades=toAdd.concat(State.trades);ss("trades",State.trades);
       State.imp_preview=null;State.logPage=0;
-      State.imp_msg={type:"ok",text:"✓ Imported "+toAdd.length+" trades."+(dupes?" Skipped "+dupes+" duplicates.":"")};
+      State.imp_msg={type:"ok",text:"✓ Imported "+toAdd.length+" trades."+(dupes?" Skipped "+dupes+" duplicates"+(backfilled?" — filled in exit time on "+backfilled+" of them":"")+".":"")};
       render();
     });
     pvH2.appendChild(impBtn);pvCard.appendChild(pvH2);
@@ -4495,19 +4522,49 @@ function loadNTFile(){
 }
 
 
+// ── lightweight-charts + OANDA CFD data, with trade markers ────────────
+// Open-source charting lib (Apache 2.0), fed by OANDA's v20 candles API
+// (CORS-friendly, confirmed via their own docs — unlike Yahoo). Needs an
+// OANDA practice-account token for chart data only; your trades still
+// come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
+var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",MNQ:"NAS100_USD"};
+var OANDA_GRAN={"1m":"M1","5m":"M5","15m":"M15","1h":"H1","4h":"H4"};
+
+function tradeTs(t){
+  if(!t||!t.date) return null;
+  var p=t.date.split("/");if(p.length!==3) return null;
+  var mo=parseInt(p[0],10)-1,dy=parseInt(p[1],10),yr=2000+parseInt(p[2],10);
+  var hh=0,mm=0;
+  if(t.time){var tm=t.time.match(/(\d{1,2}):(\d{2})/);if(tm){hh=parseInt(tm[1],10);mm=parseInt(tm[2],10);}}
+  return new Date(yr,mo,dy,hh,mm);
+}
+function tradeExitTs(t){
+  if(!t||!t.xdate) return null;
+  var p=t.xdate.split("/");if(p.length!==3) return null;
+  var mo=parseInt(p[0],10)-1,dy=parseInt(p[1],10),yr=2000+parseInt(p[2],10);
+  var hh=0,mm=0;
+  if(t.xtime){var tm=t.xtime.match(/(\d{1,2}):(\d{2})/);if(tm){hh=parseInt(tm[1],10);mm=parseInt(tm[2],10);}}
+  return new Date(yr,mo,dy,hh,mm);
+}
+
 function chartTab(){
   var el=div();
   el.style.padding="16px";
 
-  var sym    = State.chart_symbol  || "ES";
-  var tf     = State.chart_interval|| "1h";
+  var sym=State.chart_symbol||"ES";
+  var tf=State.chart_interval||"1h";
+  var focusTs=State.chart_focus_ts||null;
 
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
-  var sh=div("sh");sh.style.marginBottom="0";sh.textContent=sym+" — "+tf;hrow.appendChild(sh);
+  var sh=div("sh");sh.style.marginBottom="0";
+  sh.textContent=focusTs
+    ? sym+" — "+tf+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
+    : sym+" — "+tf+" (OANDA proxy)";
+  hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
 
-  // Symbol buttons
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"MES",n:"Micro E-mini S&P"},{l:"MNQ",n:"Micro E-mini NQ"}];
   SYMS.forEach(function(s){
     var b=h("button",{className:"btn"});
@@ -4517,10 +4574,8 @@ function chartTab(){
     ctrlRow.appendChild(b);
   });
 
-  // Separator
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
 
-  // Timeframe buttons
   var TFS=["1m","5m","15m","1h","4h"];
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
@@ -4531,85 +4586,141 @@ function chartTab(){
     ctrlRow.appendChild(b);
   });
 
-  // Refresh button
   var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp2);
   var rbtn=h("button",{className:"btn"});
   rbtn.textContent="↻ Refresh";
   rbtn.addEventListener("click",function(){render();});
   ctrlRow.appendChild(rbtn);
 
+  if(focusTs){
+    var clearBtn=h("button",{className:"btn"});
+    clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
+    clearBtn.textContent="← Show all trades";
+    clearBtn.addEventListener("click",function(){State.chart_focus_ts=null;render();});
+    ctrlRow.appendChild(clearBtn);
+  }
+
   hrow.appendChild(ctrlRow);
   el.appendChild(hrow);
 
+  // ── OANDA token gate ──────────────────────────────────────
+  var tok=ls("oanda_token","");
+  if(!tok){
+    var tokRow=div("row gap8 mb12");
+    var tin=h("input",{type:"password",placeholder:"OANDA practice API token"});
+    tin.style.cssText="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;font-family:monospace;font-size:12px;";
+    function saveTok(){if(tin.value.trim()){ss("oanda_token",tin.value.trim());render();}}
+    var tsave=h("button",{className:"btn"});tsave.textContent="Save";
+    tsave.addEventListener("click",saveTok);
+    tin.addEventListener("keydown",function(e){if(e.key==="Enter") saveTok();});
+    tokRow.appendChild(tin);tokRow.appendChild(tsave);
+    el.appendChild(tokRow);
+    var tnote=div("xs m");tnote.style.cssText="margin-bottom:12px;color:var(--text3);";
+    tnote.textContent="Free OANDA practice token — used only to pull chart price data. Your trades still come from your own trade log, never from OANDA. Stored client-side, visible in this page's source/network tab.";
+    el.appendChild(tnote);
+    return el; // nothing to load until a token is saved — no chart, no loading spinner
+  }
+
   // ── Chart container ───────────────────────────────────────
   var chartDiv=div();
-  chartDiv.style.cssText="width:100%;height:620px;border:1px solid var(--border);border-radius:4px;background:#040d1a;position:relative;";
+  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border);border-radius:4px;background:#040d1a;position:relative;";
   el.appendChild(chartDiv);
 
-  // Loading overlay
   var loading=div();
   loading.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;letter-spacing:2px;";
   loading.textContent="LOADING CHART DATA...";
   chartDiv.appendChild(loading);
 
-  // Footer note
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent="Live data via Yahoo Finance";
+  note.textContent="Chart data via OANDA (CFD proxy) — markers show trade entries from your log";
   el.appendChild(note);
 
-  // ── Fetch data & render ───────────────────────────────────
-  // Yahoo Finance futures symbols
-  var YF_SYM={ES:"ES=F",NQ:"NQ=F",MES:"MES=F",MNQ:"MNQ=F"};
-  var YF_RANGE={"1m":"1d","5m":"5d","15m":"5d","1h":"1mo","4h":"1mo"};
-  // Yahoo Finance doesn't have 4h — use 1h data displayed as 4h by aggregation
-  var yfTF=(tf==="4h")?"1h":tf;
-  var yfSym=YF_SYM[sym]||"ES=F";
-  var yfRange=YF_RANGE[tf]||"1mo";
+  var chg=h("button",{className:"btn"});chg.style.cssText="margin-top:6px;font-size:11px;padding:3px 8px;";chg.textContent="Change OANDA token";
+  chg.addEventListener("click",function(){ss("oanda_token","");render();});
+  el.appendChild(chg);
+
+  var oandaInst=OANDA_SYMS[sym]||"SPX500_USD";
+  var gran=OANDA_GRAN[tf]||"H1";
+
+  // Trades for this symbol, with their exact timestamp + entry price.
+  // Fetching candles by date range (when trades exist) instead of just
+  // "last 500 bars" — otherwise a trade older than that window has no
+  // real candle to sit on and silently piles up on the edge of the chart.
+  var trades=(State.trades||[]).filter(function(t){return t.inst===sym;});
+  var tradePoints=[];
+  trades.forEach(function(t){
+    var d=tradeTs(t);
+    if(d&&t.entry!=null){
+      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate});
+    }
+    if(t.xdate&&t.xtime&&t.exit!=null){
+      // Real exit timestamp — captured on import (Tradovate/NinjaTrader/forex
+      // exports have this; older imports or a generic CSV may not).
+      var xd=tradeExitTs(t);
+      if(xd) tradePoints.push({ts:Math.floor(xd.getTime()/1000),price:parseFloat(t.exit),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"exit",id:t.id,approx:false});
+    } else if(d&&t.exit!=null){
+      // No real exit time on this trade — plot the exit marker at the
+      // entry's own time instead of leaving it out entirely. Not the true
+      // exit time; the list below flags which trades this applies to.
+      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.exit),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"exit",id:t.id,approx:true});
+    }
+  });
+  tradePoints.sort(function(a,b){return a.ts-b.ts;});
+
+  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M";
+  var PERIOD_SEC={"1m":60,"5m":300,"15m":900,"1h":3600,"4h":14400};
+  var periodSec=PERIOD_SEC[tf]||3600;
+  var fromSec=null,toSec=null;
+
+  if(focusTs){
+    // Focused on one specific trade: a fixed-size window around it, so it
+    // costs the same handful of candles whether the trade was yesterday or
+    // two years ago — no dependence on how much history exists overall.
+    var padCandles=150;
+    fromSec=focusTs-periodSec*padCandles;
+    toSec=Math.min(focusTs+periodSec*padCandles,Math.floor(Date.now()/1000));
+  } else if(tradePoints.length){
+    var padSec=periodSec*20;
+    var nowSec=Math.floor(Date.now()/1000);
+    fromSec=tradePoints[0].ts-padSec;
+    toSec=Math.max(tradePoints[tradePoints.length-1].ts+padSec,nowSec);
+    // OANDA caps a single request at ~5000 candles — a wide date range at a
+    // fine granularity (e.g. weeks of history on 5m) blows past that and
+    // returns HTTP 400. Keep the most recent window that fits; older trades
+    // outside it just won't have a candle to sit on at this timeframe.
+    var maxSpan=periodSec*4500;
+    if(toSec-fromSec>maxSpan) fromSec=toSec-maxSpan;
+  }
+
+  if(fromSec!=null){
+    url+="&from="+encodeURIComponent(new Date(fromSec*1000).toISOString());
+    url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
+  } else {
+    url+="&count=500";
+  }
 
   function fetchAndRender(){
-    var url="https://query1.finance.yahoo.com/v8/finance/chart/"+yfSym
-      +"?interval="+yfTF+"&range="+yfRange+"&includePrePost=false&corsDomain=finance.yahoo.com";
-
-    fetch(url,{headers:{"Accept":"application/json"}})
-    .then(function(r){
-      if(!r.ok) throw new Error("HTTP "+r.status);
-      return r.json();
-    })
+    fetch(url,{headers:{Authorization:"Bearer "+tok}})
+    .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
     .then(function(data){
       loading.remove();
-      var result=data&&data.chart&&data.chart.result&&data.chart.result[0];
-      if(!result||!result.timestamp){
+      var raw=(data&&data.candles)||[];
+      var candles=raw.filter(function(c){return c.complete;}).map(function(c){
+        return {time:Math.floor(new Date(c.time).getTime()/1000),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+      });
+
+      if(!candles.length){
         var msg=div();
         msg.style.cssText="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px;gap:10px;";
-        msg.innerHTML="<div style='font-size:28px;opacity:.3'>📊</div><div style='letter-spacing:2px;'>NO DATA RETURNED</div><div style='font-size:11px;opacity:.6;'>Yahoo Finance may be temporarily unavailable</div>";
+        msg.innerHTML="<div style='font-size:28px;opacity:.3'>📊</div><div style='letter-spacing:2px;'>NO DATA RETURNED</div><div style='font-size:11px;opacity:.6;'>Check your OANDA token, or try refreshing</div>";
         chartDiv.appendChild(msg);
         return;
       }
 
-      var timestamps=result.timestamp;
-      var q=result.indicators.quote[0];
-      var candles=[];
-      for(var i=0;i<timestamps.length;i++){
-        if(q.open[i]==null||q.close[i]==null) continue;
-        candles.push({
-          time: timestamps[i],
-          open: parseFloat(q.open[i].toFixed(2)),
-          high: parseFloat(q.high[i].toFixed(2)),
-          low:  parseFloat(q.low[i].toFixed(2)),
-          close:parseFloat(q.close[i].toFixed(2)),
-        });
-      }
-
-      if(!candles.length){
-        loading.style.color="var(--red)";
-        loading.textContent="⚠ No candles parsed from data";
-        return;
-      }
-
       var chart=LightweightCharts.createChart(chartDiv,{
-        width:  chartDiv.offsetWidth,
-        height: 620,
+        width:chartDiv.offsetWidth,
+        height:chartDiv.offsetHeight,
         layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
         grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
@@ -4622,30 +4733,137 @@ function chartTab(){
         borderUpColor:"#00e676",borderDownColor:"#ff4444",
         wickUpColor:"#00e676",wickDownColor:"#ff4444",
       });
-
       series.setData(candles);
+
+      // ── Trade entry markers ────────────────────────────────
+      // aboveBar/belowBar positions relative to the SERIES' OWN value at
+      // that time — attaching markers directly to the candlestick series
+      // means they sit near that candle's high/low, not your actual entry
+      // price. Instead, plot each trade on a hidden line series whose only
+      // data point IS the entry price, at the trade's real timestamp (not
+      // snapped to a candle) — so the marker lands at the true price and
+      // true time. No inline text: with more than a few trades close
+      // together, permanent labels on every marker just overlap into an
+      // unreadable pile with no collision handling. Details go in the list
+      // below the chart instead.
+      // In focus mode this also naturally excludes trades outside the tight
+      // fetch window, so fitContent() below stays zoomed on the one trade
+      // instead of stretching to include something months away.
+      var windowPoints=(fromSec!=null)
+        ? tradePoints.filter(function(p){return p.ts>=fromSec&&p.ts<=toSec;})
+        : tradePoints;
+
+      // Narrow further to whatever the person has checked in the list below.
+      // Empty selection = show everything in the window (the default).
+      var selectedIds=State.chart_selected_ids||[];
+      var displayPoints=selectedIds.length
+        ? windowPoints.filter(function(p){return selectedIds.indexOf(p.id)>-1;})
+        : windowPoints;
+
+      var priceOffset=0;
+      if(windowPoints.length){
+        if(displayPoints.length){
+          // OANDA's CFD proxy and the real futures instrument don't trade at
+          // the same absolute price — placing a marker at the recorded entry
+          // price would draw it nowhere near the actual candles. Estimate the
+          // gap as the median difference between each trade's recorded price
+          // and its nearest candle at that time, then shift the marker's
+          // plotted position by that amount. The list below still shows the
+          // true recorded entry/exit numbers, unadjusted.
+          var diffs=displayPoints.map(function(p){
+            var nearest=candles[0];
+            for(var i=0;i<candles.length;i++){
+              if(Math.abs(candles[i].time-p.ts)<Math.abs(nearest.time-p.ts)) nearest=candles[i];
+            }
+            return nearest.close-p.price;
+          }).sort(function(a,b){return a-b;});
+          if(diffs.length) priceOffset=diffs[Math.floor(diffs.length/2)];
+
+          var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});
+          var seenTs={};
+          var lineData=[];
+          var markers=displayPoints.map(function(p){
+            var t=p.ts;
+            while(seenTs[t]) t+=1; // keep strictly increasing if two trades share a timestamp
+            seenTs[t]=true;
+            lineData.push({time:t,value:p.price+priceOffset});
+            // Entry arrow reflects the opening action; exit arrow reflects
+            // the closing action, which is the opposite side — closing a
+            // long is a sell (down/red), closing a short is a buy (up/green).
+            var isUp=p.kind==="entry"?p.isLong:!p.isLong;
+            return {
+              time:t,
+              position:isUp?"belowBar":"aboveBar",
+              color:isUp?"#00e676":"#ff4444",
+              shape:isUp?"arrowUp":"arrowDown"
+            };
+          });
+          markerSeries.setData(lineData);
+          markerSeries.setMarkers(markers);
+          var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
+          note.textContent="OANDA (CFD proxy, price-adjusted "+(priceOffset>=0?"+":"")+priceOffset.toFixed(2)+" to align with candles) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+        } else {
+          note.textContent="OANDA (CFD proxy) • selection doesn't match any trade in this window • "+new Date().toLocaleTimeString();
+        }
+
+        // Trade list — same info the old inline labels tried to show, but
+        // as a plain scrollable list so it can never overlap itself. Every
+        // trade in the fetched window is listed (not just the selected
+        // ones) so there's always something left to check/uncheck.
+        if(selectedIds.length){
+          var selRow=div("row gap8");selRow.style.cssText="align-items:center;margin-top:10px;margin-bottom:4px;";
+          var selTxt=span("xs m");selTxt.textContent="Showing "+displayPoints.filter(function(p){return p.kind==="entry";}).length+" selected trade"+(displayPoints.length===1?"":"s");selRow.appendChild(selTxt);
+          var clrSel=h("button",{className:"btn"});clrSel.style.cssText="font-size:11px;padding:3px 8px;";clrSel.textContent="Clear selection";
+          clrSel.addEventListener("click",function(){State.chart_selected_ids=[];render();});
+          selRow.appendChild(clrSel);
+          el.appendChild(selRow);
+        }
+        var listWrap=div();
+        listWrap.style.cssText="margin-top:"+(selectedIds.length?"4px":"10px")+";max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;";
+        windowPoints.filter(function(p){return p.kind==="entry";}).slice().reverse().forEach(function(p){
+          var row=div("row gap8");
+          row.style.cssText="padding:6px 10px;border-bottom:1px solid var(--border);align-items:center;font-family:monospace;font-size:12px;cursor:pointer;";
+          var cb=h("input",{type:"checkbox"});
+          cb.checked=selectedIds.indexOf(p.id)>-1;
+          cb.addEventListener("click",function(e){
+            e.stopPropagation();
+            var cur=(State.chart_selected_ids||[]).slice();
+            var idx=cur.indexOf(p.id);
+            if(idx>-1) cur.splice(idx,1); else cur.push(p.id);
+            State.chart_selected_ids=cur;
+            render();
+          });
+          row.appendChild(cb);
+          row.appendChild(makeBadge(p.isLong?"bg":"br",p.isLong?"L":"S"));
+          var when=span("m");when.style.marginLeft="8px";when.textContent=new Date(p.ts*1000).toLocaleString();
+          row.appendChild(when);
+          var px=span();px.style.cssText="margin-left:auto;color:var(--text3)";px.textContent=p.entry+" → "+p.exit+" ("+p.ctr+")"+(p.hasExitTime?"":" · exit time unknown");
+          row.appendChild(px);
+          listWrap.appendChild(row);
+        });
+        el.appendChild(listWrap);
+      } else {
+        note.textContent="OANDA (CFD proxy) • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
+      }
+
       chart.timeScale().fitContent();
 
-      // Show last price + update footer
       var last=candles[candles.length-1];
       var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
       lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
       el.appendChild(lastEl);
-      note.textContent="Live data via Yahoo Finance • "+new Date().toLocaleTimeString();
 
-      // Resize handler
       var ro=new ResizeObserver(function(){
-        chart.applyOptions({width:chartDiv.offsetWidth});
+        chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
       });
       ro.observe(chartDiv);
     })
     .catch(function(e){
       loading.style.color="var(--red)";
-      loading.textContent="⚠ Could not load chart: "+e.message+" — check connection or try refreshing";
+      loading.textContent="⚠ Could not load chart: "+e.message+" — check your token or connection";
     });
   }
 
-  // Load lightweight-charts lib if not already loaded
   if(window.LightweightCharts){
     fetchAndRender();
   } else {
