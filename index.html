@@ -3948,6 +3948,9 @@ function reviewTab(){
 
 function detectInstrument(s){
   var c=(s||"").toUpperCase().split(" ").join("").split(".")[0];
+  // TradingView symbols: strip exchange prefix (CME_MINI:NQ1!) and continuous-contract suffix (NQ1! -> NQ)
+  if(c.indexOf(":")>-1) c=c.split(":").pop();
+  c=c.replace(/\d*!$/,"");
   // CME Futures (micro first)
   if(c.indexOf("MES")===0) return "MES";
   if(c.indexOf("MNQ")===0) return "MNQ";
@@ -4111,6 +4114,53 @@ function parseCSV(text){
       return {date:pad(ed.getUTCMonth()+1)+"/"+pad(ed.getUTCDate())+"/"+String(ed.getUTCFullYear()).slice(2),time:pad(ed.getUTCHours())+":"+pad(ed.getUTCMinutes())};
     }
     return {date:fmtImportDate(raw),time:fmtImportTime(raw)};
+  }
+  // TradingView Paper Trading "Trade History" CSV: one row per fill (Entry/Exit),
+  // paired by Trade number, "Mon D, YYYY, HH:MM" timestamps.
+  function parseTVListDT(raw){
+    if(!raw) return {date:today(),time:""};
+    raw=(raw+"").trim().replace(/^"|"$/g,"");
+    var m=raw.match(/(\w{3})\s+(\d{1,2}),\s*(\d{4}),?\s*(\d{1,2}):(\d{2})/);
+    if(m){
+      var MONTHS={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      var mo=MONTHS[(m[1]||"jan").toLowerCase()]||0;
+      return {date:pad(mo+1)+"/"+pad(parseInt(m[2]))+"/"+String(parseInt(m[3])).slice(2),time:pad(parseInt(m[4]))+":"+m[5]};
+    }
+    return {date:fmtImportDate(raw),time:fmtImportTime(raw)};
+  }
+  var isTVList=!isTVPos&&!isNT&&!isForex&&(header.indexOf("trade number")>-1)&&(header.indexOf("type")>-1)&&(header.indexOf("price")>-1)&&(header.indexOf("date and time")>-1);
+  if(isTVList){
+    var tvlGroups={},tvlOrder=[];
+    rows.forEach(function(line){
+      var row=splitCSVRow(line);
+      var tno=col(row,["trade number"]);
+      if(!tno) return;
+      if(!tvlGroups[tno]){tvlGroups[tno]={};tvlOrder.push(tno);}
+      var typ=col(row,["type"]).toLowerCase();
+      if(typ.indexOf("entry")>-1) tvlGroups[tno].entry=row;
+      else if(typ.indexOf("exit")>-1) tvlGroups[tno].exit=row;
+    });
+    var tvlTrades=[];
+    tvlOrder.forEach(function(tno,gi){
+      var g=tvlGroups[tno];
+      if(!g.entry||!g.exit) return; // skip still-open/incomplete trades
+      var tvlInst=detectInstrument(col(g.entry,["symbol"]));
+      var tvlDir=col(g.entry,["type"]).toLowerCase().indexOf("short")>-1?"Short":"Long";
+      var tvlQty=cleanNum(col(g.entry,["size (qty)","qty","quantity"]))||"1";
+      var tvlEntry=cleanNum(col(g.entry,["price"]));
+      var tvlExit=cleanNum(col(g.exit,["price"]));
+      var tvlEntryDT=parseTVListDT(col(g.entry,["date and time"]));
+      var tvlExitDT=parseTVListDT(col(g.exit,["date and time"]));
+      var tvlPnl=cleanNum(col(g.exit,["net pnl usd","net pnl","net p&l"]));
+      var tvlPts=tvlEntry&&tvlExit?(parseFloat(tvlExit)-parseFloat(tvlEntry))*(tvlDir==="Long"?1:-1):0;
+      var tvlTick=TICK[tvlInst]||1;
+      var tvlDollar=tvlPnl?parseFloat(parseFloat(tvlPnl).toFixed(2)):parseFloat((tvlPts*tvlTick*parseFloat(tvlQty)).toFixed(2));
+      var tt={id:Date.now()+gi*13+Math.floor(Math.random()*7),date:tvlEntryDT.date,time:tvlEntryDT.time,inst:tvlInst,dir:tvlDir,entry:tvlEntry,exit:tvlExit,ctr:tvlQty,setup:"",sess:autoSession(tvlEntryDT.time),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(tvlPts.toFixed(2)),d:tvlDollar,hl:false};
+      tt.xdate=tvlExitDT.date;tt.xtime=tvlExitDT.time;
+      if(tt.inst) tvlTrades.push(tt);
+    });
+    if(!tvlTrades.length) return{trades:[],error:"Parsed 0 trades. Check the platform selection matches your CSV format."};
+    return{trades:tvlTrades,error:null};
   }
   var trades=[];
 
