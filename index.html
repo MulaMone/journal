@@ -3622,7 +3622,7 @@ function reviewTab(){
     // Monthly open reminder banner
     var moReminder=div("card mb12");moReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
     var moIcon=span("");moIcon.style.cssText="font-size:16px;flex-shrink:0;";moIcon.textContent="📌";
-    var moRText=span("sm");moRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";moRText.textContent="Reminder — mark out the monthly open and POC on your chart";
+    var moRText=span("sm");moRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";moRText.textContent="Reminder — mark out the monthly POC on your chart";
     moReminder.appendChild(moIcon);moReminder.appendChild(moRText);
     el.appendChild(moReminder);
 
@@ -3901,6 +3901,13 @@ function reviewTab(){
     wg4.appendChild(makeChip("WIN RATE",ws.wr+"%","ac","this week"));
     wg4.appendChild(makeChip("A-GRADE RATE",wadh+"%",wadh>=60?"g":"a"));
     el.appendChild(wg4);
+
+    // Weekly VWAP reminder banner
+    var wkReminder=div("card mb12");wkReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
+    var wkIcon=span("");wkIcon.style.cssText="font-size:16px;flex-shrink:0;";wkIcon.textContent="📌";
+    var wkRText=span("sm");wkRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";wkRText.textContent="Reminder — mark out the weekly VWAP on your chart";
+    wkReminder.appendChild(wkIcon);wkReminder.appendChild(wkRText);
+    el.appendChild(wkReminder);
 
     var wg2=div("g2 mb12");
     // Best/worst
