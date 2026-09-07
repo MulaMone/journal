@@ -5112,18 +5112,35 @@ function chartTab(){
       lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
       el.appendChild(lastEl);
 
-      // ── Countdown to the current bar's close, shown near the price axis ──
+      // ── Price tag with countdown baked in, replacing the native price-scale
+      // label (TradingView-style: price on top, time-to-close underneath,
+      // both in one colored tag) ──
       // last.time is already shifted for ET display; add etOffsetSec back to
       // recover the candle's true start, then + periodSec for its true close.
       var barEndTrue=last?(last.time+etOffsetSec+periodSec):null;
+      var currentPrice=last?last.close:null;
+      var currentIsUp=last?(last.close>=last.open):true;
       var cdBadge=div();
-      cdBadge.style.cssText="position:absolute;top:8px;right:8px;background:#040d1ae6;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;color:var(--accent);font-family:'Courier New',monospace;letter-spacing:1px;z-index:5;";
+      cdBadge.style.cssText="position:absolute;right:0;min-width:64px;text-align:center;border-radius:2px;padding:2px 6px;font-size:12px;font-weight:700;color:#fff;font-family:'Courier New',monospace;z-index:5;transform:translateY(-50%);white-space:nowrap;line-height:1.3;";
       chartDiv.appendChild(cdBadge);
       function renderCountdown(){
-        if(barEndTrue==null){cdBadge.textContent="";return;}
-        var remain=Math.max(0,Math.floor(barEndTrue-Date.now()/1000));
-        var mm=Math.floor(remain/60),ss=remain%60;
-        cdBadge.textContent="NEXT BAR "+mm+":"+(ss<10?"0":"")+ss;
+        if(currentPrice==null){cdBadge.style.display="none";return;}
+        cdBadge.style.background=currentIsUp?"#00b862":"#ff4444";
+        var timeLine="";
+        if(barEndTrue!=null){
+          var remain=Math.max(0,Math.floor(barEndTrue-Date.now()/1000));
+          var mm=Math.floor(remain/60),ss=remain%60;
+          timeLine='<div style="font-size:13px;font-weight:700;color:var(--accent);background:#040d1acc;border-radius:2px;padding:0 3px;margin-top:1px;display:inline-block;">'+mm+":"+(ss<10?"0":"")+ss+"</div>";
+        }
+        cdBadge.innerHTML="<div>"+currentPrice+"</div>"+timeLine;
+        // Reposition to sit right at the current price's y-coordinate on the
+        // price scale — recomputed every tick since panning/zooming the
+        // chart shifts where a given price sits without firing an event we
+        // can hook, so this just stays in sync passively on the 1s tick.
+        var y=series.priceToCoordinate(currentPrice);
+        if(y==null){cdBadge.style.display="none";return;}
+        cdBadge.style.display="";
+        cdBadge.style.top=y+"px";
       }
       renderCountdown();
       clearInterval(_chartCountdownTimer);
@@ -5134,6 +5151,7 @@ function chartTab(){
 
       var ro=new ResizeObserver(function(){
         chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
+        renderCountdown(); // reposition the badge — resizing shifts the price-to-pixel mapping
       });
       ro.observe(chartDiv);
 
@@ -5164,6 +5182,8 @@ function chartTab(){
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
           barEndTrue=Math.floor(new Date(c.time).getTime()/1000)+periodSec;
+          currentPrice=parseFloat(c.mid.c); // keep the price+countdown tag glued to the moving price
+          currentIsUp=parseFloat(c.mid.c)>=parseFloat(c.mid.o);
           renderCountdown();
         })
         .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
