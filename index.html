@@ -4682,7 +4682,7 @@ function loadNTFile(){
 // OANDA practice-account token for chart data only; your trades still
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
-var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",MNQ:"NAS100_USD"};
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",MNQ:"NAS100_USD",GBPCAD:"GBP_CAD"};
 var OANDA_GRAN={"1m":"M1","5m":"M5","15m":"M15","1h":"H1","4h":"H4","8h":"H8"};
 
 function tradeTs(t){
@@ -4719,7 +4719,7 @@ function chartTab(){
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
 
-  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"MES",n:"Micro E-mini S&P"},{l:"MNQ",n:"Micro E-mini NQ"}];
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"MES",n:"Micro E-mini S&P"},{l:"MNQ",n:"Micro E-mini NQ"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
@@ -4801,7 +4801,16 @@ function chartTab(){
   // Fetching candles by date range (when trades exist) instead of just
   // "last 500 bars" — otherwise a trade older than that window has no
   // real candle to sit on and silently piles up on the edge of the chart.
-  var trades=activeTrades().filter(function(t){return t.inst===sym;});
+  // Forex/CFD brokers often quote the same underlying index under a
+  // different symbol than the futures contract (NAS100/US100/NDX for
+  // Nasdaq, SP500/US500/SPX500 for the S&P). detectInstrument keeps those
+  // tagged separately (US100/US500) so their own tick value is used for any
+  // P&L that has to be derived from price — but on the chart, they're the
+  // same underlying price action as NQ/ES, so the NQ/ES button pulls in
+  // trades logged under either symbol.
+  var CHART_FAMILY={ES:["ES","US500"],NQ:["NQ","US100"]};
+  var chartInsts=CHART_FAMILY[sym]||[sym];
+  var trades=activeTrades().filter(function(t){return chartInsts.indexOf(t.inst)>-1;});
   var tradePoints=[];
   trades.forEach(function(t){
     var d=tradeTs(t);
@@ -4828,7 +4837,16 @@ function chartTab(){
   // 18:00 ET instead. Left at OANDA's default, every 4h/8h candle here sits
   // exactly one hour off from what the same instrument shows elsewhere.
   // Explicitly aligning to 18:00 ET matches that convention.
-  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment=18&alignmentTimezone="+encodeURIComponent("America/New_York");
+  // OANDA's day-boundary anchor differs by asset class. CME index futures
+  // (ES/NQ/MES/MNQ, and the CFD proxies that stand in for them) trade on the
+  // Globex session, which reopens at 18:00 ET — that's the boundary futures
+  // charting platforms use for 4h/8h/daily candles. Forex pairs like GBPCAD
+  // instead follow the interbank market's standard day rollover of 17:00 ET
+  // (which is also OANDA's own unmodified default). Using 18:00 for a forex
+  // pair would "fix" the futures alignment while breaking the forex one.
+  var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ"];
+  var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
+  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
   var PERIOD_SEC={"1m":60,"5m":300,"15m":900,"1h":3600,"4h":14400,"8h":28800};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
