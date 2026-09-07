@@ -578,6 +578,7 @@ function syncToCloud(){
       notes_pad:ls("notes_pad",""),
       playbook_custom:ls("playbook_custom",[]),
       sdesc_overrides:ls("sdesc_overrides",{}),
+      oanda_token:ls("oanda_token",""),
       playbook_images:ls("playbook_images",{}),
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50"},
       accounts:State.accounts,
@@ -668,6 +669,7 @@ function loadFromCloud(syncId,callback){
       if(s.notes_pad!==undefined) ss("notes_pad",s.notes_pad);
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
       if(s.sdesc_overrides){ss("sdesc_overrides",s.sdesc_overrides);Object.keys(s.sdesc_overrides).forEach(function(k){SDESC[k]=s.sdesc_overrides[k];});}
+      if(s.oanda_token!==undefined) ss("oanda_token",s.oanda_token);
       if(s.playbook_images) ss("playbook_images",s.playbook_images);
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);}
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
