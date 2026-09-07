@@ -4733,7 +4733,7 @@ function chartTab(){
   var sh=div("sh");sh.style.marginBottom="0";
   sh.textContent=focusTs
     ? sym+" — "+tf+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
-    : sym+" — "+tf+" (OANDA proxy)";
+    : sym+" — "+tf;
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
   // No horizontal scroll here, and this row holds a LOT of buttons (5
@@ -4746,7 +4746,7 @@ function chartTab(){
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
     var b=h("button",{className:"btn"});
-    if(sym===s.l) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
+    if(sym===s.l) b.style.cssText="border-color:#1db98c;color:#1db98c;font-weight:700;";
     b.textContent=s.l; b.title=s.n;
     b.addEventListener("click",function(){State.chart_symbol=s.l;render();});
     ctrlRow.appendChild(b);
