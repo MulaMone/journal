@@ -3894,6 +3894,13 @@ function reviewTab(){
     swkNavCard.appendChild(swkBody);
     el.appendChild(swkNavCard);
 
+    // Weekly VWAP reminder banner
+    var wkReminder=div("card mb12");wkReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
+    var wkIcon=span("");wkIcon.style.cssText="font-size:16px;flex-shrink:0;";wkIcon.textContent="📌";
+    var wkRText=span("sm");wkRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";wkRText.textContent="Reminder — mark out the weekly VWAP on your chart";
+    wkReminder.appendChild(wkIcon);wkReminder.appendChild(wkRText);
+    el.appendChild(wkReminder);
+
     var wg4=div("g4 mb12");
     wg4.appendChild(makeChip("WEEK P&L",dol(ws.total),clr(ws.total),wkTrades.length+" trades"));
     var wWL=div();wWL.innerHTML='<span class="g fw7">'+ws.wins.length+'</span><span class="m"> / </span><span class="r fw7">'+ws.losses.length+'</span>';
@@ -3901,13 +3908,6 @@ function reviewTab(){
     wg4.appendChild(makeChip("WIN RATE",ws.wr+"%","ac","this week"));
     wg4.appendChild(makeChip("A-GRADE RATE",wadh+"%",wadh>=60?"g":"a"));
     el.appendChild(wg4);
-
-    // Weekly VWAP reminder banner
-    var wkReminder=div("card mb12");wkReminder.style.cssText="border-color:#b06aff40;background:#b06aff0a;padding:10px 16px;display:flex;align-items:center;gap:10px;";
-    var wkIcon=span("");wkIcon.style.cssText="font-size:16px;flex-shrink:0;";wkIcon.textContent="📌";
-    var wkRText=span("sm");wkRText.style.cssText="color:#b06aff;letter-spacing:0.5px;";wkRText.textContent="Reminder — mark out the weekly VWAP on your chart";
-    wkReminder.appendChild(wkIcon);wkReminder.appendChild(wkRText);
-    el.appendChild(wkReminder);
 
     var wg2=div("g2 mb12");
     // Best/worst
