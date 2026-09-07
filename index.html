@@ -5660,7 +5660,7 @@ function notesTab(){
         var cyc=ohCycleInfo(o.cycle);
         var row=document.createElement("div");row.style.cssText="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #0d1e38;align-items:center;";
         var body=document.createElement("div");body.style.flex="1";
-        var txt=document.createElement("div");txt.style.cssText="font-size:13px;color:#e0c97a;font-family:'Courier New',monospace;line-height:1.5;";txt.textContent=o.text;
+        var txt=document.createElement("div");txt.style.cssText="font-size:13px;color:#ffffff;font-family:'Courier New',monospace;line-height:1.5;";txt.textContent=o.text;
         var sub=document.createElement("div");sub.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;margin-top:2px;";sub.textContent=cyc.l;
         body.appendChild(txt);body.appendChild(sub);
         var amt=document.createElement("span");amt.style.cssText="font-size:12px;color:#e0c97a;font-family:'Courier New',monospace;font-weight:700;white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
@@ -5853,7 +5853,7 @@ function notesTab(){
         var cyc=ohCycleInfo(o.cycle);
         var row=div("rjb");row.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);align-items:center;gap:10px;";
         var left=div();left.style.flex="1";
-        var txt=span("sm");txt.style.cssText="color:var(--text2);";txt.textContent=o.text;
+        var txt=span("sm");txt.style.cssText="color:#ffffff;";txt.textContent=o.text;
         var sub=div("xs m");sub.style.marginTop="2px";sub.textContent=cyc.l;
         left.appendChild(txt);left.appendChild(sub);row.appendChild(left);
         var amt=span("sm b");amt.style.cssText="white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
