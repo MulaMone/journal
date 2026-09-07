@@ -757,7 +757,7 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","MA Pullback","RTH VWAP","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","MA Pullback","RTH VWAP","Matrix Level","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"];
 var SDESC={
   "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
@@ -766,6 +766,7 @@ var SDESC={
   "Extension Fade":"Fade overextended moves looking to return to value. Use volume analysis to confirm exhaustion.",
   "MA Pullback":"Pull back into 1, 2, 3, 5, 30min:20ma, 1hr, 1hr:100ma.",
   "RTH VWAP":"Trade reactions off the prior RTH VWAP level. Look for confluence with key volume profile nodes.",
+  "Matrix Level":"8 Hour Open/Close or significant level on the 8 Hour timeframe, used as a magnet or for rejections.",
 "Live Read — Naked POC Magnet":"Prior session POC that was never revisited acts as a magnet. Price will seek it out. Trade the move toward it with confluence — best when price is in a rotation and the naked POC is within the day's range.",
 "Live Read — HTF Level Reaction":"Daily or weekly key level hit — PDH/PDL, prior week high/low, monthly open. Drop to lower timeframe for entry confirmation. Trade the reaction, not the anticipation — wait for rejection or acceptance signal.",
 "Live Read — Trend Exhaustion":"Extended trend with multiple pushes and shrinking range on each push. Volume drying up, delta flipping, price making new highs/lows but not holding. Fade the final push when exhaustion confirmed on tape.",
@@ -1083,7 +1084,8 @@ var SETUP_COLORS={
   "POC":"#ffd700",
   "Dual POC":"#ff9500",
   "VAH/VAL":"#40e0d0",
-  "RTH VWAP":"#ff4444"
+  "RTH VWAP":"#ff4444",
+  "Matrix Level":"#32cd32"
 };
 function setupColor(name){return SETUP_COLORS[name]||"#e0c97a";}
 function getSetups(t){
