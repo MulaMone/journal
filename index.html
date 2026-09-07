@@ -4683,7 +4683,7 @@ function chartTab(){
 
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent="Chart data via OANDA (CFD proxy) — markers show trade entries from your log";
+  note.textContent="Chart data via OANDA (CFD proxy, times shown in ET) — markers show trade entries from your log";
   el.appendChild(note);
 
   var chg=h("button",{className:"btn"});chg.style.cssText="margin-top:6px;font-size:11px;padding:3px 8px;";chg.textContent="Change OANDA token";
@@ -4755,9 +4755,25 @@ function chartTab(){
     .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
     .then(function(data){
       loading.remove();
+      // Lightweight Charts always displays numeric timestamps using UTC calendar
+      // fields, no matter the browser's timezone (documented library behavior).
+      // OANDA candle times are true UTC instants, so left as-is they render as
+      // UTC on the axis — 4-5h off from the ET times the rest of Edge uses
+      // (Trade Log, RTH sessions, the trade's own recorded entry/exit time).
+      // Fix: shift every timestamp fed to the chart by the ET offset so the
+      // library's UTC-labeled ticks show ET wall-clock digits instead. Using
+      // one offset for the whole fetched window (not per-candle) keeps candle
+      // spacing and marker snapping exact; it can be off by an hour right at
+      // a DST changeover, same simplification already used for forex imports.
+      var etOffsetSec=(function(){
+        var refTs=focusTs||(fromSec!=null?Math.floor((fromSec+toSec)/2):Math.floor(Date.now()/1000));
+        var d=new Date(refTs*1000);
+        var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10; // rough Mar–Nov DST window
+        return (isDST?4:5)*3600;
+      })();
       var raw=(data&&data.candles)||[];
       var candles=raw.filter(function(c){return c.complete;}).map(function(c){
-        return {time:Math.floor(new Date(c.time).getTime()/1000),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+        return {time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
       });
 
       if(!candles.length){
@@ -4821,9 +4837,10 @@ function chartTab(){
           // plotted position by that amount. The list below still shows the
           // true recorded entry/exit numbers, unadjusted.
           var diffs=displayPoints.map(function(p){
+            var pDisp=p.ts-etOffsetSec; // same ET shift as candles, so the diff/search stays apples-to-apples
             var nearest=candles[0];
             for(var i=0;i<candles.length;i++){
-              if(Math.abs(candles[i].time-p.ts)<Math.abs(nearest.time-p.ts)) nearest=candles[i];
+              if(Math.abs(candles[i].time-pDisp)<Math.abs(nearest.time-pDisp)) nearest=candles[i];
             }
             return nearest.close-p.price;
           }).sort(function(a,b){return a-b;});
@@ -4839,7 +4856,7 @@ function chartTab(){
             // line series at an unaligned timestamp adds a new time column the
             // chart's axis has no candle for, rendering as a blank gap under the
             // marker. Snapping keeps the arrow on a real candle; price stays exact.
-            var t=Math.floor(p.ts/periodSec)*periodSec;
+            var t=Math.floor(p.ts/periodSec)*periodSec-etOffsetSec; // snap in true time first, then shift to match the ET-shifted candles
             while(seenTs[t]) t+=periodSec; // keep strictly increasing, still period-aligned, if multiple fills land in the same candle
             seenTs[t]=true;
             lineData.push({time:t,value:p.price+priceOffset});
