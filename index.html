@@ -4683,7 +4683,7 @@ function loadNTFile(){
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
 var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",MNQ:"NAS100_USD"};
-var OANDA_GRAN={"1m":"M1","5m":"M5","15m":"M15","1h":"H1","4h":"H4"};
+var OANDA_GRAN={"1m":"M1","5m":"M5","15m":"M15","1h":"H1","4h":"H4","8h":"H8"};
 
 function tradeTs(t){
   if(!t||!t.date) return null;
@@ -4730,7 +4730,7 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
 
-  var TFS=["1m","5m","15m","1h","4h"];
+  var TFS=["1m","5m","15m","1h","4h","8h"];
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.padding="6px 10px";
@@ -4823,7 +4823,7 @@ function chartTab(){
   tradePoints.sort(function(a,b){return a.ts-b.ts;});
 
   var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M";
-  var PERIOD_SEC={"1m":60,"5m":300,"15m":900,"1h":3600,"4h":14400};
+  var PERIOD_SEC={"1m":60,"5m":300,"15m":900,"1h":3600,"4h":14400,"8h":28800};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
 
