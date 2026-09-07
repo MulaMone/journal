@@ -4838,13 +4838,19 @@ function chartTab(){
     var padSec=periodSec*20;
     var nowSec=Math.floor(Date.now()/1000);
     fromSec=tradePoints[0].ts-padSec;
-    toSec=Math.max(tradePoints[tradePoints.length-1].ts+padSec,nowSec);
+    // Never request past "now" — OANDA has no future candles and rejects the
+    // request outright. The window's end is simply the present moment; if the
+    // last trade is recent, "now" already covers it without any padding.
+    toSec=nowSec;
     // OANDA caps a single request at ~5000 candles — a wide date range at a
     // fine granularity (e.g. weeks of history on 5m) blows past that and
     // returns HTTP 400. Keep the most recent window that fits; older trades
     // outside it just won't have a candle to sit on at this timeframe.
     var maxSpan=periodSec*4500;
     if(toSec-fromSec>maxSpan) fromSec=toSec-maxSpan;
+    // Guard against a trade logged with a bad/future date pushing fromSec
+    // past toSec too (from > to is also rejected by OANDA).
+    if(fromSec>=toSec) fromSec=toSec-periodSec;
   }
 
   if(fromSec!=null){
@@ -5590,10 +5596,33 @@ function notesTab(){
     var ohT=document.createElement("div");ohT.className="m-card-title";ohT.textContent="Over Head";
     var ohTotalChip=document.createElement("div");ohTotalChip.style.cssText="font-size:12px;font-weight:700;color:#ff8c00;font-family:'Courier New',monospace;";
     ohHdr.appendChild(ohT);ohHdr.appendChild(ohTotalChip);ohCard.appendChild(ohHdr);
+    var ohEditingIdx=null;
     function renderOverheadM(){
       ohTotalChip.textContent=dol(overheadTotal())+"/mo";
       while(ohCard.children.length>1) ohCard.removeChild(ohCard.lastChild);
       overhead.forEach(function(o,i){
+        if(ohEditingIdx===i){
+          var eRow=document.createElement("div");eRow.style.cssText="padding:8px 0;border-bottom:1px solid #0d1e38;display:flex;flex-wrap:wrap;gap:8px;";
+          var eName=document.createElement("input");eName.value=o.text;eName.style.cssText="flex:1 1 100%;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
+          var eAmt=document.createElement("input");eAmt.type="number";eAmt.step="0.01";eAmt.value=o.amount;eAmt.style.cssText="flex:1;min-width:0;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
+          var eCyc=document.createElement("select");eCyc.style.cssText="flex:1;min-width:0;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:12px;padding:7px 5px;outline:none;";
+          OH_CYCLES.forEach(function(c){var opt=document.createElement("option");opt.value=c.k;opt.textContent=c.l;if((o.cycle||"monthly")===c.k)opt.selected=true;eCyc.appendChild(opt);});
+          var eSave=document.createElement("button");eSave.style.cssText="background:transparent;border:1px solid #00e676;color:#00e676;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";eSave.textContent="SAVE";
+          var eCancel=document.createElement("button");eCancel.style.cssText="background:transparent;border:1px solid #ff4444;color:#ff4444;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";eCancel.textContent="CANCEL";
+          (function(idx2){
+            eSave.addEventListener("click",function(){
+              var v=eName.value.trim();var amtV=parseFloat(eAmt.value);
+              if(!v||isNaN(amtV)) return;
+              overhead[idx2]={text:v,amount:amtV,cycle:eCyc.value,date:overhead[idx2].date};
+              ss("notes_overhead",overhead);syncToCloud();
+              ohEditingIdx=null;renderOverheadM();
+            });
+            eCancel.addEventListener("click",function(){ohEditingIdx=null;renderOverheadM();});
+          })(i);
+          eRow.appendChild(eName);eRow.appendChild(eAmt);eRow.appendChild(eCyc);eRow.appendChild(eSave);eRow.appendChild(eCancel);
+          ohCard.appendChild(eRow);
+          return;
+        }
         var cyc=ohCycleInfo(o.cycle);
         var row=document.createElement("div");row.style.cssText="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #0d1e38;align-items:center;";
         var body=document.createElement("div");body.style.flex="1";
@@ -5601,9 +5630,11 @@ function notesTab(){
         var sub=document.createElement("div");sub.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;margin-top:2px;";sub.textContent=cyc.l;
         body.appendChild(txt);body.appendChild(sub);
         var amt=document.createElement("span");amt.style.cssText="font-size:12px;color:#e0c97a;font-family:'Courier New',monospace;font-weight:700;white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
+        var edit=document.createElement("span");edit.style.cssText="font-size:8px;color:#00d4d4;cursor:pointer;font-family:monospace;margin-left:8px;";edit.textContent="EDIT";
+        (function(idx2){edit.addEventListener("click",function(){ohEditingIdx=idx2;renderOverheadM();});})(i);
         var del=document.createElement("span");del.style.cssText="font-size:8px;color:#ff4444;cursor:pointer;font-family:monospace;margin-left:8px;";del.textContent="✕";
         (function(idx2){del.addEventListener("click",function(){overhead.splice(idx2,1);ss("notes_overhead",overhead);syncToCloud();renderOverheadM();});})(i);
-        row.appendChild(body);row.appendChild(amt);row.appendChild(del);ohCard.appendChild(row);
+        row.appendChild(body);row.appendChild(amt);row.appendChild(edit);row.appendChild(del);ohCard.appendChild(row);
       });
       var addRow=document.createElement("div");addRow.style.cssText="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;";
       var addName=document.createElement("input");addName.placeholder="e.g. Data feed, platform fee...";addName.style.cssText="flex:1 1 100%;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
@@ -5758,10 +5789,33 @@ function notesTab(){
     var ohAddBtn=h("button",{className:"btn btn-g"});ohAddBtn.style.cssText="padding:3px 10px;font-size:9px;";ohAddBtn.textContent="+ ADD";ohH.appendChild(ohAddBtn);ohCard.appendChild(ohH);
     var ohList=div();ohCard.appendChild(ohList);
     var ohShowAdd=false;
+    var ohEditingIdxD=null;
     function renderOverheadD(){
       ohTotalChip.textContent=dol(overheadTotal())+"/mo";
       ohList.innerHTML="";
       overhead.forEach(function(o,i){
+        if(ohEditingIdxD===i){
+          var eRow=div("row gap8 mt8");eRow.style.flexWrap="wrap";
+          var eName=h("input");eName.value=o.text;eName.style.cssText="flex:1 1 100%;";
+          var eAmt=h("input",{type:"number",step:"0.01"});eAmt.value=o.amount;eAmt.style.flex="1";
+          var eCyc=h("select");eCyc.style.flex="1";
+          OH_CYCLES.forEach(function(c){var opt=h("option",{value:c.k});opt.textContent=c.l;if((o.cycle||"monthly")===c.k)opt.selected=true;eCyc.appendChild(opt);});
+          var eSave=h("button",{className:"btn btn-g"});eSave.style.whiteSpace="nowrap";eSave.textContent="SAVE";
+          var eCancel=h("button",{className:"btn btn-r"});eCancel.style.whiteSpace="nowrap";eCancel.textContent="CANCEL";
+          (function(idx2){
+            eSave.addEventListener("click",function(){
+              var v=eName.value.trim();var amtV=parseFloat(eAmt.value);
+              if(!v||isNaN(amtV)) return;
+              overhead[idx2]={text:v,amount:amtV,cycle:eCyc.value,date:overhead[idx2].date};
+              ss("notes_overhead",overhead);syncToCloud();
+              ohEditingIdxD=null;renderOverheadD();
+            });
+            eCancel.addEventListener("click",function(){ohEditingIdxD=null;renderOverheadD();});
+          })(i);
+          eRow.appendChild(eName);eRow.appendChild(eAmt);eRow.appendChild(eCyc);eRow.appendChild(eSave);eRow.appendChild(eCancel);
+          ohList.appendChild(eRow);
+          return;
+        }
         var cyc=ohCycleInfo(o.cycle);
         var row=div("rjb");row.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);align-items:center;gap:10px;";
         var left=div();left.style.flex="1";
@@ -5770,6 +5824,9 @@ function notesTab(){
         left.appendChild(txt);left.appendChild(sub);row.appendChild(left);
         var amt=span("sm b");amt.style.cssText="white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
         row.appendChild(amt);
+        var editBtn2=h("button",{className:"btn"});editBtn2.style.cssText="padding:2px 8px;font-size:9px;flex-shrink:0;";editBtn2.textContent="EDIT";
+        (function(idx2){editBtn2.addEventListener("click",function(){ohEditingIdxD=idx2;renderOverheadD();});})(i);
+        row.appendChild(editBtn2);
         var del=h("button",{className:"btn btn-r"});del.style.cssText="padding:2px 8px;font-size:9px;flex-shrink:0;";del.textContent="✕";
         (function(idx2){del.addEventListener("click",function(){overhead.splice(idx2,1);ss("notes_overhead",overhead);syncToCloud();renderOverheadD();});})(i);
         row.appendChild(del);ohList.appendChild(row);
