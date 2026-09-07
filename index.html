@@ -4927,7 +4927,12 @@ function chartTab(){
         return (isDST?4:5)*3600;
       })();
       var raw=(data&&data.candles)||[];
-      var candles=raw.filter(function(c){return c.complete;}).map(function(c){
+      // Only completed candles were kept, so the still-forming current bar
+      // never appeared until its period fully closed — on a 5m chart that
+      // reads as a several-minute gap at the right edge even right after
+      // hitting Refresh. Keep the in-progress candle too so the chart
+      // reflects live price action up to the moment of the request.
+      var candles=raw.map(function(c){
         return {time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
       });
 
