@@ -5489,7 +5489,13 @@ function notesTab(){
   var lessons=ls("notes_lessons",[]);
   var mantras=ls("notes_mantras",["Only A+ setups. No B trades ever.","The market will always be there tomorrow.","Cut losers fast. Let winners breathe.","Process over profits — every single day.","Wait for the trade to come to you — never go hunting.","Protect the account first. Profits come second.","You don't need to make money every day. You need to not lose it.","The goal is to still be here in 10 years.","Enter with a reason. Exit with a plan. Never guess."]);
   var overhead=ls("notes_overhead",[]);
-  function overheadTotal(){return overhead.reduce(function(a,o){return a+(parseFloat(o.amount)||0);},0);}
+  var OH_CYCLES=[{k:"monthly",l:"Monthly",div:1},{k:"quarterly",l:"3 Months",div:3},{k:"yearly",l:"Yearly",div:12},{k:"onetime",l:"One-Time",div:0}];
+  function ohCycleInfo(k){return OH_CYCLES.filter(function(c){return c.k===k;})[0]||OH_CYCLES[0];}
+  // Normalizes every entry to its monthly-equivalent cost, so a $90/3-months
+  // subscription and a $30/month one both count as $30 toward the total —
+  // one-time costs are shown in the list but don't recur, so they're excluded.
+  function ohMonthly(o){var c=ohCycleInfo(o.cycle);return c.div?(parseFloat(o.amount)||0)/c.div:0;}
+  function overheadTotal(){return overhead.reduce(function(a,o){return a+ohMonthly(o);},0);}
   var notepad=ls("notes_pad","");
 
   // Week key: Sun of current week
@@ -5574,30 +5580,34 @@ function notesTab(){
     var ohTotalChip=document.createElement("div");ohTotalChip.style.cssText="font-size:12px;font-weight:700;color:#ff8c00;font-family:'Courier New',monospace;";
     ohHdr.appendChild(ohT);ohHdr.appendChild(ohTotalChip);ohCard.appendChild(ohHdr);
     function renderOverheadM(){
-      ohTotalChip.textContent=dol(overheadTotal());
+      ohTotalChip.textContent=dol(overheadTotal())+"/mo";
       while(ohCard.children.length>1) ohCard.removeChild(ohCard.lastChild);
       overhead.forEach(function(o,i){
+        var cyc=ohCycleInfo(o.cycle);
         var row=document.createElement("div");row.style.cssText="display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #0d1e38;align-items:center;";
         var body=document.createElement("div");body.style.flex="1";
         var txt=document.createElement("div");txt.style.cssText="font-size:13px;color:#e0c97a;font-family:'Courier New',monospace;line-height:1.5;";txt.textContent=o.text;
-        body.appendChild(txt);
+        var sub=document.createElement("div");sub.style.cssText="font-size:9px;color:#c9a84c;font-family:monospace;margin-top:2px;";sub.textContent=cyc.l;
+        body.appendChild(txt);body.appendChild(sub);
         var amt=document.createElement("span");amt.style.cssText="font-size:12px;color:#e0c97a;font-family:'Courier New',monospace;font-weight:700;white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
         var del=document.createElement("span");del.style.cssText="font-size:8px;color:#ff4444;cursor:pointer;font-family:monospace;margin-left:8px;";del.textContent="✕";
         (function(idx2){del.addEventListener("click",function(){overhead.splice(idx2,1);ss("notes_overhead",overhead);syncToCloud();renderOverheadM();});})(i);
         row.appendChild(body);row.appendChild(amt);row.appendChild(del);ohCard.appendChild(row);
       });
-      var addRow=document.createElement("div");addRow.style.cssText="display:flex;gap:8px;margin-top:8px;";
-      var addName=document.createElement("input");addName.placeholder="e.g. Data feed, platform fee...";addName.style.cssText="flex:2;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
-      var addAmt=document.createElement("input");addAmt.placeholder="Amount";addAmt.type="number";addAmt.step="0.01";addAmt.style.cssText="flex:1;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
+      var addRow=document.createElement("div");addRow.style.cssText="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;";
+      var addName=document.createElement("input");addName.placeholder="e.g. Data feed, platform fee...";addName.style.cssText="flex:1 1 100%;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
+      var addAmt=document.createElement("input");addAmt.placeholder="Amount";addAmt.type="number";addAmt.step="0.01";addAmt.style.cssText="flex:1;min-width:0;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:13px;padding:7px 9px;outline:none;";
+      var addCyc=document.createElement("select");addCyc.style.cssText="flex:1;min-width:0;background:#071428;border:1px solid #1a3260;border-radius:5px;color:#e0c97a;font-family:'Courier New',monospace;font-size:12px;padding:7px 5px;outline:none;";
+      OH_CYCLES.forEach(function(c){var opt=document.createElement("option");opt.value=c.k;opt.textContent=c.l;addCyc.appendChild(opt);});
       var addBtn3=document.createElement("button");addBtn3.style.cssText="background:transparent;border:1px solid #00e676;color:#00e676;font-family:'Courier New',monospace;font-size:10px;padding:7px 12px;border-radius:5px;cursor:pointer;white-space:nowrap;";addBtn3.textContent="+ ADD";
       addBtn3.addEventListener("click",function(){
         var v=addName.value.trim();var amtV=parseFloat(addAmt.value);
         if(!v||isNaN(amtV)) return;
-        overhead.push({text:v,amount:amtV,date:notesToday});
+        overhead.push({text:v,amount:amtV,cycle:addCyc.value,date:notesToday});
         ss("notes_overhead",overhead);syncToCloud();
         renderOverheadM();
       });
-      addRow.appendChild(addName);addRow.appendChild(addAmt);addRow.appendChild(addBtn3);ohCard.appendChild(addRow);
+      addRow.appendChild(addName);addRow.appendChild(addAmt);addRow.appendChild(addCyc);addRow.appendChild(addBtn3);ohCard.appendChild(addRow);
     }
     renderOverheadM();
     el.appendChild(ohCard);
@@ -5738,13 +5748,15 @@ function notesTab(){
     var ohList=div();ohCard.appendChild(ohList);
     var ohShowAdd=false;
     function renderOverheadD(){
-      ohTotalChip.textContent=dol(overheadTotal());
+      ohTotalChip.textContent=dol(overheadTotal())+"/mo";
       ohList.innerHTML="";
       overhead.forEach(function(o,i){
+        var cyc=ohCycleInfo(o.cycle);
         var row=div("rjb");row.style.cssText="padding:8px 0;border-bottom:1px solid var(--border);align-items:center;gap:10px;";
         var left=div();left.style.flex="1";
         var txt=span("sm");txt.style.cssText="color:var(--text2);";txt.textContent=o.text;
-        left.appendChild(txt);row.appendChild(left);
+        var sub=div("xs m");sub.style.marginTop="2px";sub.textContent=cyc.l;
+        left.appendChild(txt);left.appendChild(sub);row.appendChild(left);
         var amt=span("sm b");amt.style.cssText="white-space:nowrap;";amt.textContent=dol(parseFloat(o.amount)||0);
         row.appendChild(amt);
         var del=h("button",{className:"btn btn-r"});del.style.cssText="padding:2px 8px;font-size:9px;flex-shrink:0;";del.textContent="✕";
@@ -5752,19 +5764,21 @@ function notesTab(){
         row.appendChild(del);ohList.appendChild(row);
       });
       if(ohShowAdd){
-        var ohAddRow=div("row gap8 mt8");
-        var ohInpName=h("input",{placeholder:"e.g. Data feed, platform fee..."});ohInpName.style.flex="2";
+        var ohAddRow=div("row gap8 mt8");ohAddRow.style.flexWrap="wrap";
+        var ohInpName=h("input",{placeholder:"e.g. Data feed, platform fee..."});ohInpName.style.cssText="flex:1 1 100%;";
         var ohInpAmt=h("input",{placeholder:"Amount",type:"number",step:"0.01"});ohInpAmt.style.flex="1";
+        var ohSelCyc=h("select");ohSelCyc.style.flex="1";
+        OH_CYCLES.forEach(function(c){var opt=h("option",{value:c.k});opt.textContent=c.l;ohSelCyc.appendChild(opt);});
         var ohSaveBtn=h("button",{className:"btn btn-g"});ohSaveBtn.style.whiteSpace="nowrap";ohSaveBtn.textContent="SAVE";
         ohSaveBtn.addEventListener("click",function(){
           var v=ohInpName.value.trim();var amtV=parseFloat(ohInpAmt.value);
           if(!v||isNaN(amtV)) return;
-          overhead.push({text:v,amount:amtV,date:notesToday});
+          overhead.push({text:v,amount:amtV,cycle:ohSelCyc.value,date:notesToday});
           ss("notes_overhead",overhead);syncToCloud();
           ohShowAdd=false;ohAddBtn.textContent="+ ADD";
           renderOverheadD();
         });
-        ohAddRow.appendChild(ohInpName);ohAddRow.appendChild(ohInpAmt);ohAddRow.appendChild(ohSaveBtn);
+        ohAddRow.appendChild(ohInpName);ohAddRow.appendChild(ohInpAmt);ohAddRow.appendChild(ohSelCyc);ohAddRow.appendChild(ohSaveBtn);
         ohList.appendChild(ohAddRow);
         setTimeout(function(){ohInpName.focus();},50);
       }
