@@ -5026,7 +5026,11 @@ function chartTab(){
               time:t,
               position:isUp?"belowBar":"aboveBar",
               color:isUp?"#00e676":"#ff4444",
-              shape:isUp?"arrowUp":"arrowDown"
+              shape:isUp?"arrowUp":"arrowDown",
+              // Label entries only (not exits) so a Short's arrow shows "S"
+              // above the bar and a Long's shows "L" below — a quick way to
+              // tell separate trades apart at a glance without opening the list.
+              text:p.kind==="entry"?(p.isLong?"L":"S"):""
             };
           });
           markerSeries.setData(lineData);
