@@ -1102,24 +1102,12 @@ function saveSetupImages(name,arr){
   ss("playbook_images",m);
   syncToCloud();
 }
-// Downscale + JPEG-compress before storing — a raw phone photo can be
-// several MB. Kept close to full screen resolution and high quality so
-// chart screenshots stay readable when viewed enlarged.
+// Store the file exactly as uploaded — no resize/recompress, so it stays
+// pixel-for-pixel identical to the original (large screenshots/photos will
+// take up more storage and cloud-sync bandwidth as a tradeoff).
 function readImageCompressed(file,cb){
   var reader=new FileReader();
-  reader.onload=function(ev){
-    var img=new Image();
-    img.onload=function(){
-      var maxDim=1920;
-      var scale=Math.min(1,maxDim/Math.max(img.width,img.height));
-      var w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
-      var canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
-      canvas.getContext("2d").drawImage(img,0,0,w,h);
-      cb(canvas.toDataURL("image/jpeg",0.92));
-    };
-    img.onerror=function(){cb(null);};
-    img.src=ev.target.result;
-  };
+  reader.onload=function(ev){cb(ev.target.result);};
   reader.onerror=function(){cb(null);};
   reader.readAsDataURL(file);
 }
@@ -3539,7 +3527,7 @@ function playbookTab(){
       var lbOverlay=div();
       lbOverlay.style.cssText="position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
       lbOverlay.addEventListener("click",function(e){if(e.target===lbOverlay){State.pb_lightbox=null;render();}});
-      var lbBox=div();lbBox.style.cssText="max-width:90vw;max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:12px;";
+      var lbBox=div();lbBox.style.cssText="max-width:90vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:12px;";
       if(lbImages.length>1){
         var lbCount=div("xs m");lbCount.textContent=(lbIdx+1)+" / "+lbImages.length;
         lbBox.appendChild(lbCount);
@@ -3550,7 +3538,7 @@ function playbookTab(){
         lbPrev.addEventListener("click",function(){State.pb_lightbox={name:lbName,idx:(lbIdx-1+lbImages.length)%lbImages.length};render();});
         lbImgRow.appendChild(lbPrev);
       }
-      var lbImg=h("img",{src:lbImages[lbIdx]});lbImg.style.cssText="max-width:80vw;max-height:70vh;border-radius:4px;border:1px solid var(--border);";
+      var lbImg=h("img",{src:lbImages[lbIdx]});lbImg.style.cssText="max-width:80vw;max-height:65vh;border-radius:4px;border:1px solid var(--border);";
       lbImgRow.appendChild(lbImg);
       if(lbImages.length>1){
         var lbNext=h("button",{className:"btn"});lbNext.textContent="›";
