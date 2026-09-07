@@ -4728,7 +4728,7 @@ function chartTab(){
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
 
-  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"MES",n:"Micro E-mini S&P"},{l:"MNQ",n:"Micro E-mini NQ"},{l:"GBPCAD",n:"GBP/CAD"}];
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--ca);color:var(--ca);font-weight:700;";
