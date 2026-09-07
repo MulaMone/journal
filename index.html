@@ -4722,12 +4722,19 @@ function chartTab(){
 
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
+  hrow.style.flexWrap="wrap";
   var sh=div("sh");sh.style.marginBottom="0";
   sh.textContent=focusTs
     ? sym+" — "+tf+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
     : sym+" — "+tf+" (OANDA proxy)";
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
+  // No horizontal scroll here, and this row holds a LOT of buttons (5
+  // symbols + 6 timeframes + Refresh) — on a narrow mobile screen a plain
+  // non-wrapping flex row runs straight off the edge, leaving the timeframe
+  // buttons physically present but impossible to reach. Let it wrap instead.
+  ctrlRow.style.flexWrap="wrap";
+  ctrlRow.style.rowGap="8px";
 
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
