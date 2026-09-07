@@ -4826,25 +4826,28 @@ function chartTab(){
         ? windowPoints.filter(function(p){return selectedIds.indexOf(p.id)>-1;})
         : windowPoints;
 
-      var priceOffset=0;
       if(windowPoints.length){
         if(displayPoints.length){
           // OANDA's CFD proxy and the real futures instrument don't trade at
-          // the same absolute price — placing a marker at the recorded entry
-          // price would draw it nowhere near the actual candles. Estimate the
-          // gap as the median difference between each trade's recorded price
-          // and its nearest candle at that time, then shift the marker's
-          // plotted position by that amount. The list below still shows the
-          // true recorded entry/exit numbers, unadjusted.
-          var diffs=displayPoints.map(function(p){
-            var pDisp=p.ts-etOffsetSec; // same ET shift as candles, so the diff/search stays apples-to-apples
+          // the same absolute price, and that gap DRIFTS over the session —
+          // it isn't a fixed spread. A single shared offset (e.g. the median
+          // across every marker in view) only happens to line a marker up
+          // with its local candles if the gap hasn't moved since the other
+          // markers it was averaged with. An entry and its exit an hour+
+          // apart can easily have different real gaps, so averaging them
+          // left one marker snapped to its candles and the other floating.
+          // Give every marker its OWN nearest-candle offset instead — each
+          // one lands on its own local price action, independent of how far
+          // apart in time the other markers are. The list below the chart
+          // still shows the true recorded entry/exit numbers, unadjusted.
+          function nearestCandleOffset(p){
+            var pDisp=p.ts-etOffsetSec; // same ET shift as candles, so the search stays apples-to-apples
             var nearest=candles[0];
             for(var i=0;i<candles.length;i++){
               if(Math.abs(candles[i].time-pDisp)<Math.abs(nearest.time-pDisp)) nearest=candles[i];
             }
             return nearest.close-p.price;
-          }).sort(function(a,b){return a-b;});
-          if(diffs.length) priceOffset=diffs[Math.floor(diffs.length/2)];
+          }
 
           var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});
           var seenTs={};
@@ -4859,7 +4862,7 @@ function chartTab(){
             var t=Math.floor(p.ts/periodSec)*periodSec-etOffsetSec; // snap in true time first, then shift to match the ET-shifted candles
             while(seenTs[t]) t+=periodSec; // keep strictly increasing, still period-aligned, if multiple fills land in the same candle
             seenTs[t]=true;
-            lineData.push({time:t,value:p.price+priceOffset});
+            lineData.push({time:t,value:p.price+nearestCandleOffset(p)});
             // Entry arrow reflects the opening action; exit arrow reflects
             // the closing action, which is the opposite side — closing a
             // long is a sell (down/red), closing a short is a buy (up/green).
@@ -4874,7 +4877,7 @@ function chartTab(){
           markerSeries.setData(lineData);
           markerSeries.setMarkers(markers);
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent="OANDA (CFD proxy, price-adjusted "+(priceOffset>=0?"+":"")+priceOffset.toFixed(2)+" to align with candles) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+          note.textContent="OANDA (CFD proxy, each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
         } else {
           note.textContent="OANDA (CFD proxy) • selection doesn't match any trade in this window • "+new Date().toLocaleTimeString();
         }
