@@ -4856,7 +4856,18 @@ function chartTab(){
 
   function fetchAndRender(){
     fetch(url,{headers:{Authorization:"Bearer "+tok}})
-    .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
+    .then(function(r){
+      if(!r.ok){
+        // Surface OANDA's actual error body instead of just the status code —
+        // "HTTP 400" alone doesn't say whether it's an expired token, a bad
+        // date range, etc. OANDA returns JSON with an errorMessage field.
+        return r.json().catch(function(){return null;}).then(function(body){
+          var reason=body&&(body.errorMessage||body.message)?": "+(body.errorMessage||body.message):"";
+          throw new Error("HTTP "+r.status+reason);
+        });
+      }
+      return r.json();
+    })
     .then(function(data){
       loading.remove();
       // Lightweight Charts always displays numeric timestamps using UTC calendar
