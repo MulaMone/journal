@@ -736,6 +736,11 @@ var _ss_orig=null;
 var _syncInFlight=false;
 var _syncInFlightTimer=null;
 var _chartLiveTimer=null; // polling interval for the Chart tab's live price updates
+// Incremented on every chartTab() call. Lets an in-flight fetch from a
+// symbol/timeframe the person has since switched away from detect that it's
+// stale and no-op, instead of mutating the chart/live-poll state for the
+// wrong instrument if its response happens to arrive after a newer one's.
+var _chartLoadToken=0;
 function initAutoSync(){
   _ss_orig=ss;
   var syncTimer=null;
@@ -4708,6 +4713,7 @@ function tradeExitTs(t){
 function chartTab(){
   var el=div();
   el.style.padding="16px";
+  var myLoadToken=++_chartLoadToken;
 
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
@@ -4916,6 +4922,10 @@ function chartTab(){
       return r.json();
     })
     .then(function(data){
+      // A symbol/timeframe switch since this fetch started means a newer
+      // chartTab() call is now the current one — let that one own the DOM
+      // and the live-poll timer instead of this stale response.
+      if(myLoadToken!==_chartLoadToken) return;
       loading.remove();
       // Lightweight Charts always displays numeric timestamps using UTC calendar
       // fields, no matter the browser's timezone (documented library behavior).
@@ -5134,6 +5144,7 @@ function chartTab(){
       },15000);
     })
     .catch(function(e){
+      if(myLoadToken!==_chartLoadToken) return; // superseded by a newer load — don't show a stale error
       loading.style.color="var(--red)";
       loading.textContent="⚠ Could not load chart: "+e.message+" — check your token or connection";
     });
@@ -5154,13 +5165,6 @@ function chartTab(){
 
   return el;
 }
-
-function buildChart(){}
-function loadLWChart(){}
-function loadTVWidget(){render();}
-function fetchChartData(){}
-function loadChartData(){}
-function updateTVWidget(){render();}
 
 
 
