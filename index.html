@@ -4833,8 +4833,14 @@ function chartTab(){
           var seenTs={};
           var lineData=[];
           var markers=displayPoints.map(function(p){
-            var t=p.ts;
-            while(seenTs[t]) t+=1; // keep strictly increasing if two trades share a timestamp
+            // Snap to the candle period the fill falls inside, rather than the raw
+            // fill timestamp. The candlestick series only has data on period
+            // boundaries (e.g. :00/:15/:30/:45 for 15m); plotting this marker's own
+            // line series at an unaligned timestamp adds a new time column the
+            // chart's axis has no candle for, rendering as a blank gap under the
+            // marker. Snapping keeps the arrow on a real candle; price stays exact.
+            var t=Math.floor(p.ts/periodSec)*periodSec;
+            while(seenTs[t]) t+=periodSec; // keep strictly increasing, still period-aligned, if multiple fills land in the same candle
             seenTs[t]=true;
             lineData.push({time:t,value:p.price+priceOffset});
             // Entry arrow reflects the opening action; exit arrow reflects
