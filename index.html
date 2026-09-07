@@ -4757,8 +4757,9 @@ function chartTab(){
   var TFS=["1m","5m","15m","1h","4h","8h"];
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
-    b.style.padding="6px 10px";
-    if(tf===t) b.style.cssText="border-color:#ff6b4a;color:#ff6b4a;padding:6px 10px;";
+    b.style.cssText=tf===t
+      ? "border-color:var(--accent);color:var(--accent);padding:6px 10px;"
+      : "border-color:var(--red);color:var(--red);padding:6px 10px;";
     b.textContent=t;
     b.addEventListener("click",function(){State.chart_interval=t;render();});
     ctrlRow.appendChild(b);
