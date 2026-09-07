@@ -5598,7 +5598,7 @@ function notesTab(){
     ohHdr.appendChild(ohT);ohHdr.appendChild(ohTotalChip);ohCard.appendChild(ohHdr);
     var ohEditingIdx=null;
     function renderOverheadM(){
-      ohTotalChip.textContent=dol(overheadTotal())+"/mo";
+      ohTotalChip.textContent=dol(overheadTotal())+"/mo · "+dol(overheadTotal()*12)+"/yr";
       while(ohCard.children.length>1) ohCard.removeChild(ohCard.lastChild);
       overhead.forEach(function(o,i){
         if(ohEditingIdx===i){
@@ -5791,7 +5791,7 @@ function notesTab(){
     var ohShowAdd=false;
     var ohEditingIdxD=null;
     function renderOverheadD(){
-      ohTotalChip.textContent=dol(overheadTotal())+"/mo";
+      ohTotalChip.textContent=dol(overheadTotal())+"/mo · "+dol(overheadTotal()*12)+"/yr";
       ohList.innerHTML="";
       overhead.forEach(function(o,i){
         if(ohEditingIdxD===i){
