@@ -735,6 +735,7 @@ function updateSyncStatus(status){
 var _ss_orig=null;
 var _syncInFlight=false;
 var _syncInFlightTimer=null;
+var _chartLiveTimer=null; // polling interval for the Chart tab's live price updates
 function initAutoSync(){
   _ss_orig=ss;
   var syncTimer=null;
@@ -4747,6 +4748,8 @@ function chartTab(){
   rbtn.textContent="↻ Refresh";
   rbtn.addEventListener("click",function(){render();});
   ctrlRow.appendChild(rbtn);
+  var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;align-self:center;margin-left:4px;";liveTag.innerHTML="● LIVE";
+  ctrlRow.appendChild(liveTag);
 
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
@@ -4895,6 +4898,10 @@ function chartTab(){
   }
 
   function fetchAndRender(){
+    // Stop any live-poll loop from a previous chart load up front — covers
+    // the case where this new load itself fails, which the success-path
+    // clearInterval below wouldn't reach.
+    clearInterval(_chartLiveTimer);
     fetch(url,{headers:{Authorization:"Bearer "+tok}})
     .then(function(r){
       if(!r.ok){
@@ -5097,6 +5104,32 @@ function chartTab(){
         chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
       });
       ro.observe(chartDiv);
+
+      // ── Live updates without a manual Refresh ──────────────────
+      // Poll for just the newest few bars and push them into the existing
+      // series via update() (which appends a new bar or overwrites the
+      // in-progress one if the timestamp matches) rather than re-fetching
+      // and re-rendering the whole chart — so zoom/scroll position is never
+      // disturbed. Only one poll loop ever runs: clear any prior one first,
+      // since switching symbol/timeframe re-enters this function. The loop
+      // self-clears the moment the person navigates off the Chart tab.
+      clearInterval(_chartLiveTimer);
+      _chartLiveTimer=setInterval(function(){
+        if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=3&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        fetch(liveUrl,{headers:{Authorization:"Bearer "+tok}})
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(freshData){
+          var freshCandles=(freshData&&freshData.candles)||[];
+          if(!freshCandles.length) return;
+          freshCandles.forEach(function(c){
+            series.update({time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
+          });
+          var freshLast=freshCandles[freshCandles.length-1];
+          if(freshLast) lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(freshLast.mid.c)+'</span>';
+        })
+        .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
+      },15000);
     })
     .catch(function(e){
       loading.style.color="var(--red)";
