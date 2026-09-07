@@ -4822,7 +4822,13 @@ function chartTab(){
   });
   tradePoints.sort(function(a,b){return a.ts-b.ts;});
 
-  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M";
+  // OANDA's default day-boundary anchor for H4/H8/H12/D granularities is
+  // 17:00 America/New_York — but futures charting platforms (TradingView
+  // included) anchor their session/day boundary to the CME Globex reopen at
+  // 18:00 ET instead. Left at OANDA's default, every 4h/8h candle here sits
+  // exactly one hour off from what the same instrument shows elsewhere.
+  // Explicitly aligning to 18:00 ET matches that convention.
+  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment=18&alignmentTimezone="+encodeURIComponent("America/New_York");
   var PERIOD_SEC={"1m":60,"5m":300,"15m":900,"1h":3600,"4h":14400,"8h":28800};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
