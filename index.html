@@ -5116,17 +5116,19 @@ function chartTab(){
       clearInterval(_chartLiveTimer);
       _chartLiveTimer=setInterval(function(){
         if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
-        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=3&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         fetch(liveUrl,{headers:{Authorization:"Bearer "+tok}})
         .then(function(r){return r.ok?r.json():null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
           if(!freshCandles.length) return;
-          freshCandles.forEach(function(c){
-            series.update({time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
-          });
-          var freshLast=freshCandles[freshCandles.length-1];
-          if(freshLast) lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(freshLast.mid.c)+'</span>';
+          // series.update() only allows updating the LAST bar already plotted
+          // or appending one strictly newer — feeding it an older timestamp
+          // throws. Only touch the single newest candle, never anything
+          // before it, so this can never violate that and silently no-op.
+          var c=freshCandles[freshCandles.length-1];
+          series.update({time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(c.mid.c)+'</span>';
         })
         .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
       },15000);
