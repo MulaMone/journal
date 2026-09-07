@@ -4837,7 +4837,15 @@ function chartTab(){
   } else if(tradePoints.length){
     var padSec=periodSec*20;
     var nowSec=Math.floor(Date.now()/1000);
-    fromSec=tradePoints[0].ts-padSec;
+    // A symbol with NO trades falls through to the plain "&count=500" request
+    // below, giving ~500 bars of recent history. A symbol WITH trades was
+    // instead anchored tightly to just 20h before its earliest trade — far
+    // fewer bars for the exact same OANDA feed (e.g. NQ vs MNQ, both
+    // NAS100_USD). Take whichever start is EARLIER so a symbol with trades
+    // never shows less history than one with none — it can only show more,
+    // if the trade itself is older than that default lookback.
+    var defaultLookback=periodSec*500;
+    fromSec=Math.min(tradePoints[0].ts-padSec,nowSec-defaultLookback);
     // Never request past "now" — OANDA has no future candles and rejects the
     // request outright. The window's end is simply the present moment; if the
     // last trade is recent, "now" already covers it without any padding.
