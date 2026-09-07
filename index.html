@@ -736,6 +736,7 @@ var _ss_orig=null;
 var _syncInFlight=false;
 var _syncInFlightTimer=null;
 var _chartLiveTimer=null; // polling interval for the Chart tab's live price updates
+var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes" badge
 // Incremented on every chartTab() call. Lets an in-flight fetch from a
 // symbol/timeframe the person has since switched away from detect that it's
 // stale and no-op, instead of mutating the chart/live-poll state for the
@@ -4904,10 +4905,11 @@ function chartTab(){
   }
 
   function fetchAndRender(){
-    // Stop any live-poll loop from a previous chart load up front — covers
-    // the case where this new load itself fails, which the success-path
-    // clearInterval below wouldn't reach.
+    // Stop any live-poll loop (and countdown ticker) from a previous chart
+    // load up front — covers the case where this new load itself fails,
+    // which the success-path clearInterval below wouldn't reach.
     clearInterval(_chartLiveTimer);
+    clearInterval(_chartCountdownTimer);
     fetch(url,{headers:{Authorization:"Bearer "+tok}})
     .then(function(r){
       if(!r.ok){
@@ -5110,6 +5112,26 @@ function chartTab(){
       lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
       el.appendChild(lastEl);
 
+      // ── Countdown to the current bar's close, shown near the price axis ──
+      // last.time is already shifted for ET display; add etOffsetSec back to
+      // recover the candle's true start, then + periodSec for its true close.
+      var barEndTrue=last?(last.time+etOffsetSec+periodSec):null;
+      var cdBadge=div();
+      cdBadge.style.cssText="position:absolute;top:8px;right:8px;background:#040d1ae6;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;color:var(--accent);font-family:'Courier New',monospace;letter-spacing:1px;z-index:5;";
+      chartDiv.appendChild(cdBadge);
+      function renderCountdown(){
+        if(barEndTrue==null){cdBadge.textContent="";return;}
+        var remain=Math.max(0,Math.floor(barEndTrue-Date.now()/1000));
+        var mm=Math.floor(remain/60),ss=remain%60;
+        cdBadge.textContent="NEXT BAR "+mm+":"+(ss<10?"0":"")+ss;
+      }
+      renderCountdown();
+      clearInterval(_chartCountdownTimer);
+      _chartCountdownTimer=setInterval(function(){
+        if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(_chartCountdownTimer);return;}
+        renderCountdown();
+      },1000);
+
       var ro=new ResizeObserver(function(){
         chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
       });
@@ -5139,6 +5161,10 @@ function chartTab(){
           var c=freshCandles[freshCandles.length-1];
           series.update({time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(c.mid.c)+'</span>';
+          // Recompute from this candle's own true (unshifted) start — covers
+          // both the in-progress bar ticking down and a fresh bar starting.
+          barEndTrue=Math.floor(new Date(c.time).getTime()/1000)+periodSec;
+          renderCountdown();
         })
         .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
       },15000);
