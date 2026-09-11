@@ -5271,12 +5271,14 @@ function chartTab(){
             lineData.push({time:t,value:p.price+nearestCandleOffset(p)});
             // Entry arrow reflects the opening action; exit arrow reflects
             // the closing action, which is the opposite side — closing a
-            // long is a sell (down/red), closing a short is a buy (up/green).
+            // long is a sell (down), closing a short is a buy (up). Exits get
+            // their own color (purple) so they read as "closing" at a glance,
+            // distinct from the green/red of entries.
             var isUp=p.kind==="entry"?p.isLong:!p.isLong;
             return {
               time:t,
               position:isUp?"belowBar":"aboveBar",
-              color:isUp?"#00e676":"#ff4444",
+              color:p.kind==="entry"?(isUp?"#00e676":"#ff4444"):"#ff8c00",
               shape:isUp?"arrowUp":"arrowDown",
               // Label entries only (not exits) so a Short's arrow shows "S"
               // above the bar and a Long's shows "L" below — a quick way to
