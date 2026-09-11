@@ -6409,8 +6409,6 @@ function analystTab(){
   });
   var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";
   ctrlRow.appendChild(rbtn);
-  var cmeBtn=h("button",{className:"btn"});cmeBtn.textContent="Load daily OI (CME)";cmeBtn.style.marginLeft="auto";
-  ctrlRow.appendChild(cmeBtn);
   el.appendChild(ctrlRow);
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;";
@@ -6456,9 +6454,6 @@ function analystTab(){
   // Auto-check for a newer bulletin every time this tab opens.
   loadCme(false);
 
-  cmeBtn.addEventListener("click",function(){loadCme(true);});
-
-
   var body=div();body.id="cot-body";el.appendChild(body);
 
   function showLoading(){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING COT DATA…</div>';}
@@ -6476,7 +6471,7 @@ function analystTab(){
       showError(err&&err.message?err.message:"network error");
     });
   }
-  rbtn.addEventListener("click",function(){load(true);});
+  rbtn.addEventListener("click",function(){load(true);loadCme(true);});
   load(false);
 
   return el;
