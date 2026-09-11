@@ -2496,6 +2496,57 @@ function computeTodayMacroEvents(etTodayStr){
   return events;
 }
 
+// Maps a raw event title (from either source) to a checklist label below,
+// so today's actual events get flagged automatically instead of requiring
+// a manual click. Keyword match, case-insensitive, first hit wins.
+var NEWS_MATCH_RULES=[
+  {l:"FOMC Meeting / Fed Decision",kw:["fomc","federal funds rate","fed interest rate"]},
+  {l:"CPI / Inflation Data",kw:["cpi"]},
+  {l:"NFP / Non-Farm Payrolls",kw:["non-farm","nonfarm","non farm payrolls"]},
+  {l:"PCE Price Index",kw:["pce"]},
+  {l:"GDP Report",kw:["gdp"]},
+  {l:"Initial Jobless Claims",kw:["jobless claims","unemployment claims"]},
+  {l:"Retail Sales",kw:["retail sales"]},
+  {l:"ADP Non-Farm Employment",kw:["adp"]},
+  {l:"ISM Manufacturing PMI",kw:["ism manufacturing"]},
+  {l:"ISM Services PMI",kw:["ism services","ism non-manufacturing"]},
+  {l:"PPI (Producer Price Index)",kw:["ppi"]},
+  {l:"JOLTS Job Openings",kw:["jolts"]},
+  {l:"Consumer Confidence",kw:["consumer confidence"]},
+  {l:"Durable Goods Orders",kw:["durable goods"]},
+  {l:"10-Yr Treasury Auction",kw:["10-y bond auction","10-yr bond auction","10 year bond auction","10-y note auction"]},
+  {l:"Michigan Consumer Sentiment",kw:["uom consumer sentiment","michigan consumer sentiment","umich"]},
+  {l:"Unemployment Rate",kw:["unemployment rate"]}
+];
+function matchNewsLabels(rawTitles){
+  var matched=[];
+  rawTitles.forEach(function(rawTitle){
+    var lower=(rawTitle||"").toLowerCase();
+    NEWS_MATCH_RULES.forEach(function(rule){
+      if(matched.indexOf(rule.l)>-1) return;
+      for(var i=0;i<rule.kw.length;i++){
+        if(lower.indexOf(rule.kw[i])>-1){ matched.push(rule.l); break; }
+      }
+    });
+  });
+  return matched;
+}
+// Auto-flags matched labels as "today" in the manual checklist's selection
+// state (State.newsSelected) — same state the checklist rows already read
+// from, so no separate UI is needed. Returns true if anything changed.
+function autoSelectNewsLabels(rawTitles){
+  var matched=matchNewsLabels(rawTitles);
+  if(!matched.length) return false;
+  var todayStr=today();
+  if(State.newsSelectedDate!==todayStr){State.newsSelected=[];State.newsSelectedDate=todayStr;}
+  var changed=false;
+  matched.forEach(function(l){
+    if(State.newsSelected.indexOf(l)===-1){State.newsSelected.push(l);changed=true;}
+  });
+  if(changed){ss("newsSelected",State.newsSelected);ss("newsSelectedDate",State.newsSelectedDate);}
+  return changed;
+}
+
 function prepTab(){
   var el=div();
   var sh=div("sh");sh.innerHTML="Pre-Session Prep — "+today();el.appendChild(sh);
@@ -2749,6 +2800,7 @@ function prepTab(){
 
   function renderFromLocalCompute(){
     var todaysComputed=computeTodayMacroEvents(etTodayStr);
+    autoSelectNewsLabels(todaysComputed.map(function(ev){return ev.title;}));
     renderCalendarRows(todaysComputed,"Computed locally (FOMC calendar + standard NFP schedule) — calendar.json unavailable. CPI/PPI/GDP/PCE/Retail Sales tracked manually below.");
   }
 
@@ -2759,7 +2811,9 @@ function prepTab(){
     }).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(ev){
       return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
     });
+    var changed=autoSelectNewsLabels(todays.map(function(ev){return ev.title;}));
     renderCalendarRows(todays,"Live — calendar.json (refreshed twice daily via GitHub Actions).");
+    if(changed) render(); // refresh the checklist below with the newly auto-flagged items
   }).catch(function(){
     // calendar.json not deployed yet / unreachable (e.g. file:// testing) — the local-compute render above already stands.
   });
