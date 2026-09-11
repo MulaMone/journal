@@ -6508,8 +6508,15 @@ function fmtCotChg(n){
   return (n>0?"+":"")+n.toLocaleString("en-US");
 }
 
-// ─── Daily Open Interest — CME Daily Bulletin (real exchange OI, updates
-// once per trading day, separate from the weekly CFTC snapshot above) ───
+// ─── Daily Open Interest — CME Daily Bulletin (real exchange OI, separate
+// from the weekly CFTC snapshot above) ───────────────────────────────────
+// CME actually publishes each trade date TWICE at the same URL, in place:
+// a Preliminary bulletin (~12:00am CT the following business day) and a
+// Final bulletin (~10:00am CT that same following business day) which can
+// revise the Preliminary numbers (out-trades, clearing corrections, etc).
+// We snapshot both so we can show whether last night's print held or got
+// revised by morning — this is NOT overnight OI activity, just prelim vs
+// final for the identical trade date.
 // This pulls from "Section11" (the per-contract-month settlement table) —
 // NOT Section01C, which is only the aggregate across every expiration month
 // combined. Section11 lists each contract month as its own row (SEP26,
@@ -6696,21 +6703,50 @@ function fetchCmeDailyOI(sym,statusCb){
 }
 
 function cmeOiCacheGet(sym){
-  try{var raw=localStorage.getItem("edge_cme_oi_v2_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+  try{var raw=localStorage.getItem("edge_cme_oi_v4_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
 }
 function cmeOiCacheSet(sym,obj){
-  try{localStorage.setItem("edge_cme_oi_v2_"+sym,JSON.stringify(obj));}catch(e){}
+  try{localStorage.setItem("edge_cme_oi_v4_"+sym,JSON.stringify(obj));}catch(e){}
 }
-// CME's bulletin only updates once per trading day (after the close), so a
-// 6h cache is plenty — this just avoids re-fetching+re-parsing a multi-page
-// PDF every time the tab renders.
+// Is it currently at/after 10:00am CT? That's when CME overwrites the
+// Preliminary bulletin with the Final one for the same trade date.
+function isPastCmeFinalTime(){
+  var ctHour=parseInt(new Date().toLocaleString("en-US",{timeZone:"America/Chicago",hour:"2-digit",hour12:false}),10);
+  return ctHour>=10;
+}
+// Folds a freshly-fetched snapshot into the per-trade-date prelim/final
+// record: a new dateStr starts a fresh record (stored as prelim); same
+// dateStr before 10am CT keeps updating prelim; same dateStr at/after
+// 10am CT is the final bulletin.
+function cmeOiFold(cached,fresh){
+  var snap={oi:fresh.oi,change:fresh.change,fetchedAt:fresh.fetchedAt};
+  if(!cached||cached.date!==fresh.dateStr){
+    // First time seeing this trade date. If it's already past 10am CT, the
+    // bulletin we just pulled IS the Final — don't mislabel it as prelim
+    // (that would later look identical to "final" and falsely say
+    // "unchanged" even though we never actually saw the real prelim).
+    return isPastCmeFinalTime()
+      ? {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:null,final:snap}
+      : {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:snap,final:null};
+  }
+  var next={date:cached.date,contractMonth:fresh.contractMonth,prelim:cached.prelim,final:cached.final};
+  if(isPastCmeFinalTime()) next.final=snap; else next.prelim=snap;
+  return next;
+}
+// A 6h cache avoids re-fetching+re-parsing a multi-page PDF every time the
+// tab renders, EXCEPT: if we're already past 10am CT and haven't captured
+// a Final snapshot for the current trade date yet, that overrides the 6h
+// window so we don't keep serving a stale Preliminary all day.
 function loadCmeDailyOI(sym,force,statusCb){
   var cached=cmeOiCacheGet(sym);
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000;
-  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  var lastFetchedAt=cached?((cached.final||cached.prelim||{}).fetchedAt):null;
+  var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000;
+  var missingFinal=cached&&!cached.final&&isPastCmeFinalTime();
+  if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
-    cmeOiCacheSet(sym,data);
-    return data;
+    var folded=cmeOiFold(cached,data);
+    cmeOiCacheSet(sym,folded);
+    return folded;
   }).catch(function(err){
     if(cached) return cached;
     throw err;
@@ -6888,9 +6924,22 @@ function analystTab(){
   el.appendChild(cmeResult);
 
   function renderCmeResult(data,fromCache){
-    var chgCol=data.change>0?"#00e676":data.change<0?"#ff4444":"var(--text2)";
-    var chgText=data.change===0?"UNCH":fmtCotChg(data.change);
-    cmeResult.innerHTML=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.dateStr?" ("+data.dateStr+")":"")+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
+    var eff=data.final||data.prelim;
+    var chgCol=eff.change>0?"#00e676":eff.change<0?"#ff4444":"var(--text2)";
+    var chgText=eff.change===0?"UNCH":fmtCotChg(eff.change);
+    var label=data.final?"":" <span style='color:var(--text3)'>· prelim</span>";
+    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" ("+data.date+")":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
+    var line2="";
+    if(data.prelim&&data.final){
+      var revDelta=data.final.change-data.prelim.change;
+      if(revDelta===0){
+        line2="\nPrelim → Final chg: unchanged ("+fmtCotChg(data.final.change)+")";
+      }else{
+        var revCol=revDelta>0?"#00e676":"#ff4444";
+        line2="\nPrelim → Final chg revision: <span style='color:"+revCol+"'>"+fmtCotChg(revDelta)+"</span> ("+fmtCotChg(data.prelim.change)+" → "+fmtCotChg(data.final.change)+")";
+      }
+    }
+    cmeResult.innerHTML=line1+line2;
     cmeResult.style.color="var(--text2)";
   }
 
