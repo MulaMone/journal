@@ -1295,8 +1295,8 @@ function lineSVG(data,w,h2,col,fmt){
   var vals=data.map(function(d){return d.v});
   var mn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),mx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
   var rng=mx-mn||1;
-  var padL=44,padB=16,padT=6;
-  var W=w-padL,H=h2-padB-padT;
+  var padL=44,padR=6,padB=16,padT=6;
+  var W=w-padL-padR,H=h2-padB-padT;
   function px(i){return padL+(i/(data.length-1))*W}
   function py(v){return padT+H-(v-mn)/rng*H}
   var pts=data.map(function(d,i){return px(i)+","+py(d.v)}).join(" ");
