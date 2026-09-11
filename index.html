@@ -6825,10 +6825,6 @@ function buildCOTLegacyView(sym,data,isM){
   trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#a78bfa",fmtCotNum));
   el.appendChild(trendCard);
 
-  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: CFTC Legacy Commitments of Traders (Futures Only), publicreporting.cftc.gov";
-  el.appendChild(srcNote);
-
   return el;
 }
 
@@ -6996,7 +6992,7 @@ function analystTab(){
   }
 
   // ── TFF report — separate section, rendered below Legacy ──
-  var tffHead=div();tffHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
+  var tffHead=div();tffHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   tffHead.textContent="TFF Report — Dealer / Asset Mgr / Lev Funds / Other";
   el.appendChild(tffHead);
 
