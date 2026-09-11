@@ -6920,7 +6920,7 @@ function analystTab(){
   ctrlRow.appendChild(rbtn);
   el.appendChild(ctrlRow);
 
-  var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;";
+  var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
   el.appendChild(cmeResult);
 
   function renderCmeResult(data,fromCache){
@@ -6932,11 +6932,15 @@ function analystTab(){
     var line2="";
     if(data.prelim&&data.final){
       var revDelta=data.final.change-data.prelim.change;
+      var pCol=data.prelim.change>0?"#00e676":data.prelim.change<0?"#ff4444":"var(--text2)";
+      var fCol=data.final.change>0?"#00e676":data.final.change<0?"#ff4444":"var(--text2)";
+      var pTxt=data.prelim.change===0?"UNCH":fmtCotChg(data.prelim.change);
+      var fTxt=data.final.change===0?"UNCH":fmtCotChg(data.final.change);
       if(revDelta===0){
-        line2="\nPrelim → Final chg: unchanged ("+fmtCotChg(data.final.change)+")";
+        line2="\nPrelim → Final chg: unchanged (<span style='color:"+fCol+"'>"+fTxt+"</span>)";
       }else{
         var revCol=revDelta>0?"#00e676":"#ff4444";
-        line2="\nPrelim → Final chg revision: <span style='color:"+revCol+"'>"+fmtCotChg(revDelta)+"</span> ("+fmtCotChg(data.prelim.change)+" → "+fmtCotChg(data.final.change)+")";
+        line2="\nPrelim → Final chg revision: <span style='color:"+revCol+"'>"+fmtCotChg(revDelta)+"</span> (<span style='color:"+pCol+"'>"+pTxt+"</span> → <span style='color:"+fCol+"'>"+fTxt+"</span>)";
       }
     }
     cmeResult.innerHTML=line1+line2;
@@ -6950,22 +6954,18 @@ function analystTab(){
 
   function loadCme(force){
     var myToken=++_cmeLoadToken;
-    var log=[];
-    function status(s){
-      if(myToken!==_cmeLoadToken) return;
-      log.push(s);
-      cmeResult.textContent=log.join("\n");
-      cmeResult.style.color="var(--text3)";
-    }
-    // loadCmeDailyOI already gates on its own 6h cache when force is false,
-    // so this only actually hits the network when the cache is stale.
-    loadCmeDailyOI(sym,force,force?status:null).then(function(data){
+    // Subtle dim while fetching instead of the old status-line spam — the
+    // existing result just fades a bit, then snaps back once resolved.
+    if(force) cmeResult.style.opacity="0.45";
+    loadCmeDailyOI(sym,force,null).then(function(data){
       if(myToken!==_cmeLoadToken) return;
       renderCmeResult(data,false);
+      cmeResult.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_cmeLoadToken) return;
+      cmeResult.style.opacity="1";
       if(force){
-        status("✗ Failed at this step — "+(err&&err.message?err.message:"unknown error"));
+        cmeResult.textContent="✗ Failed — "+(err&&err.message?err.message:"unknown error");
         cmeResult.style.color="#ff4444";
       }
       // Silent background auto-check: if we already have a cached value
