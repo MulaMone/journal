@@ -6414,6 +6414,17 @@ function analystTab(){
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;";
   el.appendChild(cmeResult);
 
+  // Show whatever we already have cached (no network call) so this doesn't
+  // sit blank until the button is clicked again on every tab visit.
+  (function(){
+    var cached=cmeOiCacheGet(sym);
+    if(!cached) return;
+    var chgCol=cached.change>0?"#00e676":cached.change<0?"#ff4444":"var(--text2)";
+    var chgText=cached.change===0?"UNCH":fmtCotChg(cached.change);
+    cmeResult.innerHTML=sym+" "+(cached.contractMonth||"")+": "+fmtCotNum(cached.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(cached.dateStr?" ("+cached.dateStr+")":"")+" <span style='color:var(--text3)'>· cached</span>";
+    cmeResult.style.color="var(--text2)";
+  })();
+
   cmeBtn.addEventListener("click",function(){
     var log=[];
     function status(s){
