@@ -1442,16 +1442,7 @@ function updateMobileNav(){
       });
     }
   }
-  // Keep clock ticking in mobile topbar
-  if(!document.getElementById("clk-time")){
-    // Inject compact clock into topbar-stats area
-    var ts=document.getElementById("topbar-stats");
-    if(ts){
-      var clkSpan=document.createElement("span");clkSpan.id="clk-time";clkSpan.style.cssText="font-size:11px;color:#e8f0ff;font-weight:700;letter-spacing:1px;font-family:monospace;";
-      var cdSpan=document.createElement("span");cdSpan.id="clk-countdown";cdSpan.style.cssText="font-size:9px;color:#ff4444;font-weight:700;letter-spacing:.5px;font-family:monospace;margin-left:6px;display:none;";
-      ts.appendChild(clkSpan);ts.appendChild(cdSpan);
-    }
-  }
+
 }
 
 var _moreOpen=false;
