@@ -2782,7 +2782,7 @@ function prepTab(){
 
   var etTodayStr=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
 
-  function renderCalendarRows(rows,sourceLabel){
+  function renderCalendarRows(rows){
     liveNewsBody.innerHTML="";
     if(!rows.length){
       var ne=div("xs m");ne.textContent="No High-impact USD events today.";liveNewsBody.appendChild(ne);
@@ -2795,13 +2795,12 @@ function prepTab(){
         liveNewsBody.appendChild(row);
       });
     }
-    var liveNewsNote=div("xs m");liveNewsNote.style.cssText="padding:6px 10px 0;font-style:italic;";liveNewsNote.textContent=sourceLabel;liveNewsBody.appendChild(liveNewsNote);
   }
 
   function renderFromLocalCompute(){
     var todaysComputed=computeTodayMacroEvents(etTodayStr);
     autoSelectNewsLabels(todaysComputed.map(function(ev){return ev.title;}));
-    renderCalendarRows(todaysComputed,"Computed locally (FOMC calendar + standard NFP schedule) — calendar.json unavailable. CPI/PPI/GDP/PCE/Retail Sales tracked manually below.");
+    renderCalendarRows(todaysComputed);
   }
 
   renderFromLocalCompute(); // show something immediately, then upgrade if the live file loads
@@ -2812,7 +2811,7 @@ function prepTab(){
       return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
     });
     var changed=autoSelectNewsLabels(todays.map(function(ev){return ev.title;}));
-    renderCalendarRows(todays,"Live — calendar.json (refreshed twice daily via GitHub Actions).");
+    renderCalendarRows(todays);
     if(changed) render(); // refresh the checklist below with the newly auto-flagged items
   }).catch(function(){
     // calendar.json not deployed yet / unreachable (e.g. file:// testing) — the local-compute render above already stands.
@@ -4193,7 +4192,7 @@ function reviewTab(){
 
     var dg2=div("g2");
     var deqCard=div("card");var deqH=div("card-h");var deqT=div("card-t");deqT.textContent="Equity Curve";deqH.appendChild(deqT);deqCard.appendChild(deqH);deqCard.appendChild(equitySVG(_at,380,200));dg2.appendChild(deqCard);
-    var dByHour=[];var dByHourTrades=[];for(var dhi=0;dhi<10;dhi++){var dhh=9+dhi;var dhs=(dhh<10?"0":"")+dhh;var dhts=_at.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});dByHourTrades.push(dhts);}
+    var dByHour=[];var dByHourTrades=[];for(var dhh=0;dhh<24;dhh++){var dhs=(dhh<10?"0":"")+dhh;var dhts=_at.filter(function(t){return t.time&&t.time.indexOf(dhs)===0});if(dhts.length){dByHour.push({l:dhh+":00",v:dhts.reduce(function(a,t){return a+t.d},0)});dByHourTrades.push(dhts);}}
     var dbhCard=div("card");var dbhH=div("card-h");var dbhT=div("card-t");dbhT.textContent="P&L by Hour";dbhH.appendChild(dbhT);dbhCard.appendChild(dbhH);dbhCard.appendChild(barSVG(dByHour,380,200));dg2.appendChild(dbhCard);
     el.appendChild(dg2);
 
