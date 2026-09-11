@@ -3404,6 +3404,7 @@ function logTab(){
         var ts=tradeTs(trade);
         State.chart_symbol=trade.inst;
         State.chart_focus_ts=ts?Math.floor(ts.getTime()/1000):null;
+        State.chart_selected_ids=[trade.id];
         switchTab("chart");
       });})(t);
       btnRow.appendChild(chartBtn);
@@ -4989,7 +4990,7 @@ function chartTab(){
     var clearBtn=h("button",{className:"btn"});
     clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
     clearBtn.textContent="← Show all trades";
-    clearBtn.addEventListener("click",function(){State.chart_focus_ts=null;render();});
+    clearBtn.addEventListener("click",function(){State.chart_focus_ts=null;State.chart_selected_ids=[];render();});
     ctrlRow.appendChild(clearBtn);
   }
 
