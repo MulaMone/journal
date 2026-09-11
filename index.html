@@ -6985,16 +6985,23 @@ function analystTab(){
 
   function showLegacyLoading(){legacyBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING LEGACY COT DATA…</div>';}
   function showLegacyError(msg){legacyBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD LEGACY COT DATA — '+msg+'</div>';}
+  legacyBody.style.transition="opacity .15s";
 
   function loadLegacy(force){
     var myToken=++_cotLegacyLoadToken;
-    showLegacyLoading();
+    // Refresh: dim the existing card instead of wiping it with a loading
+    // placeholder. Only show the placeholder when there's nothing on
+    // screen yet (first render of the tab).
+    if(force&&legacyBody.firstChild) legacyBody.style.opacity="0.45";
+    else showLegacyLoading();
     loadCOTLegacyData(sym,force).then(function(data){
       if(myToken!==_cotLegacyLoadToken||State.tab!=="analyst") return;
       legacyBody.innerHTML="";
       legacyBody.appendChild(buildCOTLegacyView(sym,data,isM));
+      legacyBody.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_cotLegacyLoadToken) return;
+      legacyBody.style.opacity="1";
       showLegacyError(err&&err.message?err.message:"network error");
     });
   }
@@ -7008,16 +7015,20 @@ function analystTab(){
 
   function showLoading(){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING COT DATA…</div>';}
   function showError(msg){body.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD COT DATA — '+msg+'</div>';}
+  body.style.transition="opacity .15s";
 
   function load(force){
     var myToken=++_cotLoadToken;
-    showLoading();
+    if(force&&body.firstChild) body.style.opacity="0.45";
+    else showLoading();
     loadCOTData(sym,force).then(function(data){
       if(myToken!==_cotLoadToken||State.tab!=="analyst") return;
       body.innerHTML="";
       body.appendChild(buildCOTView(sym,data,isM));
+      body.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_cotLoadToken) return;
+      body.style.opacity="1";
       showError(err&&err.message?err.message:"network error");
     });
   }
