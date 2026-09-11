@@ -1288,24 +1288,34 @@ function barSVG(data,w,h2){
   var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
 }
 
-function lineSVG(data,w,h2,col){
+function lineSVG(data,w,h2,col,fmt){
   col=col||"#ffab00";
+  fmt=fmt||function(v){return v;};
   if(!data||data.length<2) return div("chart-wrap");
   var vals=data.map(function(d){return d.v});
   var mn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),mx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
   var rng=mx-mn||1;
-  var padL=24,padB=16,padT=6;
+  var padL=44,padB=16,padT=6;
   var W=w-padL,H=h2-padB-padT;
   function px(i){return padL+(i/(data.length-1))*W}
   function py(v){return padT+H-(v-mn)/rng*H}
   var pts=data.map(function(d,i){return px(i)+","+py(d.v)}).join(" ");
-  var svg='<svg width="100%" viewBox="0 0 '+w+" "+h2+'" xmlns="http://www.w3.org/2000/svg">';
+  // width:100% + explicit height:100% + preserveAspectRatio="none" on a
+  // fixed-height wrapper — without all three the SVG scales by the
+  // viewBox's own aspect ratio against the rendered width and spills past
+  // its box (this is what caused the overlap into text below the chart).
+  var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
   [0.25,0.5,0.75].forEach(function(f){var y=padT+H*f; svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
   svg+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
   data.forEach(function(d,i){svg+='<circle cx="'+px(i)+'" cy="'+py(d.v)+'" r="3" fill="'+col+'"/>'});
-  [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-4)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" fill="#c9a84c">'+v+'</text>'});
+  [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#c9a84c">'+fmt(v)+'</text>'});
+  // Endpoint date labels — each dot is one weekly report, so label the
+  // first and last so the axis reads as time rather than bare numbers.
+  if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
+  var lastL=data[data.length-1].l;
+  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
   svg+='</svg>';
-  var wrap=div("chart-wrap");wrap.innerHTML=svg;return wrap;
+  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
 }
 
 // ─── UI COMPONENTS ───────────────────────────────────────────────────
@@ -1344,7 +1354,8 @@ var TABS=[
   {id:"import",icon:"⬆",label:"IMPORT"},
   {id:"notes",icon:"✎",label:"NOTES"},
   {id:"openanalysis",icon:"◉",label:"OPEN"},
-  {id:"chart",icon:"▤",label:"CHART"}
+  {id:"chart",icon:"▤",label:"CHART"},
+  {id:"analyst",icon:"Ξ",label:"ANALYST"}
 ];
 
 function renderTabs(){
@@ -1389,9 +1400,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","playbook","import","notes","chart"];
-var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart"};
-var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤"};
+var MORE_TABS=["home","playbook","import","notes","chart","analyst"];
+var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",analyst:"Analyst"};
+var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",analyst:"Ξ"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -6011,6 +6022,192 @@ function notesTab(){
   return el;
 }
 
+// ─── ANALYST TAB (CFTC COT + Open Interest) ────────────────────────────
+// Data source: CFTC Traders in Financial Futures (TFF), Futures-Only report,
+// via the CFTC's public Socrata Open Data API (free, no key required).
+// Dataset: publicreporting.cftc.gov, resource id gpe5-46if.
+// This is the CFTC's own weekly Commitment of Traders release, so it is
+// also the authoritative source for reportable open interest on ES/NQ —
+// no second API needed for OI.
+var COT_TFF_URL="https://publicreporting.cftc.gov/resource/gpe5-46if.json";
+var COT_SYMS={
+  ES:{name:"E-mini S&P 500",market:"E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE"},
+  NQ:{name:"E-mini Nasdaq-100",market:"NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE"}
+};
+// NOTE: the CFTC's field naming is inconsistent across categories — only the
+// "dealer" category's long/short fields carry an "_all" suffix; the other
+// three do not. Field names below were confirmed against a live API sample.
+var COT_CATS=[
+  {label:"Leveraged Funds",sub:"hedge funds / CTAs — the speculative money",col:"#00d4d4",lk:"lev_money_positions_long",sk:"lev_money_positions_short"},
+  {label:"Asset Managers",sub:"institutional / real money",col:"#5b9bd5",lk:"asset_mgr_positions_long",sk:"asset_mgr_positions_short"},
+  {label:"Dealers",sub:"bank / dealer intermediaries",col:"#c9a84c",lk:"dealer_positions_long_all",sk:"dealer_positions_short_all"},
+  {label:"Other Reportables",sub:"smaller reportable traders",col:"#b06aff",lk:"other_rept_positions_long",sk:"other_rept_positions_short"}
+];
+var _cotMemCache={};
+var _cotLoadToken=0;
+
+function cotCacheGet(sym){
+  try{var raw=localStorage.getItem("edge_cot_v2_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+}
+function cotCacheSet(sym,obj){
+  try{localStorage.setItem("edge_cot_v2_"+sym,JSON.stringify(obj));}catch(e){}
+}
+// Weekly data, published Fridays — refetch if our cache is stale or forced.
+function loadCOTData(sym,force){
+  var cached=_cotMemCache[sym]||cotCacheGet(sym);
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>12*60*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  var market=COT_SYMS[sym].market;
+  var where="market_and_exchange_names='"+market+"'";
+  var url=COT_TFF_URL+"?$where="+encodeURIComponent(where)+"&$order=report_date_as_yyyy_mm_dd DESC&$limit=60";
+  return fetch(url).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(rows){
+    if(!rows||!rows.length) throw new Error("empty response");
+    rows.sort(function(a,b){return a.report_date_as_yyyy_mm_dd<b.report_date_as_yyyy_mm_dd?-1:1;});
+    var obj={rows:rows,fetchedAt:Date.now()};
+    _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
+    return obj;
+  }).catch(function(err){
+    if(cached){_cotMemCache[sym]=cached;return cached;}
+    throw err;
+  });
+}
+
+function longShortBar(long,short){
+  var total=long+short||1;
+  var longPct=Math.max(0,Math.min(100,long/total*100));
+  var wrap=div();wrap.style.cssText="position:relative;height:20px;border-radius:3px;overflow:hidden;background:var(--bg2);display:flex;margin:8px 0 4px;";
+  var lSeg=div();lSeg.style.cssText="width:"+longPct.toFixed(1)+"%;background:#00e67655;";
+  var sSeg=div();sSeg.style.cssText="width:"+(100-longPct).toFixed(1)+"%;background:#ff444455;";
+  wrap.appendChild(lSeg);wrap.appendChild(sSeg);
+  return wrap;
+}
+
+function fmtCotNum(n){
+  n=Math.round(n);
+  var sign=n<0?"-":"";n=Math.abs(n);
+  return sign+n.toLocaleString("en-US");
+}
+function fmtCotChg(n){
+  n=Math.round(n);
+  return (n>0?"+":"")+n.toLocaleString("en-US");
+}
+
+function buildCOTView(sym,data,isM){
+  var rows=data.rows;
+  var latest=rows[rows.length-1];
+  var prev=rows.length>1?rows[rows.length-2]:null;
+  var el=div();
+
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
+  var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
+  staleNote.textContent="Report week ending "+asOf+" · fetched "+new Date(data.fetchedAt).toLocaleString()+" · CFTC TFF, updated weekly (Fridays)";
+  el.appendChild(staleNote);
+
+  // ── Open Interest summary ──
+  var oi=+latest.open_interest_all||0;
+  var oiChg=+latest.change_in_open_interest_all||0;
+  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var oiTop=div("rjb");oiTop.style.alignItems="flex-start";
+  var oiL=div();
+  oiL.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Total Open Interest — "+COT_SYMS[sym].name+"</div>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtCotNum(oi)+"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" contracts vs prior week</div>";
+  oiTop.appendChild(oiL);
+  oiCard.appendChild(oiTop);
+  var oiHist=rows.slice(-26).map(function(r){return {v:+r.open_interest_all||0,l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
+  var oiChartWrap=div();oiChartWrap.style.cssText="margin-top:10px;height:80px;";
+  oiChartWrap.appendChild(lineSVG(oiHist,isM?300:640,80,"#e0c97a",fmtCotNum));
+  oiCard.appendChild(oiChartWrap);
+  el.appendChild(oiCard);
+
+  // ── Positioning by trader category ──
+  var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
+  catHead.textContent="Positioning by Trader Category";
+  el.appendChild(catHead);
+
+  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  COT_CATS.forEach(function(cat){
+    var lk=cat.lk,sk=cat.sk;
+    var long=+latest[lk]||0,short=+latest[sk]||0,net=long-short;
+    var prevNet=0;
+    if(prev) prevNet=(+prev[lk]||0)-(+prev[sk]||0);
+    var netChg=net-prevNet;
+    var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+cat.col+";border-radius:4px;padding:14px 16px;";
+    card.innerHTML="<div style='font-size:14px;font-weight:700;color:var(--text2);'>"+cat.label+"</div>"
+      +"<div style='font-size:11px;color:var(--text3);margin-bottom:8px;'>"+cat.sub+"</div>"
+      +"<div style='display:flex;gap:14px;font-family:Courier New,monospace;font-size:13px;'>"
+      +"<div><span style='color:var(--text3);'>LONG </span><span style='color:#00e676;'>"+fmtCotNum(long)+"</span></div>"
+      +"<div><span style='color:var(--text3);'>SHORT </span><span style='color:#ff4444;'>"+fmtCotNum(short)+"</span></div>"
+      +"</div>";
+    var barHolder=longShortBar(long,short);card.appendChild(barHolder);
+    var netRow=div();netRow.style.cssText="display:flex;justify-content:space-between;font-family:Courier New,monospace;font-size:13px;margin-top:2px;";
+    netRow.innerHTML="<div><span style='color:var(--text3);'>NET </span><span style='color:"+(net>=0?"#00e676":"#ff4444")+";font-weight:700;'>"+fmtCotChg(net)+"</span></div>"
+      +"<div style='color:"+(netChg>=0?"#00e676":"#ff4444")+";'>"+fmtCotChg(netChg)+" wow</div>";
+    card.appendChild(netRow);
+    grid.appendChild(card);
+  });
+  el.appendChild(grid);
+
+  // ── Leveraged Funds net positioning trend (most-watched speculative read) ──
+  var trendHead=div();trendHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
+  trendHead.textContent="Leveraged Funds — Net Position Trend";
+  el.appendChild(trendHead);
+  var lfHist=rows.slice(-26).map(function(r){return {v:(+r.lev_money_positions_long||0)-(+r.lev_money_positions_short||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
+  var trendCard=div();trendCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
+  trendCard.appendChild(lineSVG(lfHist,isM?300:640,100,"#00d4d4",fmtCotNum));
+  el.appendChild(trendCard);
+
+  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
+  srcNote.textContent="Source: CFTC Traders in Financial Futures (TFF), publicreporting.cftc.gov — free public API, no key required.";
+  el.appendChild(srcNote);
+
+  return el;
+}
+
+function analystTab(){
+  var isM=isMobile();
+  var el=div();
+  var sh=div("sh");sh.textContent="Analyst — COT & Open Interest";el.appendChild(sh);
+
+  var sym=State.analyst_symbol||"ES";
+  var ctrlRow=div("row gap8");ctrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  Object.keys(COT_SYMS).forEach(function(s){
+    var b=h("button",{className:"btn"});
+    b.textContent=s;b.title=COT_SYMS[s].name;
+    if(sym===s) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
+    b.addEventListener("click",function(){State.analyst_symbol=s;render();});
+    ctrlRow.appendChild(b);
+  });
+  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";rbtn.style.marginLeft="auto";
+  ctrlRow.appendChild(rbtn);
+  el.appendChild(ctrlRow);
+
+  var body=div();body.id="cot-body";el.appendChild(body);
+
+  function showLoading(){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING COT DATA…</div>';}
+  function showError(msg){body.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD COT DATA — '+msg+'</div>';}
+
+  function load(force){
+    var myToken=++_cotLoadToken;
+    showLoading();
+    loadCOTData(sym,force).then(function(data){
+      if(myToken!==_cotLoadToken||State.tab!=="analyst") return;
+      body.innerHTML="";
+      body.appendChild(buildCOTView(sym,data,isM));
+    }).catch(function(err){
+      if(myToken!==_cotLoadToken) return;
+      showError(err&&err.message?err.message:"network error");
+    });
+  }
+  rbtn.addEventListener("click",function(){load(true);});
+  load(false);
+
+  return el;
+}
+
 function openAnalysisTab(){
   var isM=isMobile();
   var el=div();
@@ -6568,7 +6765,7 @@ function accountsTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab};
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
