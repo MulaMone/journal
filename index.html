@@ -6059,6 +6059,8 @@ var COT_CATS=[
 ];
 var _cotMemCache={};
 var _cotLoadToken=0;
+var _cmeLoadToken=0;
+
 
 function cotCacheGet(sym){
   try{var raw=localStorage.getItem("edge_cot_v2_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
@@ -6414,35 +6416,48 @@ function analystTab(){
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;";
   el.appendChild(cmeResult);
 
-  // Show whatever we already have cached (no network call) so this doesn't
-  // sit blank until the button is clicked again on every tab visit.
-  (function(){
-    var cached=cmeOiCacheGet(sym);
-    if(!cached) return;
-    var chgCol=cached.change>0?"#00e676":cached.change<0?"#ff4444":"var(--text2)";
-    var chgText=cached.change===0?"UNCH":fmtCotChg(cached.change);
-    cmeResult.innerHTML=sym+" "+(cached.contractMonth||"")+": "+fmtCotNum(cached.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(cached.dateStr?" ("+cached.dateStr+")":"")+" <span style='color:var(--text3)'>· cached</span>";
+  function renderCmeResult(data,fromCache){
+    var chgCol=data.change>0?"#00e676":data.change<0?"#ff4444":"var(--text2)";
+    var chgText=data.change===0?"UNCH":fmtCotChg(data.change);
+    cmeResult.innerHTML=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.dateStr?" ("+data.dateStr+")":"")+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
     cmeResult.style.color="var(--text2)";
-  })();
+  }
 
-  cmeBtn.addEventListener("click",function(){
+  // Show whatever's cached immediately (no network call), so there's no
+  // blank flash while the auto-check below runs.
+  var cmeCachedNow=cmeOiCacheGet(sym);
+  if(cmeCachedNow) renderCmeResult(cmeCachedNow,true);
+
+  function loadCme(force){
+    var myToken=++_cmeLoadToken;
     var log=[];
     function status(s){
+      if(myToken!==_cmeLoadToken) return;
       log.push(s);
       cmeResult.textContent=log.join("\n");
       cmeResult.style.color="var(--text3)";
     }
-    status("Loading…");
-    loadCmeDailyOI(sym,true,status).then(function(data){
-      var chgCol=data.change>0?"#00e676":data.change<0?"#ff4444":"var(--text2)";
-      var chgText=data.change===0?"UNCH":fmtCotChg(data.change);
-      cmeResult.innerHTML="✓ "+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.dateStr?" ("+data.dateStr+")":"");
-      cmeResult.style.color="var(--text2)";
+    // loadCmeDailyOI already gates on its own 6h cache when force is false,
+    // so this only actually hits the network when the cache is stale.
+    loadCmeDailyOI(sym,force,force?status:null).then(function(data){
+      if(myToken!==_cmeLoadToken) return;
+      renderCmeResult(data,false);
     }).catch(function(err){
-      status("✗ Failed at this step — "+(err&&err.message?err.message:"unknown error"));
-      cmeResult.style.color="#ff4444";
+      if(myToken!==_cmeLoadToken) return;
+      if(force){
+        status("✗ Failed at this step — "+(err&&err.message?err.message:"unknown error"));
+        cmeResult.style.color="#ff4444";
+      }
+      // Silent background auto-check: if we already have a cached value
+      // showing, leave it up rather than clobbering it with an error.
     });
-  });
+  }
+
+  // Auto-check for a newer bulletin every time this tab opens.
+  loadCme(false);
+
+  cmeBtn.addEventListener("click",function(){loadCme(true);});
+
 
   var body=div();body.id="cot-body";el.appendChild(body);
 
