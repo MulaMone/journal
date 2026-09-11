@@ -6814,13 +6814,15 @@ function buildCOTLegacyView(sym,data,isM){
   });
   el.appendChild(grid);
 
-  // ── Non-Commercial net positioning trend (the classic "spec net" read) ──
+  // ── Commercial net positioning trend (Non-Commercial already tracks
+  // very closely with TFF's Leveraged Funds trend below, so this swaps to
+  // the hedger side instead of showing the same read twice) ──
   var trendHead=div();trendHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
-  trendHead.textContent="Non-Commercial — Net Position Trend";
+  trendHead.textContent="Commercial — Net Position Trend";
   el.appendChild(trendHead);
-  var ncHist=rows.slice(-26).map(function(r){return {v:(+r.noncomm_positions_long_all||0)-(+r.noncomm_positions_short_all||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
+  var ncHist=rows.slice(-26).map(function(r){return {v:(+r.comm_positions_long_all||0)-(+r.comm_positions_short_all||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
   var trendCard=div();trendCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
-  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#00d4d4",fmtCotNum));
+  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#a78bfa",fmtCotNum));
   el.appendChild(trendCard);
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
