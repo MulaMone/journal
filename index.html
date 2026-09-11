@@ -3311,7 +3311,54 @@ function logTab(){
     _logByDate[d].push(t);
   });
 
+  // Week boundaries (Monday-anchored) — pre-pass to total each week's P&L/count
+  // before rendering, then a divider row is inserted whenever the week changes.
+  function mondayOf(dateKey){
+    var p=dateKey.split("/");if(p.length!==3) return null;
+    var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+    var day=dt.getDay();var diff=(day===0?-6:1-day);
+    dt.setDate(dt.getDate()+diff);dt.setHours(0,0,0,0);
+    return dt;
+  }
+  var _weekTotals={};var _weekMonday={};
   _logDates.forEach(function(dateKey){
+    var m=mondayOf(dateKey);
+    var wk=m?(m.getFullYear()+"-"+m.getMonth()+"-"+m.getDate()):"unknown";
+    if(!_weekTotals[wk]){_weekTotals[wk]={pnl:0,count:0};_weekMonday[wk]=m;}
+    _weekTotals[wk].pnl+=_logByDate[dateKey].reduce(function(a,t){return a+t.d;},0);
+    _weekTotals[wk].count+=_logByDate[dateKey].length;
+  });
+  var _lastWeekKey=null;
+
+  _logDates.forEach(function(dateKey){
+    var m=mondayOf(dateKey);
+    var wk=m?(m.getFullYear()+"-"+m.getMonth()+"-"+m.getDate()):"unknown";
+    if(wk!==_lastWeekKey){
+      _lastWeekKey=wk;
+      var wkTot=_weekTotals[wk];
+      var wkTr=h("tr");
+      var wkTd=h("td");wkTd.colSpan=15;
+      wkTd.style.cssText="background:var(--panel3);border-top:2px solid var(--border3);border-bottom:1px solid var(--border3);padding:7px 10px;";
+      var wkInner=div();wkInner.style.cssText="display:flex;align-items:center;justify-content:space-between;";
+      var wkLeft=div();wkLeft.style.cssText="display:flex;align-items:center;gap:10px;";
+      var wkLbl=div();wkLbl.style.cssText="font-size:11px;letter-spacing:2px;color:var(--accent);font-weight:700;";
+      if(m){
+        // Futures trading week runs Sun evening (Globex reopen) → Fri close,
+        // not a calendar Mon–Sun week — label it that way even though the
+        // bucket itself is still keyed off the Monday-rolled session date.
+        var wStart=new Date(m);wStart.setDate(m.getDate()-1);
+        var wEnd=new Date(m);wEnd.setDate(m.getDate()+4);
+        var fmt=function(dt){return(dt.getMonth()+1)+"/"+dt.getDate();};
+        wkLbl.textContent="WEEK OF "+fmt(wStart)+" – "+fmt(wEnd);
+      } else { wkLbl.textContent="WEEK UNKNOWN"; }
+      var wkCt=div();wkCt.style.cssText="font-size:10px;color:var(--text3);letter-spacing:1px;";wkCt.textContent="· "+wkTot.count+" trade"+(wkTot.count!==1?"s":"");
+      wkLeft.appendChild(wkLbl);wkLeft.appendChild(wkCt);
+      var wkPnl=div();wkPnl.style.cssText="font-size:13px;font-weight:700;letter-spacing:1px;color:"+(wkTot.pnl>=0?"#00e676":"#ff4444")+";";
+      wkPnl.textContent=(wkTot.pnl>=0?"+":"")+dol(wkTot.pnl);
+      wkInner.appendChild(wkLeft);wkInner.appendChild(wkPnl);
+      wkTd.appendChild(wkInner);wkTr.appendChild(wkTd);tbody.appendChild(wkTr);
+    }
+
     // Day separator row
     var parts=dateKey.split("/");var dowStr="";
     if(parts.length===3){try{var dt=new Date(2000+parseInt(parts[2]),parseInt(parts[0])-1,parseInt(parts[1]));dowStr=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getDay()];}catch(e){}}
@@ -5208,6 +5255,38 @@ function chartTab(){
       });
       series.setData(candles);
 
+      // ── Week boundaries ───────────────────────────────────
+      // The futures week reopens Sunday evening after Friday's close — in
+      // real candle data that shows up as a multi-day gap between two
+      // consecutive candles (no weekend bars at all). Detect that gap
+      // directly instead of guessing at ET weekdays, so it lines up with
+      // whatever this feed actually returns rather than an assumed schedule.
+      var weekBoundaries=[];
+      for(var wbi=1;wbi<candles.length;wbi++){
+        if(candles[wbi].time-candles[wbi-1].time>2*24*3600) weekBoundaries.push(candles[wbi].time);
+      }
+      if(weekBoundaries.length){
+        var weekLineWrap=div();weekLineWrap.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:5;";
+        chartDiv.appendChild(weekLineWrap);
+        function drawWeekLines(){
+          weekLineWrap.innerHTML="";
+          weekBoundaries.forEach(function(wt){
+            var x=chart.timeScale().timeToCoordinate(wt);
+            if(x==null) return;
+            var line=div();
+            line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,var(--accent) 0,var(--accent) 4px,transparent 4px,transparent 8px);opacity:.6;";
+            weekLineWrap.appendChild(line);
+            var lbl=div();
+            lbl.style.cssText="position:absolute;top:2px;left:"+(x+4)+"px;font-size:9px;letter-spacing:1.5px;color:var(--accent);font-family:'Courier New',monospace;white-space:nowrap;";
+            lbl.textContent="WEEK";
+            weekLineWrap.appendChild(lbl);
+          });
+        }
+        drawWeekLines();
+        chart.timeScale().subscribeVisibleLogicalRangeChange(drawWeekLines);
+        window.addEventListener("resize",drawWeekLines);
+      }
+
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
       // that time — attaching markers directly to the candlestick series
@@ -5762,7 +5841,38 @@ function mobileLogTab(){
     byDate[d].push(t);
   });
 
+  // Week boundaries (Monday-anchored) — same pre-pass/divider approach as desktop logTab().
+  function mobMondayOf(dateKey){
+    var p=dateKey.split("/");if(p.length!==3) return null;
+    var dt=new Date(2000+parseInt(p[2]),parseInt(p[0])-1,parseInt(p[1]));
+    var day=dt.getDay();var diff=(day===0?-6:1-day);
+    dt.setDate(dt.getDate()+diff);dt.setHours(0,0,0,0);
+    return dt;
+  }
+  var mobWeekTotals={};
   dates.forEach(function(dateKey){
+    var m=mobMondayOf(dateKey);
+    var wk=m?(m.getFullYear()+"-"+m.getMonth()+"-"+m.getDate()):"unknown";
+    if(!mobWeekTotals[wk]) mobWeekTotals[wk]={pnl:0,count:0,monday:m};
+    mobWeekTotals[wk].pnl+=byDate[dateKey].reduce(function(a,t){return a+t.d;},0);
+    mobWeekTotals[wk].count+=byDate[dateKey].length;
+  });
+  var mobLastWeekKey=null;
+
+  dates.forEach(function(dateKey){
+    var m=mobMondayOf(dateKey);
+    var wk=m?(m.getFullYear()+"-"+m.getMonth()+"-"+m.getDate()):"unknown";
+    if(wk!==mobLastWeekKey){
+      mobLastWeekKey=wk;
+      var wkTot=mobWeekTotals[wk];
+      var wkSep=document.createElement("div");
+      wkSep.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;margin-top:10px;background:var(--panel3);border-top:2px solid var(--border3);border-bottom:1px solid var(--border3);border-radius:4px 4px 0 0;font-family:'Courier New',monospace;";
+      var wkLabel="WEEK UNKNOWN";
+      if(m){var wStart=new Date(m);wStart.setDate(m.getDate()-1);var wEnd=new Date(m);wEnd.setDate(m.getDate()+4);var fmt=function(dt){return(dt.getMonth()+1)+"/"+dt.getDate();};wkLabel="WEEK OF "+fmt(wStart)+" – "+fmt(wEnd);}
+      wkSep.innerHTML='<span style="font-size:10px;letter-spacing:2px;color:var(--accent);font-weight:700;">'+wkLabel+' <span style="color:var(--text3);font-weight:400;">· '+wkTot.count+' trade'+(wkTot.count!==1?"s":"")+'</span></span><span style="font-size:11px;font-weight:700;color:'+(wkTot.pnl>=0?"#00e676":"#ff4444")+';">'+(wkTot.pnl>=0?"+":"")+dol(wkTot.pnl)+'</span>';
+      el.appendChild(wkSep);
+    }
+
     // Date separator
     var sep=document.createElement("div");sep.className="date-sep";
     // Parse for day of week
