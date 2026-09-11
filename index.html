@@ -13,7 +13,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--border2:#1e3d73;--border3:#2a5099;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
-html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden}body{overflow-y:scroll;-webkit-overflow-scrolling:touch}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden;scrollbar-gutter:stable}html{overflow-y:scroll}body{overflow-y:scroll;-webkit-overflow-scrolling:touch}
 #app{min-height:100vh;display:flex;flex-direction:column;padding-top:calc(100px + env(safe-area-inset-top))}
 /* TOPBAR */
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;padding-top:env(safe-area-inset-top);height:calc(54px + env(safe-area-inset-top));background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:fixed;top:0;left:0;right:0;z-index:201}
@@ -355,6 +355,7 @@ svg text{font-family:'Courier New',monospace}
     <div id="topbar-left"><div class="row gap8"><div class="logo">EDGE<small>TERMINAL</small></div><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
     <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));window.location.reload();" style="cursor:pointer" title="Refresh">BILLION$</div>
     <div id="topbar-stats"></div>
+    <button id="topbar-import-btn" onclick="switchTab('import')" title="Import" class="hide-xs" style="position:absolute;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;transition:color .15s;">⬆</button>
   </div>
   <div id="tabs"></div>
   <div id="content"></div>
@@ -1351,12 +1352,14 @@ var TABS=[
   {id:"log",icon:"≡",label:"TRADE LOG"},
   {id:"playbook",icon:"◈",label:"PLAYS"},
   {id:"analytics",icon:"⟁",label:"STATS"},
-  {id:"import",icon:"⬆",label:"IMPORT"},
   {id:"notes",icon:"✎",label:"NOTES"},
   {id:"openanalysis",icon:"◉",label:"OPEN"},
   {id:"chart",icon:"▤",label:"CHART"},
   {id:"analyst",icon:"Ξ",label:"ANALYST"}
 ];
+// "import" (importTab) is intentionally NOT in TABS — it's reached only via
+// the "⬆ IMPORT CSV" button on the Trade Log page (State.tab="import"),
+// not as a top-nav item. VIEWS.import still routes to it either way.
 
 function renderTabs(){
   // ── MOBILE: update bottom nav active state only ──
@@ -1558,6 +1561,25 @@ function startClock(){
   _clockInterval=setInterval(tick,1000);
 }
 
+function positionImportBtn(){
+  var impBtn=document.getElementById("topbar-import-btn");
+  var gearBtn=document.getElementById("topbar-gear-btn");
+  var topbarEl=document.getElementById("topbar");
+  if(!impBtn||!gearBtn||!topbarEl) return;
+  var gr=gearBtn.getBoundingClientRect();
+  var tr=topbarEl.getBoundingClientRect();
+  if(gr.width===0) return; // gear is hidden (mobile) — nothing to align to
+  impBtn.style.top=(gr.top-tr.top)+"px";
+  impBtn.style.left=(gr.left-tr.left-30)+"px";
+}
+(function(){
+  var b=document.getElementById("topbar-import-btn");
+  if(!b) return;
+  b.addEventListener("mouseover",function(){b.style.color="var(--accent)";});
+  b.addEventListener("mouseout",function(){b.style.color="var(--text3)";});
+})();
+window.addEventListener("resize",positionImportBtn);
+
 function renderTopbar(){
   var td=sessionToday();
   var _at=activeTrades();
@@ -1572,7 +1594,8 @@ function renderTopbar(){
     var _atPnl=s.total;
     el.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;"><span style="font-size:8px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:1px;">'+(_acctName?_acctName:"ALL TIME")+'</span><b class="'+(_atPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(_atPnl)+'</b></div>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+today()+'</b>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button id="topbar-gear-btn" onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+today()+'</b>';
+    positionImportBtn();
     var dlEl=document.getElementById("topbar-dl");
     if(dlEl){
       var maxLoss=parseFloat(localStorage.getItem("edge_max_loss")||"0");
