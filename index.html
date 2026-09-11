@@ -5259,6 +5259,7 @@ function chartTab(){
           var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});
           var seenTs={};
           var lineData=[];
+          var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
           var markers=displayPoints.map(function(p){
             // Snap to the candle period the fill falls inside, rather than the raw
             // fill timestamp. The candlestick series only has data on period
@@ -5269,7 +5270,9 @@ function chartTab(){
             var t=Math.floor(p.ts/periodSec)*periodSec-etOffsetSec; // snap in true time first, then shift to match the ET-shifted candles
             while(seenTs[t]) t+=periodSec; // keep strictly increasing, still period-aligned, if multiple fills land in the same candle
             seenTs[t]=true;
-            lineData.push({time:t,value:p.price+nearestCandleOffset(p)});
+            var val=p.price+nearestCandleOffset(p);
+            lineData.push({time:t,value:val});
+            hoverPoints.push({time:t,value:val,p:p});
             // Entry arrow reflects the opening action; exit arrow reflects
             // the closing action, which is the opposite side — closing a
             // long is a sell (down), closing a short is a buy (up). Exits get
@@ -5291,6 +5294,55 @@ function chartTab(){
           markerSeries.setMarkers(markers);
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
           note.textContent="OANDA (CFD proxy, each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+
+          // ── Hover tooltip ───────────────────────────────────
+          // lightweight-charts has no built-in per-marker hover event, so we
+          // hit-test manually: on every crosshair move, convert each marker's
+          // (time,value) to pixel coords and pick the nearest one within a
+          // small radius. Recomputed each move rather than cached, since
+          // pixel position shifts with pan/zoom but this list is short.
+          var tip=div();
+          tip.style.cssText="position:absolute;pointer-events:none;display:none;z-index:20;background:var(--panel2);border:1px solid var(--border2);border-radius:4px;padding:8px 10px;font-family:monospace;font-size:11px;color:var(--text);white-space:nowrap;box-shadow:0 4px 12px #00000060;";
+          chartDiv.appendChild(tip);
+          chart.subscribeCrosshairMove(function(param){
+            if(!param||!param.point){tip.style.display="none";return;}
+            var mx=param.point.x,my=param.point.y;
+            var best=null,bestD=18*18; // 18px hit radius
+            for(var i=0;i<hoverPoints.length;i++){
+              var hp=hoverPoints[i];
+              var x=chart.timeScale().timeToCoordinate(hp.time);
+              var y=markerSeries.priceToCoordinate(hp.value);
+              if(x==null||y==null) continue;
+              var dx=x-mx,dy=y-my,d=dx*dx+dy*dy;
+              if(d<bestD){bestD=d;best=hp;}
+            }
+            if(!best){tip.style.display="none";return;}
+            var p=best.p;
+            var trade=trades.find(function(x){return x.id===p.id;});
+            var dirLbl=(p.isLong?"LONG":"SHORT")+" "+(p.kind==="entry"?"ENTRY":"EXIT");
+            var dirCol=p.kind==="entry"?(p.isLong?"#00e676":"#ff4444"):"#ff8c00";
+            var html='<div style="color:'+dirCol+';font-weight:700;letter-spacing:1px;margin-bottom:4px;">'+dirLbl+'</div>';
+            html+='<div>'+new Date(p.ts*1000).toLocaleString()+'</div>';
+            html+='<div>Price: '+(p.kind==="entry"?p.entry:p.exit)+' &nbsp; Ctr: '+p.ctr+'</div>';
+            if(trade){
+              html+='<div>Entry: '+trade.entry+' → Exit: '+trade.exit+'</div>';
+              html+='<div style="color:'+(trade.d>=0?"#00e676":"#ff4444")+';font-weight:700;">'+dol(trade.d)+'</div>';
+              if(trade.setup) html+='<div style="color:var(--text3);">'+trade.setup+'</div>';
+            } else if(p.kind==="exit"&&p.approx){
+              html+='<div style="color:var(--text3);">exit time approximated</div>';
+            }
+            tip.innerHTML=html;
+            tip.style.display="block";
+            var cw=chartDiv.clientWidth,ch=chartDiv.clientHeight;
+            var left=mx+16,top=my-12;
+            // Keep the tooltip on-screen near the right/bottom edges instead of
+            // letting it run off the chart container.
+            if(left+180>cw) left=mx-196;
+            if(top+90>ch) top=ch-96;
+            if(top<0) top=4;
+            tip.style.left=left+"px";
+            tip.style.top=top+"px";
+          });
         } else {
           note.textContent="OANDA (CFD proxy) • selection doesn't match any trade in this window • "+new Date().toLocaleTimeString();
         }
