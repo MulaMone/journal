@@ -6232,15 +6232,22 @@ function extractFrontMonthOI(fullText,sym){
   var tokens=line.split(/\s+/);
   var contractMonth=tokens[0];
   var idx=-1;
+  var signPos=-1;
   for(var i=tokens.length-1;i>=0;i--){
-    if(tokens[i]==="+"||tokens[i]==="-"||tokens[i]==="UNCH"){ idx=i-1; break; }
+    if(tokens[i]==="+"||tokens[i]==="-"||tokens[i]==="UNCH"){ idx=i-1; signPos=i; break; }
   }
   if(idx<0) throw new Error("front-month row matched but couldn't locate OI in it: \""+line+"\"");
   var oiTok=tokens[idx];
   if(oiTok==="----") throw new Error("front-month contract ("+contractMonth+") shows no open interest: \""+line+"\"");
   var oi=parseInt(oiTok.replace(/,/g,""),10);
   if(isNaN(oi)) throw new Error("OI token wasn't numeric: \""+oiTok+"\" (line: \""+line+"\")");
-  return {oi:oi,contractMonth:contractMonth};
+  var change=0;
+  if(tokens[signPos]==="+"||tokens[signPos]==="-"){
+    var chgTok=tokens[signPos+1];
+    var chgNum=chgTok?parseInt(chgTok.replace(/,/g,""),10):NaN;
+    if(!isNaN(chgNum)) change=tokens[signPos]==="-"?-chgNum:chgNum;
+  }
+  return {oi:oi,change:change,contractMonth:contractMonth};
 }
 
 function fetchCmeDailyOI(sym,statusCb){
@@ -6271,7 +6278,7 @@ function fetchCmeDailyOI(sym,statusCb){
     var fullText=pageTexts.join("\n");
     var result=extractFrontMonthOI(fullText,sym);
     var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
-    return {oi:result.oi,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+    return {oi:result.oi,change:result.change,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
   });
 }
 
@@ -6402,8 +6409,10 @@ function analystTab(){
     }
     status("Loading…");
     loadCmeDailyOI(sym,true,status).then(function(data){
-      cmeResult.textContent="✓ "+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI"+(data.dateStr?" ("+data.dateStr+")":"");
-      cmeResult.style.color="#00e676";
+      var chgCol=data.change>0?"#00e676":data.change<0?"#ff4444":"var(--text2)";
+      var chgText=data.change===0?"UNCH":fmtCotChg(data.change);
+      cmeResult.innerHTML="✓ "+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.dateStr?" ("+data.dateStr+")":"");
+      cmeResult.style.color="var(--text2)";
     }).catch(function(err){
       status("✗ Failed at this step — "+(err&&err.message?err.message:"unknown error"));
       cmeResult.style.color="#ff4444";
