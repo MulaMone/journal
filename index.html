@@ -6841,22 +6841,9 @@ function buildCOTView(sym,data,isM){
   staleNote.textContent="Report week ending "+asOf+" · fetched "+new Date(data.fetchedAt).toLocaleString()+" · CFTC TFF, updated weekly (Fridays)";
   el.appendChild(staleNote);
 
-  // ── Open Interest summary ──
-  var oi=+latest.open_interest_all||0;
-  var oiChg=+latest.change_in_open_interest_all||0;
-  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px 18px;margin-bottom:14px;";
-  var oiTop=div("rjb");oiTop.style.alignItems="flex-start";
-  var oiL=div();
-  oiL.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Total Open Interest — "+COT_SYMS[sym].name+"</div>"
-    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtCotNum(oi)+"</div>"
-    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" contracts vs prior week</div>";
-  oiTop.appendChild(oiL);
-  oiCard.appendChild(oiTop);
-  var oiHist=rows.slice(-26).map(function(r){return {v:+r.open_interest_all||0,l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
-  var oiChartWrap=div();oiChartWrap.style.cssText="margin-top:10px;height:80px;";
-  oiChartWrap.appendChild(lineSVG(oiHist,isM?300:640,80,"#e0c97a",fmtCotNum));
-  oiCard.appendChild(oiChartWrap);
-  el.appendChild(oiCard);
+  // Open Interest summary card intentionally omitted here — it's already
+  // shown once at the top of the Legacy report above; TFF's open_interest_all
+  // is the same total market OI, so a second identical card was redundant.
 
   // ── Positioning by trader category ──
   var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
