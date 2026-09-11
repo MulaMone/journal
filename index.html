@@ -4473,8 +4473,8 @@ function parseCSV(text){
       var tvlInst=detectInstrument(col(g.entry,["symbol"]));
       var tvlDir=col(g.entry,["type"]).toLowerCase().indexOf("short")>-1?"Short":"Long";
       var tvlQty=cleanNum(col(g.entry,["size (qty)","qty","quantity"]))||"1";
-      var tvlEntry=cleanNum(col(g.entry,["price"]));
-      var tvlExit=cleanNum(col(g.exit,["price"]));
+      var tvlEntry=String(snapToTick(parseFloat(cleanNum(col(g.entry,["price"]))),tvlInst));
+      var tvlExit=String(snapToTick(parseFloat(cleanNum(col(g.exit,["price"]))),tvlInst));
       var tvlEntryDT=parseTVListDT(col(g.entry,["date and time"]));
       var tvlExitDT=parseTVListDT(col(g.exit,["date and time"]));
       var tvlPnl=cleanNum(col(g.exit,["net pnl usd","net pnl","net p&l"]));
