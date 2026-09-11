@@ -1572,7 +1572,7 @@ function renderTopbar(){
     var _atPnl=s.total;
     el.innerHTML='<div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;"><span style="font-size:8px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:1px;">'+(_acctName?_acctName:"ALL TIME")+'</span><b class="'+(_atPnl>=0?"g":"r")+'" style="font-size:13px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums;">'+dol(_atPnl)+'</b></div>';
   } else {
-    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+td+'</b>';
+    el.innerHTML='<span>TODAY</span> <b class="'+clr(tPnl)+'" style="font-variant-numeric:tabular-nums;">'+dol(tPnl)+'</b> &nbsp; <span class="hide-xs">W/L</span> <b class="g hide-xs">'+tW+'</b><b class="m hide-xs">–</b><b class="r hide-xs">'+tL+'</b> &nbsp;<span class="hide-xs">WIN%</span> <b class="hide-xs">'+s.wr+'%</b> &nbsp; <button onclick="openSettings()" title="Settings" class="hide-xs" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;vertical-align:middle;transition:color .15s;" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--text3)\'">&#9881;</button> <b class="m xs hide-xs" style="font-size:13px;">'+today()+'</b>';
     var dlEl=document.getElementById("topbar-dl");
     if(dlEl){
       var maxLoss=parseFloat(localStorage.getItem("edge_max_loss")||"0");
@@ -4655,6 +4655,19 @@ function syncTradovate(creds,days){
   });
 }
 
+// Tradovate's /fill/list API returns timestamps in UTC ISO 8601. Convert to
+// ET (DST-aware) before extracting calendar date/time, mirroring the offset
+// logic used for the TradingView-paper-trading import above — otherwise
+// fills between ~00:00-05:00 UTC (evening ET) land on the wrong day.
+function tvFillToET(raw){
+  var utcMs=Date.parse(raw);
+  if(isNaN(utcMs)) return {date:fmtImportDate(raw),time:fmtImportTime(raw)};
+  var d=new Date(utcMs);
+  var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;
+  var etOffset=isDST?4:5;
+  var ed=new Date(utcMs-(etOffset*3600000));
+  return {date:pad(ed.getUTCMonth()+1)+"/"+pad(ed.getUTCDate())+"/"+String(ed.getUTCFullYear()).slice(2),time:pad(ed.getUTCHours())+":"+pad(ed.getUTCMinutes())};
+}
 function parseTradovateFills(fills){
   // Group fills by orderId or pair buys/sells by contract
   var trades=[];
@@ -4678,7 +4691,8 @@ function parseTradovateFills(fills){
         var pts=(parseFloat(exitP)-parseFloat(entryP))*(dir==="Long"?1:-1);
         var tv2=TICK[inst]||1;
         var dollar=parseFloat((pts*tv2*parseFloat(qty)-getActiveCommission(inst)*parseFloat(qty)).toFixed(2));
-        trades.push({id:Date.now()+i,accountId:State.activeAccount||null,date:fmtImportDate(entry.timestamp),time:fmtImportTime(entry.timestamp),inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(fmtImportTime(entry.timestamp)),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
+        var entryET=tvFillToET(entry.timestamp);
+        trades.push({id:Date.now()+i,accountId:State.activeAccount||null,date:entryET.date,time:entryET.time,inst:inst,dir:dir,entry:entryP,exit:exitP,ctr:qty,setup:"",sess:autoSession(entryET.time),conf:"",post:"",ex:"B",ru:"B",emo:3,right:"",wrong:"",pts:parseFloat(pts.toFixed(2)),d:dollar,hl:false});
         i+=2;
       } else { i++; }
     }
