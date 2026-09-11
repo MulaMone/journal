@@ -6095,6 +6095,209 @@ function fmtCotChg(n){
   return (n>0?"+":"")+n.toLocaleString("en-US");
 }
 
+// ─── Daily Open Interest — CME Daily Bulletin (real exchange OI, updates
+// once per trading day, separate from the weekly CFTC snapshot above) ───
+// This pulls from "Section11" (the per-contract-month settlement table) —
+// NOT Section01C, which is only the aggregate across every expiration month
+// combined. Section11 lists each contract month as its own row (SEP26,
+// DEC26, MAR27, ...) directly under a product header line, so the front
+// (nearest/most active) month's OI is simply the first row under that
+// header, not the total.
+// pdf.js is lazy-loaded (only fetched when this feature is actually used).
+// If a real Worker can't be created (e.g. this page is opened via file://,
+// where browsers refuse to instantiate Workers), pdf.js automatically falls
+// back to a "fake worker" that runs the same parsing on the main thread —
+// so file:// alone should not be a blocker here.
+var CME_BULLETIN_URL="https://www.cmegroup.com/daily_bulletin/current/Section11_Equity_And_Index_Futures.pdf";
+var CME_ROW_PATTERNS={
+  ES:{label:"EMINI S&P FUT",name:"E-mini S&P 500"},
+  NQ:{label:"EMINI NASD FUT",name:"E-mini Nasdaq-100"}
+};
+var PDFJS_CDNS=[
+  {js:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",worker:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"},
+  {js:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",worker:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js"}
+];
+var _pdfJsLoadPromise=null;
+function loadOneScript(src){
+  return new Promise(function(resolve,reject){
+    var s=document.createElement("script");
+    s.src=src;
+    s.onload=function(){resolve();};
+    s.onerror=function(){reject(new Error("script tag failed to load: "+src));};
+    document.head.appendChild(s);
+  });
+}
+// Tries each CDN in order; reports which one it's trying via statusCb so a
+// failure tells us exactly which step broke instead of a generic message.
+function loadPdfJs(statusCb){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(_pdfJsLoadPromise) return _pdfJsLoadPromise;
+  function tryCdn(i){
+    if(i>=PDFJS_CDNS.length) return Promise.reject(new Error("all CDNs failed to load pdf.js"));
+    var cdn=PDFJS_CDNS[i];
+    if(statusCb) statusCb("Loading pdf.js from "+cdn.js.split("/")[2]+"…");
+    return loadOneScript(cdn.js).then(function(){
+      var lib=window["pdfjs-dist/build/pdf"]||window.pdfjsLib;
+      if(!lib) throw new Error("script loaded but pdfjsLib global was not found ("+cdn.js+")");
+      window.pdfjsLib=lib;
+      lib.GlobalWorkerOptions.workerSrc=cdn.worker;
+      return lib;
+    }).catch(function(err){
+      if(statusCb) statusCb("CDN "+(i+1)+" failed ("+err.message+"), trying next…");
+      return tryCdn(i+1);
+    });
+  }
+  _pdfJsLoadPromise=tryCdn(0);
+  return _pdfJsLoadPromise;
+}
+
+// Each bulletin row looks like:
+//   ES E-MINI S&P 500 FUTURES 1457182 31179 1488361 2078540 + 6704 1448451 2043818
+// i.e. [globex vol] [pnt vol]? [total vol] [open interest] [+/-] [chg] [vol 52w ago] [oi 52w ago]
+// The PNT-volume column is sometimes absent (when it's zero), which shifts
+// everything left by one — so instead of counting from the front, we anchor
+// on the +/- change sign and count backward from there, which stays correct
+// either way.
+// pdf.js reports text items in whatever order they're stored in the PDF's
+// content stream — NOT necessarily left-to-right, top-to-bottom, and pdf.js's
+// own issue tracker documents this as inconsistent across PDFs: sometimes a
+// whole line comes back as one item, sometimes every glyph is its own item.
+// This reconstructs actual lines by clustering items with the same y
+// position (their vertical baseline), then sorting each line's items by x —
+// and, critically, only inserts a space between two items when there's a
+// real visual gap between them (scaled to that item's own font size, the
+// way pdfplumber and similar tools do it) rather than always inserting
+// exactly one space, which can silently split a single word like "S&P" or
+// "FUTURES" into pieces that no longer match a search string.
+function pageItemsToText(tc){
+  var items=tc.items.map(function(it){
+    return {str:it.str,x:it.transform[4],y:it.transform[5],w:it.width||0,h:it.height||Math.abs(it.transform[3])||8};
+  });
+  items.sort(function(a,b){ return (b.y-a.y)||(a.x-b.x); });
+  var lines=[];
+  var current=null;
+  var TOL=2; // points of vertical tolerance to treat items as same line
+  items.forEach(function(it){
+    if(!current||Math.abs(it.y-current.y)>TOL){
+      current={y:it.y,items:[]};
+      lines.push(current);
+    }
+    current.items.push(it);
+  });
+  return lines.map(function(line){
+    var sorted=line.items.slice().sort(function(a,b){return a.x-b.x;});
+    var out="";
+    var prevEnd=null;
+    sorted.forEach(function(it){
+      if(prevEnd!==null){
+        var gap=it.x-prevEnd;
+        var threshold=Math.max(1,it.h*0.2);
+        if(gap>threshold) out+=" ";
+      }
+      out+=it.str;
+      prevEnd=it.x+it.w;
+    });
+    return out;
+  }).join("\n");
+}
+
+// Each contract-month row looks like (SEP26, front month, as example):
+//   SEP26 7681.00 7691.25 7628.75 ---- 7643.75 - 3675 22686 1409517 1928738 - 23323 7838.50 5660.00A
+// i.e. [open] [high] [low] [closing range] [settle price] [sign][pt chg]
+//      [pnt vol] [globex vol] [open interest] [sign or "UNCH"][oi chg]
+//      [contract high] [contract low]
+// "----" is CME's explicit placeholder for an absent value, and it still
+// occupies its own token — so column *count* stays stable even when a
+// contract has no PNT volume, etc. The one real irregularity: when OI is
+// unchanged, the sign+number pair collapses into a single "UNCH" token,
+// shifting everything after it. So instead of counting from a fixed
+// position, we scan from the right for the first "+"/"-"/"UNCH" token and
+// take whatever's immediately before it as the OI — verified against the
+// bulletin's own TOTAL line (summed, this matched exactly).
+function extractFrontMonthOI(fullText,sym){
+  var pat=CME_ROW_PATTERNS[sym];
+  var escLabel=pat.label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  var re=new RegExp(escLabel+"\\n([^\\n]+)");
+  var m=fullText.match(re);
+  if(!m){
+    // Diagnostic fallback: surface real extracted lines instead of a bare
+    // "not found" — if the format genuinely changed, this shows us exactly
+    // what it looks like now instead of guessing again.
+    var lines=fullText.split("\n");
+    var firstWord=pat.label.split(" ")[0];
+    var near=lines.filter(function(l){return new RegExp(firstWord,"i").test(l);}).slice(0,3);
+    throw new Error("could not find \""+pat.label+"\" header — nearby line(s): "+(near.length?'"'+near.join('" | "')+'"':"(none found at all)"));
+  }
+  var line=m[1].trim();
+  var tokens=line.split(/\s+/);
+  var contractMonth=tokens[0];
+  var idx=-1;
+  for(var i=tokens.length-1;i>=0;i--){
+    if(tokens[i]==="+"||tokens[i]==="-"||tokens[i]==="UNCH"){ idx=i-1; break; }
+  }
+  if(idx<0) throw new Error("front-month row matched but couldn't locate OI in it: \""+line+"\"");
+  var oiTok=tokens[idx];
+  if(oiTok==="----") throw new Error("front-month contract ("+contractMonth+") shows no open interest: \""+line+"\"");
+  var oi=parseInt(oiTok.replace(/,/g,""),10);
+  if(isNaN(oi)) throw new Error("OI token wasn't numeric: \""+oiTok+"\" (line: \""+line+"\")");
+  return {oi:oi,contractMonth:contractMonth};
+}
+
+function fetchCmeDailyOI(sym,statusCb){
+  function report(s){ if(statusCb) statusCb(s); }
+  return loadPdfJs(statusCb).then(function(){
+    report("pdf.js ready. Fetching today's CME bulletin…");
+    return fetch(CME_BULLETIN_URL);
+  }).then(function(r){
+    if(!r.ok) throw new Error("bulletin fetch failed: HTTP "+r.status);
+    report("Bulletin fetched ("+(r.headers.get("content-length")||"?")+" bytes). Reading into memory…");
+    return r.arrayBuffer();
+  }).then(function(buf){
+    report("Parsing PDF ("+buf.byteLength+" bytes)…");
+    return window.pdfjsLib.getDocument({data:buf}).promise;
+  }).then(function(pdf){
+    report("PDF parsed ("+pdf.numPages+" pages). Extracting text…");
+    var pagePromises=[];
+    for(var p=1;p<=pdf.numPages;p++){
+      pagePromises.push(pdf.getPage(p).then(function(page){
+        return page.getTextContent().then(function(tc){
+          return pageItemsToText(tc);
+        });
+      }));
+    }
+    return Promise.all(pagePromises);
+  }).then(function(pageTexts){
+    report("Text extracted. Searching for "+sym+" front-month row…");
+    var fullText=pageTexts.join("\n");
+    var result=extractFrontMonthOI(fullText,sym);
+    var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
+    return {oi:result.oi,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+  });
+}
+
+function cmeOiCacheGet(sym){
+  try{var raw=localStorage.getItem("edge_cme_oi_v2_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+}
+function cmeOiCacheSet(sym,obj){
+  try{localStorage.setItem("edge_cme_oi_v2_"+sym,JSON.stringify(obj));}catch(e){}
+}
+// CME's bulletin only updates once per trading day (after the close), so a
+// 6h cache is plenty — this just avoids re-fetching+re-parsing a multi-page
+// PDF every time the tab renders.
+function loadCmeDailyOI(sym,force,statusCb){
+  var cached=cmeOiCacheGet(sym);
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  return fetchCmeDailyOI(sym,statusCb).then(function(data){
+    cmeOiCacheSet(sym,data);
+    return data;
+  }).catch(function(err){
+    if(cached) return cached;
+    throw err;
+  });
+}
+
+
 function buildCOTView(sym,data,isM){
   var rows=data.rows;
   var latest=rows[rows.length-1];
@@ -6181,9 +6384,31 @@ function analystTab(){
     b.addEventListener("click",function(){State.analyst_symbol=s;render();});
     ctrlRow.appendChild(b);
   });
-  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";rbtn.style.marginLeft="auto";
+  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";
   ctrlRow.appendChild(rbtn);
+  var cmeBtn=h("button",{className:"btn"});cmeBtn.textContent="Load daily OI (CME)";cmeBtn.style.marginLeft="auto";
+  ctrlRow.appendChild(cmeBtn);
   el.appendChild(ctrlRow);
+
+  var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;";
+  el.appendChild(cmeResult);
+
+  cmeBtn.addEventListener("click",function(){
+    var log=[];
+    function status(s){
+      log.push(s);
+      cmeResult.textContent=log.join("\n");
+      cmeResult.style.color="var(--text3)";
+    }
+    status("Loading…");
+    loadCmeDailyOI(sym,true,status).then(function(data){
+      cmeResult.textContent="✓ "+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(data.oi)+" OI"+(data.dateStr?" ("+data.dateStr+")":"");
+      cmeResult.style.color="#00e676";
+    }).catch(function(err){
+      status("✗ Failed at this step — "+(err&&err.message?err.message:"unknown error"));
+      cmeResult.style.color="#ff4444";
+    });
+  });
 
   var body=div();body.id="cot-body";el.appendChild(body);
 
