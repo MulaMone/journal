@@ -1309,7 +1309,7 @@ function lineSVG(data,w,h2,col,fmt){
   var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
   [0.25,0.5,0.75].forEach(function(f){var y=padT+H*f; svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
   svg+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
-  data.forEach(function(d,i){svg+='<circle cx="'+px(i)+'" cy="'+py(d.v)+'" r="3" fill="'+col+'"/>'});
+  data.forEach(function(d,i){var ttl='<title>'+(d.l?d.l+": ":"")+fmt(d.v)+'</title>';svg+='<circle cx="'+px(i)+'" cy="'+py(d.v)+'" r="9" fill="transparent">'+ttl+'</circle><circle cx="'+px(i)+'" cy="'+py(d.v)+'" r="3" fill="'+col+'" style="pointer-events:none;">'+ttl+'</circle>'});
   [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#c9a84c">'+fmt(v)+'</text>'});
   // Endpoint date labels — each dot is one weekly report, so label the
   // first and last so the axis reads as time rather than bare numbers.
