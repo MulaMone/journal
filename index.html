@@ -1339,13 +1339,44 @@ function catmullRom2bezier(pts){
 // marked, since with ~180 daily points per-point dots just add noise.
 // Also draws a zero line when the series crosses it — relevant here
 // since a spread crossing zero is the inversion/normal boundary.
+// "Nice number" axis-tick algorithm (the standard approach behind
+// matplotlib/FRED-style axes) — picks a round step size (1/2/5 x a power
+// of ten) so gridlines land on 0.5, 1.0, -0.5 etc. instead of whatever
+// the data's actual min/max happens to be.
+function niceNum(range,round){
+  var exp=Math.floor(Math.log10(range||1));
+  var frac=range/Math.pow(10,exp);
+  var niceFrac;
+  if(round){ niceFrac=frac<1.5?1:frac<3?2:frac<7?5:10; }
+  else{ niceFrac=frac<=1?1:frac<=2?2:frac<=5?5:10; }
+  return niceFrac*Math.pow(10,exp);
+}
+function niceTicks(min,max,count){
+  count=count||5;
+  if(min===max){min-=1;max+=1;}
+  var span=niceNum(max-min,false);
+  var step=niceNum(span/(count-1),true);
+  var niceMin=Math.floor(min/step)*step;
+  var niceMax=Math.ceil(max/step)*step;
+  var ticks=[];
+  for(var v=niceMin;v<=niceMax+step/1e6;v+=step) ticks.push(Math.round(v/step)*step);
+  return {ticks:ticks,min:niceMin,max:niceMax};
+}
+// Smoothed, gradient-filled area chart — same axis/label conventions as
+// lineSVG (endpoint dates along the bottom), but a Catmull-Rom smoothed
+// curve with a fading fill underneath, round-number axis ticks with
+// gridlines (niceTicks, above) instead of raw data min/max, and a
+// zero line drawn solid rather than dashed since for a spread that's the
+// inversion/normal boundary. Only the latest point is marked, since with
+// ~180 daily points per-point dots just add noise.
 function areaSVG(data,w,h2,col,fmt){
   fmt=fmt||function(v){return v;};
   if(!data||data.length<2) return div("chart-wrap");
   var vals=data.map(function(d){return d.v});
-  var mn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),mx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
-  if(mn===mx){mn-=1;mx+=1;}
-  var rng=mx-mn||1;
+  var dmn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),dmx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
+  var nice=niceTicks(dmn,dmx,5);
+  var mn=nice.min,mx=nice.max;
+  var rng=(mx-mn)||1;
   var padL=44,padR=6,padB=16,padT=10;
   var W=w-padL-padR,H=h2-padB-padT;
   function px(i){return padL+(i/(data.length-1))*W;}
@@ -1360,18 +1391,17 @@ function areaSVG(data,w,h2,col,fmt){
     +'<stop offset="0%" stop-color="'+col+'" stop-opacity="0.35"/>'
     +'<stop offset="100%" stop-color="'+col+'" stop-opacity="0"/>'
     +'</linearGradient></defs>';
-  [0.25,0.5,0.75].forEach(function(f){var y=padT+H*f; svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
-  if(mn<0&&mx>0){
-    var zy=py(0);
-    svg+='<line x1="'+padL+'" y1="'+zy+'" x2="'+(padL+W)+'" y2="'+zy+'" stroke="#6b7a99" stroke-width="1"/>';
-    svg+='<text x="'+(padL-6)+'" y="'+(zy+3)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#8fadd4">0</text>';
-  }
+  nice.ticks.forEach(function(t){
+    var y=py(t);
+    var isZero=Math.abs(t)<1e-9;
+    svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="'+(isZero?"#6b7a99":"#1a3260")+'" '+(isZero?'stroke-width="1"':'stroke-dasharray="2 4"')+'/>';
+    svg+='<text x="'+(padL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="'+(isZero?"#8fadd4":"#c9a84c")+'">'+fmt(t)+'</text>';
+  });
   svg+='<path d="'+areaPath+'" fill="url(#'+gid+')" stroke="none"/>';
   svg+='<path d="'+linePath+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
   var last=pts[pts.length-1],lastD=data[data.length-1];
   var lastTtl='<title>'+(lastD.l?lastD.l+": ":"")+fmt(lastD.v)+'</title>';
   svg+='<circle cx="'+last[0]+'" cy="'+last[1]+'" r="9" fill="transparent">'+lastTtl+'</circle><circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="'+col+'" style="pointer-events:none;">'+lastTtl+'</circle>';
-  [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#c9a84c">'+fmt(v)+'</text>';});
   if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
   var lastL=data[data.length-1].l;
   if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
