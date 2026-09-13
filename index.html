@@ -6895,10 +6895,141 @@ function buildCOTView(sym,data,isM){
   return el;
 }
 
+// ─── Yield Curve Spreads — U.S. Treasury daily par yield curve ─────────
+// Data source: home.treasury.gov's own CSV export (one row per trading
+// day, every maturity in one response) — this is NOT a CORS-enabled API
+// (it's a human-facing download link), so requests go through a public
+// CORS proxy. Treasury publishes once per business day, ~3:30pm ET, so
+// "frequent updates" here means we keep checking for that day's print
+// rather than any faster real intraday feed (none exists for free).
+// Free CORS proxies are individually flaky (allorigins in particular
+// throws sporadic 408/500s under load, and can also just hang with no
+// response at all) — same fallback-chain approach as PDFJS_CDNS above:
+// try each in order, only fail if all of them do. Each attempt is capped
+// at 10s so a hung proxy gets skipped instead of stalling the whole chain
+// forever (fetch() itself has no built-in timeout).
+var YC_PROXIES=[
+  function(u){return "https://api.allorigins.win/raw?url="+encodeURIComponent(u);},
+  function(u){return "https://corsproxy.io/?url="+encodeURIComponent(u);},
+  function(u){return "https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u);}
+];
+function fetchWithTimeout(url,ms){
+  return Promise.race([
+    fetch(url),
+    new Promise(function(_,reject){setTimeout(function(){reject(new Error("timeout after "+ms+"ms"));},ms);})
+  ]);
+}
+function fetchViaProxyChain(target,i){
+  i=i||0;
+  if(i>=YC_PROXIES.length) return Promise.reject(new Error("all CORS proxies failed"));
+  return fetchWithTimeout(YC_PROXIES[i](target),10000).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.text();
+  }).then(function(text){
+    if(!text||text.indexOf(",")<0) throw new Error("empty/invalid response");
+    return text;
+  }).catch(function(){
+    return fetchViaProxyChain(target,i+1);
+  });
+}
+function ycTreasuryUrl(year){
+  return "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/"+year+"/all?type=daily_treasury_yield_curve&field_tdr_date_value="+year+"&page&_format=csv";
+}
+var YC_SPREADS={
+  "2s10s":{label:"2s10s (10Y − 2Y)",a:"10 Yr",b:"2 Yr",col:"#00d4d4"},
+  "10y3m":{label:"10Y − 3M",a:"10 Yr",b:"3 Mo",col:"#5b9bd5"},
+  "5s30s":{label:"5s30s (30Y − 5Y)",a:"30 Yr",b:"5 Yr",col:"#c9a84c"}
+};
+// Minimal CSV parser — Treasury's export has no embedded commas inside
+// fields (dates and plain numbers only), so a straight split is safe.
+function parseYcCsv(text){
+  var lines=text.split(/\r?\n/).filter(function(l){return l.trim().length;});
+  if(lines.length<2) return [];
+  var headers=lines[0].split(",").map(function(h){return h.replace(/^"|"$/g,"").trim();});
+  var rows=lines.slice(1).map(function(line){
+    var cells=line.split(",").map(function(c){return c.replace(/^"|"$/g,"").trim();});
+    var obj={};
+    headers.forEach(function(h,i){obj[h]=cells[i];});
+    var dp=(obj.Date||"").split("/");
+    obj._ts=dp.length===3?new Date(+dp[2],+dp[0]-1,+dp[1]).getTime():0;
+    return obj;
+  }).filter(function(r){return r._ts;});
+  rows.sort(function(a,b){return a._ts-b._ts;});
+  return rows;
+}
+var _ycMemCache=null;
+var _ycLoadToken=0;
+var _ycAutoInterval=null;
+function ycCacheGet(){
+  try{var raw=localStorage.getItem("edge_yc_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}
+}
+function ycCacheSet(obj){
+  try{localStorage.setItem("edge_yc_v1",JSON.stringify(obj));}catch(e){}
+}
+// 2h staleness window — tighter than COT's 12h since this is the "keep it
+// fresh" request, but still bounded by Treasury only publishing once/day.
+function loadYieldCurveData(force){
+  var cached=_ycMemCache||ycCacheGet();
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>2*60*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  var year=new Date().getFullYear();
+  return fetchViaProxyChain(ycTreasuryUrl(year)).then(function(text){
+    var rows=parseYcCsv(text);
+    if(!rows.length) throw new Error("empty response");
+    var obj={rows:rows,fetchedAt:Date.now()};
+    _ycMemCache=obj;ycCacheSet(obj);
+    return obj;
+  }).catch(function(err){
+    if(cached){_ycMemCache=cached;return cached;}
+    throw err;
+  });
+}
+function buildYieldCurveView(spreadKey,data,isM){
+  var cfg=YC_SPREADS[spreadKey];
+  var series=data.rows.map(function(r){
+    var a=parseFloat(r[cfg.a]),b=parseFloat(r[cfg.b]);
+    if(isNaN(a)||isNaN(b)) return null;
+    var d=new Date(r._ts);
+    return {v:(a-b)*100,l:(d.getMonth()+1)+"/"+d.getDate()};
+  }).filter(Boolean);
+  var el=div();
+  if(series.length<2){
+    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough data to plot yet.</div>';
+    return el;
+  }
+  var latest=series[series.length-1],prev=series[series.length-2];
+  var chg=latest.v-prev.v;
+  var inverted=latest.v<0;
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
+  staleNote.textContent="Latest print "+latest.l+" · fetched "+new Date(data.fetchedAt).toLocaleString()+" · Treasury daily par yield curve, updates ~once/day (~3:30pm ET)";
+  el.appendChild(staleNote);
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+cfg.col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var top=div("rjb");top.style.alignItems="flex-start";
+  var l=div();
+  var badgeCol=inverted?"#ff4444":"#00e676";
+  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+cfg.label+"</div>"
+    +"<div style='display:flex;align-items:baseline;gap:10px;'>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(0)+" bps</div>"
+    +"<div style='font-size:11px;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:3px;background:"+badgeCol+"22;color:"+badgeCol+";'>"+(inverted?"INVERTED":"NORMAL")+"</div>"
+    +"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"")+chg.toFixed(0)+" bps vs prior print</div>";
+  top.appendChild(l);
+  card.appendChild(top);
+  var hist=series.slice(-180);
+  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
+  chartWrap.appendChild(lineSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(0)+"bp";}));
+  card.appendChild(chartWrap);
+  el.appendChild(card);
+  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
+  srcNote.textContent="Source: home.treasury.gov daily par yield curve (via CORS proxy)";
+  el.appendChild(srcNote);
+  return el;
+}
+
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst — COT & Open Interest";el.appendChild(sh);
+  var sh=div("sh");sh.textContent="Analyst — COT, Open Interest & Yield Curve";el.appendChild(sh);
 
   var sym=State.analyst_symbol||"ES";
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
@@ -7025,9 +7156,58 @@ function analystTab(){
       showError(err&&err.message?err.message:"network error");
     });
   }
-  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);});
+  // ── Yield Curve Spreads — separate section, own data source ──
+  var ycSpread=State.analyst_yc_spread||"2s10s";
+  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  ycHead.textContent="Yield Curve Spreads";
+  el.appendChild(ycHead);
+
+  var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  Object.keys(YC_SPREADS).forEach(function(k){
+    var b=h("button",{className:"btn"});
+    b.textContent=YC_SPREADS[k].label;
+    if(ycSpread===k) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
+    b.addEventListener("click",function(){State.analyst_yc_spread=k;render();});
+    ycCtrlRow.appendChild(b);
+  });
+  el.appendChild(ycCtrlRow);
+
+  var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
+  ycBody.style.transition="opacity .15s";
+
+  function showYcLoading(){ycBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING YIELD CURVE DATA…</div>';}
+  function showYcError(msg){ycBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD YIELD CURVE DATA — '+msg+'</div>';}
+
+  function loadYc(force){
+    var myToken=++_ycLoadToken;
+    if(force&&ycBody.firstChild) ycBody.style.opacity="0.45";
+    else showYcLoading();
+    loadYieldCurveData(force).then(function(data){
+      if(myToken!==_ycLoadToken||State.tab!=="analyst") return;
+      ycBody.innerHTML="";
+      ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",data,isM));
+      ycBody.style.opacity="1";
+    }).catch(function(err){
+      if(myToken!==_ycLoadToken) return;
+      ycBody.style.opacity="1";
+      showYcError(err&&err.message?err.message:"network error");
+    });
+  }
+
+  // Auto-recheck every 15 min while this tab stays open, so a new day's
+  // print shows up without needing a manual refresh — bounded by the 2h
+  // cache staleness above, and itself bounded by Treasury only publishing
+  // once/day. Clear any previous interval first so re-renders (e.g.
+  // switching spreads) never stack up duplicate timers.
+  if(_ycAutoInterval) clearInterval(_ycAutoInterval);
+  _ycAutoInterval=setInterval(function(){
+    if(State.tab==="analyst") loadYc(false);
+  },15*60*1000);
+
+  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);});
   loadLegacy(false);
   load(false);
+  loadYc(false);
 
   return el;
 }
