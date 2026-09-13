@@ -6997,6 +6997,21 @@ var YC_SPREADS={
   "10y3m":{label:"10Y − 3M",a:"y10",b:"m3",col:"#5b9bd5"},
   "5s30s":{label:"5s30s (30Y − 5Y)",a:"y30",b:"y5",col:"#c9a84c"}
 };
+// Chart lookback presets, CNBC-style — capped at 5Y since that's all the
+// Action backfills (YEARS_BACK in update_yields.py). "5Y" returns null
+// (no cutoff) rather than computing exactly 5 years back, so it always
+// shows the full history the file actually has.
+var YC_RANGES=["1M","3M","6M","YTD","1Y","5Y"];
+function ycRangeCutoff(range){
+  var now=new Date(),y=now.getFullYear(),m=now.getMonth(),d=now.getDate();
+  function iso(dt){return dt.toISOString().slice(0,10);}
+  if(range==="1M") return iso(new Date(y,m-1,d));
+  if(range==="3M") return iso(new Date(y,m-3,d));
+  if(range==="6M") return iso(new Date(y,m-6,d));
+  if(range==="YTD") return y+"-01-01";
+  if(range==="1Y") return iso(new Date(y-1,m,d));
+  return null; // 5Y / anything else — show everything available
+}
 var _ycMemCache=null;
 var _ycLoadToken=0;
 var _ycAutoInterval=null;
@@ -7026,12 +7041,11 @@ function loadYieldCurveData(force){
     throw err;
   });
 }
-function buildYieldCurveView(spreadKey,data,isM){
+function buildYieldCurveView(spreadKey,rangeKey,data,isM){
   var cfg=YC_SPREADS[spreadKey];
   var series=data.rows.map(function(r){
     var a=r[cfg.a],b=r[cfg.b];
     if(typeof a!=="number"||typeof b!=="number") return null;
-    // r.d is "YYYY-MM-DD" — slice to "MM-DD" rather than re-parsing a Date.
     // Full ISO date now that history spans multiple years — only ever
     // shown twice (chart start/end labels), so no need to abbreviate.
     return {v:(a-b),l:r.d||""};
@@ -7041,6 +7055,8 @@ function buildYieldCurveView(spreadKey,data,isM){
     el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough data to plot yet.</div>';
     return el;
   }
+  // Latest/change always reflect the newest print regardless of the
+  // chart's selected lookback — only the chart itself gets windowed.
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v;
   var inverted=latest.v<0;
@@ -7059,7 +7075,9 @@ function buildYieldCurveView(spreadKey,data,isM){
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"−")+Math.abs(chg).toFixed(2)+"% vs prior print</div>";
   top.appendChild(l);
   card.appendChild(top);
-  var hist=series; // full multi-year history now that the Action pulls YEARS_BACK years
+  var cutoff=ycRangeCutoff(rangeKey);
+  var hist=cutoff?series.filter(function(s){return s.l>=cutoff;}):series;
+  if(hist.length<2) hist=series.slice(-2); // guard: near-empty window falls back to whatever's available
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(2)+"%";}));
   card.appendChild(chartWrap);
@@ -7216,6 +7234,17 @@ function analystTab(){
   });
   el.appendChild(ycCtrlRow);
 
+  var ycRange=State.analyst_yc_range||"1Y";
+  var ycRangeRow=div("row gap8");ycRangeRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  YC_RANGES.forEach(function(rk){
+    var b=h("button",{className:"btn"});
+    b.textContent=rk;
+    b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--accent);color:var(--accent);font-weight:700;":"");
+    b.addEventListener("click",function(){State.analyst_yc_range=rk;render();});
+    ycRangeRow.appendChild(b);
+  });
+  el.appendChild(ycRangeRow);
+
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
 
@@ -7229,7 +7258,7 @@ function analystTab(){
     loadYieldCurveData(force).then(function(data){
       if(myToken!==_ycLoadToken||State.tab!=="analyst") return;
       ycBody.innerHTML="";
-      ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",data,isM));
+      ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",State.analyst_yc_range||"1Y",data,isM));
       ycBody.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_ycLoadToken) return;
