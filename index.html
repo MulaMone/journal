@@ -2915,12 +2915,12 @@ function prepTab(){
   }
 
   // ── Your Originals ──
-  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;margin-top:8px;";
+  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr")+";gap:8px;margin-bottom:8px;margin-top:8px;";
   NEWS_EVENTS.forEach(function(ev,ni){origGrid.appendChild(makeNewsRow(ev,"news_"+ni,"var(--panel2)"));});
   newsCard.appendChild(origGrid);
 
   // ── Macro Calendar ──
-  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
+  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr")+";gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
   MACRO_EVENTS.forEach(function(ev,mi){macroGrid.appendChild(makeNewsRow(ev,"macro_"+mi,"#1d1040"));});
   newsCard.appendChild(macroGrid);
 
