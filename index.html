@@ -7091,9 +7091,43 @@ function buildYieldCurveView(spreadKey,rangeKey,data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst — COT, Open Interest & Yield Curve";el.appendChild(sh);
+  var sh=div("sh");sh.textContent="Analyst — Yield Curve, COT & Open Interest";el.appendChild(sh);
+
+  // ── Yield Curve Spreads — moved to the top since this is now checked
+  // daily; own data source (see below), rendered before COT/OI. ──
+  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  ycHead.textContent="Yield Curve Spreads";
+  el.appendChild(ycHead);
+
+  var ycSpread=State.analyst_yc_spread||"2s10s";
+  var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  Object.keys(YC_SPREADS).forEach(function(k){
+    var b=h("button",{className:"btn"});
+    b.textContent=YC_SPREADS[k].label;
+    if(ycSpread===k) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
+    b.addEventListener("click",function(){State.analyst_yc_spread=k;render();});
+    ycCtrlRow.appendChild(b);
+  });
+  el.appendChild(ycCtrlRow);
+
+  var ycRange=State.analyst_yc_range||"1Y";
+  var ycRangeRow=div("row gap8");ycRangeRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  YC_RANGES.forEach(function(rk){
+    var b=h("button",{className:"btn"});
+    b.textContent=rk;
+    b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--accent);color:var(--accent);font-weight:700;":"");
+    b.addEventListener("click",function(){State.analyst_yc_range=rk;render();});
+    ycRangeRow.appendChild(b);
+  });
+  el.appendChild(ycRangeRow);
+
+  var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
+  ycBody.style.transition="opacity .15s";
 
   var sym=State.analyst_symbol||"ES";
+  var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  cotHead.textContent="COT & Open Interest";
+  el.appendChild(cotHead);
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
   Object.keys(COT_SYMS).forEach(function(s){
     var b=h("button",{className:"btn"});
@@ -7219,35 +7253,6 @@ function analystTab(){
     });
   }
   // ── Yield Curve Spreads — separate section, own data source ──
-  var ycSpread=State.analyst_yc_spread||"2s10s";
-  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  ycHead.textContent="Yield Curve Spreads";
-  el.appendChild(ycHead);
-
-  var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
-  Object.keys(YC_SPREADS).forEach(function(k){
-    var b=h("button",{className:"btn"});
-    b.textContent=YC_SPREADS[k].label;
-    if(ycSpread===k) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
-    b.addEventListener("click",function(){State.analyst_yc_spread=k;render();});
-    ycCtrlRow.appendChild(b);
-  });
-  el.appendChild(ycCtrlRow);
-
-  var ycRange=State.analyst_yc_range||"1Y";
-  var ycRangeRow=div("row gap8");ycRangeRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
-  YC_RANGES.forEach(function(rk){
-    var b=h("button",{className:"btn"});
-    b.textContent=rk;
-    b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--accent);color:var(--accent);font-weight:700;":"");
-    b.addEventListener("click",function(){State.analyst_yc_range=rk;render();});
-    ycRangeRow.appendChild(b);
-  });
-  el.appendChild(ycRangeRow);
-
-  var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
-  ycBody.style.transition="opacity .15s";
-
   function showYcLoading(){ycBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING YIELD CURVE DATA…</div>';}
   function showYcError(msg){ycBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD YIELD CURVE DATA — '+msg+'</div>';}
 
