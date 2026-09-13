@@ -5608,14 +5608,12 @@ function mobileHomeTab(){
     var newsWarn=document.createElement("div");
     newsWarn.style.cssText="background:"+mBg+";border:1px solid "+mBorder+";border-left:3px solid "+mPanelAccent+";border-radius:8px;padding:10px 12px;margin-bottom:10px;cursor:pointer;";
     newsWarn.innerHTML='<div style="font-size:9px;color:'+mPanelAccent+';letter-spacing:1.5px;text-transform:uppercase;font-family:monospace;margin-bottom:4px">⚠ Today News Events</div>';
-    function mMakeNewsRow(n,c){
-      var row=document.createElement("div");row.style.cssText="display:flex;align-items:flex-start;gap:6px;padding:2px 0;";
-      var icon=document.createElement("span");icon.style.cssText="color:"+c+";font-size:11px;flex-shrink:0;line-height:1.4;";icon.textContent="◆";
-      var lbl=document.createElement("span");lbl.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;flex:1;min-width:0;line-height:1.4;";lbl.textContent=n;
-      row.appendChild(icon);row.appendChild(lbl);return row;
-    }
-    mKeyEvents.forEach(function(n){newsWarn.appendChild(mMakeNewsRow(n,"var(--ca)"));});
-    mMacroEvents.forEach(function(n){newsWarn.appendChild(mMakeNewsRow(n,"#b06aff"));});
+    mKeyEvents.forEach(function(n){
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+n;newsWarn.appendChild(row);
+    });
+    mMacroEvents.forEach(function(n){
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+n;newsWarn.appendChild(row);
+    });
     newsWarn.addEventListener("click",function(){switchTab("prep");});
     el.appendChild(newsWarn);
   }
