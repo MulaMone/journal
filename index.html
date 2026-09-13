@@ -2897,14 +2897,14 @@ function prepTab(){
     var isMacro=key.indexOf("macro_")===0;
     var row=div("row gap8");
     var borderCol=isSelected?"var(--ca)":(isMacro?"#b06aff40":"transparent");
-    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":bgDefault)+";align-items:center;border:1px solid "+borderCol+";transition:all .15s;";
+    row.style.cssText="cursor:pointer;padding:7px 10px;border-radius:3px;background:"+(isSelected?"#ff8c0015":bgDefault)+";align-items:center;flex-wrap:wrap;border:1px solid "+borderCol+";transition:all .15s;min-width:0;";
     var chk=div("lv-check"+(isChecked?" on":""));chk.style.flexShrink="0";
     (function(k){chk.addEventListener("click",function(e){e.stopPropagation();State.newsChecks[k]=!State.newsChecks[k];ss("newsChecks",State.newsChecks);render();});})(key);
     row.appendChild(chk);
     var displayLabel=(isMacro&&isMobile()&&MACRO_ABBR[ev.l])?MACRO_ABBR[ev.l]:ev.l;
-    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;";lbl.textContent=displayLabel;row.appendChild(lbl);
+    var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);font-size:12px;min-width:0;";lbl.textContent=displayLabel;row.appendChild(lbl);
     var badge=h("span",{className:"badge imp-high"});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent="HIGH";row.appendChild(badge);
-    if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
+    if(isSelected){var flagged=span("xs b");flagged.style.cssText="color:var(--ca);font-size:10px;font-weight:700;margin-left:4px;flex-shrink:0;white-space:nowrap;flex-basis:100%;text-align:right;";flagged.textContent="▶ TODAY";row.appendChild(flagged);}
     (function(name){row.addEventListener("click",function(){
       var idx=State.newsSelected.indexOf(name);
       if(idx>-1) State.newsSelected.splice(idx,1);
@@ -2915,12 +2915,12 @@ function prepTab(){
   }
 
   // ── Your Originals ──
-  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr")+";gap:8px;margin-bottom:8px;margin-top:8px;";
+  var origGrid=div();origGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;margin-top:8px;";
   NEWS_EVENTS.forEach(function(ev,ni){origGrid.appendChild(makeNewsRow(ev,"news_"+ni,"var(--panel2)"));});
   newsCard.appendChild(origGrid);
 
   // ── Macro Calendar ──
-  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr")+";gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
+  var macroGrid=div();macroGrid.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px;";
   MACRO_EVENTS.forEach(function(ev,mi){macroGrid.appendChild(makeNewsRow(ev,"macro_"+mi,"#1d1040"));});
   newsCard.appendChild(macroGrid);
 
