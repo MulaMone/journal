@@ -1320,6 +1320,65 @@ function lineSVG(data,w,h2,col,fmt){
   var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
 }
 
+// Catmull-Rom -> cubic Bezier, standard 1/6-tension conversion — gives a
+// smooth curve through every point without needing any extra library.
+function catmullRom2bezier(pts){
+  var d="M"+pts[0][0]+","+pts[0][1]+" ";
+  for(var i=0;i<pts.length-1;i++){
+    var p0=pts[i-1<0?0:i-1],p1=pts[i],p2=pts[i+1],p3=pts[i+2>pts.length-1?pts.length-1:i+2];
+    var c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+    var c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+="C"+c1x+","+c1y+" "+c2x+","+c2y+" "+p2[0]+","+p2[1]+" ";
+  }
+  return d;
+}
+// Smoothed, gradient-filled area chart — same axis/label conventions as
+// lineSVG (min/max on the left, endpoint dates along the bottom), but a
+// Catmull-Rom smoothed curve with a fading fill underneath instead of a
+// raw polyline with a dot on every point. Only the latest point is
+// marked, since with ~180 daily points per-point dots just add noise.
+// Also draws a zero line when the series crosses it — relevant here
+// since a spread crossing zero is the inversion/normal boundary.
+function areaSVG(data,w,h2,col,fmt){
+  fmt=fmt||function(v){return v;};
+  if(!data||data.length<2) return div("chart-wrap");
+  var vals=data.map(function(d){return d.v});
+  var mn=vals.reduce(function(a,b){return a<b?a:b;},Infinity),mx=vals.reduce(function(a,b){return a>b?a:b;},-Infinity);
+  if(mn===mx){mn-=1;mx+=1;}
+  var rng=mx-mn||1;
+  var padL=44,padR=6,padB=16,padT=10;
+  var W=w-padL-padR,H=h2-padB-padT;
+  function px(i){return padL+(i/(data.length-1))*W;}
+  function py(v){return padT+H-(v-mn)/rng*H;}
+  var pts=data.map(function(d,i){return [px(i),py(d.v)];});
+  var linePath=catmullRom2bezier(pts);
+  var baseline=padT+H;
+  var areaPath=linePath+"L"+pts[pts.length-1][0]+","+baseline+" L"+pts[0][0]+","+baseline+" Z";
+  var gid="ycg"+Math.abs(Math.round(mn*1000+mx*7+data.length));
+  var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
+  svg+='<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'
+    +'<stop offset="0%" stop-color="'+col+'" stop-opacity="0.35"/>'
+    +'<stop offset="100%" stop-color="'+col+'" stop-opacity="0"/>'
+    +'</linearGradient></defs>';
+  [0.25,0.5,0.75].forEach(function(f){var y=padT+H*f; svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>'});
+  if(mn<0&&mx>0){
+    var zy=py(0);
+    svg+='<line x1="'+padL+'" y1="'+zy+'" x2="'+(padL+W)+'" y2="'+zy+'" stroke="#6b7a99" stroke-width="1"/>';
+    svg+='<text x="'+(padL-6)+'" y="'+(zy+3)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#8fadd4">0</text>';
+  }
+  svg+='<path d="'+areaPath+'" fill="url(#'+gid+')" stroke="none"/>';
+  svg+='<path d="'+linePath+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
+  var last=pts[pts.length-1],lastD=data[data.length-1];
+  var lastTtl='<title>'+(lastD.l?lastD.l+": ":"")+fmt(lastD.v)+'</title>';
+  svg+='<circle cx="'+last[0]+'" cy="'+last[1]+'" r="9" fill="transparent">'+lastTtl+'</circle><circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="'+col+'" style="pointer-events:none;">'+lastTtl+'</circle>';
+  [mn,mx].forEach(function(v){var y=py(v);svg+='<text x="'+(padL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" font-family="Courier New,monospace" fill="#c9a84c">'+fmt(v)+'</text>';});
+  if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
+  var lastL=data[data.length-1].l;
+  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
+  svg+='</svg>';
+  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
+}
+
 // ─── UI COMPONENTS ───────────────────────────────────────────────────
 function makeChip(label,val,colorCls,sub){
   var c=div("chip");
@@ -6970,7 +7029,7 @@ function buildYieldCurveView(spreadKey,data,isM){
   card.appendChild(top);
   var hist=series.slice(-180);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
-  chartWrap.appendChild(lineSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(0)+"bp";}));
+  chartWrap.appendChild(areaSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(0)+"bp";}));
   card.appendChild(chartWrap);
   el.appendChild(card);
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
