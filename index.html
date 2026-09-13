@@ -734,8 +734,14 @@ function checkCloudChanged(syncId,callback){
   .then(function(r){return r.json();})
   .then(function(data){
     if(!Array.isArray(data)||!data.length){callback(null);return;}
-    var remoteUpdatedAt=data[0].updated_at;
-    callback(remoteUpdatedAt!==_lastKnownUpdatedAt);
+    var remoteMs=Date.parse(data[0].updated_at);
+    var localMs=_lastKnownUpdatedAt?Date.parse(_lastKnownUpdatedAt):NaN;
+    // Compare parsed instants, not raw strings — our client-generated ISO string
+    // (from syncToCloud) and Postgres/PostgREST's returned format can render the
+    // exact same instant differently (e.g. trailing "Z" vs "+00:00", fractional-
+    // second digits), which would otherwise make every poll look "changed" forever.
+    if(isNaN(remoteMs)){callback(null);return;}
+    callback(localMs!==remoteMs);
   })
   .catch(function(){callback(null);});
 }
