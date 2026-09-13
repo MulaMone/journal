@@ -7002,7 +7002,7 @@ function buildYieldCurveView(spreadKey,data,isM){
     var a=r[cfg.a],b=r[cfg.b];
     if(typeof a!=="number"||typeof b!=="number") return null;
     // r.d is "YYYY-MM-DD" — slice to "MM-DD" rather than re-parsing a Date.
-    return {v:(a-b)*100,l:(r.d||"").slice(5)};
+    return {v:(a-b),l:(r.d||"").slice(5)};
   }).filter(Boolean);
   var el=div();
   if(series.length<2){
@@ -7021,15 +7021,15 @@ function buildYieldCurveView(spreadKey,data,isM){
   var badgeCol=inverted?"#ff4444":"#00e676";
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+cfg.label+"</div>"
     +"<div style='display:flex;align-items:baseline;gap:10px;'>"
-    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(0)+" bps</div>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+(latest.v>=0?"":"−")+Math.abs(latest.v).toFixed(2)+"%</div>"
     +"<div style='font-size:11px;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:3px;background:"+badgeCol+"22;color:"+badgeCol+";'>"+(inverted?"INVERTED":"NORMAL")+"</div>"
     +"</div>"
-    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"")+chg.toFixed(0)+" bps vs prior print</div>";
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"−")+Math.abs(chg).toFixed(2)+"% vs prior print</div>";
   top.appendChild(l);
   card.appendChild(top);
   var hist=series.slice(-180);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
-  chartWrap.appendChild(areaSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(0)+"bp";}));
+  chartWrap.appendChild(areaSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(2)+"%";}));
   card.appendChild(chartWrap);
   el.appendChild(card);
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
