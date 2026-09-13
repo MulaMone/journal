@@ -594,7 +594,7 @@ function syncToCloud(){
   clearTimeout(_syncInFlightTimer);
   supaFetch("POST","edge_data",payload)
   .then(function(r){
-    if(r.ok||r.status===201||r.status===204) updateSyncStatus("synced");
+    if(r.ok||r.status===201||r.status===204){ updateSyncStatus("synced"); _lastKnownUpdatedAt=payload.updated_at; }
     else updateSyncStatus("error");
     _syncInFlight=false;
     clearTimeout(_syncInFlightTimer);
@@ -612,6 +612,7 @@ function loadFromCloud(syncId,callback){
   .then(function(data){
     if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
     var d=data[0];
+    if(d.updated_at) _lastKnownUpdatedAt=d.updated_at;
     // Never overwrite local trades while a sync upload is still in flight — protects against poll eating a just-saved trade
     if(d.trades){
       if(_syncInFlight){if(callback) callback(false);return;}
@@ -724,6 +725,21 @@ function loadFromCloud(syncId,callback){
   .catch(function(){if(callback) callback(false);});
 }
 
+// Cheap poll step: fetch only updated_at and compare to what we already have.
+// Only triggers the full select=* row (trades/levels/settings/playbook images) via
+// loadFromCloud when the timestamp actually moved. callback(changed:boolean|null) —
+// null means the check itself failed (network/etc), so caller should not treat it as "no change".
+function checkCloudChanged(syncId,callback){
+  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(syncId)+"&select=updated_at")
+  .then(function(r){return r.json();})
+  .then(function(data){
+    if(!Array.isArray(data)||!data.length){callback(null);return;}
+    var remoteUpdatedAt=data[0].updated_at;
+    callback(remoteUpdatedAt!==_lastKnownUpdatedAt);
+  })
+  .catch(function(){callback(null);});
+}
+
 function updateSyncStatus(status){
   var el=document.getElementById("sync-status");
   if(!el) return;
@@ -737,6 +753,7 @@ function updateSyncStatus(status){
 var _ss_orig=null;
 var _syncInFlight=false;
 var _syncInFlightTimer=null;
+var _lastKnownUpdatedAt=null; // last-seen cloud updated_at — lets the poller skip the full-row fetch when nothing changed
 var _chartLiveTimer=null; // polling interval for the Chart tab's live price updates
 var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes" badge
 // Incremented on every chartTab() call. Lets an in-flight fetch from a
@@ -7990,17 +8007,31 @@ initAutoSync();
 
 // Poll edge_data every 10 seconds to stay in sync across computers
 // Guard: skip if user has a form open or a sync is in-flight to avoid wiping unsaved changes
-setInterval(function(){
+// Guard: skip entirely while the tab is hidden — no point pulling updates nobody can see
+// Guard: check updated_at first (cheap) and only pull the full row (trades/levels/settings/
+// playbook images) when it actually changed — most polls previously re-fetched identical data
+function pollCloud(){
+  if(document.hidden) return;
   if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
   if(_syncInFlight) return; // don't overwrite while upload is pending
   var currentId=getSyncId();
-  var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
-  loadFromCloud(currentId,function(ok){
-    if(!ok) return;
-    var snapAfter=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
-    if(snapAfter!==snapBefore) render();
+  checkCloudChanged(currentId,function(changed){
+    if(changed===false) return; // nothing new — skip the full fetch
+    // changed===true or changed===null (check failed) fall through to the real load,
+    // same as the old unconditional behavior, so a flaky check never blocks a real sync
+    var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
+    loadFromCloud(currentId,function(ok){
+      if(!ok) return;
+      var snapAfter=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
+      if(snapAfter!==snapBefore) render();
+    });
   });
-},10000);
+}
+setInterval(pollCloud,10000);
+// Catch up immediately when the tab becomes visible again, instead of waiting up to 10s
+document.addEventListener("visibilitychange",function(){
+  if(!document.hidden) pollCloud();
+});
 
 // Re-render on resize (mobile <-> desktop breakpoint)
 var _lastMobile=isMobile();
