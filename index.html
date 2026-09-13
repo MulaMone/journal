@@ -5596,6 +5596,28 @@ function mobileHomeTab(){
   statRow.appendChild(sc1);statRow.appendChild(sc2);
   el.appendChild(statRow);
 
+  // ── Today's news warning (2nd row, colors match desktop key/macro split) ──
+  var tdNews=today();
+  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
+  if(hasNews){
+    var mKeyEvents=State.newsSelected.filter(function(n){return !isMacroNews(n);});
+    var mMacroEvents=State.newsSelected.filter(function(n){return isMacroNews(n);});
+    var mPanelAccent=mKeyEvents.length>0?"var(--ca)":"#b06aff";
+    var mBg=mKeyEvents.length>0?"#ff8c0015":"#b06aff15";
+    var mBorder=mKeyEvents.length>0?"#ff8c0040":"#b06aff40";
+    var newsWarn=document.createElement("div");
+    newsWarn.style.cssText="background:"+mBg+";border:1px solid "+mBorder+";border-left:3px solid "+mPanelAccent+";border-radius:8px;padding:10px 12px;margin-bottom:10px;cursor:pointer;";
+    newsWarn.innerHTML='<div style="font-size:9px;color:'+mPanelAccent+';letter-spacing:1.5px;text-transform:uppercase;font-family:monospace;margin-bottom:4px">⚠ Today News Events</div>';
+    mKeyEvents.forEach(function(n){
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+n;newsWarn.appendChild(row);
+    });
+    mMacroEvents.forEach(function(n){
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+n;newsWarn.appendChild(row);
+    });
+    newsWarn.addEventListener("click",function(){switchTab("prep");});
+    el.appendChild(newsWarn);
+  }
+
   // ── Equity curve card ──
   var eqCard=document.createElement("div");eqCard.className="m-eq-card";
   var eqHdr=document.createElement("div");eqHdr.className="m-card-hdr";
@@ -5703,20 +5725,6 @@ function mobileHomeTab(){
   var moBarFillM=document.createElement("div");moBarFillM.style.cssText="background:#ff8c00;width:"+moPct2+"%;height:100%;border-radius:3px;";
   moBarBgM.appendChild(moBarFillM);moCard2.appendChild(moBarBgM);
   el.appendChild(moCard2);
-
-  // ── Today's news warning ──
-  var tdNews=today();
-  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
-  if(hasNews){
-    var newsWarn=document.createElement("div");
-    newsWarn.style.cssText="background:#ff8c0015;border:1px solid #ff8c0040;border-left:3px solid #ff8c00;border-radius:8px;padding:10px 12px;margin-bottom:10px;cursor:pointer;";
-    newsWarn.innerHTML='<div style="font-size:9px;color:#ff8c00;letter-spacing:1.5px;text-transform:uppercase;font-family:monospace;margin-bottom:4px">⚠ Today News Events</div>';
-    State.newsSelected.forEach(function(n){
-      var row=document.createElement("div");row.style.cssText="font-size:11px;color:#e0c97a;font-family:monospace;padding:2px 0;";row.textContent="◆ "+n;newsWarn.appendChild(row);
-    });
-    newsWarn.addEventListener("click",function(){switchTab("prep");});
-    el.appendChild(newsWarn);
-  }
 
   // ── Recent trades ──
   var tradesSh=document.createElement("div");tradesSh.className="m-sh";
