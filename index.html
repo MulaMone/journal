@@ -636,10 +636,11 @@ function loadFromCloud(syncId,callback){
         if(l.l==="4hr Naked POC"){l.l="HTF Gaps";l.imp="low";}
         if(l.l==="HTF Gaps") l.imp="low";
         if(l.l==="GEX GAMMA Weekly Exp") l.l="CALL/PUT Wall Weekly Exp";
-        if(l.l==="Weekly Open") l.l="8H Structure";
+        if(l.l==="Weekly Open") l.l="8Hours Structure";
+        if(l.l==="8H Structure") l.l="8Hours Structure";
       });
       if(!State.weekLevels.some(function(l){return l.l==="CALL/PUT Wall Weekly Exp";})){
-        var _wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="8H Structure";});
+        var _wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="8Hours Structure";});
         var _wkGexAt=_wkOpenIdx>-1?_wkOpenIdx+1:1;
         State.weekLevels.splice(_wkGexAt,0,{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true});
       }
@@ -929,7 +930,7 @@ var State={
   expanded:null,
   adding:false,
   editing:null,
-  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"8H Structure",imp:"high",builtin:true},{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"HTF Gaps",imp:"low",builtin:true}]),
+  weekLevels:ls("weekLevels",[{l:"Weekly VAH/VAL/POC",imp:"high",builtin:true},{l:"8Hours Structure",imp:"high",builtin:true},{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true},{l:"Weekly VWAP",imp:"medium",builtin:true},{l:"Weekly Naked POC",imp:"high",builtin:true},{l:"Daily Naked POC",imp:"medium",builtin:true},{l:"HTF Gaps",imp:"low",builtin:true}]),
   levelChecks:ls("levelChecks",{}),
   levelChecksDate:ls("levelChecksDate",""),
   weekLevelChecks:ls("weekLevelChecks",{}),
@@ -1021,20 +1022,21 @@ var State={
   State.levels.forEach(function(l){if(l.l==="OPEN"&&!l.sess) l.sess="RTH Open";});
   ss("levels",State.levels);
   // Mark builtin week levels
-  var WK_BUILTIN=["Weekly VAH/VAL/POC","8H Structure","CALL/PUT Wall Weekly Exp","Weekly VWAP","Weekly Naked POC","Daily Naked POC","HTF Gaps"];
+  var WK_BUILTIN=["Weekly VAH/VAL/POC","8Hours Structure","CALL/PUT Wall Weekly Exp","Weekly VWAP","Weekly Naked POC","Daily Naked POC","HTF Gaps"];
   var wkChanged=false;
   State.weekLevels.forEach(function(l){
     if(l.l==="4hr Naked POC"){l.l="HTF Gaps";wkChanged=true;}
     if(l.l==="GEX GAMMA Weekly Exp"){l.l="CALL/PUT Wall Weekly Exp";wkChanged=true;}
-    if(l.l==="Weekly Open"){l.l="8H Structure";wkChanged=true;}
+    if(l.l==="Weekly Open"){l.l="8Hours Structure";wkChanged=true;}
+    if(l.l==="8H Structure"){l.l="8Hours Structure";wkChanged=true;}
     if(WK_BUILTIN.indexOf(l.l)>-1&&!l.builtin){l.builtin=true;wkChanged=true;}
     if(l.l==="Weekly VWAP"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
     if(l.l==="Daily Naked POC"&&l.imp!=="medium"){l.imp="medium";wkChanged=true;}
     if(l.l==="HTF Gaps"&&l.imp!=="low"){l.imp="low";wkChanged=true;}
   });
-  // Inject CALL/PUT Wall Weekly Exp after 8H Structure if missing
+  // Inject CALL/PUT Wall Weekly Exp after 8Hours Structure if missing
   if(!State.weekLevels.some(function(l){return l.l==="CALL/PUT Wall Weekly Exp";})){
-    var wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="8H Structure";});
+    var wkOpenIdx=State.weekLevels.findIndex(function(l){return l.l==="8Hours Structure";});
     var wkGexAt=wkOpenIdx>-1?wkOpenIdx+1:1;
     State.weekLevels.splice(wkGexAt,0,{l:"CALL/PUT Wall Weekly Exp",imp:"high",builtin:true});
     wkChanged=true;
@@ -6877,10 +6879,10 @@ function fetchCmeDailyOI(sym,statusCb){
 }
 
 function cmeOiCacheGet(sym){
-  try{var raw=localStorage.getItem("edge_cme_oi_v4_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+  try{var raw=localStorage.getItem("edge_cme_oi_v5_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
 }
 function cmeOiCacheSet(sym,obj){
-  try{localStorage.setItem("edge_cme_oi_v4_"+sym,JSON.stringify(obj));}catch(e){}
+  try{localStorage.setItem("edge_cme_oi_v5_"+sym,JSON.stringify(obj));}catch(e){}
 }
 // Is it currently at/after CME's Final cutoff? CME's swap from Preliminary
 // to Final happens "~10:00am CT" — that's an approximation on their end,
