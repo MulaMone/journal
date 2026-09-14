@@ -1428,8 +1428,53 @@ function areaSVG(data,w,h2,col,fmt){
   if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
   var lastL=data[data.length-1].l;
   if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
+  // ── Hover/touch crosshair — snaps to nearest data point, shows its
+  // date on the x-axis and its value near the top-left. Hidden until
+  // the first pointer interaction so it never appears in a static
+  // screenshot or export.
+  svg+='<line x1="0" y1="'+padT+'" x2="0" y2="'+baseline+'" stroke="#8fadd4" stroke-width="1" visibility="hidden" pointer-events="none" class="xh-line"/>';
+  svg+='<circle r="3.5" fill="'+col+'" visibility="hidden" pointer-events="none" class="xh-dot"/>';
+  svg+='<rect height="11" fill="#0f1c33" visibility="hidden" pointer-events="none" class="xh-axbg"/>';
+  svg+='<text y="'+(h2-2)+'" text-anchor="middle" font-size="8" font-family="Courier New,monospace" fill="#ffffff" visibility="hidden" pointer-events="none" class="xh-axlbl"></text>';
+  svg+='<rect x="'+padL+'" y="1" width="120" height="11" fill="#0f1c33" visibility="hidden" pointer-events="none" class="xh-valbg"/>';
+  svg+='<text x="'+padL+'" y="10" font-size="9" font-weight="700" font-family="Courier New,monospace" fill="#ffffff" visibility="hidden" pointer-events="none" class="xh-vallbl"></text>';
+  svg+='<rect x="'+padL+'" y="'+padT+'" width="'+W+'" height="'+H+'" fill="transparent" class="xh-hit"/>';
   svg+='</svg>';
-  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
+  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;
+  var svgEl=wrap.querySelector("svg");
+  var xhLine=wrap.querySelector(".xh-line"),xhDot=wrap.querySelector(".xh-dot"),
+      xhAxBg=wrap.querySelector(".xh-axbg"),xhAxLbl=wrap.querySelector(".xh-axlbl"),
+      xhValBg=wrap.querySelector(".xh-valbg"),xhValLbl=wrap.querySelector(".xh-vallbl"),
+      xhHit=wrap.querySelector(".xh-hit");
+  function nearestIdx(xPos){
+    var best=0,bd=Infinity;
+    pts.forEach(function(p,i){var d=Math.abs(p[0]-xPos);if(d<bd){bd=d;best=i;}});
+    return best;
+  }
+  function showAt(clientX){
+    var rect=svgEl.getBoundingClientRect();
+    var xPos=(clientX-rect.left)/rect.width*w;
+    var i=nearestIdx(xPos);
+    var p=pts[i],d=data[i];
+    xhLine.setAttribute("x1",p[0]);xhLine.setAttribute("x2",p[0]);xhLine.setAttribute("visibility","visible");
+    xhDot.setAttribute("cx",p[0]);xhDot.setAttribute("cy",p[1]);xhDot.setAttribute("visibility","visible");
+    var lbl=d.l||"";
+    xhAxLbl.textContent=lbl;xhAxLbl.setAttribute("x",p[0]);xhAxLbl.setAttribute("visibility",lbl?"visible":"hidden");
+    var tw=lbl.length*5+4;
+    xhAxBg.setAttribute("x",p[0]-tw/2);xhAxBg.setAttribute("width",tw);xhAxBg.setAttribute("y",h2-11);xhAxBg.setAttribute("visibility",lbl?"visible":"hidden");
+    var valText=(lbl?lbl+"  ":"")+fmt(d.v);
+    xhValLbl.textContent=valText;xhValLbl.setAttribute("visibility","visible");
+    xhValBg.setAttribute("width",valText.length*5.5+8);xhValBg.setAttribute("visibility","visible");
+  }
+  function hideXh(){
+    xhLine.setAttribute("visibility","hidden");xhDot.setAttribute("visibility","hidden");
+    xhAxLbl.setAttribute("visibility","hidden");xhAxBg.setAttribute("visibility","hidden");
+    xhValLbl.setAttribute("visibility","hidden");xhValBg.setAttribute("visibility","hidden");
+  }
+  xhHit.addEventListener("pointermove",function(e){showAt(e.clientX);});
+  xhHit.addEventListener("pointerdown",function(e){showAt(e.clientX);});
+  xhHit.addEventListener("pointerleave",hideXh);
+  return wrap;
 }
 
 // ─── UI COMPONENTS ───────────────────────────────────────────────────
@@ -7138,7 +7183,7 @@ function analystTab(){
   YC_RANGES.forEach(function(rk){
     var b=h("button",{className:"btn"});
     b.textContent=rk;
-    b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--accent);color:var(--accent);font-weight:700;":"");
+    b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--red);color:var(--red);font-weight:700;":"border-color:var(--green);color:var(--green);");
     b.addEventListener("click",function(){State.analyst_yc_range=rk;render();});
     ycRangeRow.appendChild(b);
   });
