@@ -7150,7 +7150,7 @@ function buildYieldCurveView(spreadKey,rangeKey,data,isM){
   var chg=latest.v-prev.v;
   var inverted=latest.v<0;
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  staleNote.textContent="Latest print "+latest.l+(data.sourceFetchedAt?" · data pulled "+new Date(data.sourceFetchedAt).toLocaleString():"")+" · Treasury daily par yield curve, updates ~once/day (~3:30pm ET)";
+  staleNote.textContent="Latest print "+latest.l+" · Treasury daily par yield curve, updates ~once/day (~3:30pm ET)";
   el.appendChild(staleNote);
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+cfg.col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
