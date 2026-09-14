@@ -2795,6 +2795,53 @@ function prepTab(){
   mantraCard.appendChild(mantraTA);
   el.appendChild(mantraCard);
 
+  // ── Today's Economic Calendar (computed, no network call) ─────────
+  var liveNewsCard=div("card mt12");
+  var liveNewsH=div("card-h");
+  var liveNewsT=div("card-t");liveNewsT.textContent="Today's Economic Calendar";liveNewsH.appendChild(liveNewsT);
+  liveNewsCard.appendChild(liveNewsH);
+  var liveNewsBody=div();liveNewsBody.style.cssText="font-size:12px;";
+  liveNewsCard.appendChild(liveNewsBody);
+
+  var etTodayStr=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
+
+  function renderCalendarRows(rows){
+    liveNewsBody.innerHTML="";
+    if(!rows.length){
+      var ne=div("xs m");ne.textContent="No High-impact USD events today.";liveNewsBody.appendChild(ne);
+    } else {
+      rows.forEach(function(ev){
+        var row=div("row gap8");row.style.cssText="padding:6px 10px;align-items:center;border-bottom:1px solid var(--border);";
+        var t=span("xs m");t.style.cssText="width:66px;flex-shrink:0;font-family:Courier New,monospace;";t.textContent=ev.time;row.appendChild(t);
+        var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);";lbl.textContent=ev.title;row.appendChild(lbl);
+        var badge=h("span",{className:"badge "+(ev.impact==="High"?"imp-high":"imp-med")});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent=ev.impact==="High"?"HIGH":"MED";row.appendChild(badge);
+        liveNewsBody.appendChild(row);
+      });
+    }
+  }
+
+  function renderFromLocalCompute(){
+    var todaysComputed=computeTodayMacroEvents(etTodayStr);
+    autoSelectNewsLabels(todaysComputed.map(function(ev){return ev.title;}));
+    renderCalendarRows(todaysComputed);
+  }
+
+  renderFromLocalCompute(); // show something immediately, then upgrade if the live file loads
+  loadLocalCalendar(false).then(function(data){
+    var todays=data.rows.filter(function(ev){
+      return ev.date&&ev.date.slice(0,10)===etTodayStr&&ev.country==="USD"&&ev.impact==="High";
+    }).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(ev){
+      return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
+    });
+    var changed=autoSelectNewsLabels(todays.map(function(ev){return ev.title;}));
+    renderCalendarRows(todays);
+    if(changed) render(); // refresh the checklist below with the newly auto-flagged items
+  }).catch(function(){
+    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — the local-compute render above already stands.
+  });
+
+  el.appendChild(liveNewsCard);
+
   var spacer=div();spacer.style.height="18px";el.appendChild(spacer);
 
   var g2=div("g2");
@@ -2945,53 +2992,6 @@ function prepTab(){
   wkCard.appendChild(wfg);
   if(!isMobile()) g2.appendChild(wkCard);
   el.appendChild(g2);
-
-  // ── Today's Economic Calendar (computed, no network call) ─────────
-  var liveNewsCard=div("card mt12");
-  var liveNewsH=div("card-h");
-  var liveNewsT=div("card-t");liveNewsT.textContent="Today's Economic Calendar";liveNewsH.appendChild(liveNewsT);
-  liveNewsCard.appendChild(liveNewsH);
-  var liveNewsBody=div();liveNewsBody.style.cssText="font-size:12px;";
-  liveNewsCard.appendChild(liveNewsBody);
-
-  var etTodayStr=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
-
-  function renderCalendarRows(rows){
-    liveNewsBody.innerHTML="";
-    if(!rows.length){
-      var ne=div("xs m");ne.textContent="No High-impact USD events today.";liveNewsBody.appendChild(ne);
-    } else {
-      rows.forEach(function(ev){
-        var row=div("row gap8");row.style.cssText="padding:6px 10px;align-items:center;border-bottom:1px solid var(--border);";
-        var t=span("xs m");t.style.cssText="width:66px;flex-shrink:0;font-family:Courier New,monospace;";t.textContent=ev.time;row.appendChild(t);
-        var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);";lbl.textContent=ev.title;row.appendChild(lbl);
-        var badge=h("span",{className:"badge "+(ev.impact==="High"?"imp-high":"imp-med")});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent=ev.impact==="High"?"HIGH":"MED";row.appendChild(badge);
-        liveNewsBody.appendChild(row);
-      });
-    }
-  }
-
-  function renderFromLocalCompute(){
-    var todaysComputed=computeTodayMacroEvents(etTodayStr);
-    autoSelectNewsLabels(todaysComputed.map(function(ev){return ev.title;}));
-    renderCalendarRows(todaysComputed);
-  }
-
-  renderFromLocalCompute(); // show something immediately, then upgrade if the live file loads
-  loadLocalCalendar(false).then(function(data){
-    var todays=data.rows.filter(function(ev){
-      return ev.date&&ev.date.slice(0,10)===etTodayStr&&ev.country==="USD"&&ev.impact==="High";
-    }).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(ev){
-      return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
-    });
-    var changed=autoSelectNewsLabels(todays.map(function(ev){return ev.title;}));
-    renderCalendarRows(todays);
-    if(changed) render(); // refresh the checklist below with the newly auto-flagged items
-  }).catch(function(){
-    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — the local-compute render above already stands.
-  });
-
-  el.appendChild(liveNewsCard);
 
   // ── Key News & Events ──────────────────────────────────────────────
   var NEWS_EVENTS=[
