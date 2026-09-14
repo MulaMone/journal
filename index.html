@@ -5192,7 +5192,7 @@ function chartTab(){
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
-      ? "border-color:#1db98c;color:#1db98c;padding:6px 10px;"
+      ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
       : "border-color:var(--red);color:var(--red);padding:6px 10px;";
     b.textContent=t;
     b.addEventListener("click",function(){State.chart_interval=t;render();});
