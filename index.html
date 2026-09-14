@@ -7081,7 +7081,7 @@ function buildCOTView(sym,data,isM){
 // Treasury only publishes once/day (~3:30pm ET), so "frequent updates"
 // means we keep checking for that day's print, not a faster live feed.
 var YC_SPREADS={
-  "2s10s":{label:"2s10s (10Y − 2Y)",a:"y10",b:"y2",col:"#00d4d4"},
+  "2s10s":{btn:"2s10s",label:"10Y − 2Y",a:"y10",b:"y2",col:"#00d4d4"},
   "10y3m":{label:"10Y − 3M",a:"y10",b:"m3",col:"#5b9bd5"},
   "30y10y":{label:"30Y − 10Y",a:"y30",b:"y10",col:"#ffab00"},
   "2y3m":{label:"2Y − 3M",a:"y2",b:"m3",col:"#b06aff"}
@@ -7149,9 +7149,6 @@ function buildYieldCurveView(spreadKey,rangeKey,data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v;
   var inverted=latest.v<0;
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  staleNote.textContent="Latest print "+latest.l+" · Treasury daily par yield curve, updates ~once/day (~3:30pm ET)";
-  el.appendChild(staleNote);
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+cfg.col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
@@ -7192,7 +7189,7 @@ function analystTab(){
   var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
   Object.keys(YC_SPREADS).forEach(function(k){
     var b=h("button",{className:"btn"});
-    b.textContent=YC_SPREADS[k].label;
+    b.textContent=YC_SPREADS[k].btn||YC_SPREADS[k].label;
     if(ycSpread===k) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
     b.addEventListener("click",function(){State.analyst_yc_spread=k;render();});
     ycCtrlRow.appendChild(b);
