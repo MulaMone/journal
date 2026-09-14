@@ -1422,16 +1422,15 @@ function areaSVG(data,w,h2,col,fmt){
   });
   svg+='<path d="'+areaPath+'" fill="url(#'+gid+')" stroke="none"/>';
   svg+='<path d="'+linePath+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
-  var last=pts[pts.length-1],lastD=data[data.length-1];
-  var lastTtl='<title>'+(lastD.l?lastD.l+": ":"")+fmt(lastD.v)+'</title>';
-  svg+='<circle cx="'+last[0]+'" cy="'+last[1]+'" r="9" fill="transparent">'+lastTtl+'</circle><circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="'+col+'" style="pointer-events:none;">'+lastTtl+'</circle>';
   if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
   var lastL=data[data.length-1].l;
   if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
   // ── Hover/touch crosshair — snaps to nearest data point, shows its
   // date on the x-axis and its value near the top-left. Hidden until
   // the first pointer interaction so it never appears in a static
-  // screenshot or export.
+  // screenshot or export. Sits UNDER the last-point tooltip circle
+  // below so hovering the last dot still surfaces its native <title>
+  // tooltip instead of being swallowed by this hit layer.
   svg+='<line x1="0" y1="'+padT+'" x2="0" y2="'+baseline+'" stroke="#8fadd4" stroke-width="1" visibility="hidden" pointer-events="none" class="xh-line"/>';
   svg+='<circle r="3.5" fill="'+col+'" visibility="hidden" pointer-events="none" class="xh-dot"/>';
   svg+='<rect height="11" fill="#0f1c33" visibility="hidden" pointer-events="none" class="xh-axbg"/>';
@@ -1439,6 +1438,9 @@ function areaSVG(data,w,h2,col,fmt){
   svg+='<rect x="'+padL+'" y="1" width="120" height="11" fill="#0f1c33" visibility="hidden" pointer-events="none" class="xh-valbg"/>';
   svg+='<text x="'+padL+'" y="10" font-size="9" font-weight="700" font-family="Courier New,monospace" fill="#ffffff" visibility="hidden" pointer-events="none" class="xh-vallbl"></text>';
   svg+='<rect x="'+padL+'" y="'+padT+'" width="'+W+'" height="'+H+'" fill="transparent" class="xh-hit"/>';
+  var last=pts[pts.length-1],lastD=data[data.length-1];
+  var lastTtl='<title>'+(lastD.l?lastD.l+": ":"")+fmt(lastD.v)+'</title>';
+  svg+='<circle cx="'+last[0]+'" cy="'+last[1]+'" r="9" fill="transparent">'+lastTtl+'</circle><circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="'+col+'" style="pointer-events:none;">'+lastTtl+'</circle>';
   svg+='</svg>';
   var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;
   var svgEl=wrap.querySelector("svg");
