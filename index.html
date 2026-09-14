@@ -6882,11 +6882,17 @@ function cmeOiCacheGet(sym){
 function cmeOiCacheSet(sym,obj){
   try{localStorage.setItem("edge_cme_oi_v4_"+sym,JSON.stringify(obj));}catch(e){}
 }
-// Is it currently at/after 10:00am CT? That's when CME overwrites the
-// Preliminary bulletin with the Final one for the same trade date.
+// Is it currently at/after CME's Final cutoff? CME's swap from Preliminary
+// to Final happens "~10:00am CT" — that's an approximation on their end,
+// not a guaranteed instant, so a fetch made right at 10:00 can still pull
+// the still-preliminary PDF and get mislabeled "final" (see cmeOiFold).
+// A 15min buffer gives their site time to actually finish the swap before
+// we trust the clock.
 function isPastCmeFinalTime(){
-  var ctHour=parseInt(new Date().toLocaleString("en-US",{timeZone:"America/Chicago",hour:"2-digit",hour12:false}),10);
-  return ctHour>=10;
+  var parts=new Date().toLocaleString("en-US",{timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit",hour12:false}).split(":");
+  var ctHour=parseInt(parts[0],10);
+  var ctMin=parseInt(parts[1],10);
+  return ctHour>10||(ctHour===10&&ctMin>=15);
 }
 // Folds a freshly-fetched snapshot into the per-trade-date prelim/final
 // record: a new dateStr starts a fresh record (stored as prelim); same
