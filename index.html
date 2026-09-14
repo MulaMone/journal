@@ -5201,6 +5201,18 @@ function chartTab(){
   rbtn.textContent="↻ Refresh";
   rbtn.addEventListener("click",function(){render();});
   ctrlRow.appendChild(rbtn);
+
+  // Show/hide trade markers toggle — eye icon, on by default.
+  var showTrades=State.chart_show_trades!==false;
+  var EYE_OPEN='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var EYE_OFF='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+  var eyeBtn=h("button",{className:"btn"});
+  eyeBtn.style.cssText="display:flex;align-items:center;justify-content:center;padding:6px 10px;"+(showTrades?"border-color:var(--accent);color:var(--accent);":"border-color:var(--border);color:var(--text3);");
+  eyeBtn.innerHTML=showTrades?EYE_OPEN:EYE_OFF;
+  eyeBtn.title=showTrades?"Hide trade markers":"Show trade markers";
+  eyeBtn.addEventListener("click",function(){State.chart_show_trades=!showTrades;render();});
+  ctrlRow.appendChild(eyeBtn);
+
   var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;align-self:center;margin-left:4px;";liveTag.innerHTML="● LIVE";
   ctrlRow.appendChild(liveTag);
 
@@ -5479,9 +5491,9 @@ function chartTab(){
       // Narrow further to whatever the person has checked in the list below.
       // Empty selection = show everything in the window (the default).
       var selectedIds=State.chart_selected_ids||[];
-      var displayPoints=selectedIds.length
+      var displayPoints=(State.chart_show_trades===false)?[]:(selectedIds.length
         ? windowPoints.filter(function(p){return selectedIds.indexOf(p.id)>-1;})
-        : windowPoints;
+        : windowPoints);
 
       if(windowPoints.length){
         if(displayPoints.length){
