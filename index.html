@@ -5161,10 +5161,13 @@ function chartTab(){
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
   hrow.style.flexWrap="wrap";
-  var sh=div("sh");sh.style.marginBottom="0";
-  sh.textContent=focusTs
+  var sh=div("sh");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
+  var shText=span();shText.textContent=focusTs
     ? sym+" — "+tf+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
     : sym+" — "+tf;
+  sh.appendChild(shText);
+  var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;";liveTag.innerHTML="● LIVE";
+  sh.appendChild(liveTag);
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
   // No horizontal scroll here, and this row holds a LOT of buttons (5
@@ -5213,9 +5216,6 @@ function chartTab(){
   eyeBtn.addEventListener("click",function(){State.chart_show_trades=!showTrades;render();});
   ctrlRow.appendChild(eyeBtn);
 
-  var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;align-self:center;margin-left:4px;";liveTag.innerHTML="● LIVE";
-  ctrlRow.appendChild(liveTag);
-
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
     clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
@@ -5257,7 +5257,7 @@ function chartTab(){
 
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent="Chart data via OANDA (CFD proxy, times shown in ET) — markers show trade entries from your log";
+  note.textContent="Chart data via OANDA (times shown in ET) — markers show trade entries from your log";
   el.appendChild(note);
 
   var chg=h("button",{className:"btn"});chg.style.cssText="margin-top:6px;font-size:11px;padding:3px 8px;";chg.textContent="Change OANDA token";
@@ -5555,7 +5555,7 @@ function chartTab(){
           markerSeries.setData(lineData);
           markerSeries.setMarkers(markers);
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent="OANDA (CFD proxy, each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+          note.textContent="OANDA (each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
           // ── Hover tooltip ───────────────────────────────────
           // lightweight-charts has no built-in per-marker hover event, so we
@@ -5606,7 +5606,7 @@ function chartTab(){
             tip.style.top=top+"px";
           });
         } else {
-          note.textContent="OANDA (CFD proxy) • selection doesn't match any trade in this window • "+new Date().toLocaleTimeString();
+          note.textContent="OANDA • selection doesn't match any trade in this window • "+new Date().toLocaleTimeString();
         }
 
         // Trade list — same info the old inline labels tried to show, but
@@ -5646,7 +5646,7 @@ function chartTab(){
         });
         el.appendChild(listWrap);
       } else {
-        note.textContent="OANDA (CFD proxy) • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
+        note.textContent="OANDA • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
       }
 
       chart.timeScale().fitContent();
