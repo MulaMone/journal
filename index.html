@@ -6920,10 +6920,10 @@ function fetchCmeDailyOI(sym,statusCb){
 }
 
 function cmeOiCacheGet(sym){
-  try{var raw=localStorage.getItem("edge_cme_oi_v5_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+  try{var raw=localStorage.getItem("edge_cme_oi_v6_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
 }
 function cmeOiCacheSet(sym,obj){
-  try{localStorage.setItem("edge_cme_oi_v5_"+sym,JSON.stringify(obj));}catch(e){}
+  try{localStorage.setItem("edge_cme_oi_v6_"+sym,JSON.stringify(obj));}catch(e){}
 }
 // Is it currently at/after CME's Final cutoff? CME's swap from Preliminary
 // to Final happens "~10:00am CT" — that's an approximation on their end,
@@ -6948,8 +6948,14 @@ function cmeOiFold(cached,fresh){
     // best-known snapshot (Final if we captured one, else whatever Prelim
     // we had) as prevDayFinal — this is what lets us diff today's OI
     // against yesterday's even on days we never saw yesterday's Final post.
+    // Also carry the CONTRACT MONTH that snapshot belonged to (e.g. SEP26)
+    // — the front-month contract rolls over periodically (SEP26 → DEC26
+    // etc.), and open interest is only meaningfully comparable within the
+    // same contract. Diffing SEP26's OI against DEC26's OI on roll day
+    // would read as a huge, meaningless jump. The renderer below checks
+    // this field and skips the numeric delta when the contract changed.
     var prevSnap=cached?(cached.final||cached.prelim):null;
-    var prevDay=prevSnap?{oi:prevSnap.oi,date:cached.date,isFinal:!!cached.final}:null;
+    var prevDay=prevSnap?{oi:prevSnap.oi,date:cached.date,isFinal:!!cached.final,contractMonth:cached.contractMonth||null}:null;
     // If it's already past 10am CT, the bulletin we just pulled IS the
     // Final — don't mislabel it as prelim (that would later look identical
     // to "final" and falsely say "unchanged" even though we never actually
@@ -7675,7 +7681,16 @@ function buildDxyView(data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
+  var shRow=div();shRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
+  var sh=div("sh");sh.style.cssText="margin-bottom:0;flex:1;min-width:0;";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
+  var rbtn=h("button",{className:"btn"});
+  rbtn.textContent=isM?"↻":"↻ Refresh";
+  rbtn.title="Refresh";
+  rbtn.style.cssText=isM
+    ?"flex-shrink:0;width:30px;height:30px;padding:0;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;"
+    :"flex-shrink:0;";
+  shRow.appendChild(rbtn);
+  el.appendChild(shRow);
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
@@ -7692,18 +7707,9 @@ function analystTab(){
   dxyBody.style.transition="opacity .15s";
 
   // ── Yield Curve Spreads ──
-  var ycHeadRow=div();ycHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
+  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
-  ycHeadRow.appendChild(ycHead);
-  var rbtn=h("button",{className:"btn"});
-  rbtn.textContent=isM?"↻":"↻ Refresh";
-  rbtn.title="Refresh";
-  rbtn.style.cssText=isM
-    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
-    :"flex-shrink:0;";
-  ycHeadRow.appendChild(rbtn);
-  el.appendChild(ycHeadRow);
+  el.appendChild(ycHead);
 
   var ycSpread=State.analyst_yc_spread||"2s10s";
   var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
@@ -7730,6 +7736,7 @@ function analystTab(){
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
 
+  // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   cotHead.textContent="COT & Open Interest";
@@ -7769,12 +7776,28 @@ function analystTab(){
     }
     var line3="";
     if(data.prevDayFinal){
-      var dayDelta=eff.oi-data.prevDayFinal.oi;
-      var dSign=dayDelta>0?"+":dayDelta<0?"-":"";
-      var dCol=dayDelta>0?"#00e676":dayDelta<0?"#ff4444":"var(--text2)";
+      var sameContract=!data.prevDayFinal.contractMonth||data.prevDayFinal.contractMonth===data.contractMonth;
       var prevLbl=data.prevDayFinal.isFinal?"Final":"Prelim";
       var curLbl=data.final?"Final":"Prelim";
-      line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ:</span> <span style='color:"+dCol+"'>"+dSign+"</span><span style='color:var(--amber)'>"+fmtCotNum(Math.abs(dayDelta))+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
+      if(sameContract){
+        // Straightforward day-over-day OI diff: today's best-known OI for
+        // this contract minus yesterday's best-known OI for the SAME
+        // contract. This is deliberately a different number from the
+        // "chg" column above (that's CME's own reported change for
+        // whichever single bulletin we're looking at); this one spans two
+        // separate fetches/days and can reflect a prelim→final revision on
+        // top of the raw day-over-day move.
+        var dayDelta=eff.oi-data.prevDayFinal.oi;
+        var dSign=dayDelta>0?"+":dayDelta<0?"-":"";
+        var dCol=dayDelta>0?"#00e676":dayDelta<0?"#ff4444":"var(--text2)";
+        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ:</span> <span style='color:"+dCol+"'>"+dSign+"</span><span style='color:var(--amber)'>"+fmtCotNum(Math.abs(dayDelta))+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
+      } else {
+        // Front-month contract rolled between the two snapshots (e.g.
+        // SEP26 → DEC26) — the two OI figures belong to different
+        // contracts and aren't a meaningful day-over-day diff, so don't
+        // compute or show one.
+        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" ("+(data.prevDayFinal.contractMonth||"?")+") → "+curLbl+" "+(data.date||"today")+" ("+data.contractMonth+"):</span> <span style='color:var(--text3)'>front-month rolled — OI not directly comparable</span>";
+      }
     }
     cmeResult.innerHTML=line1+line2+line3;
     cmeResult.style.color="var(--text2)";
@@ -7809,7 +7832,6 @@ function analystTab(){
   // Auto-check for a newer bulletin every time this tab opens.
   loadCme(false);
 
-  // ── Legacy report — separate section, rendered above TFF ──
   var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   legacyHead.textContent="Legacy Report — Non-Comm / Comm / Non-Rept";
   el.appendChild(legacyHead);
