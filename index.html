@@ -7134,10 +7134,6 @@ function buildCOTView(sym,data,isM){
   trendCard.appendChild(lineSVG(lfHist,isM?300:640,100,"#00d4d4",fmtCotNum));
   el.appendChild(trendCard);
 
-  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: CFTC Traders in Financial Futures (TFF), publicreporting.cftc.gov";
-  el.appendChild(srcNote);
-
   return el;
 }
 
@@ -7238,9 +7234,6 @@ function buildYieldCurveView(spreadKey,rangeKey,data,isM){
   chartWrap.appendChild(areaSVG(hist,isM?300:640,100,cfg.col,function(v){return v.toFixed(2)+"%";}));
   card.appendChild(chartWrap);
   el.appendChild(card);
-  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: home.treasury.gov daily par yield curve";
-  el.appendChild(srcNote);
   return el;
 }
 
@@ -7542,9 +7535,6 @@ function buildFedFundsView(data,isM){
     el.appendChild(pathCard);
   }
 
-  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: CME Group Daily Bulletin, Section 10 (Interest Rate Futures Continued)";
-  el.appendChild(srcNote);
   return el;
 }
 
