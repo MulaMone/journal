@@ -7595,8 +7595,13 @@ function analystTab(){
   var isM=isMobile();
   var el=div();
   var shRow=div();shRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
-  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
-  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";rbtn.style.cssText="flex-shrink:0;"+(isM?"padding:6px 10px;font-size:11px;":"");
+  var sh=div("sh");sh.style.cssText="margin-bottom:0;flex:1;min-width:0;";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
+  var rbtn=h("button",{className:"btn"});
+  rbtn.textContent=isM?"↻":"↻ Refresh";
+  rbtn.title="Refresh";
+  rbtn.style.cssText=isM
+    ?"flex-shrink:0;width:30px;height:30px;padding:0;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;"
+    :"flex-shrink:0;";
   shRow.appendChild(rbtn);
   el.appendChild(shRow);
 
