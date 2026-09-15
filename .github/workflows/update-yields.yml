@@ -2,12 +2,15 @@ name: Update Treasury yield curve data
 
 on:
   schedule:
-    # Treasury publishes once/day around 3:30pm ET. Two runs (20:45 and
-    # 21:45 UTC) cover both EST and EDT without needing to change the cron
-    # twice a year. Weekdays only — no new print on weekends.
-    - cron: "45 20 * * 1-5"
-    - cron: "45 21 * * 1-5"
+    # Off-peak minutes (42 instead of 45) prevent high-traffic queue stalls
+    - cron: "42 20 * * 1-5" # ~4:42pm EDT / 3:42pm EST
+    - cron: "42 21 * * 1-5" # ~5:42pm EDT / 4:42pm EST
   workflow_dispatch: {}
+
+# Cancel stagnant/queued runs if a new instance fires
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -18,13 +21,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check local time
+        id: timecheck
+        run: |
+          python3 -c "
+          from zoneinfo import ZoneInfo
+          from datetime import datetime
+          now = datetime.now(ZoneInfo('America/New_York'))
+          # Only proceed if it's between 3:30pm and 5:00pm Eastern
+          proceed = (now.hour == 15 and now.minute >= 30) or (now.hour == 16)
+          print('Local time:', now.isoformat(), '| Proceed:', proceed)
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('proceed=' + ('true' if proceed else 'false') + '\n')
+          "
+
       - name: Fetch and build yields.json
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: python3 scripts/update_yields.py
 
       - name: Commit if changed
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add yields.json
-          git diff --cached --quiet || git commit -m "chore: update yield curve data"
-          git push
+          git diff --cached --quiet || (git commit -m "chore: update yield curve data" && git push)
