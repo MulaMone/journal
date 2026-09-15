@@ -7088,11 +7088,6 @@ function buildCOTView(sym,data,isM){
   var prev=rows.length>1?rows[rows.length-2]:null;
   var el=div();
 
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
-  staleNote.textContent="Report week ending "+asOf+" · CFTC TFF, updated weekly (Fridays)";
-  el.appendChild(staleNote);
-
   // Open Interest summary card intentionally omitted here — it's already
   // shown once at the top of the Legacy report above; TFF's open_interest_all
   // is the same total market OI, so a second identical card was redundant.
