@@ -572,7 +572,7 @@ function syncToCloud(){
       mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
       levelChecksDate:State.levelChecksDate,weekLevelChecks:State.weekLevelChecks,newsChecks:State.newsChecks,
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
-      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,
+      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,newsTimes:State.newsTimes,
       focusImprove:State.focusImprove,mantraNotes:State.mantraNotes,
       starredSetups:State.starredSetups,
       notes_session:ls("notes_session",{}),
@@ -666,6 +666,7 @@ function loadFromCloud(syncId,callback){
       if(s.newsOther!==undefined){State.newsOther=s.newsOther;ss("newsOther",s.newsOther);}
       if(s.newsSelected){State.newsSelected=s.newsSelected;ss("newsSelected",s.newsSelected);}
       if(s.newsSelectedDate){State.newsSelectedDate=s.newsSelectedDate;ss("newsSelectedDate",s.newsSelectedDate);}
+      if(s.newsTimes){State.newsTimes=s.newsTimes;ss("newsTimes",s.newsTimes);}
       if(s.focusImprove!==undefined){State.focusImprove=s.focusImprove;ss("focusImprove",s.focusImprove);}
       if(s.mantraNotes!==undefined){State.mantraNotes=s.mantraNotes;ss("mantraNotes",s.mantraNotes);}
       if(s.starredSetups){State.starredSetups=s.starredSetups;ss("starredSetups",s.starredSetups);}
@@ -964,6 +965,7 @@ var State={
   newsOther:ls("newsOther",""),
   newsSelected:ls("newsSelected",[]),
   newsSelectedDate:ls("newsSelectedDate",""),
+  newsTimes:ls("newsTimes",{}),
   focusImprove:ls("focusImprove",""),
   mantraNotes:ls("mantraNotes",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
@@ -2334,6 +2336,8 @@ function homeTab(){
     keyEvents.forEach(function(evName){
       var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#ff8c0015;border:1px solid #ff8c0040;border-left:3px solid var(--ca);";
       var npIcon=span();npIcon.style.cssText="color:var(--ca);font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npTime=State.newsTimes&&State.newsTimes[evName];
+      if(npTime){var npTimeEl=span("xs m");npTimeEl.style.cssText="font-family:Courier New,monospace;font-size:10px;flex-shrink:0;";npTimeEl.textContent=npTime;npRow.appendChild(npTimeEl);}
       var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
       var npBadge2=span();npBadge2.style.cssText="background:#ff8c0020;color:var(--ca);border:1px solid #ff8c0050;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge2.textContent="KEY";npRow.appendChild(npBadge2);
       newsPanel.appendChild(npRow);
@@ -2343,6 +2347,8 @@ function homeTab(){
     macroEvents.forEach(function(evName){
       var npRow=div("row gap8 mb6");npRow.style.cssText="padding:6px 9px;border-radius:3px;background:#b06aff15;border:1px solid #b06aff40;border-left:3px solid #b06aff;";
       var npIcon=span();npIcon.style.cssText="color:#b06aff;font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
+      var npTime2=State.newsTimes&&State.newsTimes[evName];
+      if(npTime2){var npTimeEl2=span("xs m");npTimeEl2.style.cssText="font-family:Courier New,monospace;font-size:10px;flex-shrink:0;";npTimeEl2.textContent=npTime2;npRow.appendChild(npTimeEl2);}
       var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
       var npBadge3=span();npBadge3.style.cssText="background:#b06aff20;color:#b06aff;border:1px solid #b06aff50;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge3.textContent="MACRO";npRow.appendChild(npBadge3);
       newsPanel.appendChild(npRow);
@@ -2704,32 +2710,39 @@ var NEWS_MATCH_RULES=[
   {l:"Michigan Consumer Sentiment",kw:["uom consumer sentiment","michigan consumer sentiment","umich"]},
   {l:"Unemployment Rate",kw:["unemployment rate"]}
 ];
-function matchNewsLabels(rawTitles){
-  var matched=[];
-  rawTitles.forEach(function(rawTitle){
+// events: array of {title, time}. Returns {matched:[label,...], times:{label:time}} —
+// times carries each matched label's event time through to autoSelectNewsLabels below,
+// which is what lets the Home tab news panel show a time next to each event.
+function matchNewsLabels(events){
+  var matched=[],times={};
+  events.forEach(function(ev){
+    var rawTitle=ev&&ev.title!==undefined?ev.title:ev; // tolerate a plain string too
     var lower=(rawTitle||"").toLowerCase();
     NEWS_MATCH_RULES.forEach(function(rule){
       if(matched.indexOf(rule.l)>-1) return;
       for(var i=0;i<rule.kw.length;i++){
-        if(lower.indexOf(rule.kw[i])>-1){ matched.push(rule.l); break; }
+        if(lower.indexOf(rule.kw[i])>-1){ matched.push(rule.l); if(ev&&ev.time) times[rule.l]=ev.time; break; }
       }
     });
   });
-  return matched;
+  return {matched:matched,times:times};
 }
 // Auto-flags matched labels as "today" in the manual checklist's selection
 // state (State.newsSelected) — same state the checklist rows already read
-// from, so no separate UI is needed. Returns true if anything changed.
-function autoSelectNewsLabels(rawTitles){
-  var matched=matchNewsLabels(rawTitles);
+// from, so no separate UI is needed. events: array of {title, time}. Returns
+// true if anything changed.
+function autoSelectNewsLabels(events){
+  var result=matchNewsLabels(events);
+  var matched=result.matched;
   if(!matched.length) return false;
   var todayStr=today();
-  if(State.newsSelectedDate!==todayStr){State.newsSelected=[];State.newsSelectedDate=todayStr;}
+  if(State.newsSelectedDate!==todayStr){State.newsSelected=[];State.newsSelectedDate=todayStr;State.newsTimes={};}
   var changed=false;
   matched.forEach(function(l){
     if(State.newsSelected.indexOf(l)===-1){State.newsSelected.push(l);changed=true;}
+    if(result.times[l]&&State.newsTimes[l]!==result.times[l]){State.newsTimes[l]=result.times[l];changed=true;}
   });
-  if(changed){ss("newsSelected",State.newsSelected);ss("newsSelectedDate",State.newsSelectedDate);}
+  if(changed){ss("newsSelected",State.newsSelected);ss("newsSelectedDate",State.newsSelectedDate);ss("newsTimes",State.newsTimes);}
   return changed;
 }
 
@@ -2834,7 +2847,7 @@ function prepTab(){
 
   function renderFromLocalCompute(){
     var todaysComputed=computeTodayMacroEvents(etTodayStr);
-    autoSelectNewsLabels(todaysComputed.map(function(ev){return ev.title;}));
+    autoSelectNewsLabels(todaysComputed);
     renderCalendarRows(todaysComputed);
   }
 
@@ -2845,7 +2858,7 @@ function prepTab(){
     }).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(ev){
       return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
     });
-    var changed=autoSelectNewsLabels(todays.map(function(ev){return ev.title;}));
+    var changed=autoSelectNewsLabels(todays);
     renderCalendarRows(todays);
     if(changed) render(); // refresh the checklist below with the newly auto-flagged items
   }).catch(function(){
@@ -5803,10 +5816,12 @@ function mobileHomeTab(){
     newsWarn.style.cssText="background:"+mBg+";border:1px solid "+mBorder+";border-left:3px solid "+mPanelAccent+";border-radius:8px;padding:10px 12px;margin-bottom:10px;cursor:pointer;";
     newsWarn.innerHTML='<div style="font-size:9px;color:'+mPanelAccent+';letter-spacing:1.5px;text-transform:uppercase;font-family:monospace;margin-bottom:4px">⚠ Today News Events</div>';
     mKeyEvents.forEach(function(n){
-      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+n;newsWarn.appendChild(row);
+      var nTime=State.newsTimes&&State.newsTimes[n];
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+(nTime?'<span style="color:var(--text3);">'+nTime+'</span> ':'')+n;newsWarn.appendChild(row);
     });
     mMacroEvents.forEach(function(n){
-      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+n;newsWarn.appendChild(row);
+      var nTime2=State.newsTimes&&State.newsTimes[n];
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+(nTime2?'<span style="color:var(--text3);">'+nTime2+'</span> ':'')+n;newsWarn.appendChild(row);
     });
     newsWarn.addEventListener("click",function(){switchTab("prep");});
     el.appendChild(newsWarn);
@@ -7547,7 +7562,7 @@ function buildDxyView(data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (synthetic, OANDA majors)</div>"
@@ -7556,17 +7571,17 @@ function buildDxyView(data,isM){
   top.appendChild(l);
   card.appendChild(top);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
-  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#ffab00",function(v){return v.toFixed(1);}));
+  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
   card.appendChild(chartWrap);
   el.appendChild(card);
 
   var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  noteCard.innerHTML="<b style='color:#00e676;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
   el.appendChild(noteCard);
 
-  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffd700",2,
+  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here."));
-  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#8b6f47",2,
+  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case."));
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
