@@ -8114,7 +8114,7 @@ function buildGoldOilRow(data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst";el.appendChild(sh);
+  var sh=div("sh");sh.innerHTML="Analyst — <span style='color:#e8f0ff;'>The Fundamentals</span>";el.appendChild(sh);
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHeadRow=div();fedHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
