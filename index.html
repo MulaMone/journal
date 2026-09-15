@@ -7257,8 +7257,28 @@ function extractZQCurve(fullText){
 
 function fedFundsCacheGet(){try{var raw=localStorage.getItem("edge_fedfunds_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function fedFundsCacheSet(obj){try{localStorage.setItem("edge_fedfunds_v1",JSON.stringify(obj));}catch(e){}}
+
+// Daily EFFR fixing from the NY Fed — only used as a fallback anchor when
+// the contract month immediately before an FOMC meeting has already rolled
+// off the ZQ curve (see computeFedProbability below). Not needed at all
+// when that prior month is still present.
+var NYFED_EFFR_URL="https://markets.newyorkfed.org/api/rates/all/latest.json";
+function fetchEffrLatest(){
+  return fetch(NYFED_EFFR_URL).then(function(r){
+    if(!r.ok) throw new Error("EFFR fetch failed: HTTP "+r.status);
+    return r.json();
+  }).then(function(json){
+    var rows=(json&&json.refRates)||[];
+    var row=rows.filter(function(r){return r.type==="EFFR";})[0];
+    if(!row||row.percentRate==null) throw new Error("EFFR response missing percentRate");
+    var rate=parseFloat(row.percentRate);
+    if(!isFinite(rate)) throw new Error("EFFR percentRate not numeric");
+    return {rate:rate,date:row.effectiveDate};
+  });
+}
+
 function fetchFedFundsData(){
-  return loadPdfJs(null).then(function(){
+  var bulletinP=loadPdfJs(null).then(function(){
     return fetch(FED_BULLETIN_URL);
   }).then(function(r){
     if(!r.ok) throw new Error("bulletin fetch failed: HTTP "+r.status);
@@ -7278,7 +7298,14 @@ function fetchFedFundsData(){
     var curve=extractZQCurve(fullText);
     if(!curve.length) throw new Error("parsed 0 contract months from 30D FED FD FUT section");
     var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
-    return {curve:curve,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+    return {curve:curve,dateStr:dm?dm[0]:null};
+  });
+  // EFFR is only a fallback anchor (see above) — never let it take down the
+  // whole section if the NY Fed endpoint hiccups; the curve fetch above is
+  // the one that actually has to succeed.
+  var effrP=fetchEffrLatest().catch(function(){return null;});
+  return Promise.all([bulletinP,effrP]).then(function(results){
+    return {curve:results[0].curve,dateStr:results[0].dateStr,effr:results[1],fetchedAt:Date.now()};
   });
 }
 function loadFedFundsData(force){
@@ -7313,31 +7340,41 @@ function nextFomcMeetingISO(){
   return future.length?future[0]:null;
 }
 // Standard CME-style single-step approximation for the NEXT meeting only:
-// treat the meeting month's contract as a blend of "days before the
-// decision, at the prior-month's implied rate" and "days after, at
-// whatever new rate the market is pricing," then solve for that new rate.
-// This only works when the month immediately BEFORE the meeting month is
-// itself in the fetched curve (i.e. it hasn't already expired) — when the
-// meeting falls in the very next available contract month with no clean
-// pre-meeting month to anchor to, this returns null and the caller falls
-// back to showing the rate path alone rather than guessing.
-function computeFedProbability(meetingIso,curve){
+// treat the meeting month's contract as a blend of "N days before the
+// decision, at a known start-of-month rate" and "M days after, at whatever
+// new rate the market is pricing," then solve for that new rate:
+//   ImpliedAvg = (N/Days)*EFFR_start + (M/Days)*EFFR_end
+// Preferred anchor for EFFR_start: the contract month immediately BEFORE
+// the meeting month, whose own whole-month implied average rate stands in
+// for it. That only works when that prior month is still in the fetched
+// curve (i.e. hasn't already expired/rolled off). When it's gone — e.g.
+// trading a few days before a mid-month meeting with no clean pre-meeting
+// month left — fall back to anchoring on the NY Fed's actual published
+// daily EFFR fixing instead of giving up and showing only the rate path.
+function computeFedProbability(meetingIso,curve,effr){
   var meetingCode=contractMonthCodeFromISO(meetingIso);
   var byCode={};curve.forEach(function(c){byCode[c.code]=c;});
   var meetingRow=byCode[meetingCode];
   if(!meetingRow) return null;
-  var prevRow=byCode[prevContractMonthCode(meetingCode)];
-  if(!prevRow) return null;
   var d=new Date(meetingIso+"T00:00:00Z");
   var D=d.getUTCDate();
   var N=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();
   if(D>=N) return null; // meeting on the last day of the month — no "after" days to solve from
-  var Rprior=prevRow.rate,Ravg=meetingRow.rate;
-  var Rnext=(Ravg*N-Rprior*D)/(N-D);
+  var Ravg=meetingRow.rate;
+  var prevRow=byCode[prevContractMonthCode(meetingCode)];
+  var Rstart,anchor,effrDate=null;
+  if(prevRow){
+    Rstart=prevRow.rate;anchor="contract";
+  } else if(effr&&isFinite(effr.rate)){
+    Rstart=effr.rate;anchor="effr";effrDate=effr.date||null;
+  } else {
+    return null;
+  }
+  var Rnext=(Ravg*N-Rstart*D)/(N-D);
   if(!isFinite(Rnext)) return null;
-  var deltaBp=(Rnext-Rprior)*100;
+  var deltaBp=(Rnext-Rstart)*100;
   var stepProb=Math.max(0,Math.min(100,Math.abs(deltaBp)/25*100));
-  return {meetingCode:meetingCode,Rprior:Rprior,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb};
+  return {meetingCode:meetingCode,Rprior:Rstart,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb,anchor:anchor,effrDate:effrDate};
 }
 
 function buildFedFundsView(data,isM){
@@ -7347,22 +7384,25 @@ function buildFedFundsView(data,isM){
   el.appendChild(staleNote);
 
   var meetingIso=nextFomcMeetingISO();
-  var prob=meetingIso?computeFedProbability(meetingIso,data.curve):null;
+  var prob=meetingIso?computeFedProbability(meetingIso,data.curve,data.effr):null;
   if(prob){
     var isCut=prob.deltaBp<-0.5,isHike=prob.deltaBp>0.5;
     var moveLbl=isCut?"25bp CUT":isHike?"25bp HIKE":"25bp MOVE";
     var moveCol=isCut?"#00e676":isHike?"#ff4444":"var(--text3)";
+    var anchorNote=prob.anchor==="effr"
+      ? "anchored on NY Fed EFFR"+(prob.effrDate?" ("+prob.effrDate+")":"")+" — prior contract month has rolled off the curve"
+      : "single-step approximation, assumes at most one 25bp move this meeting";
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+moveCol+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
       +"<div style='display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;'>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
       +"</div>"
-      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · single-step approximation, assumes at most one 25bp move this meeting</div>";
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · "+anchorNote+"</div>";
     el.appendChild(card);
   } else if(meetingIso){
     var noteCard=div();noteCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:11px;color:var(--text3);";
-    noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a clean pre-meeting contract month to solve a probability yet (it rolled off the curve). Showing the implied rate path below instead.";
+    noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a probability yet (prior contract month has rolled off the curve and the NY Fed EFFR fetch failed). Showing the implied rate path below instead.";
     el.appendChild(noteCard);
   }
 
@@ -7507,7 +7547,7 @@ function buildDxyView(data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (synthetic, OANDA majors)</div>"
@@ -7516,17 +7556,17 @@ function buildDxyView(data,isM){
   top.appendChild(l);
   card.appendChild(top);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
-  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
+  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#ffab00",function(v){return v.toFixed(1);}));
   card.appendChild(chartWrap);
   el.appendChild(card);
 
   var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-  noteCard.innerHTML="<b style='color:#00e676;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
   el.appendChild(noteCard);
 
-  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffab00",2,
+  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffd700",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here."));
-  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
+  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#8b6f47",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case."));
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
