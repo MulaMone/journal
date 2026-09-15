@@ -767,6 +767,8 @@ var _syncInFlight=false;
 var _syncInFlightTimer=null;
 var _lastKnownUpdatedAt=null; // last-seen cloud updated_at — lets the poller skip the full-row fetch when nothing changed
 var _chartLiveTimer=null; // polling interval for the Chart tab's live price updates
+var _dxyLiveTimer=null; // polling interval for Gold/Oil/DXY live-quote badges
+var _dxyLiveBaselines=null; // {gold,oil,dxy} daily-close values the live badges compare against for up/down color
 var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes" badge
 // Incremented on every chartTab() call. Lets an in-flight fetch from a
 // symbol/timeframe the person has since switched away from detect that it's
@@ -7623,11 +7625,53 @@ function loadDxyData(force){
     throw err;
   });
 }
+// Fetches a single fresh (count=1) daily candle for each leg needed by the
+// live badges — the six DXY FX pairs plus Gold and Oil — and updates the
+// "Live" badges painted in the top-right corner of their cards in place.
+// Color is up/down vs each instrument's own last daily CLOSE (the same
+// "prior close" baseline the card's big number is already measured
+// against), stored in _dxyLiveBaselines when the daily data loads.
+function updateDxyLiveBadges(){
+  var tok=ls("oanda_token","");
+  if(!tok||!_dxyLiveBaselines) return;
+  var insts=OANDA_DXY_PAIRS.map(function(p){return p.inst;}).concat(["XAU_USD","WTICO_USD"]);
+  Promise.all(insts.map(function(inst){
+    var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=1";
+    return fetch(url,{headers:{Authorization:"Bearer "+tok}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(j){
+        var c=j&&j.candles&&j.candles[j.candles.length-1];
+        return c?parseFloat(c.mid.c):null;
+      }).catch(function(){return null;});
+  })).then(function(vals){
+    var closesByPair={};
+    OANDA_DXY_PAIRS.forEach(function(p,i){if(vals[i]!=null) closesByPair[p.inst]=vals[i];});
+    var gold=vals[OANDA_DXY_PAIRS.length];
+    var oil=vals[OANDA_DXY_PAIRS.length+1];
+    var dxy=null;
+    if(Object.keys(closesByPair).length===OANDA_DXY_PAIRS.length){
+      dxy=50.14348112;
+      OANDA_DXY_PAIRS.forEach(function(p){dxy*=Math.pow(closesByPair[p.inst],p.weight);});
+    }
+    paintLiveBadge("live-gold",gold,_dxyLiveBaselines.gold,2);
+    paintLiveBadge("live-oil",oil,_dxyLiveBaselines.oil,2);
+    paintLiveBadge("live-dxy",dxy,_dxyLiveBaselines.dxy,2);
+  });
+}
+function paintLiveBadge(id,val,baseline,decimals){
+  var badge=document.getElementById(id);
+  if(!badge||val==null) return;
+  var v=badge.querySelector(".live-val");
+  if(!v) return;
+  var up=baseline!=null&&val>=baseline;
+  v.style.color=baseline!=null?(up?"#00e676":"#ff4444"):"var(--text3)";
+  v.textContent=val.toFixed(decimals);
+}
 // Small reusable price card (used for Gold and Oil) — same shape as the
 // DXY card but without the DXY-specific formula/legend line.
-function buildSimplePriceCard(label,rows,accentColor,decimals,note){
+function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   var series=rows.map(function(r){return {v:r.c,l:r.d||""};}).filter(function(s){return typeof s.v==="number";});
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+accentColor+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+accentColor+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
   if(series.length<2){
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;'>"+label+"</div><div style='font-size:12px;color:var(--text3);margin-top:8px;'>Not enough data yet.</div>";
     return card;
@@ -7638,6 +7682,12 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note){
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+label+"</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior close</div>";
+  if(liveId){
+    var liveBadge=div();liveBadge.id="live-"+liveId;
+    liveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
+    liveBadge.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);'>—</div>";
+    card.appendChild(liveBadge);
+  }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isMobile()?300:640,80,accentColor,function(v){return v.toFixed(decimals);}));
   card.appendChild(chartWrap);
@@ -7659,7 +7709,7 @@ function buildDxyView(data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index</div>"
@@ -7667,6 +7717,10 @@ function buildDxyView(data,isM){
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
   top.appendChild(l);
   card.appendChild(top);
+  var dxyLiveBadge=div();dxyLiveBadge.id="live-dxy";
+  dxyLiveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
+  dxyLiveBadge.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);'>—</div>";
+  card.appendChild(dxyLiveBadge);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
   card.appendChild(chartWrap);
@@ -7680,9 +7734,9 @@ function buildDxyView(data,isM){
 
   var goldOilRow=div("g2");
   goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
-    "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here."));
+    "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here.","gold"));
   goldOilRow.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
-    "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case."));
+    "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case.","oil"));
   el.appendChild(goldOilRow);
 
   return el;
@@ -7971,6 +8025,7 @@ function analystTab(){
     dxyBody.appendChild(tnote);
   }
   function loadDxy(force){
+    clearInterval(_dxyLiveTimer);
     if(!ls("oanda_token","")){renderDxyTokenGate();return;}
     var myToken=++_dxyLoadToken;
     if(force&&dxyBody.firstChild) dxyBody.style.opacity="0.45";
@@ -7980,6 +8035,17 @@ function analystTab(){
       dxyBody.innerHTML="";
       dxyBody.appendChild(buildDxyView(data,isM));
       dxyBody.style.opacity="1";
+      var dxyRows=data.rows,goldRows=data.goldRows||[],oilRows=data.oilRows||[];
+      _dxyLiveBaselines={
+        dxy:dxyRows.length?dxyRows[dxyRows.length-1].c:null,
+        gold:goldRows.length?goldRows[goldRows.length-1].c:null,
+        oil:oilRows.length?oilRows[oilRows.length-1].c:null
+      };
+      updateDxyLiveBadges();
+      _dxyLiveTimer=setInterval(function(){
+        if(myToken!==_dxyLoadToken||State.tab!=="analyst"){clearInterval(_dxyLiveTimer);return;}
+        updateDxyLiveBadges();
+      },30000);
     }).catch(function(err){
       if(myToken!==_dxyLoadToken) return;
       if(err&&err.code==="NO_TOKEN"){renderDxyTokenGate();return;}
