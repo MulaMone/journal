@@ -1,0 +1,37 @@
+name: Update TNX quote
+
+on:
+  schedule:
+    # Every 15 minutes, 9:25am-4:15pm ET (13:25-20:15 UTC during EDT,
+    # 14:25-21:15 UTC during EST) — set for EDT here; adjust the hour
+    # range twice a year, or widen it if you don't want to bother.
+    - cron: "*/15 13-20 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-tnx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch $TNX and write tnx.json
+        run: python3 scripts/fetch-tnx.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- tnx.json; then
+            git add tnx.json
+            git commit -m "Update TNX quote"
+            git push
+          else
+            echo "tnx.json unchanged — nothing to commit"
+          fi
