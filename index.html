@@ -7235,7 +7235,14 @@ function paintTnxBadge(data){
   var up=_tnxLiveBaseline!=null&&data.yieldVal>=_tnxLiveBaseline;
   v.style.color=_tnxLiveBaseline!=null?(up?"#00e676":"#ff4444"):"var(--text3)";
   v.textContent=data.yieldVal.toFixed(2)+"%";
-  if(sub) sub.textContent=data.marketTime?data.marketTime:"";
+  if(sub){
+    var t="";
+    if(data.marketTime){
+      var d=new Date(data.marketTime);
+      t=isNaN(d.getTime())?data.marketTime:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    }
+    sub.textContent=t;
+  }
 }
 
 function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
