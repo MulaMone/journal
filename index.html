@@ -1945,6 +1945,19 @@ function openSettings(){
   tnxTrigRow.appendChild(tnxTrigInfo);tnxTrigRow.appendChild(tnxTrigBtn);
   body.appendChild(tnxTrigRow);
 
+  var allTrigRow=document.createElement("div");
+  allTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var allTrigInfo=document.createElement("div");allTrigInfo.style.cssText="min-width:0;";
+  var allTrigLbl=document.createElement("div");allTrigLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";allTrigLbl.textContent="Trigger All Data Updates";
+  var allTrigStatus=document.createElement("div");allTrigStatus.id="trigger-all-status";allTrigStatus.style.cssText="font-size:10px;color:var(--text3);";allTrigStatus.textContent="TNX, liquidity, yields, calendar — all at once";
+  allTrigInfo.appendChild(allTrigLbl);allTrigInfo.appendChild(allTrigStatus);
+  var allTrigBtn=document.createElement("button");
+  allTrigBtn.textContent="⚡ TRIGGER ALL";
+  allTrigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0;";
+  allTrigBtn.onclick=function(){triggerAllWorkflows();};
+  allTrigRow.appendChild(allTrigInfo);allTrigRow.appendChild(allTrigBtn);
+  body.appendChild(allTrigRow);
+
   // ── DISPLAY ──
   body.appendChild(sectionLabel("Display"));
   body.appendChild(toggleRow("Compact Trade Cards","Smaller rows in the Trade Log","edge_compact_cards",false));
@@ -7498,6 +7511,36 @@ function pollForFreshTnx(attempt,baseline){
       pollForFreshTnx(attempt+1,baseline);
     });
   },5000);
+}
+// ── Trigger all data workflows at once — fire-and-forget, no per-file
+// polling (unlike triggerTnxWorkflow above). Dispatches all four Actions
+// that keep this app's same-origin JSON files fresh, using the same
+// token and repo already configured for the TNX trigger. Reports which
+// dispatches succeeded/failed; the person verifies actual completion via
+// the Actions tab rather than the app polling four separate JSON files.
+var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","update-economic-calendar.yml"];
+function triggerAllWorkflows(){
+  var tok=ls("gh_token","");
+  var statusEl=document.getElementById("trigger-all-status");
+  if(!tok){if(statusEl){statusEl.textContent="Set a GitHub token first";statusEl.style.color="var(--red)";}return;}
+  if(statusEl){statusEl.textContent="Triggering all "+GH_ALL_WORKFLOWS.length+"…";statusEl.style.color="var(--text3)";}
+  Promise.all(GH_ALL_WORKFLOWS.map(function(file){
+    return fetch("https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/"+file+"/dispatches",{
+      method:"POST",
+      headers:{"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json","Content-Type":"application/json"},
+      body:JSON.stringify({ref:GH_BRANCH})
+    }).then(function(r){return {file:file,ok:r.ok};}).catch(function(){return {file:file,ok:false};});
+  })).then(function(results){
+    var failed=results.filter(function(r){return !r.ok;});
+    if(!statusEl) return;
+    if(!failed.length){
+      statusEl.textContent="Triggered all "+results.length+" — check Actions tab in ~30s";
+      statusEl.style.color="var(--green)";
+    } else {
+      statusEl.textContent="Failed: "+failed.map(function(f){return f.file;}).join(", ");
+      statusEl.style.color="var(--red)";
+    }
+  });
 }
 function paintTnxBadge(data){
   var badge=document.getElementById("live-tnx");
