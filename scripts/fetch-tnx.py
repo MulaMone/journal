@@ -1,71 +1,119 @@
 #!/usr/bin/env python3
 """
-Fetches CBOE's $TNX (10-Year Treasury Yield Index) via Yahoo Finance's
-public chart endpoint (server-side — no CORS restriction here, unlike a
-client-side fetch from index.html) and writes tnx.json to the repo root.
+Fetches three FRED series that together make up the "Liquidity & Fed
+Balance Sheet" section:
 
-Yahoo's ^TNX feed returns the price already in yield-percent terms (e.g.
-4.98 for 4.98%), not the older 10x-scaled CBOE ticker convention — so no
-division is applied. Meant to run on a schedule via GitHub Actions (see
-.github/workflows/update-tnx.yml) — every run overwrites tnx.json with the
-latest quote.
+  WALCL    Fed Total Assets (H.4.1), weekly Wednesday level, in MILLIONS $
+  WTREGEN  Treasury General Account (H.4.1), weekly Wednesday level, BILLIONS $
+  WLRRAL   Reverse Repo liability (H.4.1), weekly Wednesday level, BILLIONS $
+
+All three come from the same weekly H.4.1 release, so they land on the
+same Wednesday dates — this merges them into one row per date, converting
+each to a plain dollar figure (not millions/billions) so the front end
+can format them uniformly.
+
+Needs a FRED API key (free, https://fred.stlouisfed.org/docs/api/api_key.html)
+passed via the FRED_API_KEY environment variable — set as a GitHub Actions
+repo secret, never exposed client-side. Writes liquidity.json to the repo
+root, same same-origin-static-file pattern as yields.json/tnx.json.
 """
 import json
+import os
 import sys
 import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime, timezone
 
-YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1m&range=1d"
-# The "journal" repo's root IS what's served at mulamone.github.io/journal/
-# (GitHub Pages project-site convention) — index.html sits at repo root, so
-# this file needs to as well, not inside a nested journal/ subfolder.
-OUT_PATH = "tnx.json"
+FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
+OUT_PATH = "liquidity.json"
+
+# (series_id, output field name, multiplier to convert to plain dollars)
+# All three H.4.1-sourced series are reported by FRED in MILLIONS of
+# dollars — confirmed on each series' own FRED page — not billions.
+SERIES = [
+    ("WALCL", "fedAssets", 1_000_000),
+    ("WTREGEN", "tga", 1_000_000),
+    ("WLRRAL", "rrp", 1_000_000),
+]
 
 
-def fetch_tnx():
-    req = urllib.request.Request(
-        YAHOO_URL,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; edge-terminal-bot/1.0)"},
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-
-    result = data.get("chart", {}).get("result")
-    if not result:
-        raise RuntimeError("no 'result' in Yahoo response — %r" % (data.get("chart", {}).get("error"),))
-
-    meta = result[0].get("meta", {})
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        raise RuntimeError("no regularMarketPrice in Yahoo response meta")
-
-    market_time_epoch = meta.get("regularMarketTime")
-    market_time_iso = (
-        datetime.fromtimestamp(market_time_epoch, tz=timezone.utc).isoformat()
-        if market_time_epoch
-        else None
-    )
-
-    return {
-        "yield": round(price, 3),
-        "rawPrice": price,
-        "marketTime": market_time_iso,
-        "fetchedAt": datetime.now(timezone.utc).isoformat(),
+def fetch_series(series_id, api_key):
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "sort_order": "asc",
+        "observation_start": "2015-01-01",
     }
+    url = FRED_BASE + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "edge-terminal-bot/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError("FRED HTTP %s for %s: %s" % (e.code, series_id, body[:300]))
+    obs = data.get("observations")
+    if obs is None:
+        raise RuntimeError("no 'observations' in FRED response for %s — %r" % (series_id, data))
+    out = {}
+    for o in obs:
+        val = o.get("value")
+        if val in (None, ".", ""):
+            continue
+        try:
+            out[o["date"]] = float(val)
+        except ValueError:
+            continue
+    if not out:
+        raise RuntimeError("FRED returned zero usable observations for %s" % series_id)
+    return out
 
 
 def main():
-    try:
-        obj = fetch_tnx()
-    except Exception as e:
-        print("fetch-tnx.py failed: %s" % e, file=sys.stderr)
+    api_key = os.environ.get("FRED_API_KEY")
+    if not api_key:
+        print("fetch-liquidity.py failed: FRED_API_KEY env var not set", file=sys.stderr)
         sys.exit(1)
+
+    try:
+        by_series = {}
+        for series_id, field, mult in SERIES:
+            raw = fetch_series(series_id, api_key)
+            by_series[field] = {d: v * mult for d, v in raw.items()}
+    except Exception as e:
+        print("fetch-liquidity.py failed: %s" % e, file=sys.stderr)
+        sys.exit(1)
+
+    all_dates = set()
+    for field_map in by_series.values():
+        all_dates.update(field_map.keys())
+
+    rows = []
+    for d in sorted(all_dates):
+        row = {"d": d}
+        ok = True
+        for _, field, _ in SERIES:
+            v = by_series[field].get(d)
+            if v is None:
+                ok = False
+                break
+            row[field] = v
+        if ok:
+            rows.append(row)
+
+    if not rows:
+        print("fetch-liquidity.py failed: no dates with all three series present", file=sys.stderr)
+        sys.exit(1)
+
+    obj = {"rows": rows, "fetchedAt": datetime.now(timezone.utc).isoformat()}
 
     with open(OUT_PATH, "w") as f:
         json.dump(obj, f)
         f.write("\n")
 
-    print("wrote %s: %s" % (OUT_PATH, obj))
+    print("wrote %s: %d rows, latest %s" % (OUT_PATH, len(rows), rows[-1]["d"]))
 
 
 if __name__ == "__main__":
