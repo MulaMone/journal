@@ -7076,7 +7076,7 @@ function buildCOTLegacyView(sym,data,isM){
   el.appendChild(trendHead);
   var ncHist=rows.slice(-26).map(function(r){return {v:(+r.comm_positions_long_all||0)-(+r.comm_positions_short_all||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
   var trendCard=div();trendCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
-  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#a78bfa",fmtCotNum));
+  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#f59e0b",fmtCotNum));
   el.appendChild(trendCard);
 
   return el;
