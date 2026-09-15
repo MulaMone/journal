@@ -22,6 +22,7 @@ import os
 import sys
 import urllib.request
 import urllib.parse
+import urllib.error
 from datetime import datetime, timezone
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
@@ -30,9 +31,13 @@ OUT_PATH = "liquidity.json"
 # (series_id, output field name, multiplier to convert to plain dollars)
 # All three H.4.1-sourced series are reported by FRED in MILLIONS of
 # dollars — confirmed on each series' own FRED page — not billions.
+# WDTGAL (not WTREGEN) is deliberate: WTREGEN is a "Week Average" series
+# on a different weekly anchor than WALCL/WLRRAL's "Wednesday Level", so
+# almost no dates lined up across all three when merged — WDTGAL is the
+# actual Wednesday-Level TGA series, matching the other two's cadence.
 SERIES = [
     ("WALCL", "fedAssets", 1_000_000),
-    ("WTREGEN", "tga", 1_000_000),
+    ("WDTGAL", "tga", 1_000_000),
     ("WLRRAL", "rrp", 1_000_000),
 ]
 
@@ -47,8 +52,12 @@ def fetch_series(series_id, api_key):
     }
     url = FRED_BASE + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": "edge-terminal-bot/1.0"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError("FRED HTTP %s for %s: %s" % (e.code, series_id, body[:300]))
     obs = data.get("observations")
     if obs is None:
         raise RuntimeError("no 'observations' in FRED response for %s — %r" % (series_id, data))
