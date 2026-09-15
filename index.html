@@ -7707,21 +7707,21 @@ function buildDxyView(data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var shRow=div();shRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
-  var sh=div("sh");sh.style.cssText="margin-bottom:0;flex:1;min-width:0;";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
+  var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
+
+  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
+  var fedHeadRow=div();fedHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
+  fedHead.textContent="Fed Rate Probabilities";
+  fedHeadRow.appendChild(fedHead);
   var rbtn=h("button",{className:"btn"});
   rbtn.textContent=isM?"↻":"↻ Refresh";
   rbtn.title="Refresh";
   rbtn.style.cssText=isM
-    ?"flex-shrink:0;width:30px;height:30px;padding:0;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;"
+    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
     :"flex-shrink:0;";
-  shRow.appendChild(rbtn);
-  el.appendChild(shRow);
-
-  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
-  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  fedHead.textContent="Fed Rate Probabilities";
-  el.appendChild(fedHead);
+  fedHeadRow.appendChild(rbtn);
+  el.appendChild(fedHeadRow);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
 
