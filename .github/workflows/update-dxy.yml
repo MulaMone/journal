@@ -1,0 +1,29 @@
+name: Update DXY data
+
+on:
+  schedule:
+    # 21:30 UTC, Mon–Fri — after US market close, before the next session.
+    # Adjust to match whatever cadence update-yields.yml already uses.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  update-dxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch DXY data
+        run: python3 scripts/update_dxy.py
+
+      - name: Commit dxy.json if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dxy.json
+          git diff --cached --quiet || git commit -m "Update dxy.json"
+          git push
