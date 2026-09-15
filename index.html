@@ -8056,7 +8056,7 @@ function buildDxyView(data,isM){
 // render in their own full-width row below the DXY+TNX note, instead of
 // stacking inside the (now half-width) DXY column.
 function buildGoldOilRow(data,isM){
-  var goldOilRow=div("g2");
+  var goldOilRow=div("g2");goldOilRow.style.marginBottom="0";
   goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here.","gold"));
   goldOilRow.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
