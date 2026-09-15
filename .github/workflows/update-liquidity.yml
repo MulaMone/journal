@@ -2,14 +2,18 @@ name: Update liquidity data
 
 on:
   schedule:
-    # Fires twice each Thursday — 5:30pm EDT and 5:30pm EST — since GitHub
-    # Actions cron is fixed UTC and doesn't shift for daylight saving. The
-    # "Check local time" guard step below verifies it's actually ~5:30pm
-    # America/New_York before doing anything, so whichever trigger doesn't
-    # match the current DST state just no-ops — self-correcting across the
-    # Nov/March changeovers with no manual cron edits ever needed.
-    - cron: "30 21 * * 4"  # 5:30pm EDT
-    - cron: "30 22 * * 4"  # 5:30pm EST
+    # Fires twice each Thursday — ~5:33pm EDT and ~5:33pm EST — since
+    # GitHub Actions cron is fixed UTC and doesn't shift for daylight
+    # saving. Offset to :33 rather than the exact half-hour mark: GitHub's
+    # own docs flag :00/:15/:30/:45 as high-load times since scheduled
+    # workflows across all of GitHub tend to cluster there, which can
+    # queue/delay runs. The "Check local time" guard step below verifies
+    # it's actually ~5:30pm America/New_York before doing anything, so
+    # whichever trigger doesn't match the current DST state just no-ops —
+    # self-correcting across the Nov/March changeovers with no manual
+    # cron edits ever needed.
+    - cron: "33 21 * * 4"  # ~5:33pm EDT
+    - cron: "33 22 * * 4"  # ~5:33pm EST
   workflow_dispatch: {}
 
 permissions:
@@ -48,7 +52,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python3 scripts/fetch-liquidity.py
 
-      - name: Commit if changed
+      - name: Commit and push (with retry on race with other workflows)
         if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
@@ -56,7 +60,15 @@ jobs:
           if ! git diff --quiet -- liquidity.json; then
             git add liquidity.json
             git commit -m "Update liquidity data"
-            git push
+            # Multiple data-fetch workflows can run around the same time and
+            # each push to main independently — pull --rebase first so this
+            # push always lands on top of whatever the others already
+            # committed, instead of getting rejected as a non-fast-forward.
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "push attempt $i failed, retrying..."
+              sleep 3
+            done
           else
             echo "liquidity.json unchanged — nothing to commit"
           fi
