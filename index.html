@@ -7381,31 +7381,82 @@ function buildFedFundsView(data,isM){
   return el;
 }
 
-// ─── Intermarket & Cross-Asset Correlations — Broad Dollar Index ───────
-// DXY has no free endpoint that's safe to hit directly from the browser —
-// unlike the CME/Treasury sources above, a client-side fetch here would
-// mean routing through a CORS proxy, which is exactly the fragile pattern
-// the yields.json approach was built to avoid. So this follows that same
-// pattern instead: dxy.json, written to this repo by a scheduled GitHub
-// Action that fetches DXY history server-side (no CORS to work around
-// there) and commits the result — index.html only ever reads that file
-// same-origin. Until that workflow is added to the repo (see chat for the
-// action + script), this section fails gracefully rather than silently
-// showing stale or wrong data.
+// ─── Intermarket & Cross-Asset Correlations — synthetic US Dollar Index ─
+// Reuses the same OANDA practice-account token the Chart tab already
+// uses (client-side calls to OANDA already work fine — no CORS problem
+// there, unlike Stooq/a raw DXY feed), so there's no separate deploy
+// step needed the way yields.json/dxy.json required. Instead of pulling
+// DXY directly, this reconstructs it from OANDA's six major FX pairs
+// using ICE's own published DXY formula and weights — same methodology,
+// independently computed, so it can drift slightly from the literal ICE
+// futures settlement (feed timing, no real-time weighting adjustments)
+// but tracks it closely.
+var OANDA_DXY_PAIRS=[
+  {inst:"EUR_USD",weight:-0.576},
+  {inst:"USD_JPY",weight:0.136},
+  {inst:"GBP_USD",weight:-0.119},
+  {inst:"USD_CAD",weight:0.091},
+  {inst:"USD_SEK",weight:0.042},
+  {inst:"USD_CHF",weight:0.036}
+];
 var _dxyMemCache=null;
 var _dxyLoadToken=0;
 function dxyCacheGet(){try{var raw=localStorage.getItem("edge_dxy_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function dxyCacheSet(obj){try{localStorage.setItem("edge_dxy_v1",JSON.stringify(obj));}catch(e){}}
+
+function fetchOandaDailyCloses(inst,tok){
+  var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=400";
+  return fetch(url,{headers:{Authorization:"Bearer "+tok}}).then(function(r){
+    if(!r.ok) return r.text().then(function(t){
+      var msg="HTTP "+r.status;
+      try{var j=JSON.parse(t);if(j.errorMessage) msg=j.errorMessage;}catch(e){}
+      throw new Error(inst+": "+msg);
+    });
+    return r.json();
+  }).then(function(json){
+    var out={};
+    (json.candles||[]).forEach(function(c){
+      if(!c.complete) return;
+      out[c.time.slice(0,10)]=parseFloat(c.mid.c); // date -> mid close
+    });
+    return out;
+  });
+}
+// Combines same-date closes across all six pairs into one index value per
+// date, using ICE's published USDX formula. OANDA's own pair-naming
+// convention already matches what the formula expects for every leg (USD
+// per EUR/GBP for the two "^negative" legs, foreign-per-USD for the other
+// four) — no inversions needed.
+function computeDxyProxySeries(closesByPair){
+  var dateSet={};
+  Object.keys(closesByPair).forEach(function(inst){
+    Object.keys(closesByPair[inst]).forEach(function(d){dateSet[d]=true;});
+  });
+  var rows=[];
+  Object.keys(dateSet).sort().forEach(function(d){
+    var idx=50.14348112,ok=true;
+    OANDA_DXY_PAIRS.forEach(function(p){
+      var c=closesByPair[p.inst]&&closesByPair[p.inst][d];
+      if(!c){ok=false;return;}
+      idx*=Math.pow(c,p.weight);
+    });
+    if(ok) rows.push({d:d,c:idx});
+  });
+  return rows;
+}
 function loadDxyData(force){
+  var tok=ls("oanda_token","");
+  if(!tok){var e=new Error("no OANDA token set");e.code="NO_TOKEN";return Promise.reject(e);}
   var cached=_dxyMemCache||dxyCacheGet();
   var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetch("dxy.json",{cache:"no-store"}).then(function(r){
-    if(!r.ok) throw new Error("HTTP "+r.status+(r.status===404?" — dxy.json not deployed yet":""));
-    return r.json();
-  }).then(function(json){
-    if(!json||!json.rows||!json.rows.length) throw new Error("empty response");
-    var obj={rows:json.rows,sourceFetchedAt:json.fetchedAt,fetchedAt:Date.now()};
+  var closesByPair={};
+  return Promise.all(OANDA_DXY_PAIRS.map(function(p){
+    return fetchOandaDailyCloses(p.inst,tok).then(function(closes){closesByPair[p.inst]=closes;});
+  })).then(function(){
+    var rows=computeDxyProxySeries(closesByPair);
+    if(!rows.length) throw new Error("no overlapping dates across the six FX pairs");
+    var obj={rows:rows,fetchedAt:Date.now()};
     _dxyMemCache=obj;dxyCacheSet(obj);
     return obj;
   }).catch(function(err){
@@ -7418,7 +7469,7 @@ function buildDxyView(data,isM){
   var rows=data.rows;
   var series=rows.map(function(r){return {v:r.c,l:r.d||""};}).filter(function(s){return typeof s.v==="number";});
   if(series.length<2){
-    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough DXY data to plot yet.</div>';
+    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough FX data to compute an index yet.</div>';
     return el;
   }
   var latest=series[series.length-1],prev=series[series.length-2];
@@ -7427,7 +7478,7 @@ function buildDxyView(data,isM){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
-  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Broad Dollar Index (Fed, DTWEXBGS)</div>"
+  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (synthetic, OANDA majors)</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
   top.appendChild(l);
@@ -7438,11 +7489,11 @@ function buildDxyView(data,isM){
   el.appendChild(card);
 
   var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> Broad dollar strength and equity index futures have run inversely more often than not — a stronger dollar tends to pressure risk assets (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
   el.appendChild(noteCard);
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: dxy.json — FRED DTWEXBGS (Fed's Nominal Broad U.S. Dollar Index), updated daily via scheduled fetch";
+  srcNote.textContent="Computed from OANDA EUR/USD, USD/JPY, GBP/USD, USD/CAD, USD/SEK, USD/CHF daily closes, using ICE's published DXY formula/weights";
   el.appendChild(srcNote);
   return el;
 }
@@ -7686,7 +7737,23 @@ function analystTab(){
   // ── Intermarket & Cross-Asset Correlations (DXY) ──
   function showDxyLoading(){dxyBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING DXY DATA…</div>';}
   function showDxyError(msg){dxyBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD DXY DATA — '+msg+'</div>';}
+  function renderDxyTokenGate(){
+    dxyBody.innerHTML="";
+    var tokRow=div("row gap8 mb12");
+    var tin=h("input",{type:"password",placeholder:"OANDA practice API token"});
+    tin.style.cssText="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;font-family:monospace;font-size:12px;";
+    function saveTok(){if(tin.value.trim()){ss("oanda_token",tin.value.trim());loadDxy(true);}}
+    var tsave=h("button",{className:"btn"});tsave.textContent="Save";
+    tsave.addEventListener("click",saveTok);
+    tin.addEventListener("keydown",function(e){if(e.key==="Enter") saveTok();});
+    tokRow.appendChild(tin);tokRow.appendChild(tsave);
+    dxyBody.appendChild(tokRow);
+    var tnote=div("xs m");tnote.style.cssText="margin-bottom:12px;color:var(--text3);";
+    tnote.textContent="Same free OANDA practice token as the Chart tab — used here to build a synthetic Dollar Index from six major FX pairs, since there's no free direct DXY feed. Stored client-side, visible in this page's source/network tab.";
+    dxyBody.appendChild(tnote);
+  }
   function loadDxy(force){
+    if(!ls("oanda_token","")){renderDxyTokenGate();return;}
     var myToken=++_dxyLoadToken;
     if(force&&dxyBody.firstChild) dxyBody.style.opacity="0.45";
     else showDxyLoading();
@@ -7697,6 +7764,7 @@ function analystTab(){
       dxyBody.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_dxyLoadToken) return;
+      if(err&&err.code==="NO_TOKEN"){renderDxyTokenGate();return;}
       dxyBody.style.opacity="1";
       showDxyError(err&&err.message?err.message:"network error");
     });
