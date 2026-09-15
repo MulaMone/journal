@@ -1,0 +1,39 @@
+name: Update liquidity data
+
+on:
+  schedule:
+    # Weekly, Thursday evenings ET — the Fed's H.4.1 release (which WALCL,
+    # WTREGEN, and WLRRAL are all sourced from) publishes Thursdays ~4:30pm
+    # ET; this gives FRED time to ingest it. 22:00 UTC = 6pm EDT / 5pm EST.
+    - cron: "0 22 * * 4"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-liquidity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch liquidity series and write liquidity.json
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python3 scripts/fetch-liquidity.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- liquidity.json; then
+            git add liquidity.json
+            git commit -m "Update liquidity data"
+            git push
+          else
+            echo "liquidity.json unchanged — nothing to commit"
+          fi
