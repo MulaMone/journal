@@ -1,30 +1,57 @@
-name: Update Treasury yield curve data
+name: Update TNX quote
 
 on:
   schedule:
-    # Treasury publishes once/day around 3:30pm ET. Two runs (20:45 and
-    # 21:45 UTC) cover both EST and EDT without needing to change the cron
-    # twice a year. Weekdays only — no new print on weekends.
-    - cron: "45 20 * * 1-5"
-    - cron: "45 21 * * 1-5"
+    # Fires at :07, :22, :37, :52 rather than the exact quarter-hour
+    # marks — GitHub's own docs flag :00/:15/:30/:45 as high-load times
+    # since every scheduled workflow on GitHub tends to cluster there,
+    # which can queue/delay runs. Still every 15 min, just offset.
+    # 13:07-21:52 UTC covers both EDT (9:25am-4:15pm ET) and EST
+    # (9:25am-4:15pm ET) market hours as a superset; the "Check local
+    # time" guard step below narrows it to the real window each run.
+    - cron: "7,22,37,52 13-21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 jobs:
-  update:
+  update-tnx:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch and build yields.json
-        run: python3 scripts/update_yields.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check local time
+        id: timecheck
+        run: |
+          python3 -c "
+          from zoneinfo import ZoneInfo
+          from datetime import datetime, time
+          now = datetime.now(ZoneInfo('America/New_York'))
+          proceed = time(9, 25) <= now.time() <= time(16, 15)
+          print('local time is', now.isoformat(), '— proceed:', proceed)
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('proceed=' + ('true' if proceed else 'false') + '\n')
+          "
+
+      - name: Fetch $TNX and write tnx.json
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
+        run: python3 scripts/fetch-tnx.py
 
       - name: Commit if changed
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add yields.json
-          git diff --cached --quiet || git commit -m "chore: update yield curve data"
-          git push
+          if ! git diff --quiet -- tnx.json; then
+            git add tnx.json
+            git commit -m "Update TNX quote"
+            git push
+          else
+            echo "tnx.json unchanged — nothing to commit"
+          fi
