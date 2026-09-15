@@ -2,10 +2,14 @@ name: Update TNX quote
 
 on:
   schedule:
-    # Every 15 minutes, 9:25am-4:15pm ET (13:25-20:15 UTC during EDT,
-    # 14:25-21:15 UTC during EST) — set for EDT here; adjust the hour
-    # range twice a year, or widen it if you don't want to bother.
-    - cron: "*/15 13-20 * * 1-5"
+    # Every 15 minutes, 13:25-21:15 UTC — a superset covering both EDT
+    # (9:25am-4:15pm ET = 13:25-20:15 UTC) and EST (9:25am-4:15pm ET =
+    # 14:25-21:15 UTC) market hours, so this window is always wide enough
+    # regardless of season. The "Check local time" guard step below then
+    # skips any run that falls outside the real 9:25am-4:15pm ET window —
+    # self-correcting across the Nov/March DST changeovers with no manual
+    # cron edits ever needed.
+    - cron: "*/15 13-21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
@@ -21,10 +25,26 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Check local time
+        id: timecheck
+        run: |
+          python3 -c "
+          from zoneinfo import ZoneInfo
+          from datetime import datetime, time
+          now = datetime.now(ZoneInfo('America/New_York'))
+          proceed = time(9, 25) <= now.time() <= time(16, 15)
+          print('local time is', now.isoformat(), '— proceed:', proceed)
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('proceed=' + ('true' if proceed else 'false') + '\n')
+          "
+
       - name: Fetch $TNX and write tnx.json
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: python3 scripts/fetch-tnx.py
 
       - name: Commit if changed
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
