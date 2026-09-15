@@ -6929,15 +6929,21 @@ function isPastCmeFinalTime(){
 function cmeOiFold(cached,fresh){
   var snap={oi:fresh.oi,change:fresh.change,fetchedAt:fresh.fetchedAt};
   if(!cached||cached.date!==fresh.dateStr){
-    // First time seeing this trade date. If it's already past 10am CT, the
-    // bulletin we just pulled IS the Final — don't mislabel it as prelim
-    // (that would later look identical to "final" and falsely say
-    // "unchanged" even though we never actually saw the real prelim).
+    // New trade date. Before dropping the old record, carry forward its
+    // best-known snapshot (Final if we captured one, else whatever Prelim
+    // we had) as prevDayFinal — this is what lets us diff today's OI
+    // against yesterday's even on days we never saw yesterday's Final post.
+    var prevSnap=cached?(cached.final||cached.prelim):null;
+    var prevDay=prevSnap?{oi:prevSnap.oi,date:cached.date,isFinal:!!cached.final}:null;
+    // If it's already past 10am CT, the bulletin we just pulled IS the
+    // Final — don't mislabel it as prelim (that would later look identical
+    // to "final" and falsely say "unchanged" even though we never actually
+    // saw the real prelim).
     return isPastCmeFinalTime()
-      ? {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:null,final:snap}
-      : {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:snap,final:null};
+      ? {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:null,final:snap,prevDayFinal:prevDay}
+      : {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:snap,final:null,prevDayFinal:prevDay};
   }
-  var next={date:cached.date,contractMonth:fresh.contractMonth,prelim:cached.prelim,final:cached.final};
+  var next={date:cached.date,contractMonth:fresh.contractMonth,prelim:cached.prelim,final:cached.final,prevDayFinal:cached.prevDayFinal};
   if(isPastCmeFinalTime()) next.final=snap; else next.prelim=snap;
   return next;
 }
@@ -7272,7 +7278,15 @@ function analystTab(){
         line2="\nPrelim → Final chg revision: <span style='color:"+revCol+"'>"+fmtCotChg(revDelta)+"</span> (<span style='color:"+pCol+"'>"+pTxt+"</span> → <span style='color:"+fCol+"'>"+fTxt+"</span>)";
       }
     }
-    cmeResult.innerHTML=line1+line2;
+    var line3="";
+    if(data.prevDayFinal){
+      var dayDelta=eff.oi-data.prevDayFinal.oi;
+      var dCol=dayDelta>0?"#00e676":dayDelta<0?"#ff4444":"var(--text2)";
+      var prevLbl=data.prevDayFinal.isFinal?"Final":"Prelim";
+      var curLbl=data.final?"Final":"Prelim";
+      line3="\n"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ: <span style='color:"+dCol+"'>"+fmtCotChg(dayDelta)+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
+    }
+    cmeResult.innerHTML=line1+line2+line3;
     cmeResult.style.color="var(--text2)";
   }
 
