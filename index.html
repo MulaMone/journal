@@ -778,9 +778,11 @@ function checkImagesChanged(callback){
 }
 
 // Cheap poll step: fetch only updated_at and compare to what we already have.
-// Only triggers the full select=* row (trades/levels/settings/playbook images) via
-// loadFromCloud when the timestamp actually moved. callback(changed:boolean|null) —
-// null means the check itself failed (network/etc), so caller should not treat it as "no change".
+// Only triggers the full select=* row (trades/levels/settings) via
+// loadFromCloud when the timestamp actually moved. Playbook images sync
+// separately now — see checkImagesChanged/loadImagesFromCloud below.
+// callback(changed:boolean|null) — null means the check itself failed
+// (network/etc), so caller should not treat it as "no change".
 function checkCloudChanged(syncId,callback){
   supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(syncId)+"&select=updated_at")
   .then(function(r){return r.json();})
@@ -9198,8 +9200,9 @@ initAutoSync();
 // Poll edge_data every 10 seconds to stay in sync across computers
 // Guard: skip if user has a form open or a sync is in-flight to avoid wiping unsaved changes
 // Guard: skip entirely while the tab is hidden — no point pulling updates nobody can see
-// Guard: check updated_at first (cheap) and only pull the full row (trades/levels/settings/
-// playbook images) when it actually changed — most polls previously re-fetched identical data
+// Guard: check updated_at first (cheap) and only pull the full row (trades/levels/settings)
+// when it actually changed — most polls previously re-fetched identical data. Playbook
+// images are a separate row/poll now — see pollCloudImages below.
 function pollCloud(){
   if(document.hidden) return;
   if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
