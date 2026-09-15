@@ -7811,12 +7811,6 @@ function buildDxyView(data,isM){
   card.appendChild(chartWrap);
   el.appendChild(card);
 
-  if(!isM){
-    var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-    noteCard.innerHTML="<b style='color:#00e676;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
-    el.appendChild(noteCard);
-  }
-
   var goldOilRow=div("g2");
   goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here.","gold"));
@@ -7858,6 +7852,12 @@ function analystTab(){
   var y10Body=div();y10Body.id="y10-body";dxyRow.appendChild(y10Body);
   y10Body.style.transition="opacity .15s";
   el.appendChild(dxyRow);
+
+  if(!isM){
+    var dxyTnxNote=div();dxyTnxNote.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.6;";
+    dxyTnxNote.innerHTML="<b style='color:#00e676;'>Reading DXY & TNX against ES/NQ:</b> Dollar up + yields up is usually the bearish combo for equities — tighter liquidity and richer discount rates, hardest on NQ. Dollar down + yields down is usually the bullish mirror. Either can decouple during regime shifts (risk-off rallies dollar, bonds, and yield-down together while stocks still sell off), so treat this as context, not a rule.";
+    el.appendChild(dxyTnxNote);
+  }
 
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
