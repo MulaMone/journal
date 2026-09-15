@@ -7544,7 +7544,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note){
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isMobile()?300:640,80,accentColor,function(v){return v.toFixed(decimals);}));
   card.appendChild(chartWrap);
-  if(note){
+  if(note&&!isMobile()){
     var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;";
     n.textContent=note;
     card.appendChild(n);
@@ -7594,7 +7594,11 @@ function buildDxyView(data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
+  var shRow=div();shRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
+  var sh=div("sh");sh.style.marginBottom="0";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
+  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";rbtn.style.cssText="flex-shrink:0;"+(isM?"padding:6px 10px;font-size:11px;":"");
+  shRow.appendChild(rbtn);
+  el.appendChild(shRow);
 
   // ── Yield Curve Spreads — moved to the top since this is now checked
   // daily; own data source (see below), rendered before COT/OI. ──
@@ -7656,8 +7660,6 @@ function analystTab(){
     b.addEventListener("click",function(){State.analyst_symbol=s;render();});
     ctrlRow.appendChild(b);
   });
-  var rbtn=h("button",{className:"btn"});rbtn.textContent="↻ Refresh";
-  ctrlRow.appendChild(rbtn);
   el.appendChild(ctrlRow);
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;margin-bottom:10px;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
