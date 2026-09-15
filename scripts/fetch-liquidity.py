@@ -28,10 +28,12 @@ FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 OUT_PATH = "liquidity.json"
 
 # (series_id, output field name, multiplier to convert to plain dollars)
+# All three H.4.1-sourced series are reported by FRED in MILLIONS of
+# dollars — confirmed on each series' own FRED page — not billions.
 SERIES = [
-    ("WALCL", "fedAssets", 1_000_000),   # FRED units: millions of $
-    ("WTREGEN", "tga", 1_000_000_000),   # FRED units: billions of $
-    ("WLRRAL", "rrp", 1_000_000_000),    # FRED units: billions of $
+    ("WALCL", "fedAssets", 1_000_000),
+    ("WTREGEN", "tga", 1_000_000),
+    ("WLRRAL", "rrp", 1_000_000),
 ]
 
 
