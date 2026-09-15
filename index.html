@@ -6964,16 +6964,18 @@ function cmeOiFold(cached,fresh){
   if(!cached||cached.date!==fresh.dateStr){
     // New trade date. Before dropping the old record, carry forward its
     // best-known snapshot (Final if we captured one, else whatever Prelim
-    // we had) as prevDayFinal — this is what lets us diff today's OI
-    // against yesterday's even on days we never saw yesterday's Final post.
+    // we had) as prevDayFinal. This carries both the OI level AND the
+    // CME-reported net change ("change") for that day — the renderer
+    // below diffs the CHANGE figures against each other (today's net
+    // change vs yesterday's net change), not the raw OI levels, since an
+    // OI-level diff is redundant with the "chg" already shown on line 1.
     // Also carry the CONTRACT MONTH that snapshot belonged to (e.g. SEP26)
     // — the front-month contract rolls over periodically (SEP26 → DEC26
-    // etc.), and open interest is only meaningfully comparable within the
-    // same contract. Diffing SEP26's OI against DEC26's OI on roll day
-    // would read as a huge, meaningless jump. The renderer below checks
-    // this field and skips the numeric delta when the contract changed.
+    // etc.), and neither OI nor its net change is meaningfully comparable
+    // across that boundary. The renderer skips the numeric delta when the
+    // contract changed.
     var prevSnap=cached?(cached.final||cached.prelim):null;
-    var prevDay=prevSnap?{oi:prevSnap.oi,date:cached.date,isFinal:!!cached.final,contractMonth:cached.contractMonth||null}:null;
+    var prevDay=prevSnap?{oi:prevSnap.oi,change:prevSnap.change,date:cached.date,isFinal:!!cached.final,contractMonth:cached.contractMonth||null}:null;
     // If it's already past 10am CT, the bulletin we just pulled IS the
     // Final — don't mislabel it as prelim (that would later look identical
     // to "final" and falsely say "unchanged" even though we never actually
@@ -7797,24 +7799,30 @@ function analystTab(){
       var sameContract=!data.prevDayFinal.contractMonth||data.prevDayFinal.contractMonth===data.contractMonth;
       var prevLbl=data.prevDayFinal.isFinal?"Final":"Prelim";
       var curLbl=data.final?"Final":"Prelim";
-      if(sameContract){
-        // Straightforward day-over-day OI diff: today's best-known OI for
-        // this contract minus yesterday's best-known OI for the SAME
-        // contract. This is deliberately a different number from the
-        // "chg" column above (that's CME's own reported change for
-        // whichever single bulletin we're looking at); this one spans two
-        // separate fetches/days and can reflect a prelim→final revision on
-        // top of the raw day-over-day move.
-        var dayDelta=eff.oi-data.prevDayFinal.oi;
-        var dSign=dayDelta>0?"+":dayDelta<0?"-":"";
-        var dCol=dayDelta>0?"#00e676":dayDelta<0?"#ff4444":"var(--text2)";
-        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ:</span> <span style='color:"+dCol+"'>"+dSign+"</span><span style='color:var(--amber)'>"+fmtCotNum(Math.abs(dayDelta))+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
-      } else {
+      if(!sameContract){
         // Front-month contract rolled between the two snapshots (e.g.
-        // SEP26 → DEC26) — the two OI figures belong to different
-        // contracts and aren't a meaningful day-over-day diff, so don't
-        // compute or show one.
-        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" ("+(data.prevDayFinal.contractMonth||"?")+") → "+curLbl+" "+(data.date||"today")+" ("+data.contractMonth+"):</span> <span style='color:var(--text3)'>front-month rolled — OI not directly comparable</span>";
+        // SEP26 → DEC26) — neither the OI level nor its net change is
+        // comparable across that boundary, so don't compute or show one.
+        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" ("+(data.prevDayFinal.contractMonth||"?")+") → "+curLbl+" "+(data.date||"today")+" ("+data.contractMonth+"):</span> <span style='color:var(--text3)'>front-month rolled — not directly comparable</span>";
+      } else if(data.prevDayFinal.change===undefined||data.prevDayFinal.change===null){
+        // Migrated from an older cache that didn't record the previous
+        // day's net-change figure — nothing to diff against yet, but it
+        // will be on record starting the next fold.
+        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+":</span> <span style='color:var(--text3)'>previous day's net change wasn't on record — will compare from the next update</span>";
+      } else {
+        // The actual ask: how much did the DAILY NET CHANGE figure itself
+        // move, day over day — not the raw OI level (that's redundant
+        // with the "chg" already shown on line 1 above, since today's OI
+        // minus yesterday's OI is approximately today's own reported
+        // change). This compares today's net change to yesterday's net
+        // change, e.g. Friday printed -288,428 and if Monday prints
+        // +17,843, this line shows the +306,271 swing between those two
+        // change figures — a read on whether OI flow is accelerating,
+        // decelerating, or reversing direction, not just today's level.
+        var chgDelta=eff.change-data.prevDayFinal.change;
+        var dSign=chgDelta>0?"+":chgDelta<0?"-":"";
+        var dCol=chgDelta>0?"#00e676":chgDelta<0?"#ff4444":"var(--text2)";
+        line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" net chg Δ:</span> <span style='color:"+dCol+"'>"+dSign+"</span><span style='color:var(--amber)'>"+fmtCotNum(Math.abs(chgDelta))+"</span> ("+fmtCotChg(data.prevDayFinal.change)+" → "+fmtCotChg(eff.change)+")";
       }
     }
     cmeResult.innerHTML=line1+line2+line3;
