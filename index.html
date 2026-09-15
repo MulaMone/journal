@@ -7677,9 +7677,22 @@ function analystTab(){
   var el=div();
   var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
 
-  // ── Yield Curve Spreads — moved to the top since this is now checked
-  // daily; own data source (see below), rendered before COT/OI. ──
-  var ycHeadRow=div();ycHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  fedHead.textContent="Fed Rate Probabilities";
+  el.appendChild(fedHead);
+  var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
+  fedBody.style.transition="opacity .15s";
+
+  // ── Intermarket & Cross-Asset Correlations — DXY ──
+  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  dxyHead.textContent="Intermarket & Cross-Asset Correlations";
+  el.appendChild(dxyHead);
+  var dxyBody=div();dxyBody.id="dxy-body";el.appendChild(dxyBody);
+  dxyBody.style.transition="opacity .15s";
+
+  // ── Yield Curve Spreads ──
+  var ycHeadRow=div();ycHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
   ycHead.textContent="Yield Curve Spreads";
   ycHeadRow.appendChild(ycHead);
@@ -7716,23 +7729,6 @@ function analystTab(){
 
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
-
-  // ── Fed Rate Probabilities — own data source (CME ZQ futures). Element
-  // created here (so loadFed below has something to render into as soon
-  // as the tab opens) but appended to the DOM at the bottom of the tab —
-  // see the el.appendChild(fedHead)/el.appendChild(fedBody) calls near
-  // the end of this function. ──
-  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  fedHead.textContent="Fed Rate Probabilities";
-  var fedBody=div();fedBody.id="fed-body";
-  fedBody.style.transition="opacity .15s";
-
-  // ── Intermarket & Cross-Asset Correlations — DXY ──
-  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  dxyHead.textContent="Intermarket & Cross-Asset Correlations";
-  el.appendChild(dxyHead);
-  var dxyBody=div();dxyBody.id="dxy-body";el.appendChild(dxyBody);
-  dxyBody.style.transition="opacity .15s";
 
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
@@ -7960,12 +7956,6 @@ function analystTab(){
   loadYc(false);
   loadFed(false);
   loadDxy(false);
-
-  // Fed Rate Probabilities is appended here so it renders at the bottom
-  // of the tab — the element and its loader were set up earlier (see
-  // above) so loadFed(false) just above has something to render into.
-  el.appendChild(fedHead);
-  el.appendChild(fedBody);
 
   return el;
 }
