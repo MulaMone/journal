@@ -7316,7 +7316,7 @@ function buildLiquidityCard(fieldKey,label,col,note,data,isM){
     if(typeof v!=="number") return null;
     return {v:v,l:r.d||""};
   }).filter(Boolean);
-  var el=div();
+  var el=div();el.style.cssText="height:100%;display:flex;flex-direction:column;";
   if(series.length<2){
     el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough data to plot yet.</div>';
     return el;
@@ -7324,15 +7324,15 @@ function buildLiquidityCard(fieldKey,label,col,note,data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;height:100%;display:flex;flex-direction:column;box-sizing:border-box;";
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+label+"</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtLiqDollar(latest.v)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+fmtLiqDollar(chg)+" vs prior print</div>";
-  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
+  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;flex-shrink:0;";
   chartWrap.appendChild(areaSVG(series.slice(-104),isM?300:640,80,col,fmtLiqDollar)); // ~2yr of weekly points
   card.appendChild(chartWrap);
   if(note&&!isM){
-    var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;";
+    var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;flex:1;";
     n.textContent=note;
     card.appendChild(n);
   }
