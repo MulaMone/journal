@@ -2,14 +2,14 @@ name: Update TNX quote
 
 on:
   schedule:
-    # Every 15 minutes, 13:25-21:15 UTC — a superset covering both EDT
-    # (9:25am-4:15pm ET = 13:25-20:15 UTC) and EST (9:25am-4:15pm ET =
-    # 14:25-21:15 UTC) market hours, so this window is always wide enough
-    # regardless of season. The "Check local time" guard step below then
-    # skips any run that falls outside the real 9:25am-4:15pm ET window —
-    # self-correcting across the Nov/March DST changeovers with no manual
-    # cron edits ever needed.
-    - cron: "*/15 13-21 * * 1-5"
+    # Fires at :07, :22, :37, :52 rather than the exact quarter-hour
+    # marks — GitHub's own docs flag :00/:15/:30/:45 as high-load times
+    # since every scheduled workflow on GitHub tends to cluster there,
+    # which can queue/delay runs. Still every 15 min, just offset.
+    # 13:07-21:52 UTC covers both EDT (9:25am-4:15pm ET) and EST
+    # (9:25am-4:15pm ET) market hours as a superset; the "Check local
+    # time" guard step below narrows it to the real window each run.
+    - cron: "7,22,37,52 13-21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
