@@ -7662,7 +7662,7 @@ function buildDxyView(data,isM){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
-  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (synthetic, OANDA majors)</div>"
+  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
   top.appendChild(l);
@@ -7679,7 +7679,7 @@ function buildDxyView(data,isM){
   }
 
   var goldOilRow=div("g2");
-  goldOilRow.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffab00",2,
+  goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here."));
   goldOilRow.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case."));
