@@ -2656,7 +2656,7 @@ function loadLocalCalendar(force){
   var cached=localCalendarCacheGet();
   var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>3*60*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetch(LOCAL_CALENDAR_URL).then(function(r){
+  return fetch(LOCAL_CALENDAR_URL+(force?"?_="+Date.now():"")).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(data){
@@ -7181,7 +7181,7 @@ function loadYieldCurveData(force){
   var cached=_ycMemCache||ycCacheGet();
   var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetch("yields.json",{cache:"no-store"}).then(function(r){
+  return fetch("yields.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
@@ -7208,7 +7208,7 @@ var _tnxLiveBaseline=null; // latest official Treasury 10Y print — the badge's
 function tnxCacheGet(){try{var raw=localStorage.getItem("edge_tnx_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function tnxCacheSet(obj){try{localStorage.setItem("edge_tnx_v1",JSON.stringify(obj));}catch(e){}}
 function fetchTnxJson(){
-  return fetch("tnx.json",{cache:"no-store"}).then(function(r){
+  return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
