@@ -43,7 +43,7 @@ jobs:
         if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: python3 scripts/fetch-tnx.py
 
-      - name: Commit if changed
+      - name: Commit and push (with retry on race with other workflows)
         if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
@@ -51,7 +51,15 @@ jobs:
           if ! git diff --quiet -- tnx.json; then
             git add tnx.json
             git commit -m "Update TNX quote"
-            git push
+            # Multiple data-fetch workflows can run around the same time and
+            # each push to main independently — pull --rebase first so this
+            # push always lands on top of whatever the others already
+            # committed, instead of getting rejected as a non-fast-forward.
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "push attempt $i failed, retrying..."
+              sleep 3
+            done
           else
             echo "tnx.json unchanged — nothing to commit"
           fi
