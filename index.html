@@ -7594,22 +7594,22 @@ function buildDxyView(data,isM){
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var shRow=div();shRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
-  var sh=div("sh");sh.style.cssText="margin-bottom:0;flex:1;min-width:0;";sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";shRow.appendChild(sh);
+  var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
+
+  // ── Yield Curve Spreads — moved to the top since this is now checked
+  // daily; own data source (see below), rendered before COT/OI. ──
+  var ycHeadRow=div();ycHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
+  ycHead.textContent="Yield Curve Spreads";
+  ycHeadRow.appendChild(ycHead);
   var rbtn=h("button",{className:"btn"});
   rbtn.textContent=isM?"↻":"↻ Refresh";
   rbtn.title="Refresh";
   rbtn.style.cssText=isM
-    ?"flex-shrink:0;width:30px;height:30px;padding:0;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:4px;"
+    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
     :"flex-shrink:0;";
-  shRow.appendChild(rbtn);
-  el.appendChild(shRow);
-
-  // ── Yield Curve Spreads — moved to the top since this is now checked
-  // daily; own data source (see below), rendered before COT/OI. ──
-  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  ycHead.textContent="Yield Curve Spreads";
-  el.appendChild(ycHead);
+  ycHeadRow.appendChild(rbtn);
+  el.appendChild(ycHeadRow);
 
   var ycSpread=State.analyst_yc_spread||"2s10s";
   var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
