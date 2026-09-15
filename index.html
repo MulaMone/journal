@@ -1932,19 +1932,6 @@ function openSettings(){
   tnxTokRow.appendChild(tnxTokInfo);tnxTokRow.appendChild(tnxTokRight);
   body.appendChild(tnxTokRow);
 
-  var tnxTrigRow=document.createElement("div");
-  tnxTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
-  var tnxTrigInfo=document.createElement("div");tnxTrigInfo.style.cssText="min-width:0;";
-  var tnxTrigLbl=document.createElement("div");tnxTrigLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";tnxTrigLbl.textContent="Trigger TNX Update";
-  var tnxTrigStatus=document.createElement("div");tnxTrigStatus.id="tnx-trigger-status";tnxTrigStatus.style.cssText="font-size:10px;color:var(--text3);";tnxTrigStatus.textContent="Fetch a fresh $TNX quote right now";
-  tnxTrigInfo.appendChild(tnxTrigLbl);tnxTrigInfo.appendChild(tnxTrigStatus);
-  var tnxTrigBtn=document.createElement("button");
-  tnxTrigBtn.textContent="⚡ TRIGGER";
-  tnxTrigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0;";
-  tnxTrigBtn.onclick=function(){triggerTnxWorkflow();};
-  tnxTrigRow.appendChild(tnxTrigInfo);tnxTrigRow.appendChild(tnxTrigBtn);
-  body.appendChild(tnxTrigRow);
-
   var allTrigRow=document.createElement("div");
   allTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
   var allTrigInfo=document.createElement("div");allTrigInfo.style.cssText="min-width:0;";
@@ -7519,9 +7506,9 @@ function pollForFreshTnx(attempt,baseline){
 // dispatches succeeded/failed; the person verifies actual completion via
 // the Actions tab rather than the app polling four separate JSON files.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml"];
-function triggerAllWorkflows(){
+function triggerAllWorkflows(statusElId){
   var tok=ls("gh_token","");
-  var statusEl=document.getElementById("trigger-all-status");
+  var statusEl=document.getElementById(statusElId||"trigger-all-status");
   if(!tok){if(statusEl){statusEl.textContent="Set a GitHub token first";statusEl.style.color="var(--red)";}return;}
   if(statusEl){statusEl.textContent="Triggering all "+GH_ALL_WORKFLOWS.length+"…";statusEl.style.color="var(--text3)";}
   Promise.all(GH_ALL_WORKFLOWS.map(function(file){
@@ -9159,6 +9146,37 @@ function settingsTab(){
   });
   clearRow.appendChild(clearInfo);clearRow.appendChild(clearBtn);
   el.appendChild(clearRow);
+
+  el.appendChild(mSection("Live Data"));
+  var tokRow=mRow();
+  var tokInfo=document.createElement("div");
+  tokInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>GitHub token</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;'>Repo-scoped, Actions: write</div>";
+  var tokInp=document.createElement("input");
+  tokInp.type="password";tokInp.placeholder="github_pat_...";
+  tokInp.value=ls("gh_token","");
+  tokInp.style.cssText="width:100%;background:#0a1a32;border:1px solid #1e3d73;color:#e8f0ff;font-family:'Courier New',monospace;font-size:12px;padding:8px 10px;border-radius:4px;margin-top:8px;";
+  var tokSave=document.createElement("button");
+  tokSave.textContent="Save token";
+  tokSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;margin-top:8px;width:100%;";
+  tokSave.addEventListener("click",function(){
+    ss("gh_token",tokInp.value.trim());
+    tokSave.textContent="✓ Saved";setTimeout(function(){tokSave.textContent="Save token";},1200);
+  });
+  var tokWrap=document.createElement("div");tokWrap.style.cssText="width:100%;";
+  tokWrap.appendChild(tokInfo);tokWrap.appendChild(tokInp);tokWrap.appendChild(tokSave);
+  tokRow.style.flexDirection="column";tokRow.style.alignItems="stretch";
+  tokRow.appendChild(tokWrap);
+  el.appendChild(tokRow);
+
+  var trigRow=mRow();
+  var trigInfo=document.createElement("div");
+  trigInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>Trigger all data updates</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;' id='m-trigger-all-status'>TNX, liquidity, yields, calendar</div>";
+  var trigBtn=document.createElement("button");
+  trigBtn.textContent="⚡ Trigger";
+  trigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;flex-shrink:0;";
+  trigBtn.addEventListener("click",function(){triggerAllWorkflows("m-trigger-all-status");});
+  trigRow.appendChild(trigInfo);trigRow.appendChild(trigBtn);
+  el.appendChild(trigRow);
 
   el.appendChild(mSection("About"));
   var ver=document.createElement("div");
