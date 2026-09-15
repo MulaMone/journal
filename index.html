@@ -7197,26 +7197,47 @@ function loadYieldCurveData(force){
 // ─── $TNX (CBOE 10-Year Treasury Yield Index) — near-live badge ───────
 // Treasury's own par yield curve (above) only prints once a day, so this
 // tracks CBOE's $TNX ticker instead for a more frequently-updating read.
-// $TNX isn't fetchable client-side (no free CORS-friendly source), so a
-// server-side GitHub Action writes tnx.json to this repo on a schedule —
-// same same-origin-static-file pattern as yields.json/calendar.json. The
-// badge polls that file; its actual freshness is bounded by however often
-// that Action runs, not by this poll interval.
+// Primary path: try a direct client-side fetch to Yahoo's chart endpoint —
+// this only works if Yahoo's response allows cross-origin browser requests
+// (not guaranteed; their CORS policy on this endpoint isn't something we
+// control and may block it outright). Fallback path: tnx.json, written by
+// a server-side GitHub Action on a schedule — same same-origin-static-file
+// pattern as yields.json/calendar.json — which sidesteps CORS entirely but
+// is only as fresh as that Action's last run.
 var _tnxMemCache=null;
 var _tnxLiveTimer=null;
 var _tnxLiveBaseline=null; // latest official Treasury 10Y print — the badge's up/down color is measured against this
 function tnxCacheGet(){try{var raw=localStorage.getItem("edge_tnx_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function tnxCacheSet(obj){try{localStorage.setItem("edge_tnx_v1",JSON.stringify(obj));}catch(e){}}
-function fetchTnxJson(){
+function fetchTnxDirect(){
+  var url="https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1m&range=1d&_="+Date.now();
+  return fetch(url).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(json){
+    var result=json&&json.chart&&json.chart.result&&json.chart.result[0];
+    var meta=result&&result.meta;
+    var price=meta&&meta.regularMarketPrice;
+    if(typeof price!=="number") throw new Error("no regularMarketPrice in response");
+    var marketTimeIso=meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toISOString():null;
+    var obj={yieldVal:price,marketTime:marketTimeIso,fetchedAt:Date.now(),source:"direct"};
+    _tnxMemCache=obj;tnxCacheSet(obj);
+    return obj;
+  });
+}
+function fetchTnxFromFile(){
   return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
     if(!json||typeof json.yield!=="number") throw new Error("tnx.json missing a numeric yield field");
-    var obj={yieldVal:json.yield,marketTime:json.marketTime||null,fetchedAt:Date.now()};
+    var obj={yieldVal:json.yield,marketTime:json.marketTime||null,fetchedAt:Date.now(),source:"file"};
     _tnxMemCache=obj;tnxCacheSet(obj);
     return obj;
   });
+}
+function fetchTnxJson(){
+  return fetchTnxDirect().catch(function(){return fetchTnxFromFile();});
 }
 function updateTnxLiveBadge(){
   fetchTnxJson().then(function(data){
@@ -7241,7 +7262,7 @@ function paintTnxBadge(data){
       var d=new Date(data.marketTime);
       t=isNaN(d.getTime())?data.marketTime:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     }
-    sub.textContent=t;
+    sub.textContent=t+(data.source==="direct"?" · live":data.source==="file"?" · action":"");
   }
 }
 
