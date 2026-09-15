@@ -15,6 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Rye&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,212,212,0.6);}50%{opacity:0.5;box-shadow:0 0 0 4px rgba(0,212,212,0);}}
 :root{--bg:#040d1a;--bg2:#071428;--bg3:#0a1a32;--panel:#0d1e38;--panel2:#112444;--panel3:#162c50;--border:#1a3260;--border2:#1e3d73;--border3:#2a5099;--accent:#00d4d4;--accentglow:#00d4d430;--ca:#ff8c00;--caglow:#ff8c0025;--ca15:#ff8c0015;--ca30:#ff8c0030;--ca40:#ff8c0040;--ca50:#ff8c0050;--text:#e8f0ff;--text2:#e0c97a;--text3:#c9a84c;--green:#00e676;--red:#ff4444;--amber:#ffab00}
 html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:15px;overflow-x:hidden;scrollbar-gutter:stable}html{overflow-y:scroll}body{overflow-y:scroll;-webkit-overflow-scrolling:touch}
 #app{min-height:100vh;display:flex;flex-direction:column;padding-top:calc(100px + env(safe-area-inset-top))}
@@ -7685,7 +7686,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
     liveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-    liveBadge.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);'>—</div>";
+    liveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div>";
     card.appendChild(liveBadge);
   }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
@@ -7719,7 +7720,7 @@ function buildDxyView(data,isM){
   card.appendChild(top);
   var dxyLiveBadge=div();dxyLiveBadge.id="live-dxy";
   dxyLiveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-  dxyLiveBadge.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);'>—</div>";
+  dxyLiveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div>";
   card.appendChild(dxyLiveBadge);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
