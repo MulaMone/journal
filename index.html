@@ -7330,12 +7330,17 @@ function paintTnxBadge(data){
   v.style.color=_tnxLiveBaseline!=null?(up?"#00e676":"#ff4444"):"var(--text3)";
   v.textContent=data.yieldVal.toFixed(2)+"%";
   if(sub){
+    // Prefer sourceFetchedAt (when the Action itself actually ran) over
+    // Yahoo's marketTime — the latter reflects Yahoo's own last-tick
+    // timestamp and isn't a reliable proof of freshness on its own, since
+    // it can lag behind an updated price for lower-frequency instruments.
     var t="";
-    if(data.marketTime){
-      var d=new Date(data.marketTime);
-      t=isNaN(d.getTime())?data.marketTime:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    var basis=data.sourceFetchedAt||data.marketTime;
+    if(basis){
+      var d=new Date(basis);
+      t=isNaN(d.getTime())?basis:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit"});
     }
-    sub.textContent=t+(data.source==="direct"?" · live":data.source==="file"?" · action":"");
+    sub.textContent=t+(data.source==="direct"?" · live":data.source==="file"?" · action run":"");
   }
 }
 
