@@ -7381,7 +7381,7 @@ function buildFedFundsView(data,isM){
   return el;
 }
 
-// ─── Intermarket & Cross-Asset Correlations — US Dollar Index (DXY) ────
+// ─── Intermarket & Cross-Asset Correlations — Broad Dollar Index ───────
 // DXY has no free endpoint that's safe to hit directly from the browser —
 // unlike the CME/Treasury sources above, a client-side fetch here would
 // mean routing through a CORS proxy, which is exactly the fragile pattern
@@ -7427,7 +7427,7 @@ function buildDxyView(data,isM){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
-  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (DXY)</div>"
+  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Broad Dollar Index (Fed, DTWEXBGS)</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
   top.appendChild(l);
@@ -7438,11 +7438,11 @@ function buildDxyView(data,isM){
   el.appendChild(card);
 
   var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> DXY and equity index futures have run inversely more often than not — a stronger dollar tends to pressure risk assets (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> Broad dollar strength and equity index futures have run inversely more often than not — a stronger dollar tends to pressure risk assets (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
   el.appendChild(noteCard);
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
-  srcNote.textContent="Source: dxy.json (ICE US Dollar Index, updated daily via scheduled fetch)";
+  srcNote.textContent="Source: dxy.json — FRED DTWEXBGS (Fed's Nominal Broad U.S. Dollar Index), updated daily via scheduled fetch";
   el.appendChild(srcNote);
   return el;
 }
