@@ -7018,11 +7018,6 @@ function buildCOTLegacyView(sym,data,isM){
   var prev=rows.length>1?rows[rows.length-2]:null;
   var el=div();
 
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
-  staleNote.textContent="Report week ending "+asOf+" · CFTC Legacy, updated weekly (Fridays)";
-  el.appendChild(staleNote);
-
   // ── Open Interest summary ──
   var oi=+latest.open_interest_all||0;
   var oiChg=+latest.change_in_open_interest_all||0;
