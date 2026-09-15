@@ -7231,7 +7231,7 @@ function fetchTnxFromFile(){
     return r.json();
   }).then(function(json){
     if(!json||typeof json.yield!=="number") throw new Error("tnx.json missing a numeric yield field");
-    var obj={yieldVal:json.yield,marketTime:json.marketTime||null,fetchedAt:Date.now(),source:"file"};
+    var obj={yieldVal:json.yield,marketTime:json.marketTime||null,sourceFetchedAt:json.fetchedAt||null,fetchedAt:Date.now(),source:"file"};
     _tnxMemCache=obj;tnxCacheSet(obj);
     return obj;
   });
@@ -7246,6 +7246,79 @@ function updateTnxLiveBadge(){
     var cached=_tnxMemCache||tnxCacheGet();
     if(cached) paintTnxBadge(cached);
   });
+}
+// ── On-demand trigger: since the direct browser fetch is CORS-blocked,
+// this instead calls GitHub's own API to kick off the "Update TNX quote"
+// Action right now, then polls tnx.json for the new commit — genuinely
+// fresh data on your schedule instead of waiting for the 15-min cron.
+// Needs a GitHub token (repo-scoped, Actions:write) saved once; stored
+// client-side same as the OANDA token elsewhere in this app.
+var GH_OWNER="mulamone";
+var GH_REPO="journal";
+var GH_WORKFLOW_FILE="update-tnx.yml";
+var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
+function triggerTnxWorkflow(){
+  var tok=ls("gh_token","");
+  var statusEl=document.getElementById("tnx-trigger-status");
+  if(!tok){renderGhTokenGate();return;}
+  if(statusEl){statusEl.textContent="Triggering…";statusEl.style.color="var(--text3)";}
+  // Baseline to diff future polls against — the source's own written
+  // fetchedAt (not this client's Date.now()), so we can tell "same file
+  // still" from "the Action actually produced a new commit" once polling
+  // starts, rather than accepting the very next successful fetch (which
+  // is very likely still the pre-trigger file) as if it were fresh.
+  var baseline=(_tnxMemCache&&_tnxMemCache.sourceFetchedAt)||null;
+  fetch("https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/"+GH_WORKFLOW_FILE+"/dispatches",{
+    method:"POST",
+    headers:{"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json","Content-Type":"application/json"},
+    body:JSON.stringify({ref:GH_BRANCH})
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error("HTTP "+r.status+(t?": "+t.slice(0,120):""));});
+    if(statusEl){statusEl.textContent="Waiting for Action to finish…";}
+    pollForFreshTnx(statusEl,0,baseline);
+  }).catch(function(err){
+    if(statusEl){statusEl.textContent="Trigger failed — "+(err&&err.message?err.message:"error");statusEl.style.color="var(--red)";}
+  });
+}
+function pollForFreshTnx(statusEl,attempt,baseline){
+  if(attempt>=10){ // ~50s of polling, matches a typical checkout+run+commit cycle
+    if(statusEl){statusEl.textContent="Still waiting — check the Actions tab";statusEl.style.color="var(--amber)";}
+    return;
+  }
+  setTimeout(function(){
+    fetchTnxFromFile().then(function(data){
+      if(baseline&&data.sourceFetchedAt===baseline){
+        pollForFreshTnx(statusEl,attempt+1,baseline); // same file as before the trigger — keep waiting
+        return;
+      }
+      paintTnxBadge(data);
+      if(statusEl){statusEl.textContent="Updated ✓";statusEl.style.color="var(--green)";}
+    }).catch(function(){
+      pollForFreshTnx(statusEl,attempt+1,baseline);
+    });
+  },5000);
+}
+function ghTokenCacheGet(){return ls("gh_token","");}
+function renderGhTokenGate(){
+  var wrap=document.getElementById("tnx-trigger-wrap");
+  if(!wrap) return;
+  wrap.innerHTML="";
+  var tin=h("input",{type:"password",placeholder:"GitHub token (repo, Actions:write)"});
+  tin.style.cssText="width:200px;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-family:monospace;font-size:10px;";
+  var save=h("button",{className:"btn"});save.style.cssText="padding:3px 8px;font-size:10px;margin-left:6px;";save.textContent="Save";
+  save.addEventListener("click",function(){
+    if(tin.value.trim()){ss("gh_token",tin.value.trim());wrap.innerHTML="";renderTnxTriggerControl();}
+  });
+  wrap.appendChild(tin);wrap.appendChild(save);
+}
+function renderTnxTriggerControl(){
+  var wrap=document.getElementById("tnx-trigger-wrap");
+  if(!wrap) return;
+  wrap.innerHTML="";
+  var btn=h("button",{className:"btn"});btn.style.cssText="padding:3px 9px;font-size:10px;";btn.textContent="⚡ Trigger live update";
+  btn.addEventListener("click",triggerTnxWorkflow);
+  var status=div();status.id="tnx-trigger-status";status.style.cssText="font-size:10px;color:var(--text3);margin-left:8px;display:inline-block;";
+  wrap.appendChild(btn);wrap.appendChild(status);
 }
 function paintTnxBadge(data){
   var badge=document.getElementById("live-tnx");
@@ -7296,6 +7369,10 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(hist,isM?300:640,100,col,function(v){return v.toFixed(2)+"%";}));
   card.appendChild(chartWrap);
+  if(!isM){
+    var triggerWrap=div();triggerWrap.id="tnx-trigger-wrap";triggerWrap.style.cssText="margin-top:10px;";
+    card.appendChild(triggerWrap);
+  }
   el.appendChild(card);
   return el;
 }
@@ -8090,6 +8167,7 @@ function analystTab(){
       y10Body.innerHTML="";
       y10Body.appendChild(buildYieldLevelView("y10","10-Year Treasury Yield",State.analyst_yc_range||"1Y",data,isM));
       y10Body.style.opacity="1";
+      if(ls("gh_token","")) renderTnxTriggerControl(); else renderGhTokenGate();
       var y10Rows=data.rows.filter(function(r){return typeof r.y10==="number";});
       _tnxLiveBaseline=y10Rows.length?y10Rows[y10Rows.length-1].y10:null;
       updateTnxLiveBadge();
