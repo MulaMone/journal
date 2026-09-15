@@ -7626,11 +7626,14 @@ function analystTab(){
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
 
-  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
+  // ── Fed Rate Probabilities — own data source (CME ZQ futures). Element
+  // created here (so loadFed below has something to render into as soon
+  // as the tab opens) but appended to the DOM at the bottom of the tab —
+  // see the el.appendChild(fedHead)/el.appendChild(fedBody) calls near
+  // the end of this function. ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   fedHead.textContent="Fed Rate Probabilities";
-  el.appendChild(fedHead);
-  var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
+  var fedBody=div();fedBody.id="fed-body";
   fedBody.style.transition="opacity .15s";
 
   // ── Intermarket & Cross-Asset Correlations — DXY ──
@@ -7868,6 +7871,12 @@ function analystTab(){
   loadYc(false);
   loadFed(false);
   loadDxy(false);
+
+  // Fed Rate Probabilities is appended here so it renders at the bottom
+  // of the tab — the element and its loader were set up earlier (see
+  // above) so loadFed(false) just above has something to render into.
+  el.appendChild(fedHead);
+  el.appendChild(fedBody);
 
   return el;
 }
