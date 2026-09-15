@@ -4,10 +4,11 @@ Fetches CBOE's $TNX (10-Year Treasury Yield Index) via Yahoo Finance's
 public chart endpoint (server-side — no CORS restriction here, unlike a
 client-side fetch from index.html) and writes tnx.json to the repo root.
 
-$TNX is quoted at 10x the actual yield (e.g. 42.50 -> 4.250%), so this
-divides by 10 before writing. Meant to run on a schedule via GitHub
-Actions (see .github/workflows/update-tnx.yml) — every run overwrites
-tnx.json with the latest quote.
+Yahoo's ^TNX feed returns the price already in yield-percent terms (e.g.
+4.98 for 4.98%), not the older 10x-scaled CBOE ticker convention — so no
+division is applied. Meant to run on a schedule via GitHub Actions (see
+.github/workflows/update-tnx.yml) — every run overwrites tnx.json with the
+latest quote.
 """
 import json
 import sys
@@ -46,7 +47,7 @@ def fetch_tnx():
     )
 
     return {
-        "yield": round(price / 10.0, 3),
+        "yield": round(price, 3),
         "rawPrice": price,
         "marketTime": market_time_iso,
         "fetchedAt": datetime.now(timezone.utc).isoformat(),
