@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
-Fetches ICE US Dollar Index (DXY) daily history from Stooq (server-side —
-no CORS to work around here, unlike a client-side browser fetch) and
-writes dxy.json in the same {rows:[...], fetchedAt} shape the Edge
-Analyst tab's DXY section expects.
+Fetches the Fed's Nominal Broad U.S. Dollar Index (FRED series DTWEXBGS)
+server-side and writes dxy.json in the same {rows:[...], fetchedAt} shape
+the Edge Analyst tab's "Intermarket & Cross-Asset Correlations" section
+expects.
+
+NOTE — this is the Fed's own broad trade-weighted dollar index, not the
+ICE DXY futures index. First choice was Stooq's DX.F continuous futures
+contract (the literal DXY proxy), but Stooq blocks requests from cloud/
+datacenter IP ranges — which is exactly what GitHub Actions runners use —
+so that endpoint returns an HTML block page instead of CSV when run here.
+FRED's plain CSV endpoint has no such bot-blocking and is well-suited to
+CI. DTWEXBGS is arguably a MORE complete dollar-strength gauge than DXY
+anyway (broader trade-partner basket vs. DXY's EUR-heavy six-currency
+basket) — just note it's a different index on a different scale (~120
+vs. DXY's ~90-105) if you ever compare the two directly.
 
 Mirrors the existing update_yields.py / update-yields.yml pattern already
 used for yields.json in this repo: a scheduled GitHub Action writes a
@@ -19,26 +30,27 @@ import sys
 import urllib.request
 from datetime import datetime, timezone
 
-STOOQ_URL = "https://stooq.com/q/d/l/?s=dx.f&i=d"
+FRED_SERIES_ID = "DTWEXBGS"  # Nominal Broad U.S. Dollar Index
+FRED_URL = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={FRED_SERIES_ID}"
 OUTPUT_PATH = "dxy.json"
 YEARS_BACK_KEPT = 3  # trim the JSON file to the last N years of daily closes
 
 
 def fetch_dxy_rows():
-    req = urllib.request.Request(STOOQ_URL, headers={"User-Agent": "Mozilla/5.0"})
+    req = urllib.request.Request(FRED_URL, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8")
 
     if raw.strip().lower().startswith("<!doctype") or "<html" in raw.lower():
-        raise RuntimeError("Stooq returned HTML instead of CSV — endpoint may have changed")
+        raise RuntimeError("FRED returned HTML instead of CSV — endpoint may have changed")
 
     reader = csv.DictReader(io.StringIO(raw))
     rows = []
     for r in reader:
-        date_key = r.get("Date") or r.get("date")
-        close_key = r.get("Close") or r.get("close")
-        if not date_key or not close_key:
-            continue
+        date_key = r.get("observation_date") or r.get("DATE")
+        close_key = r.get(FRED_SERIES_ID)
+        if not date_key or not close_key or close_key == ".":
+            continue  # "." marks a missing/holiday observation in FRED CSVs
         try:
             close = float(close_key)
         except ValueError:
@@ -46,7 +58,7 @@ def fetch_dxy_rows():
         rows.append({"d": date_key, "c": close})
 
     if not rows:
-        raise RuntimeError("parsed 0 rows from Stooq CSV — check STOOQ_URL / response format")
+        raise RuntimeError("parsed 0 rows from FRED CSV — check FRED_SERIES_ID / response format")
 
     rows.sort(key=lambda r: r["d"])
     cutoff_year = datetime.now(timezone.utc).year - YEARS_BACK_KEPT
@@ -64,6 +76,7 @@ def main():
     payload = {
         "rows": rows,
         "fetchedAt": datetime.now(timezone.utc).isoformat(),
+        "source": f"FRED:{FRED_SERIES_ID}",
     }
     with open(OUTPUT_PATH, "w") as f:
         json.dump(payload, f, separators=(",", ":"))
