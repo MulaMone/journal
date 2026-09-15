@@ -19,10 +19,22 @@ jobs:
       - name: Fetch calendar
         run: node scripts/fetch-calendar.js
 
-      - name: Commit if changed
+      - name: Commit and push (with retry on race with other workflows)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add calendar.json
-          git diff --staged --quiet || git commit -m "Update economic calendar"
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m "Update economic calendar"
+            # Multiple data-fetch workflows can run around the same time and
+            # each push to main independently — pull --rebase first so this
+            # push always lands on top of whatever the others already
+            # committed, instead of getting rejected as a non-fast-forward.
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "push attempt $i failed, retrying..."
+              sleep 3
+            done
+          else
+            echo "calendar.json unchanged — nothing to commit"
+          fi
