@@ -6920,7 +6920,25 @@ function fetchCmeDailyOI(sym,statusCb){
 }
 
 function cmeOiCacheGet(sym){
-  try{var raw=localStorage.getItem("edge_cme_oi_v6_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}
+  try{
+    var raw=localStorage.getItem("edge_cme_oi_v6_"+sym);
+    if(raw) return JSON.parse(raw);
+    // Nothing under the new key yet — this is either a first-ever run, or
+    // a v5→v6 migration (v6 added contractMonth tracking on prevDayFinal
+    // to fix a contract-roll bug). Rather than starting history over and
+    // losing the day-over-day comparison for a full day, carry the old v5
+    // record forward as-is: prevDayFinal.contractMonth will simply be
+    // absent on it, and the renderer already treats a missing
+    // contractMonth as "assume same contract" (the pre-fix behavior), so
+    // this one comparison is unguarded but everything after it is safe.
+    var oldRaw=localStorage.getItem("edge_cme_oi_v5_"+sym);
+    if(oldRaw){
+      var migrated=JSON.parse(oldRaw);
+      cmeOiCacheSet(sym,migrated);
+      return migrated;
+    }
+    return null;
+  }catch(e){return null;}
 }
 function cmeOiCacheSet(sym,obj){
   try{localStorage.setItem("edge_cme_oi_v6_"+sym,JSON.stringify(obj));}catch(e){}
