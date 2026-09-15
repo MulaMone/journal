@@ -7231,7 +7231,79 @@ function loadYieldCurveData(force){
     throw err;
   });
 }
-// ─── $TNX (CBOE 10-Year Treasury Yield Index) — near-live badge ───────
+// ─── Liquidity & Fed Balance Sheet — Fed Total Assets, Treasury General
+// Account, and the ON Reverse Repo facility, all from FRED's weekly H.4.1-
+// sourced series (WALCL, WTREGEN, WLRRAL) so the three line up on the same
+// Wednesday-level weekly cadence. Same server-side Action + same-origin-
+// file pattern as yields.json — a GitHub Action holds the FRED API key as
+// a repo secret and writes liquidity.json; the browser never touches FRED
+// directly.
+var _liqMemCache=null;
+var _liqLoadToken=0;
+var _liqAutoInterval=null;
+function liqCacheGet(){
+  try{var raw=localStorage.getItem("edge_liq_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}
+}
+function liqCacheSet(obj){
+  try{localStorage.setItem("edge_liq_v1",JSON.stringify(obj));}catch(e){}
+}
+function loadLiquidityData(force){
+  var cached=_liqMemCache||liqCacheGet();
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  return fetch("liquidity.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(json){
+    if(!json||!json.rows||!json.rows.length) throw new Error("empty response");
+    var obj={rows:json.rows,sourceFetchedAt:json.fetchedAt,fetchedAt:Date.now()};
+    _liqMemCache=obj;liqCacheSet(obj);
+    return obj;
+  }).catch(function(err){
+    if(cached){_liqMemCache=cached;return cached;}
+    throw err;
+  });
+}
+// Formats a raw dollar figure as $X.XXT / $X.XXB / $X.XXM, matching how
+// these balance-sheet-scale numbers are normally quoted.
+function fmtLiqDollar(n){
+  var abs=Math.abs(n);
+  var sign=n<0?"-":"";
+  if(abs>=1e12) return sign+"$"+(abs/1e12).toFixed(2)+"T";
+  if(abs>=1e9) return sign+"$"+(abs/1e9).toFixed(1)+"B";
+  if(abs>=1e6) return sign+"$"+(abs/1e6).toFixed(1)+"M";
+  return sign+"$"+abs.toFixed(0);
+}
+function buildLiquidityCard(fieldKey,label,col,note,data,isM){
+  var series=data.rows.map(function(r){
+    var v=r[fieldKey];
+    if(typeof v!=="number") return null;
+    return {v:v,l:r.d||""};
+  }).filter(Boolean);
+  var el=div();
+  if(series.length<2){
+    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough data to plot yet.</div>';
+    return el;
+  }
+  var latest=series[series.length-1],prev=series[series.length-2];
+  var chg=latest.v-prev.v;
+  var up=chg>=0;
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+label+"</div>"
+    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtLiqDollar(latest.v)+"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+fmtLiqDollar(chg)+" vs prior print</div>";
+  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
+  chartWrap.appendChild(areaSVG(series.slice(-104),isM?300:640,80,col,fmtLiqDollar)); // ~2yr of weekly points
+  card.appendChild(chartWrap);
+  if(note&&!isM){
+    var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;";
+    n.textContent=note;
+    card.appendChild(n);
+  }
+  el.appendChild(card);
+  return el;
+}
+
 // Treasury's own par yield curve (above) only prints once a day, so this
 // tracks CBOE's $TNX ticker instead for a more frequently-updating read.
 // Primary path: try a direct client-side fetch to Yahoo's chart endpoint —
@@ -7997,6 +8069,13 @@ function analystTab(){
   var goldOilBody=div();goldOilBody.id="goldoil-body";el.appendChild(goldOilBody);
   goldOilBody.style.transition="opacity .15s";
 
+  // ── Liquidity & Fed Balance Sheet Metrics ──
+  var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";
+  el.appendChild(liqHead);
+  var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
+  liqBody.style.transition="opacity .15s";
+
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
   el.appendChild(ycHead);
@@ -8224,6 +8303,36 @@ function analystTab(){
     if(State.tab==="analyst") loadYc(false);
   },15*60*1000);
 
+  // ── Liquidity & Fed Balance Sheet — separate section, own data source ──
+  function showLiqLoading(){liqBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING LIQUIDITY DATA…</div>';}
+  function showLiqError(msg){liqBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD LIQUIDITY DATA — '+msg+'</div>';}
+  function loadLiq(force){
+    var myToken=++_liqLoadToken;
+    if(force&&liqBody.firstChild) liqBody.style.opacity="0.45";
+    else showLiqLoading();
+    loadLiquidityData(force).then(function(data){
+      if(myToken!==_liqLoadToken||State.tab!=="analyst") return;
+      liqBody.innerHTML="";
+      var liqRow=div("g3");
+      liqRow.appendChild(buildLiquidityCard("fedAssets","Fed Total Assets","#00d4d4",
+        "The Fed's balance sheet — QE expands it, QT shrinks it. A larger balance sheet generally means more system liquidity available to flow into risk assets.",data,isM));
+      liqRow.appendChild(buildLiquidityCard("tga","Treasury General Account","#ffab00",
+        "The Treasury's own checking account at the Fed. When the TGA rises, cash is being pulled out of the banking system (draining liquidity); when it falls, that cash flows back out into the system.",data,isM));
+      liqRow.appendChild(buildLiquidityCard("rrp","Reverse Repo Facility","#b06aff",
+        "Cash parked overnight at the Fed by money-market funds, effectively sidelined from the market. A falling RRP balance is often read as liquidity draining back out into risk assets.",data,isM));
+      liqBody.appendChild(liqRow);
+      liqBody.style.opacity="1";
+    }).catch(function(err){
+      if(myToken!==_liqLoadToken) return;
+      liqBody.style.opacity="1";
+      showLiqError(err&&err.message?err.message:"network error");
+    });
+  }
+  if(_liqAutoInterval) clearInterval(_liqAutoInterval);
+  _liqAutoInterval=setInterval(function(){
+    if(State.tab==="analyst") loadLiq(false);
+  },15*60*1000);
+
   // ── Fed Rate Probabilities ──
   function showFedLoading(){fedBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING FED FUNDS DATA…</div>';}
   function showFedError(msg){fedBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD FED FUNDS DATA — '+msg+'</div>';}
@@ -8294,10 +8403,11 @@ function analystTab(){
     });
   }
 
-  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);loadFed(true);loadDxy(true);});
+  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);loadLiq(true);loadFed(true);loadDxy(true);});
   loadLegacy(false);
   load(false);
   loadYc(false);
+  loadLiq(false);
   loadFed(false);
   loadDxy(false);
 
