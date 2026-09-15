@@ -7132,6 +7132,7 @@ function ycRangeCutoff(range){
 }
 var _ycMemCache=null;
 var _ycLoadToken=0;
+var _fedLoadToken=0;
 var _ycAutoInterval=null;
 function ycCacheGet(){
   try{var raw=localStorage.getItem("edge_yc_v2");return raw?JSON.parse(raw):null;}catch(e){return null;}
@@ -7203,10 +7204,253 @@ function buildYieldCurveView(spreadKey,rangeKey,data,isM){
   return el;
 }
 
+// ─── Fed Rate Probabilities — CME 30-Day Fed Funds (ZQ) futures ────────
+// Same direct-fetch approach as the CME Daily Bulletin OI section above
+// (that section already proved CME allows cross-origin fetch of these PDFs
+// without a proxy) — just pointed at a different page of the same
+// bulletin. Section10 ("Interest Rate Futures Continued") carries the
+// 30-Day Fed Fund futures (ZQ) block; each contract month's settlement
+// price already IS the market's implied average daily effective rate for
+// that month (rate = 100 − price), which is exactly what CME's own
+// FedWatch tool is built from. This derives the same kind of read
+// independently from the public settlement prices — it is NOT CME's
+// official FedWatch output, so it's labeled as our own estimate rather
+// than attributed to their tool.
+var FED_BULLETIN_URL="https://www.cmegroup.com/daily_bulletin/current/Section10_Interest_Rate_Futures_Continued.pdf";
+var MONTH_CODES=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+// Pulls every "30D FED FD FUT" contract-month row out of the bulletin text.
+// Row shape (confirmed against a live bulletin sample):
+//   MONTH  OPEN  HIGH  LOW  SETT  ( DISCOUNT% )  ±PTCHG-or-UNCH  ...more columns
+// OPEN/HIGH/LOW can each independently collapse to "----" (still one
+// token), but MONTH/OPEN/HIGH/LOW/SETT are always exactly the first 5
+// tokens — so SETT is reliably tokens[4] regardless of which of the
+// earlier columns are dashed out. Same anchor-on-a-fixed-token approach
+// as extractFrontMonthOI above, just a different fixed index.
+function extractZQCurve(fullText){
+  var startIdx=fullText.indexOf("30D FED FD FUT");
+  if(startIdx<0) throw new Error("could not find \"30D FED FD FUT\" section in bulletin");
+  var endIdx=fullText.indexOf("TOTAL 30D FED FD FUT",startIdx);
+  var block=fullText.slice(startIdx,endIdx>0?endIdx:fullText.length);
+  var MONTH_RE=new RegExp("^("+MONTH_CODES.join("|")+")\\d{2}$");
+  var curve=[];
+  block.split("\n").forEach(function(line){
+    var tokens=line.trim().split(/\s+/);
+    if(!tokens.length||!MONTH_RE.test(tokens[0])||tokens.length<5) return;
+    var sett=parseFloat(tokens[4]);
+    if(isNaN(sett)) return;
+    // Point change sits right after the "( discount% )" group — note the
+    // closing paren is glued onto the discount number in the extracted
+    // text (e.g. "3.73)"), so it's tokens[5]="(" + tokens[6]="3.73)", and
+    // the sign/UNCH lands at tokens[7] (collapsing to a single "UNCH"
+    // token when unchanged, same as the OI section's collapse pattern).
+    var chg=0;
+    if(tokens[7]==="UNCH"){ /* chg stays 0 */ }
+    else if((tokens[7]==="-"||tokens[7]==="+")&&tokens[8]!==undefined){
+      var v=parseFloat(tokens[8]);
+      if(!isNaN(v)) chg=(tokens[7]==="-"?-v:v);
+    }
+    curve.push({code:tokens[0],rate:100-sett,rateChg:-chg}); // rate = 100-price, so a price uptick is a rate downtick
+  });
+  return curve;
+}
+
+function fedFundsCacheGet(){try{var raw=localStorage.getItem("edge_fedfunds_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function fedFundsCacheSet(obj){try{localStorage.setItem("edge_fedfunds_v1",JSON.stringify(obj));}catch(e){}}
+function fetchFedFundsData(){
+  return loadPdfJs(null).then(function(){
+    return fetch(FED_BULLETIN_URL);
+  }).then(function(r){
+    if(!r.ok) throw new Error("bulletin fetch failed: HTTP "+r.status);
+    return r.arrayBuffer();
+  }).then(function(buf){
+    return window.pdfjsLib.getDocument({data:buf}).promise;
+  }).then(function(pdf){
+    var pagePromises=[];
+    for(var p=1;p<=pdf.numPages;p++){
+      pagePromises.push(pdf.getPage(p).then(function(page){
+        return page.getTextContent().then(pageItemsToText);
+      }));
+    }
+    return Promise.all(pagePromises);
+  }).then(function(pageTexts){
+    var fullText=pageTexts.join("\n");
+    var curve=extractZQCurve(fullText);
+    if(!curve.length) throw new Error("parsed 0 contract months from 30D FED FD FUT section");
+    var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
+    return {curve:curve,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+  });
+}
+function loadFedFundsData(force){
+  var cached=fedFundsCacheGet();
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  return fetchFedFundsData().then(function(data){fedFundsCacheSet(data);return data;}).catch(function(err){
+    if(cached) return cached;
+    throw err;
+  });
+}
+
+function contractMonthCodeFromISO(iso){
+  var p=iso.split("-");
+  return MONTH_CODES[parseInt(p[1],10)-1]+p[0].slice(2);
+}
+function prevContractMonthCode(code){
+  var mo=MONTH_CODES.indexOf(code.slice(0,3)),yr=parseInt(code.slice(3),10);
+  mo--; if(mo<0){mo=11;yr--;}
+  return MONTH_CODES[mo]+(yr<10?"0"+yr:""+yr);
+}
+function contractMonthSortKey(code){
+  var mo=MONTH_CODES.indexOf(code.slice(0,3)),yr=parseInt(code.slice(3),10);
+  return yr*12+mo;
+}
+// Next FOMC date on/after today, from the same lookup Prep already uses
+// for the news calendar — kept as the single source of truth for meeting
+// dates rather than a second list that could drift out of sync.
+function nextFomcMeetingISO(){
+  var todayIso=new Date().toISOString().slice(0,10);
+  var future=FOMC_DECISION_DATES_2026.filter(function(d){return d>=todayIso;});
+  return future.length?future[0]:null;
+}
+// Standard CME-style single-step approximation for the NEXT meeting only:
+// treat the meeting month's contract as a blend of "days before the
+// decision, at the prior-month's implied rate" and "days after, at
+// whatever new rate the market is pricing," then solve for that new rate.
+// This only works when the month immediately BEFORE the meeting month is
+// itself in the fetched curve (i.e. it hasn't already expired) — when the
+// meeting falls in the very next available contract month with no clean
+// pre-meeting month to anchor to, this returns null and the caller falls
+// back to showing the rate path alone rather than guessing.
+function computeFedProbability(meetingIso,curve){
+  var meetingCode=contractMonthCodeFromISO(meetingIso);
+  var byCode={};curve.forEach(function(c){byCode[c.code]=c;});
+  var meetingRow=byCode[meetingCode];
+  if(!meetingRow) return null;
+  var prevRow=byCode[prevContractMonthCode(meetingCode)];
+  if(!prevRow) return null;
+  var d=new Date(meetingIso+"T00:00:00Z");
+  var D=d.getUTCDate();
+  var N=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();
+  if(D>=N) return null; // meeting on the last day of the month — no "after" days to solve from
+  var Rprior=prevRow.rate,Ravg=meetingRow.rate;
+  var Rnext=(Ravg*N-Rprior*D)/(N-D);
+  if(!isFinite(Rnext)) return null;
+  var deltaBp=(Rnext-Rprior)*100;
+  var stepProb=Math.max(0,Math.min(100,Math.abs(deltaBp)/25*100));
+  return {meetingCode:meetingCode,Rprior:Rprior,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb};
+}
+
+function buildFedFundsView(data,isM){
+  var el=div();
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
+  staleNote.textContent="As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements — not CME's official FedWatch output";
+  el.appendChild(staleNote);
+
+  var meetingIso=nextFomcMeetingISO();
+  var prob=meetingIso?computeFedProbability(meetingIso,data.curve):null;
+  if(prob){
+    var isCut=prob.deltaBp<-0.5,isHike=prob.deltaBp>0.5;
+    var moveLbl=isCut?"25bp CUT":isHike?"25bp HIKE":"25bp MOVE";
+    var moveCol=isCut?"#00e676":isHike?"#ff4444":"var(--text3)";
+    var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+moveCol+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+    card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
+      +"<div style='display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;'>"
+      +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
+      +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
+      +"</div>"
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · single-step approximation, assumes at most one 25bp move this meeting</div>";
+    el.appendChild(card);
+  } else if(meetingIso){
+    var noteCard=div();noteCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:11px;color:var(--text3);";
+    noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a clean pre-meeting contract month to solve a probability yet (it rolled off the curve). Showing the implied rate path below instead.";
+    el.appendChild(noteCard);
+  }
+
+  var sorted=data.curve.slice().sort(function(a,b){return contractMonthSortKey(a.code)-contractMonthSortKey(b.code);});
+  var pathData=sorted.map(function(c){return {v:c.rate,l:c.code};});
+  var pathHead=div();pathHead.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;";
+  pathHead.textContent="Implied Rate Path — by Contract Month";
+  el.appendChild(pathHead);
+  var pathCard=div();pathCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
+  pathCard.appendChild(areaSVG(pathData,isM?300:640,110,"#00d4d4",function(v){return v.toFixed(2)+"%";}));
+  el.appendChild(pathCard);
+
+  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
+  srcNote.textContent="Source: CME Group Daily Bulletin, Section 10 (Interest Rate Futures Continued)";
+  el.appendChild(srcNote);
+  return el;
+}
+
+// ─── Intermarket & Cross-Asset Correlations — US Dollar Index (DXY) ────
+// DXY has no free endpoint that's safe to hit directly from the browser —
+// unlike the CME/Treasury sources above, a client-side fetch here would
+// mean routing through a CORS proxy, which is exactly the fragile pattern
+// the yields.json approach was built to avoid. So this follows that same
+// pattern instead: dxy.json, written to this repo by a scheduled GitHub
+// Action that fetches DXY history server-side (no CORS to work around
+// there) and commits the result — index.html only ever reads that file
+// same-origin. Until that workflow is added to the repo (see chat for the
+// action + script), this section fails gracefully rather than silently
+// showing stale or wrong data.
+var _dxyMemCache=null;
+var _dxyLoadToken=0;
+function dxyCacheGet(){try{var raw=localStorage.getItem("edge_dxy_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function dxyCacheSet(obj){try{localStorage.setItem("edge_dxy_v1",JSON.stringify(obj));}catch(e){}}
+function loadDxyData(force){
+  var cached=_dxyMemCache||dxyCacheGet();
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached);
+  return fetch("dxy.json",{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status+(r.status===404?" — dxy.json not deployed yet":""));
+    return r.json();
+  }).then(function(json){
+    if(!json||!json.rows||!json.rows.length) throw new Error("empty response");
+    var obj={rows:json.rows,sourceFetchedAt:json.fetchedAt,fetchedAt:Date.now()};
+    _dxyMemCache=obj;dxyCacheSet(obj);
+    return obj;
+  }).catch(function(err){
+    if(cached){_dxyMemCache=cached;return cached;}
+    throw err;
+  });
+}
+function buildDxyView(data,isM){
+  var el=div();
+  var rows=data.rows;
+  var series=rows.map(function(r){return {v:r.c,l:r.d||""};}).filter(function(s){return typeof s.v==="number";});
+  if(series.length<2){
+    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough DXY data to plot yet.</div>';
+    return el;
+  }
+  var latest=series[series.length-1],prev=series[series.length-2];
+  var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
+  var up=chg>=0;
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var top=div("rjb");top.style.alignItems="flex-start";
+  var l=div();
+  l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (DXY)</div>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
+  top.appendChild(l);
+  card.appendChild(top);
+  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
+  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#ffab00",function(v){return v.toFixed(1);}));
+  card.appendChild(chartWrap);
+  el.appendChild(card);
+
+  var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
+  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> DXY and equity index futures have run inversely more often than not — a stronger dollar tends to pressure risk assets (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  el.appendChild(noteCard);
+
+  var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
+  srcNote.textContent="Source: dxy.json (ICE US Dollar Index, updated daily via scheduled fetch)";
+  el.appendChild(srcNote);
+  return el;
+}
+
 function analystTab(){
   var isM=isMobile();
   var el=div();
-  var sh=div("sh");sh.textContent="Analyst — Yield Curve, COT & Open Interest";el.appendChild(sh);
+  var sh=div("sh");sh.textContent="Analyst — Yield Curve, Fed Rates, DXY, COT & OI";el.appendChild(sh);
 
   // ── Yield Curve Spreads — moved to the top since this is now checked
   // daily; own data source (see below), rendered before COT/OI. ──
@@ -7238,6 +7482,20 @@ function analystTab(){
 
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
+
+  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  fedHead.textContent="Fed Rate Probabilities";
+  el.appendChild(fedHead);
+  var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
+  fedBody.style.transition="opacity .15s";
+
+  // ── Intermarket & Cross-Asset Correlations — DXY ──
+  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  dxyHead.textContent="Intermarket & Cross-Asset Correlations";
+  el.appendChild(dxyHead);
+  var dxyBody=div();dxyBody.id="dxy-body";el.appendChild(dxyBody);
+  dxyBody.style.transition="opacity .15s";
 
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
@@ -7406,10 +7664,50 @@ function analystTab(){
     if(State.tab==="analyst") loadYc(false);
   },15*60*1000);
 
-  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);});
+  // ── Fed Rate Probabilities ──
+  function showFedLoading(){fedBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING FED FUNDS DATA…</div>';}
+  function showFedError(msg){fedBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD FED FUNDS DATA — '+msg+'</div>';}
+  function loadFed(force){
+    var myToken=++_fedLoadToken;
+    if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
+    else showFedLoading();
+    loadFedFundsData(force).then(function(data){
+      if(myToken!==_fedLoadToken||State.tab!=="analyst") return;
+      fedBody.innerHTML="";
+      fedBody.appendChild(buildFedFundsView(data,isM));
+      fedBody.style.opacity="1";
+    }).catch(function(err){
+      if(myToken!==_fedLoadToken) return;
+      fedBody.style.opacity="1";
+      showFedError(err&&err.message?err.message:"network error");
+    });
+  }
+
+  // ── Intermarket & Cross-Asset Correlations (DXY) ──
+  function showDxyLoading(){dxyBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING DXY DATA…</div>';}
+  function showDxyError(msg){dxyBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD DXY DATA — '+msg+'</div>';}
+  function loadDxy(force){
+    var myToken=++_dxyLoadToken;
+    if(force&&dxyBody.firstChild) dxyBody.style.opacity="0.45";
+    else showDxyLoading();
+    loadDxyData(force).then(function(data){
+      if(myToken!==_dxyLoadToken||State.tab!=="analyst") return;
+      dxyBody.innerHTML="";
+      dxyBody.appendChild(buildDxyView(data,isM));
+      dxyBody.style.opacity="1";
+    }).catch(function(err){
+      if(myToken!==_dxyLoadToken) return;
+      dxyBody.style.opacity="1";
+      showDxyError(err&&err.message?err.message:"network error");
+    });
+  }
+
+  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);loadFed(true);loadDxy(true);});
   loadLegacy(false);
   load(false);
   loadYc(false);
+  loadFed(false);
+  loadDxy(false);
 
   return el;
 }
