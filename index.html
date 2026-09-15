@@ -7471,14 +7471,13 @@ function fmtFedDelta(fromMove,toMove){
 
 function buildFedFundsView(data,isM){
   var el=div();
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:6px;letter-spacing:1px;";
-  staleNote.textContent="As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements";
-  el.appendChild(staleNote);
-
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
+  staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
   var cmeLink=h("a",{href:"https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",target:"_blank",rel:"noopener"});
-  cmeLink.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;text-decoration:underline;display:inline-block;margin-bottom:14px;";
+  cmeLink.style.cssText="color:var(--text3);text-decoration:underline;";
   cmeLink.textContent="CME Fed →";
-  el.appendChild(cmeLink);
+  staleNote.appendChild(cmeLink);
+  el.appendChild(staleNote);
 
   var meetingIso=nextFomcMeetingISO();
   var prob=meetingIso?computeFedProbability(meetingIso,data.curve,data.effr):null;
