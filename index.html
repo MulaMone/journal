@@ -7981,7 +7981,7 @@ function analystTab(){
   var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   dxyHead.textContent="Intermarket & Cross-Asset Correlations";
   el.appendChild(dxyHead);
-  var dxyRow=div("g2");
+  var dxyRow=div("g2");dxyRow.style.marginBottom="0";
   var dxyBody=div();dxyBody.id="dxy-body";dxyRow.appendChild(dxyBody);
   dxyBody.style.transition="opacity .15s";
   var y10Body=div();y10Body.id="y10-body";dxyRow.appendChild(y10Body);
