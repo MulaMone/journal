@@ -7281,10 +7281,11 @@ function analystTab(){
     var line3="";
     if(data.prevDayFinal){
       var dayDelta=eff.oi-data.prevDayFinal.oi;
+      var dSign=dayDelta>0?"+":dayDelta<0?"-":"";
       var dCol=dayDelta>0?"#00e676":dayDelta<0?"#ff4444":"var(--text2)";
       var prevLbl=data.prevDayFinal.isFinal?"Final":"Prelim";
       var curLbl=data.final?"Final":"Prelim";
-      line3="\n<span style='color:var(--amber)'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ:</span> <span style='color:"+dCol+"'>"+fmtCotChg(dayDelta)+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
+      line3="\n<span style='color:#b06aff'>"+prevLbl+" "+(data.prevDayFinal.date||"prev day")+" → "+curLbl+" "+(data.date||"today")+" OI Δ:</span> <span style='color:"+dCol+"'>"+dSign+"</span><span style='color:var(--amber)'>"+fmtCotNum(Math.abs(dayDelta))+"</span> ("+fmtCotNum(data.prevDayFinal.oi)+" → "+fmtCotNum(eff.oi)+")";
     }
     cmeResult.innerHTML=line1+line2+line3;
     cmeResult.style.color="var(--text2)";
