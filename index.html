@@ -1622,9 +1622,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["home","prep","playbook","import","notes","chart"];
-var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep"};
-var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣"};
+var MORE_TABS=["home","prep","playbook","import","notes","chart","settings"];
+var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
+var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -9066,7 +9066,67 @@ function accountsTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab};
+// ─── MOBILE SETTINGS ──────────────────────────────────────────────────
+// Desktop settings live in a gear-icon modal (openSettings, desktop-only).
+// Mobile had no equivalent access point at all — this is the minimal
+// mobile counterpart: just Auto-Sync and Clear Local Cache, reached via
+// the "More" drawer, not the full desktop settings surface.
+function settingsTab(){
+  var el=div();
+  var sh=div("m-sh");sh.textContent="Settings";el.appendChild(sh);
+
+  function mSection(label){var s=document.createElement("div");s.style.cssText="font-size:9px;letter-spacing:2px;color:#c9a84c;text-transform:uppercase;margin:14px 0 6px;";s.textContent=label;return s;}
+  function mRow(){var r=document.createElement("div");r.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#112444;border:1px solid #1a3260;border-radius:6px;padding:12px 14px;margin-bottom:8px;";return r;}
+
+  el.appendChild(mSection("Sync"));
+  var syncRow=mRow();
+  var syncInfo=document.createElement("div");
+  syncInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>Auto-sync to cloud</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;'>Push data automatically</div>";
+  var syncOn=localStorage.getItem("edge_autosync")!=="0";
+  var syncTog=document.createElement("div");
+  syncTog.style.cssText="width:36px;height:20px;border-radius:10px;flex-shrink:0;position:relative;cursor:pointer;background:"+(syncOn?"var(--accent)":"var(--border2)")+";border:1px solid "+(syncOn?"var(--accent)":"var(--border)")+";";
+  var syncKnob=document.createElement("div");
+  syncKnob.style.cssText="position:absolute;top:2px;"+(syncOn?"right:2px":"left:2px")+";width:14px;height:14px;border-radius:50%;background:#fff;";
+  syncTog.appendChild(syncKnob);
+  syncTog.addEventListener("click",function(){
+    var nowOn=localStorage.getItem("edge_autosync")==="0";
+    localStorage.setItem("edge_autosync",nowOn?"1":"0");
+    syncTog.style.background=nowOn?"var(--accent)":"var(--border2)";
+    syncTog.style.borderColor=nowOn?"var(--accent)":"var(--border)";
+    syncKnob.style.left=nowOn?"":"2px";syncKnob.style.right=nowOn?"2px":"";
+    syncToCloud();
+  });
+  syncRow.appendChild(syncInfo);syncRow.appendChild(syncTog);
+  el.appendChild(syncRow);
+
+  el.appendChild(mSection("Data"));
+  var clearRow=mRow();clearRow.style.borderColor="#ff444440";
+  var clearInfo=document.createElement("div");
+  clearInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>Clear local cache</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;'>Reload fresh from cloud</div>";
+  var clearBtn=document.createElement("button");
+  clearBtn.textContent="Clear";
+  clearBtn.style.cssText="background:none;border:1px solid var(--red);color:var(--red);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;flex-shrink:0;";
+  clearBtn.addEventListener("click",function(){
+    if(confirm("Clear all local cache? Data will reload from Supabase.")){
+      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize"];
+      Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
+      localStorage.setItem("edge_tab",JSON.stringify("home"));
+      window.location.reload();
+    }
+  });
+  clearRow.appendChild(clearInfo);clearRow.appendChild(clearBtn);
+  el.appendChild(clearRow);
+
+  el.appendChild(mSection("About"));
+  var ver=document.createElement("div");
+  ver.style.cssText="font-size:10px;color:#8fadd4;text-align:right;";
+  ver.textContent="EDGE Terminal · v1.0";
+  el.appendChild(ver);
+
+  return el;
+}
+
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,settings:settingsTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
