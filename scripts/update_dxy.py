@@ -27,19 +27,37 @@ import csv
 import io
 import json
 import sys
+import time
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 
 FRED_SERIES_ID = "DTWEXBGS"  # Nominal Broad U.S. Dollar Index
 FRED_URL = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={FRED_SERIES_ID}"
 OUTPUT_PATH = "dxy.json"
 YEARS_BACK_KEPT = 3  # trim the JSON file to the last N years of daily closes
+REQUEST_TIMEOUT = 60
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 5
+
+
+def fetch_csv_text():
+    req = urllib.request.Request(FRED_URL, headers={"User-Agent": "Mozilla/5.0"})
+    last_err = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+                return resp.read().decode("utf-8")
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_err = e
+            print(f"attempt {attempt}/{MAX_ATTEMPTS} failed: {e}", file=sys.stderr)
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_DELAY_SECONDS)
+    raise RuntimeError(f"all {MAX_ATTEMPTS} attempts failed, last error: {last_err}")
 
 
 def fetch_dxy_rows():
-    req = urllib.request.Request(FRED_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode("utf-8")
+    raw = fetch_csv_text()
 
     if raw.strip().lower().startswith("<!doctype") or "<html" in raw.lower():
         raise RuntimeError("FRED returned HTML instead of CSV — endpoint may have changed")
