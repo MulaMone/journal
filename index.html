@@ -7294,11 +7294,20 @@ var GH_OWNER="mulamone";
 var GH_REPO="journal";
 var GH_WORKFLOW_FILE="update-tnx.yml";
 var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
+// Updates every visible status surface at once — the text row in Settings
+// (if that modal happens to be open) and the small ⚡ icon on the card
+// itself (via its title tooltip + color), so either one reflects the same
+// state regardless of which the person is looking at.
+function setTnxTriggerStatus(text,color){
+  var statusEl=document.getElementById("tnx-trigger-status");
+  if(statusEl){statusEl.textContent=text;statusEl.style.color=color;}
+  var iconEl=document.getElementById("tnx-inline-trigger-btn");
+  if(iconEl){iconEl.title=text;iconEl.style.color=color;}
+}
 function triggerTnxWorkflow(){
   var tok=ls("gh_token","");
-  var statusEl=document.getElementById("tnx-trigger-status");
-  if(!tok){if(statusEl){statusEl.textContent="Set a GitHub token above first";statusEl.style.color="var(--red)";}return;}
-  if(statusEl){statusEl.textContent="Triggering…";statusEl.style.color="var(--text3)";}
+  if(!tok){setTnxTriggerStatus("Set a GitHub token first","var(--red)");return;}
+  setTnxTriggerStatus("Triggering…","var(--text3)");
   // Baseline to diff future polls against — the source's own written
   // fetchedAt (not this client's Date.now()), so we can tell "same file
   // still" from "the Action actually produced a new commit" once polling
@@ -7311,27 +7320,27 @@ function triggerTnxWorkflow(){
     body:JSON.stringify({ref:GH_BRANCH})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error("HTTP "+r.status+(t?": "+t.slice(0,120):""));});
-    if(statusEl){statusEl.textContent="Waiting for Action to finish…";}
-    pollForFreshTnx(statusEl,0,baseline);
+    setTnxTriggerStatus("Waiting for Action to finish…","var(--text3)");
+    pollForFreshTnx(0,baseline);
   }).catch(function(err){
-    if(statusEl){statusEl.textContent="Trigger failed — "+(err&&err.message?err.message:"error");statusEl.style.color="var(--red)";}
+    setTnxTriggerStatus("Trigger failed — "+(err&&err.message?err.message:"error"),"var(--red)");
   });
 }
-function pollForFreshTnx(statusEl,attempt,baseline){
+function pollForFreshTnx(attempt,baseline){
   if(attempt>=10){ // ~50s of polling, matches a typical checkout+run+commit cycle
-    if(statusEl){statusEl.textContent="Still waiting — check the Actions tab";statusEl.style.color="var(--amber)";}
+    setTnxTriggerStatus("Still waiting — check the Actions tab","var(--amber)");
     return;
   }
   setTimeout(function(){
     fetchTnxFromFile().then(function(data){
       if(baseline&&data.sourceFetchedAt===baseline){
-        pollForFreshTnx(statusEl,attempt+1,baseline); // same file as before the trigger — keep waiting
+        pollForFreshTnx(attempt+1,baseline); // same file as before the trigger — keep waiting
         return;
       }
       paintTnxBadge(data);
-      if(statusEl){statusEl.textContent="Updated ✓";statusEl.style.color="var(--green)";}
+      setTnxTriggerStatus("Updated ✓","var(--green)");
     }).catch(function(){
-      pollForFreshTnx(statusEl,attempt+1,baseline);
+      pollForFreshTnx(attempt+1,baseline);
     });
   },5000);
 }
@@ -7381,8 +7390,16 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   card.appendChild(l);
   var tnxBadge=div();tnxBadge.id="live-tnx";
   tnxBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-  tnxBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>TNX</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
+  tnxBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>TNX<button id='tnx-inline-trigger-btn' title='Trigger live update' style='background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0 0 0 4px;line-height:1;'>⚡</button></div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
   card.appendChild(tnxBadge);
+  var tnxInlineBtn=tnxBadge.querySelector("#tnx-inline-trigger-btn");
+  if(tnxInlineBtn){
+    tnxInlineBtn.addEventListener("click",function(e){
+      e.stopPropagation();
+      if(!ls("gh_token","")){openSettings();return;}
+      triggerTnxWorkflow();
+    });
+  }
   var cutoff=ycRangeCutoff(rangeKey);
   var hist=cutoff?series.filter(function(s){return s.l>=cutoff;}):series;
   if(hist.length<2) hist=series.slice(-2);
