@@ -7848,19 +7848,16 @@ function analystTab(){
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
 
-  // ── Intermarket & Cross-Asset Correlations — DXY ──
+  // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
   var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   dxyHead.textContent="Intermarket & Cross-Asset Correlations";
   el.appendChild(dxyHead);
-  var dxyBody=div();dxyBody.id="dxy-body";el.appendChild(dxyBody);
+  var dxyRow=div("g2");
+  var dxyBody=div();dxyBody.id="dxy-body";dxyRow.appendChild(dxyBody);
   dxyBody.style.transition="opacity .15s";
-
-  // ── Yield Curve Spreads ──
-  var y10Head=div();y10Head.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  y10Head.textContent="10-Year Treasury Yield";
-  el.appendChild(y10Head);
-  var y10Body=div();y10Body.id="y10-body";el.appendChild(y10Body);
+  var y10Body=div();y10Body.id="y10-body";dxyRow.appendChild(y10Body);
   y10Body.style.transition="opacity .15s";
+  el.appendChild(dxyRow);
 
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
