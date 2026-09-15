@@ -7238,61 +7238,6 @@ function paintTnxBadge(data){
   if(sub) sub.textContent=data.marketTime?data.marketTime:"";
 }
 
-// ─── OANDA 10-Year T-Note CFD → estimated yield ────────────────────────
-// $TNX/tnx.json above is the accurate number but only updates every ~15
-// min (bounded by the GitHub Action's schedule). This instead reuses the
-// OANDA token already in the app for a genuinely tick-by-tick estimate,
-// via the standard modified-duration approximation:
-//   %ΔPrice ≈ -duration × Δyield  =>  Δyield ≈ -(%ΔPrice) / duration
-// DURATION is a fixed approximation (current 10Y note is ~7.5-8yr modified
-// duration) — not exact, and this whole estimate drifts further from the
-// true yield the larger the price move gets (linear approximation of a
-// curved price/yield relationship — no convexity term). Anchored against
-// the latest OFFICIAL Treasury print (_tnxLiveBaseline, set in loadYc)
-// paired with OANDA's own latest daily-close price for the same
-// instrument, then re-estimated on every live tick from there.
-var OANDA_T10Y_INST="USB10Y_USD";
-var T10Y_DURATION=7.8;
-var _t10yAnchorPrice=null; // OANDA's own daily-close price paired with _tnxLiveBaseline
-var _t10yLiveTimer=null;
-function loadT10yAnchor(){
-  var tok=ls("oanda_token","");
-  if(!tok){_t10yAnchorPrice=null;return Promise.resolve(null);}
-  var url=OANDA_ENV_BASE+"/v3/instruments/"+OANDA_T10Y_INST+"/candles?granularity=D&price=M&count=1";
-  return fetch(url,{headers:{Authorization:"Bearer "+tok}}).then(function(r){
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    return r.json();
-  }).then(function(json){
-    var c=json&&json.candles&&json.candles[json.candles.length-1];
-    _t10yAnchorPrice=c?parseFloat(c.mid.c):null;
-    return _t10yAnchorPrice;
-  }).catch(function(){_t10yAnchorPrice=null;return null;});
-}
-function updateT10yEstimate(){
-  var badge=document.getElementById("live-t10y-oanda");
-  if(!badge) return;
-  var v=badge.querySelector(".live-val");
-  var sub=badge.querySelector(".live-sub");
-  var tok=ls("oanda_token","");
-  if(!tok){if(v){v.textContent="no token";v.style.color="var(--text3)";}return;}
-  if(_t10yAnchorPrice==null||_tnxLiveBaseline==null){if(v){v.textContent="—";v.style.color="var(--text3)";}return;}
-  var url=OANDA_ENV_BASE+"/v3/instruments/"+OANDA_T10Y_INST+"/candles?granularity=D&price=M&count=1";
-  fetch(url,{headers:{Authorization:"Bearer "+tok}})
-    .then(function(r){return r.ok?r.json():null;})
-    .then(function(json){
-      var c=json&&json.candles&&json.candles[json.candles.length-1];
-      var livePrice=c?parseFloat(c.mid.c):null;
-      if(livePrice==null||!v) return;
-      var pctPriceChg=(livePrice-_t10yAnchorPrice)/_t10yAnchorPrice;
-      var estYield=_tnxLiveBaseline-(pctPriceChg/T10Y_DURATION)*100;
-      var up=estYield>=_tnxLiveBaseline;
-      v.style.color=up?"#00e676":"#ff4444";
-      v.textContent=estYield.toFixed(3)+"%";
-      if(sub) sub.textContent="price "+livePrice.toFixed(2)+" · duration est.";
-    })
-    .catch(function(){});
-}
-
 function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   var series=data.rows.map(function(r){
     var v=r[fieldKey];
@@ -7317,10 +7262,6 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   tnxBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
   tnxBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>TNX</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
   card.appendChild(tnxBadge);
-  var oandaBadge=div();oandaBadge.id="live-t10y-oanda";
-  oandaBadge.style.cssText="position:absolute;top:76px;right:16px;text-align:right;";
-  oandaBadge.innerHTML="<div style='font-size:9px;letter-spacing:1px;color:#a855f7;text-transform:uppercase;'>OANDA EST.</div><div class='live-val' style='font-size:13px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:1px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
-  card.appendChild(oandaBadge);
   var cutoff=ycRangeCutoff(rangeKey);
   var hist=cutoff?series.filter(function(s){return s.l>=cutoff;}):series;
   if(hist.length<2) hist=series.slice(-2);
@@ -8107,7 +8048,6 @@ function analystTab(){
   function loadYc(force){
     var myToken=++_ycLoadToken;
     clearInterval(_tnxLiveTimer);
-    clearInterval(_t10yLiveTimer);
     if(force&&ycBody.firstChild){ycBody.style.opacity="0.45";y10Body.style.opacity="0.45";}
     else showYcLoading();
     loadYieldCurveData(force).then(function(data){
@@ -8125,14 +8065,6 @@ function analystTab(){
         if(myToken!==_ycLoadToken||State.tab!=="analyst"){clearInterval(_tnxLiveTimer);return;}
         updateTnxLiveBadge();
       },60000);
-      loadT10yAnchor().then(function(){
-        if(myToken!==_ycLoadToken||State.tab!=="analyst") return;
-        updateT10yEstimate();
-        _t10yLiveTimer=setInterval(function(){
-          if(myToken!==_ycLoadToken||State.tab!=="analyst"){clearInterval(_t10yLiveTimer);return;}
-          updateT10yEstimate();
-        },30000);
-      });
     }).catch(function(err){
       if(myToken!==_ycLoadToken) return;
       ycBody.style.opacity="1";y10Body.style.opacity="1";
