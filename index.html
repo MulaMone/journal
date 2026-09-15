@@ -7274,6 +7274,42 @@ function fmtLiqDollar(n){
   if(abs>=1e6) return sign+"$"+(abs/1e6).toFixed(1)+"M";
   return sign+"$"+abs.toFixed(0);
 }
+// Computed banner: Net Liquidity = Fed Total Assets − (TGA + RRP). Not a
+// FRED series on its own — derived client-side from the three fetched
+// fields on each row. Trend arrow is measured over the trailing 4 prints
+// (~1 month, since this data is weekly, not daily) rather than a literal
+// "10-day slope" — there's no daily cadence to measure that against here.
+function buildNetLiquidityBanner(data,isM){
+  var series=data.rows.map(function(r){
+    if(typeof r.fedAssets!=="number"||typeof r.tga!=="number"||typeof r.rrp!=="number") return null;
+    return {v:r.fedAssets-(r.tga+r.rrp),l:r.d||""};
+  }).filter(Boolean);
+  var el=div();
+  if(series.length<2){
+    el.innerHTML='<div style="padding:20px;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">Not enough data to plot yet.</div>';
+    return el;
+  }
+  var latest=series[series.length-1],prev=series[series.length-2];
+  var chg=latest.v-prev.v;
+  var up=chg>=0;
+  var trendBaseIdx=Math.max(0,series.length-5); // ~4 prints back
+  var trendBase=series[trendBaseIdx];
+  var trendUp=latest.v>=trendBase.v;
+  var col="#00e676";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
+  var badgeCol=trendUp?"#00e676":"#ff4444";
+  card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Net Liquidity <span style='color:var(--text3);text-transform:none;letter-spacing:0;'>= Fed Assets − (TGA + RRP)</span></div>"
+    +"<div style='display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;'>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtLiqDollar(latest.v)+"</div>"
+    +"<div style='font-size:11px;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:3px;background:"+badgeCol+"22;color:"+badgeCol+";'>"+(trendUp?"▲ BULLISH TAILWIND":"▼ BEARISH TAILWIND")+"</div>"
+    +"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+fmtLiqDollar(chg)+" vs prior print</div>";
+  var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:90px;";
+  chartWrap.appendChild(areaSVG(series.slice(-104),isM?300:640,90,col,fmtLiqDollar));
+  card.appendChild(chartWrap);
+  el.appendChild(card);
+  return el;
+}
 function buildLiquidityCard(fieldKey,label,col,note,data,isM){
   var series=data.rows.map(function(r){
     var v=r[fieldKey];
@@ -8313,13 +8349,14 @@ function analystTab(){
     loadLiquidityData(force).then(function(data){
       if(myToken!==_liqLoadToken||State.tab!=="analyst") return;
       liqBody.innerHTML="";
+      liqBody.appendChild(buildNetLiquidityBanner(data,isM));
       var liqRow=div("g3");
       liqRow.appendChild(buildLiquidityCard("fedAssets","Fed Total Assets","#00d4d4",
         "The Fed's balance sheet — QE expands it, QT shrinks it. A larger balance sheet generally means more system liquidity available to flow into risk assets.",data,isM));
       liqRow.appendChild(buildLiquidityCard("tga","Treasury General Account","#ffab00",
         "The Treasury's own checking account at the Fed. When the TGA rises, cash is being pulled out of the banking system (draining liquidity); when it falls, that cash flows back out into the system.",data,isM));
       liqRow.appendChild(buildLiquidityCard("rrp","Reverse Repo Facility","#b06aff",
-        "Cash parked overnight at the Fed by money-market funds, effectively sidelined from the market. A falling RRP balance is often read as liquidity draining back out into risk assets.",data,isM));
+        "Cash parked overnight at the Fed by money-market funds, sidelined from the market. A falling RRP balance means that cash is leaving overnight storage and flowing back into market liquidity — bullish; a rising RRP drains system liquidity.",data,isM));
       liqBody.appendChild(liqRow);
       liqBody.style.opacity="1";
     }).catch(function(err){
