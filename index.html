@@ -7811,14 +7811,18 @@ function buildDxyView(data,isM){
   card.appendChild(chartWrap);
   el.appendChild(card);
 
+  return el;
+}
+// Gold/Oil price cards — built separately from buildDxyView so they can
+// render in their own full-width row below the DXY+TNX note, instead of
+// stacking inside the (now half-width) DXY column.
+function buildGoldOilRow(data,isM){
   var goldOilRow=div("g2");
   goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here.","gold"));
   goldOilRow.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case.","oil"));
-  el.appendChild(goldOilRow);
-
-  return el;
+  return goldOilRow;
 }
 
 function analystTab(){
@@ -7858,6 +7862,9 @@ function analystTab(){
     dxyTnxNote.innerHTML="<b style='color:#00e676;'>Reading DXY & TNX against ES/NQ:</b> Dollar up + yields up is usually the bearish combo for equities — tighter liquidity and richer discount rates, hardest on NQ. Dollar down + yields down is usually the bullish mirror. Either can decouple during regime shifts (risk-off rallies dollar, bonds, and yield-down together while stocks still sell off), so treat this as context, not a rule.";
     el.appendChild(dxyTnxNote);
   }
+
+  var goldOilBody=div();goldOilBody.id="goldoil-body";el.appendChild(goldOilBody);
+  goldOilBody.style.transition="opacity .15s";
 
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
@@ -8127,13 +8134,16 @@ function analystTab(){
     clearInterval(_dxyLiveTimer);
     if(!ls("oanda_token","")){renderDxyTokenGate();return;}
     var myToken=++_dxyLoadToken;
-    if(force&&dxyBody.firstChild) dxyBody.style.opacity="0.45";
+    if(force&&dxyBody.firstChild){dxyBody.style.opacity="0.45";goldOilBody.style.opacity="0.45";}
     else showDxyLoading();
     loadDxyData(force).then(function(data){
       if(myToken!==_dxyLoadToken||State.tab!=="analyst") return;
       dxyBody.innerHTML="";
       dxyBody.appendChild(buildDxyView(data,isM));
       dxyBody.style.opacity="1";
+      goldOilBody.innerHTML="";
+      goldOilBody.appendChild(buildGoldOilRow(data,isM));
+      goldOilBody.style.opacity="1";
       var dxyRows=data.rows,goldRows=data.goldRows||[],oilRows=data.oilRows||[];
       _dxyLiveBaselines={
         dxy:dxyRows.length?dxyRows[dxyRows.length-1].c:null,
@@ -8148,7 +8158,7 @@ function analystTab(){
     }).catch(function(err){
       if(myToken!==_dxyLoadToken) return;
       if(err&&err.code==="NO_TOKEN"){renderDxyTokenGate();return;}
-      dxyBody.style.opacity="1";
+      dxyBody.style.opacity="1";goldOilBody.style.opacity="1";
       showDxyError(err&&err.message?err.message:"network error");
     });
   }
