@@ -1861,6 +1861,43 @@ function openSettings(){
   body.appendChild(sectionLabel("Sync"));
   body.appendChild(toggleRow("Auto-Sync to Cloud","Push data to Supabase automatically","edge_autosync",true));
 
+  // ── LIVE DATA (TNX) ──
+  body.appendChild(sectionLabel("Live Data"));
+  var tnxTokRow=document.createElement("div");
+  tnxTokRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var tnxTokInfo=document.createElement("div");tnxTokInfo.style.cssText="min-width:0;";
+  var tnxTokLbl=document.createElement("div");tnxTokLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";tnxTokLbl.textContent="GitHub Token (TNX)";
+  var tnxTokDesc=document.createElement("div");tnxTokDesc.style.cssText="font-size:10px;color:var(--text3);";tnxTokDesc.textContent="Repo-scoped, Actions: write — lets Trigger Update pull a fresh $TNX quote on demand";
+  tnxTokInfo.appendChild(tnxTokLbl);tnxTokInfo.appendChild(tnxTokDesc);
+  var tnxTokRight=document.createElement("div");tnxTokRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
+  var tnxTokInp=document.createElement("input");
+  tnxTokInp.type="password";tnxTokInp.placeholder="github_pat_...";
+  tnxTokInp.value=ls("gh_token","");
+  tnxTokInp.style.cssText="width:150px;background:var(--panel3);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:5px 8px;border-radius:3px;";
+  var tnxTokSave=document.createElement("button");
+  tnxTokSave.textContent="SET";
+  tnxTokSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 8px;border-radius:3px;cursor:pointer;";
+  tnxTokSave.onclick=function(){
+    ss("gh_token",tnxTokInp.value.trim());
+    tnxTokSave.textContent="✓";setTimeout(function(){tnxTokSave.textContent="SET";},1200);
+  };
+  tnxTokRight.appendChild(tnxTokInp);tnxTokRight.appendChild(tnxTokSave);
+  tnxTokRow.appendChild(tnxTokInfo);tnxTokRow.appendChild(tnxTokRight);
+  body.appendChild(tnxTokRow);
+
+  var tnxTrigRow=document.createElement("div");
+  tnxTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var tnxTrigInfo=document.createElement("div");tnxTrigInfo.style.cssText="min-width:0;";
+  var tnxTrigLbl=document.createElement("div");tnxTrigLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";tnxTrigLbl.textContent="Trigger TNX Update";
+  var tnxTrigStatus=document.createElement("div");tnxTrigStatus.id="tnx-trigger-status";tnxTrigStatus.style.cssText="font-size:10px;color:var(--text3);";tnxTrigStatus.textContent="Fetch a fresh $TNX quote right now";
+  tnxTrigInfo.appendChild(tnxTrigLbl);tnxTrigInfo.appendChild(tnxTrigStatus);
+  var tnxTrigBtn=document.createElement("button");
+  tnxTrigBtn.textContent="⚡ TRIGGER";
+  tnxTrigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0;";
+  tnxTrigBtn.onclick=function(){triggerTnxWorkflow();};
+  tnxTrigRow.appendChild(tnxTrigInfo);tnxTrigRow.appendChild(tnxTrigBtn);
+  body.appendChild(tnxTrigRow);
+
   // ── DISPLAY ──
   body.appendChild(sectionLabel("Display"));
   body.appendChild(toggleRow("Compact Trade Cards","Smaller rows in the Trade Log","edge_compact_cards",false));
@@ -7260,7 +7297,7 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 function triggerTnxWorkflow(){
   var tok=ls("gh_token","");
   var statusEl=document.getElementById("tnx-trigger-status");
-  if(!tok){renderGhTokenGate();return;}
+  if(!tok){if(statusEl){statusEl.textContent="Set a GitHub token above first";statusEl.style.color="var(--red)";}return;}
   if(statusEl){statusEl.textContent="Triggering…";statusEl.style.color="var(--text3)";}
   // Baseline to diff future polls against — the source's own written
   // fetchedAt (not this client's Date.now()), so we can tell "same file
@@ -7298,28 +7335,6 @@ function pollForFreshTnx(statusEl,attempt,baseline){
     });
   },5000);
 }
-function ghTokenCacheGet(){return ls("gh_token","");}
-function renderGhTokenGate(){
-  var wrap=document.getElementById("tnx-trigger-wrap");
-  if(!wrap) return;
-  wrap.innerHTML="";
-  var tin=h("input",{type:"password",placeholder:"GitHub token (repo, Actions:write)"});
-  tin.style.cssText="width:200px;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-family:monospace;font-size:10px;";
-  var save=h("button",{className:"btn"});save.style.cssText="padding:3px 8px;font-size:10px;margin-left:6px;";save.textContent="Save";
-  save.addEventListener("click",function(){
-    if(tin.value.trim()){ss("gh_token",tin.value.trim());wrap.innerHTML="";renderTnxTriggerControl();}
-  });
-  wrap.appendChild(tin);wrap.appendChild(save);
-}
-function renderTnxTriggerControl(){
-  var wrap=document.getElementById("tnx-trigger-wrap");
-  if(!wrap) return;
-  wrap.innerHTML="";
-  var btn=h("button",{className:"btn"});btn.style.cssText="padding:3px 9px;font-size:10px;";btn.textContent="⚡ Trigger live update";
-  btn.addEventListener("click",triggerTnxWorkflow);
-  var status=div();status.id="tnx-trigger-status";status.style.cssText="font-size:10px;color:var(--text3);margin-left:8px;display:inline-block;";
-  wrap.appendChild(btn);wrap.appendChild(status);
-}
 function paintTnxBadge(data){
   var badge=document.getElementById("live-tnx");
   if(!badge) return;
@@ -7338,9 +7353,9 @@ function paintTnxBadge(data){
     var basis=data.sourceFetchedAt||data.marketTime;
     if(basis){
       var d=new Date(basis);
-      t=isNaN(d.getTime())?basis:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit"});
+      t=isNaN(d.getTime())?basis:d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     }
-    sub.textContent=t+(data.source==="direct"?" · live":data.source==="file"?" · action run":"");
+    sub.textContent=t;
   }
 }
 
@@ -7374,10 +7389,6 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(hist,isM?300:640,100,col,function(v){return v.toFixed(2)+"%";}));
   card.appendChild(chartWrap);
-  if(!isM){
-    var triggerWrap=div();triggerWrap.id="tnx-trigger-wrap";triggerWrap.style.cssText="margin-top:10px;";
-    card.appendChild(triggerWrap);
-  }
   el.appendChild(card);
   return el;
 }
@@ -8172,7 +8183,6 @@ function analystTab(){
       y10Body.innerHTML="";
       y10Body.appendChild(buildYieldLevelView("y10","10-Year Treasury Yield",State.analyst_yc_range||"1Y",data,isM));
       y10Body.style.opacity="1";
-      if(ls("gh_token","")) renderTnxTriggerControl(); else renderGhTokenGate();
       var y10Rows=data.rows.filter(function(r){return typeof r.y10==="number";});
       _tnxLiveBaseline=y10Rows.length?y10Rows[y10Rows.length-1].y10:null;
       updateTnxLiveBadge();
