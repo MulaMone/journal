@@ -7471,9 +7471,14 @@ function fmtFedDelta(fromMove,toMove){
 
 function buildFedFundsView(data,isM){
   var el=div();
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  staleNote.textContent="As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements — not CME's official FedWatch output";
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:6px;letter-spacing:1px;";
+  staleNote.textContent="As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements";
   el.appendChild(staleNote);
+
+  var cmeLink=h("a",{href:"https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",target:"_blank",rel:"noopener"});
+  cmeLink.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;text-decoration:underline;display:inline-block;margin-bottom:14px;";
+  cmeLink.textContent="CME Fed →";
+  el.appendChild(cmeLink);
 
   var meetingIso=nextFomcMeetingISO();
   var prob=meetingIso?computeFedProbability(meetingIso,data.curve,data.effr):null;
@@ -7524,18 +7529,20 @@ function buildFedFundsView(data,isM){
     }
   } else if(meetingIso){
     var noteCard=div();noteCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:11px;color:var(--text3);";
-    noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a probability yet (prior contract month has rolled off the curve and the NY Fed EFFR fetch failed). Showing the implied rate path below instead.";
+    noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a probability yet (prior contract month has rolled off the curve and the NY Fed EFFR fetch failed)."+(isM?"":" Showing the implied rate path below instead.");
     el.appendChild(noteCard);
   }
 
-  var sorted=data.curve.slice().sort(function(a,b){return contractMonthSortKey(a.code)-contractMonthSortKey(b.code);});
-  var pathData=sorted.map(function(c){return {v:c.rate,l:c.code};});
-  var pathHead=div();pathHead.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;";
-  pathHead.textContent="Implied Rate Path — by Contract Month";
-  el.appendChild(pathHead);
-  var pathCard=div();pathCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
-  pathCard.appendChild(areaSVG(pathData,isM?300:640,110,"#00d4d4",function(v){return v.toFixed(2)+"%";}));
-  el.appendChild(pathCard);
+  if(!isM){
+    var sorted=data.curve.slice().sort(function(a,b){return contractMonthSortKey(a.code)-contractMonthSortKey(b.code);});
+    var pathData=sorted.map(function(c){return {v:c.rate,l:c.code};});
+    var pathHead=div();pathHead.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;";
+    pathHead.textContent="Implied Rate Path — by Contract Month";
+    el.appendChild(pathHead);
+    var pathCard=div();pathCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
+    pathCard.appendChild(areaSVG(pathData,640,110,"#00d4d4",function(v){return v.toFixed(2)+"%";}));
+    el.appendChild(pathCard);
+  }
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
   srcNote.textContent="Source: CME Group Daily Bulletin, Section 10 (Interest Rate Futures Continued)";
