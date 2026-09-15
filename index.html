@@ -6637,7 +6637,7 @@ var COT_CATS=[
 var COT_LEGACY_URL="https://publicreporting.cftc.gov/resource/6dca-aqww.json";
 var COT_LEGACY_CATS=[
   {label:"Non-Commercial",sub:"large speculators — funds & large traders",col:"#00d4d4",lk:"noncomm_positions_long_all",sk:"noncomm_positions_short_all"},
-  {label:"Commercial",sub:"hedgers — producers & merchants",col:"#c9a84c",lk:"comm_positions_long_all",sk:"comm_positions_short_all"},
+  {label:"Commercial",sub:"hedgers — producers & merchants",col:"#ffab00",lk:"comm_positions_long_all",sk:"comm_positions_short_all"},
   {label:"Non-Reportable",sub:"small traders below reporting threshold",col:"#b06aff",lk:"nonrept_positions_long_all",sk:"nonrept_positions_short_all"}
 ];
 var _cotMemCache={};
@@ -7079,7 +7079,7 @@ function buildCOTLegacyView(sym,data,isM){
   el.appendChild(trendHead);
   var ncHist=rows.slice(-26).map(function(r){return {v:(+r.comm_positions_long_all||0)-(+r.comm_positions_short_all||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
   var trendCard=div();trendCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
-  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#f59e0b",fmtCotNum));
+  trendCard.appendChild(lineSVG(ncHist,isM?300:640,100,"#ffab00",fmtCotNum));
   el.appendChild(trendCard);
 
   return el;
