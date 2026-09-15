@@ -7507,7 +7507,7 @@ function buildDxyView(data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #ffab00;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>US Dollar Index (synthetic, OANDA majors)</div>"
@@ -7516,17 +7516,17 @@ function buildDxyView(data,isM){
   top.appendChild(l);
   card.appendChild(top);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
-  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#ffab00",function(v){return v.toFixed(1);}));
+  chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
   card.appendChild(chartWrap);
   el.appendChild(card);
 
   var noteCard=div();noteCard.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;";
-  noteCard.innerHTML="<b style='color:#ffab00;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
+  noteCard.innerHTML="<b style='color:#00e676;'>Reading it against ES/NQ:</b> A stronger dollar and equity index futures have run inversely more often than not (tighter global $ liquidity, weaker multinational earnings translation) and vice versa. That correlation isn't fixed — it regularly breaks down or flips during macro regime shifts (e.g. a 'good news is dollar-and-stocks-up' growth scare, or a flight-to-quality where both rally together) — so treat it as context on the prevailing regime, not a standing rule.";
   el.appendChild(noteCard);
 
-  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffd700",2,
+  el.appendChild(buildSimplePriceCard("Gold (XAU/USD)",data.goldRows||[],"#ffab00",2,
     "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here."));
-  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#8b6f47",2,
+  el.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case."));
 
   var srcNote=div();srcNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;";
