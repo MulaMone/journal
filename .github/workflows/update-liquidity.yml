@@ -2,10 +2,14 @@ name: Update liquidity data
 
 on:
   schedule:
-    # Weekly, Thursday evenings ET — the Fed's H.4.1 release (which WALCL,
-    # WTREGEN, and WLRRAL are all sourced from) publishes Thursdays ~4:30pm
-    # ET; this gives FRED time to ingest it. 22:00 UTC = 6pm EDT / 5pm EST.
-    - cron: "0 22 * * 4"
+    # Fires twice each Thursday — 5:30pm EDT and 5:30pm EST — since GitHub
+    # Actions cron is fixed UTC and doesn't shift for daylight saving. The
+    # "Check local time" guard step below verifies it's actually ~5:30pm
+    # America/New_York before doing anything, so whichever trigger doesn't
+    # match the current DST state just no-ops — self-correcting across the
+    # Nov/March changeovers with no manual cron edits ever needed.
+    - cron: "30 21 * * 4"  # 5:30pm EDT
+    - cron: "30 22 * * 4"  # 5:30pm EST
   workflow_dispatch: {}
 
 permissions:
@@ -21,12 +25,31 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Check local time
+        id: timecheck
+        run: |
+          python3 -c "
+          from zoneinfo import ZoneInfo
+          from datetime import datetime
+          now = datetime.now(ZoneInfo('America/New_York'))
+          # Only proceed if it's actually ~5:00-6:00pm Eastern right now —
+          # exactly one of the two scheduled triggers will land in this
+          # window on any given Thursday, the other silently skips.
+          proceed = 17 <= now.hour < 18
+          print('local time is', now.isoformat(), '— proceed:', proceed)
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('proceed=' + ('true' if proceed else 'false') + '\n')
+          "
+
       - name: Fetch liquidity series and write liquidity.json
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python3 scripts/fetch-liquidity.py
 
       - name: Commit if changed
+        if: steps.timecheck.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
