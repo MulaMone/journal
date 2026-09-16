@@ -7871,32 +7871,17 @@ function fedProbSnapshotDaysAgo(hist,anchorISO,days){
   });
   return best;
 }
-// The last recorded row dated BEFORE a given event (e.g. the FOMC decision
-// date itself) — i.e. the pre-event read to diff against today's (post-
-// event) probability. Only meaningful once a bulletin dated on/after the
-// event exists in history, which — since this meeting rolls off the
-// "next FOMC" slot the day after — only happens on the decision day
-// itself, exactly when the comparison becomes relevant.
-function fedProbPreEventSnapshot(hist,eventISO){
-  if(!eventISO) return null;
-  var hasPostEvent=hist.some(function(r){return r.dateISO&&r.dateISO>=eventISO;});
-  if(!hasPostEvent) return null;
-  var best=null;
-  hist.forEach(function(r){ if(r.dateISO&&r.dateISO<eventISO){ if(!best||r.dateISO>best.dateISO) best=r; } });
-  return best;
-}
-// Pulls together everything the card needs to show 1-day / pre-vs-post /
-// 1-week change for the CURRENT meeting only — mixing in a stale prior
+// Pulls together everything the card needs to show 1-day / 1-week /
+// 1-month change for the CURRENT meeting only — mixing in a stale prior
 // meeting's numbers would misread as a change that never happened.
-function fedProbDeltas(prob,todayISO,meetingIso){
+function fedProbDeltas(prob,todayISO){
   if(!prob) return null;
   var hist=fedProbHistGet().filter(function(r){return r.meetingCode===prob.meetingCode;});
   if(hist.length<2) return null; // need at least one prior trading day's bulletin to diff against
   var d1=fedProbSnapshotDaysAgo(hist,todayISO,1);
   var d7=fedProbSnapshotDaysAgo(hist,todayISO,7);
   var d30=fedProbSnapshotDaysAgo(hist,todayISO,30);
-  var event=fedProbPreEventSnapshot(hist,meetingIso);
-  return {d1:d1,d7:d7,d30:d30,event:event};
+  return {d1:d1,d7:d7,d30:d30};
 }
 function fmtFedDelta(fromMove,toMove){
   var d=toMove-fromMove;
@@ -7934,7 +7919,7 @@ function buildFedFundsView(data,isM){
 
     recordFedProbSnapshot(prob,data.dateStr);
     var todayISO=bulletinDateISO(data.dateStr);
-    var deltas=fedProbDeltas(prob,todayISO,meetingIso);
+    var deltas=fedProbDeltas(prob,todayISO);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
       function histChip(label,fromRec,toMoveVal){
@@ -7954,7 +7939,6 @@ function buildFedFundsView(data,isM){
         return wrap;
       }
       histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,prob.stepProb));
-      histRow.appendChild(histChip("PRE → POST FOMC",deltas.event,prob.stepProb));
       histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,prob.stepProb));
       histRow.appendChild(histChip("1-MONTH Δ (MOVE)",deltas.d30,prob.stepProb));
       el.appendChild(histRow);
