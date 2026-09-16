@@ -8147,9 +8147,18 @@ function analystTab(){
   var sh=div("sh");sh.innerHTML="Analyst — <span style='color:#e8f0ff;'>The Fundamentals</span>";el.appendChild(sh);
 
   // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
-  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var dxyHeadRow=div();dxyHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
   dxyHead.textContent="Intermarket & Cross-Asset Correlations";
-  el.appendChild(dxyHead);
+  dxyHeadRow.appendChild(dxyHead);
+  var rbtn=h("button",{className:"btn"});
+  rbtn.textContent=isM?"↻":"↻ Refresh";
+  rbtn.title="Refresh";
+  rbtn.style.cssText=isM
+    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
+    :"flex-shrink:0;";
+  dxyHeadRow.appendChild(rbtn);
+  el.appendChild(dxyHeadRow);
   var dxyRow=div("g2");dxyRow.style.marginBottom="0";
   var dxyBody=div();dxyBody.id="dxy-body";dxyRow.appendChild(dxyBody);
   dxyBody.style.transition="opacity .15s";
@@ -8197,18 +8206,9 @@ function analystTab(){
   ycBody.style.transition="opacity .15s";
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
-  var fedHeadRow=div();fedHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   fedHead.textContent="Fed Rate Probabilities";
-  fedHeadRow.appendChild(fedHead);
-  var rbtn=h("button",{className:"btn"});
-  rbtn.textContent=isM?"↻":"↻ Refresh";
-  rbtn.title="Refresh";
-  rbtn.style.cssText=isM
-    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
-    :"flex-shrink:0;";
-  fedHeadRow.appendChild(rbtn);
-  el.appendChild(fedHeadRow);
+  el.appendChild(fedHead);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
 
