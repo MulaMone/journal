@@ -2759,6 +2759,7 @@ function computeTodayMacroEvents(etTodayStr){
   var events=[];
   if(FOMC_DECISION_DATES_2026.indexOf(etTodayStr)>-1){
     events.push({title:"FOMC Meeting / Fed Decision",time:"2:00 PM",impact:"High"});
+    events.push({title:"FOMC Press Conference",time:"2:30 PM",impact:"High"});
   }
   var p=etTodayStr.split("-");
   var yr=parseInt(p[0],10),mo=parseInt(p[1],10)-1,dy=parseInt(p[2],10);
@@ -2779,6 +2780,7 @@ function computeTodayMacroEvents(etTodayStr){
 // so today's actual events get flagged automatically instead of requiring
 // a manual click. Keyword match, case-insensitive, first hit wins.
 var NEWS_MATCH_RULES=[
+  {l:"FOMC Press Conference",kw:["press conference"]},
   {l:"FOMC Meeting / Fed Decision",kw:["fomc","federal funds rate","fed interest rate"]},
   {l:"CPI / Inflation Data",kw:["cpi"]},
   {l:"NFP / Non-Farm Payrolls",kw:["non-farm","nonfarm","non farm payrolls"]},
@@ -2805,12 +2807,15 @@ function matchNewsLabels(events){
   events.forEach(function(ev){
     var rawTitle=ev&&ev.title!==undefined?ev.title:ev; // tolerate a plain string too
     var lower=(rawTitle||"").toLowerCase();
-    NEWS_MATCH_RULES.forEach(function(rule){
-      if(matched.indexOf(rule.l)>-1) return;
+    for(var r=0;r<NEWS_MATCH_RULES.length;r++){
+      var rule=NEWS_MATCH_RULES[r];
+      if(matched.indexOf(rule.l)>-1) continue;
+      var hit=false;
       for(var i=0;i<rule.kw.length;i++){
-        if(lower.indexOf(rule.kw[i])>-1){ matched.push(rule.l); if(ev&&ev.time) times[rule.l]=ev.time; break; }
+        if(lower.indexOf(rule.kw[i])>-1){ hit=true; break; }
       }
-    });
+      if(hit){ matched.push(rule.l); if(ev&&ev.time) times[rule.l]=ev.time; break; }
+    }
   });
   return {matched:matched,times:times};
 }
