@@ -2,11 +2,17 @@ name: Update Treasury yield curve data
 
 on:
   schedule:
-    # Treasury publishes once/day around 3:30pm ET. Two runs (20:45 and
-    # 21:45 UTC) cover both EST and EDT without needing to change the cron
-    # twice a year. Weekdays only — no new print on weekends.
-    - cron: "45 20 * * 1-5"
-    - cron: "45 21 * * 1-5"
+    # Treasury publishes once/day around 3:30pm ET. Two runs cover both EST
+    # and EDT without needing to change the cron twice a year. Weekdays
+    # only — no new print on weekends.
+    #
+    # Times deliberately avoid round minutes (:00/:15/:30/:45) — those are
+    # the most commonly-picked cron minutes across all of GitHub, so jobs
+    # scheduled on them lose the queue race far more often. This workflow's
+    # own history showed 12 of its first 13 runs never fired from the
+    # schedule at :45 and had to be triggered manually instead.
+    - cron: "52 20 * * 1-5"
+    - cron: "57 21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
@@ -17,10 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Fetch and build yields.json
         run: python3 scripts/update_yields.py
-
       - name: Commit and push (with retry on race with other workflows)
         run: |
           git config user.name "github-actions[bot]"
