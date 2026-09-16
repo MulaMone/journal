@@ -8135,7 +8135,7 @@ function buildDxyView(data,isM){
 function buildGoldOilRow(data,isM){
   var goldOilRow=div("g2");goldOilRow.style.marginBottom="0";
   goldOilRow.appendChild(buildSimplePriceCard("Gold",data.goldRows||[],"#ffab00",2,
-    "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section above: a dovish repricing there often shows up as gold strength here.","gold"));
+    "Tends to move inversely to the dollar and benefits from falling real yields — a classic rates/inflation hedge. Watch it alongside the Fed Rate Probabilities section below: a dovish repricing there often shows up as gold strength here.","gold"));
   goldOilRow.appendChild(buildSimplePriceCard("WTI Crude Oil",data.oilRows||[],"#a855f7",2,
     "Feeds directly into inflation expectations — a sustained spike tends to push the Fed toward a more hawkish, higher-for-longer stance, and higher input costs can weigh on risk assets. Falling oil is generally the disinflationary, risk-friendlier case.","oil"));
   return goldOilRow;
@@ -8146,24 +8146,8 @@ function analystTab(){
   var el=div();
   var sh=div("sh");sh.innerHTML="Analyst — <span style='color:#e8f0ff;'>The Fundamentals</span>";el.appendChild(sh);
 
-  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
-  var fedHeadRow=div();fedHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
-  fedHead.textContent="Fed Rate Probabilities";
-  fedHeadRow.appendChild(fedHead);
-  var rbtn=h("button",{className:"btn"});
-  rbtn.textContent=isM?"↻":"↻ Refresh";
-  rbtn.title="Refresh";
-  rbtn.style.cssText=isM
-    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
-    :"flex-shrink:0;";
-  fedHeadRow.appendChild(rbtn);
-  el.appendChild(fedHeadRow);
-  var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
-  fedBody.style.transition="opacity .15s";
-
   // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
-  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   dxyHead.textContent="Intermarket & Cross-Asset Correlations";
   el.appendChild(dxyHead);
   var dxyRow=div("g2");dxyRow.style.marginBottom="0";
@@ -8182,13 +8166,7 @@ function analystTab(){
   var goldOilBody=div();goldOilBody.id="goldoil-body";el.appendChild(goldOilBody);
   goldOilBody.style.transition="opacity .15s";
 
-  // ── Liquidity & Fed Balance Sheet Metrics ──
-  var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";
-  el.appendChild(liqHead);
-  var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
-  liqBody.style.transition="opacity .15s";
-
+  // ── Yield Curve Spreads — separate section, own data source ──
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   ycHead.textContent="Yield Curve Spreads";
   el.appendChild(ycHead);
@@ -8217,6 +8195,29 @@ function analystTab(){
 
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
+
+  // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
+  var fedHeadRow=div();fedHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
+  fedHead.textContent="Fed Rate Probabilities";
+  fedHeadRow.appendChild(fedHead);
+  var rbtn=h("button",{className:"btn"});
+  rbtn.textContent=isM?"↻":"↻ Refresh";
+  rbtn.title="Refresh";
+  rbtn.style.cssText=isM
+    ?"flex-shrink:0;width:26px;height:26px;padding:0;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1;"
+    :"flex-shrink:0;";
+  fedHeadRow.appendChild(rbtn);
+  el.appendChild(fedHeadRow);
+  var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
+  fedBody.style.transition="opacity .15s";
+
+  // ── Liquidity & Fed Balance Sheet Metrics ──
+  var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";
+  el.appendChild(liqHead);
+  var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
+  liqBody.style.transition="opacity .15s";
 
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
