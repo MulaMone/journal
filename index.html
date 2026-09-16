@@ -7818,45 +7818,84 @@ function computeFedProbability(meetingIso,curve,effr){
 // Persisted separately from the ZQ curve cache above (which only ever
 // holds the latest fetch) — every distinct computed probability for a
 // given meeting gets appended here, capped by age/count below.
+//
+// Aligned to how CME actually publishes this data: ZQ settles exactly
+// once per trading day (13:59-14:00 CT) and the Daily Bulletin is that
+// single settlement's printout — there is no intraday resolution to
+// chase. So history is keyed on the bulletin's own printed date
+// (dateISO), one row per meeting per trading day, NOT on Date.now() /
+// wall-clock fetch time. That also means an 8:30am release or a 2pm
+// FOMC decision is already fully baked into that same trading day's
+// close, so "yesterday's dated bulletin" vs "today's dated bulletin" is
+// exactly the right pre/post granularity CME's feed can support.
 function fedProbHistGet(){try{var raw=localStorage.getItem("edge_fedprob_hist_v1");return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function fedProbHistSet(arr){try{localStorage.setItem("edge_fedprob_hist_v1",JSON.stringify(arr));}catch(e){}}
-// Only appends when the read actually changed from the last recorded
-// snapshot for this meeting — repeated renders of an unchanged probability
-// (e.g. re-opening the tab the same day) shouldn't pile up duplicate rows.
-function recordFedProbSnapshot(prob){
+// Bulletin dateStr looks like "Wed, Sep 16, 2026" (matched at fetch time,
+// see fetchFedFundsData above) — normalize to a sortable "YYYY-MM-DD".
+function bulletinDateISO(dateStr){
+  if(!dateStr) return null;
+  var d=new Date(dateStr);
+  return isNaN(d.getTime())?null:d.toISOString().slice(0,10);
+}
+// Records one row per (meeting, bulletin date) — even when the read is
+// unchanged from the prior day, so "unch" is available for the 1-day/
+// 1-week chips instead of a missing row. Only skips if we've already
+// logged *this exact bulletin date* for this meeting (e.g. re-opening the
+// tab twice the same trading day off the 6h cache).
+function recordFedProbSnapshot(prob,bulletinDateStr){
   if(!prob) return;
+  var dateISO=bulletinDateISO(bulletinDateStr);
   var all=fedProbHistGet();
   var lastForMeeting=null;
   for(var i=all.length-1;i>=0;i--){ if(all[i].meetingCode===prob.meetingCode){ lastForMeeting=all[i]; break; } }
-  var changed=!lastForMeeting||lastForMeeting.hold!==prob.holdProb||lastForMeeting.move!==prob.stepProb;
-  if(!changed) return;
-  all.push({meetingCode:prob.meetingCode,hold:prob.holdProb,move:prob.stepProb,deltaBp:prob.deltaBp,ts:Date.now()});
+  if(lastForMeeting&&dateISO&&lastForMeeting.dateISO===dateISO) return;
+  all.push({meetingCode:prob.meetingCode,hold:prob.holdProb,move:prob.stepProb,deltaBp:prob.deltaBp,ts:Date.now(),dateISO:dateISO});
   var cutoff=Date.now()-60*24*60*60*1000; // keep ~60 days of history
   all=all.filter(function(r){return r.ts>=cutoff;});
   if(all.length>300) all=all.slice(all.length-300); // hard cap regardless of age
   fedProbHistSet(all);
 }
-// Finds the most recent recorded snapshot at or before (now - msAgo), for
-// the 1-day/1-week lookbacks — "at or before" rather than "nearest" so a
-// 1-day change never accidentally compares against something from later
-// today.
-function fedProbSnapshotBefore(hist,msAgo){
-  var target=Date.now()-msAgo;
+// Most recent recorded row whose bulletin date is at least `days` calendar
+// days before `anchorISO` (today's bulletin date) — calendar-day lookback,
+// not a 24h/7*24h millisecond window, since CME only ever gives us one
+// dated print per trading day.
+function fedProbSnapshotDaysAgo(hist,anchorISO,days){
+  if(!anchorISO) return null;
+  var anchor=new Date(anchorISO+"T00:00:00Z").getTime();
+  var target=anchor-days*24*60*60*1000;
+  var best=null,bestT=null;
+  hist.forEach(function(r){
+    if(!r.dateISO) return;
+    var t=new Date(r.dateISO+"T00:00:00Z").getTime();
+    if(t<=target&&(bestT===null||t>bestT)){ best=r;bestT=t; }
+  });
+  return best;
+}
+// The last recorded row dated BEFORE a given event (e.g. the FOMC decision
+// date itself) — i.e. the pre-event read to diff against today's (post-
+// event) probability. Only meaningful once a bulletin dated on/after the
+// event exists in history, which — since this meeting rolls off the
+// "next FOMC" slot the day after — only happens on the decision day
+// itself, exactly when the comparison becomes relevant.
+function fedProbPreEventSnapshot(hist,eventISO){
+  if(!eventISO) return null;
+  var hasPostEvent=hist.some(function(r){return r.dateISO&&r.dateISO>=eventISO;});
+  if(!hasPostEvent) return null;
   var best=null;
-  hist.forEach(function(r){ if(r.ts<=target){ if(!best||r.ts>best.ts) best=r; } });
+  hist.forEach(function(r){ if(r.dateISO&&r.dateISO<eventISO){ if(!best||r.dateISO>best.dateISO) best=r; } });
   return best;
 }
 // Pulls together everything the card needs to show 1-day / pre-vs-post /
 // 1-week change for the CURRENT meeting only — mixing in a stale prior
 // meeting's numbers would misread as a change that never happened.
-function fedProbDeltas(prob){
+function fedProbDeltas(prob,todayISO,meetingIso){
   if(!prob) return null;
   var hist=fedProbHistGet().filter(function(r){return r.meetingCode===prob.meetingCode;});
-  if(hist.length<2) return null; // need at least one prior snapshot to diff against
-  var prev=hist[hist.length-2]; // the snapshot immediately before this one — pre-data vs post-data
-  var d24=fedProbSnapshotBefore(hist,24*60*60*1000);
-  var d7=fedProbSnapshotBefore(hist,7*24*60*60*1000);
-  return {prev:prev,d24:d24,d7:d7};
+  if(hist.length<2) return null; // need at least one prior trading day's bulletin to diff against
+  var d1=fedProbSnapshotDaysAgo(hist,todayISO,1);
+  var d7=fedProbSnapshotDaysAgo(hist,todayISO,7);
+  var event=fedProbPreEventSnapshot(hist,meetingIso);
+  return {d1:d1,d7:d7,event:event};
 }
 function fmtFedDelta(fromMove,toMove){
   var d=toMove-fromMove;
@@ -7892,8 +7931,9 @@ function buildFedFundsView(data,isM){
       +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · "+anchorNote+"</div>";
     el.appendChild(card);
 
-    recordFedProbSnapshot(prob);
-    var deltas=fedProbDeltas(prob);
+    recordFedProbSnapshot(prob,data.dateStr);
+    var todayISO=bulletinDateISO(data.dateStr);
+    var deltas=fedProbDeltas(prob,todayISO,meetingIso);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
       function histChip(label,fromRec,toMoveVal){
@@ -7912,8 +7952,8 @@ function buildFedFundsView(data,isM){
         }
         return wrap;
       }
-      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d24,prob.stepProb));
-      histRow.appendChild(histChip("PRE → POST DATA",deltas.prev,prob.stepProb));
+      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,prob.stepProb));
+      histRow.appendChild(histChip("PRE → POST FOMC",deltas.event,prob.stepProb));
       histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,prob.stepProb));
       el.appendChild(histRow);
     } else {
