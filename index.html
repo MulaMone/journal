@@ -7758,6 +7758,37 @@ function contractMonthCodeFromISO(iso){
   var p=iso.split("-");
   return MONTH_CODES[parseInt(p[1],10)-1]+p[0].slice(2);
 }
+// CBOT/CME standard futures month letter codes — Yahoo (and every other
+// vendor) ticker a specific contract month as e.g. "ZQU26.CBT", not the
+// 3-letter codes this app uses internally ("SEP26").
+var CBOT_MONTH_LETTER={JAN:"F",FEB:"G",MAR:"H",APR:"J",MAY:"K",JUN:"M",JUL:"N",AUG:"Q",SEP:"U",OCT:"V",NOV:"X",DEC:"Z"};
+function cbotYahooTicker(meetingCode){
+  var mo=meetingCode.slice(0,3),yr=meetingCode.slice(3);
+  var letter=CBOT_MONTH_LETTER[mo];
+  return letter?("ZQ"+letter+yr+".CBT"):null;
+}
+// Live (delayed) price for the specific meeting-month ZQ contract, via a
+// Supabase Edge Function that fetches Yahoo's chart API server-side and
+// re-serves it with CORS headers — Yahoo's endpoint sends none at all, so
+// a direct browser fetch() is blocked unconditionally. Never allowed to
+// break the section: any failure (network, bad response, Yahoo down) just
+// resolves null and the caller falls back to the bulletin's settle price.
+// Deliberately uncached/unthrottled here — the whole point is to be
+// fresher than the once-daily bulletin, so it's fetched fresh on every
+// Analyst-tab render rather than sharing the 6h bulletin cache.
+function fetchLiveZQQuote(meetingCode){
+  var ticker=cbotYahooTicker(meetingCode);
+  if(!ticker) return Promise.resolve(null);
+  return fetch(SUPA_URL+"/functions/v1/fed-quote?symbol="+encodeURIComponent(ticker),{
+    headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
+  }).then(function(r){
+    if(!r.ok) throw new Error("live quote HTTP "+r.status);
+    return r.json();
+  }).then(function(json){
+    if(!json||typeof json.price!=="number"||!isFinite(json.price)) throw new Error("live quote missing price");
+    return {symbol:ticker,price:json.price,rate:100-json.price,asOf:json.asOf||null,marketState:json.marketState||null};
+  }).catch(function(){return null;});
+}
 function prevContractMonthCode(code){
   var mo=MONTH_CODES.indexOf(code.slice(0,3)),yr=parseInt(code.slice(3),10);
   mo--; if(mo<0){mo=11;yr--;}
@@ -7837,14 +7868,15 @@ function bulletinDateISO(dateStr){
   var d=new Date(dateStr);
   return isNaN(d.getTime())?null:d.toISOString().slice(0,10);
 }
-// Records one row per (meeting, bulletin date) — even when the read is
+// Records one row per (meeting, trading date) — even when the read is
 // unchanged from the prior day, so "unch" is available for the 1-day/
-// 1-week chips instead of a missing row. Only skips if we've already
-// logged *this exact bulletin date* for this meeting (e.g. re-opening the
-// tab twice the same trading day off the 6h cache).
-function recordFedProbSnapshot(prob,bulletinDateStr){
+// 1-week/1-month chips instead of a missing row. Only skips if we've
+// already logged *this exact date* for this meeting (e.g. re-opening the
+// tab twice the same trading day off the cache). Takes an already-resolved
+// dateISO rather than a bulletin string, so it works the same whether the
+// date comes from the bulletin (day-behind) or a live quote (today).
+function recordFedProbSnapshot(prob,dateISO){
   if(!prob) return;
-  var dateISO=bulletinDateISO(bulletinDateStr);
   var all=fedProbHistGet();
   var lastForMeeting=null;
   for(var i=all.length-1;i>=0;i--){ if(all[i].meetingCode===prob.meetingCode){ lastForMeeting=all[i]; break; } }
@@ -7891,16 +7923,32 @@ function fmtFedDelta(fromMove,toMove){
 
 function buildFedFundsView(data,isM){
   var el=div();
+  var meetingIso=nextFomcMeetingISO();
+  var meetingCode=meetingIso?contractMonthCodeFromISO(meetingIso):null;
+  // Live quote only applies if it's actually for the current meeting's
+  // contract month — guards against a stale/mismatched symbol slipping
+  // through if the meeting rolled over between the fetch firing and
+  // resolving.
+  var liveApplied=!!(data.live&&meetingCode&&data.live.symbol===cbotYahooTicker(meetingCode));
+  var curveForCalc=data.curve;
+  if(liveApplied){
+    curveForCalc=data.curve.map(function(c){
+      return c.code===meetingCode?{code:c.code,rate:data.live.rate,rateChg:c.rateChg}:c;
+    });
+  }
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
+  if(liveApplied){
+    staleNote.appendChild(document.createTextNode("LIVE (delayed) "+data.live.symbol+(data.live.asOf?" as of "+data.live.asOf:"")+" · curve otherwise from CME bulletin, "+(data.dateStr||"?")+"  "));
+  } else {
+    staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
+  }
   var cmeLink=h("a",{href:"https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",target:"_blank",rel:"noopener"});
   cmeLink.style.cssText="color:var(--text3);text-decoration:underline;";
   cmeLink.textContent="CME Fed →";
   staleNote.appendChild(cmeLink);
   el.appendChild(staleNote);
 
-  var meetingIso=nextFomcMeetingISO();
-  var prob=meetingIso?computeFedProbability(meetingIso,data.curve,data.effr):null;
+  var prob=meetingIso?computeFedProbability(meetingIso,curveForCalc,data.effr):null;
   if(prob){
     var isCut=prob.deltaBp<-0.5,isHike=prob.deltaBp>0.5;
     var moveLbl=isCut?"25bp CUT":isHike?"25bp HIKE":"25bp MOVE";
@@ -7917,8 +7965,8 @@ function buildFedFundsView(data,isM){
       +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · "+anchorNote+"</div>";
     el.appendChild(card);
 
-    recordFedProbSnapshot(prob,data.dateStr);
-    var todayISO=bulletinDateISO(data.dateStr);
+    recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
+    var todayISO=liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr);
     var deltas=fedProbDeltas(prob,todayISO);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
@@ -8497,8 +8545,12 @@ function analystTab(){
     var myToken=++_fedLoadToken;
     if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
     else showFedLoading();
-    loadFedFundsData(force).then(function(data){
+    var liveMeetingIso=nextFomcMeetingISO();
+    var liveP=liveMeetingIso?fetchLiveZQQuote(contractMonthCodeFromISO(liveMeetingIso)):Promise.resolve(null);
+    Promise.all([loadFedFundsData(force),liveP]).then(function(results){
       if(myToken!==_fedLoadToken||State.tab!=="analyst") return;
+      var data=results[0];
+      data.live=results[1];
       fedBody.innerHTML="";
       fedBody.appendChild(buildFedFundsView(data,isM));
       fedBody.style.opacity="1";
