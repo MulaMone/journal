@@ -5373,7 +5373,13 @@ function chartTab(){
   // Border bumped from the barely-visible default --border to --border2
   // plus a real box-shadow, so the whole panel — price axis and time axis
   // included — reads as one bounded unit instead of blending into the page.
-  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;";
+  // scroll-margin-top matches the fixed mobile topbar's own height (see the
+  // #topbar/#app rules under @media(max-width:480px)), so scrollIntoView
+  // (used to jump straight to the chart on tab switch, below) stops right
+  // BELOW the topbar instead of flush at the true top of the viewport —
+  // which sits BEHIND the topbar, since it's position:fixed and paints
+  // over whatever is scrolled underneath it.
+  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;scroll-margin-top:calc(52px + env(safe-area-inset-top) + 10px);";
   el.appendChild(chartDiv);
 
   // Double-click (double-tap on mobile — a tap fires the same "dblclick"
