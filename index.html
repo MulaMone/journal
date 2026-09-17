@@ -8705,7 +8705,6 @@ function analystTab(){
       liqRow.appendChild(buildLiquidityCard("rrp","Reverse Repo Facility","#b06aff",
         "Cash parked overnight at the Fed by money-market funds, sidelined from the market. A falling RRP balance means that cash is leaving overnight storage and flowing back into market liquidity — bullish; a rising RRP drains system liquidity.",data,isM));
       liqBody.appendChild(liqRow);
-      liqBody.appendChild(buildMacroExternalLinks());
       liqBody.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_liqLoadToken) return;
@@ -8811,6 +8810,11 @@ function analystTab(){
   loadLiq(false);
   loadFed(false);
   loadDxy(false);
+
+  // "More Macro (external)" — static links/content, no data fetch needed,
+  // so it's appended once directly rather than inside any of the async
+  // load() callbacks above. Placed last so it sits at the bottom of the tab.
+  el.appendChild(buildMacroExternalLinks());
 
   return el;
 }
