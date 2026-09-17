@@ -7462,25 +7462,27 @@ function buildMacroExternalLinks(){
   var head=div();head.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;";
   head.textContent="More Macro (external)";
   card.appendChild(head);
-  var atlantaRow=div();atlantaRow.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px;";
+  card.appendChild(buildQraScheduleBlock());
+  var linksRow=div();linksRow.style.cssText="display:flex;gap:20px;flex-wrap:wrap;margin-top:8px;padding-top:10px;border-top:1px solid var(--border);";
+  var atlantaCol=div();atlantaCol.style.cssText="flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px;";
   var atlantaA=h("a",{href:MACRO_EXTERNAL_LINKS[0].url,target:"_blank",rel:"noopener"});
-  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
   atlantaA.textContent=MACRO_EXTERNAL_LINKS[0].label;
-  atlantaRow.appendChild(atlantaA);
+  atlantaCol.appendChild(atlantaA);
   var atlantaNote=div();atlantaNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
   atlantaNote.textContent=MACRO_EXTERNAL_LINKS[0].note;
-  atlantaRow.appendChild(atlantaNote);
-  card.appendChild(atlantaRow);
-  card.appendChild(buildQraScheduleBlock());
-  var cesiRow=div();cesiRow.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
+  atlantaCol.appendChild(atlantaNote);
+  linksRow.appendChild(atlantaCol);
+  var cesiCol=div();cesiCol.style.cssText="flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px;";
   var cesiA=h("a",{href:MACRO_EXTERNAL_LINKS[1].url,target:"_blank",rel:"noopener"});
-  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
   cesiA.textContent=MACRO_EXTERNAL_LINKS[1].label;
-  cesiRow.appendChild(cesiA);
+  cesiCol.appendChild(cesiA);
   var cesiNote=div();cesiNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
   cesiNote.textContent=MACRO_EXTERNAL_LINKS[1].note;
-  cesiRow.appendChild(cesiNote);
-  card.appendChild(cesiRow);
+  cesiCol.appendChild(cesiNote);
+  linksRow.appendChild(cesiCol);
+  card.appendChild(linksRow);
   return card;
 }
 function buildLiquidityCard(fieldKey,label,col,note,data,isM){
