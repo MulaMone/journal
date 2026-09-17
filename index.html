@@ -2755,9 +2755,15 @@ function loadLocalCalendar(force){
 }
 
 var FOMC_DECISION_DATES_2026=["2026-01-28","2026-03-18","2026-04-29","2026-06-17","2026-07-29","2026-09-16","2026-10-28","2026-12-09"];
+// Fed's own tentative 2027 schedule (announced 2025-09-05): decision date is
+// the second day of each two-day meeting. Extends coverage past 2026-12-09
+// so monthHasAnyFomcMeeting/nextFomcMeetingISO/decidedMeetingIsoInMonth don't
+// silently go blind on 2027 meetings.
+var FOMC_DECISION_DATES_2027=["2027-01-27","2027-03-17","2027-04-28","2027-06-09","2027-07-28","2027-09-15","2027-10-27","2027-12-08"];
+var FOMC_DECISION_DATES_ALL=FOMC_DECISION_DATES_2026.concat(FOMC_DECISION_DATES_2027);
 function computeTodayMacroEvents(etTodayStr){
   var events=[];
-  if(FOMC_DECISION_DATES_2026.indexOf(etTodayStr)>-1){
+  if(FOMC_DECISION_DATES_ALL.indexOf(etTodayStr)>-1){
     events.push({title:"FOMC Meeting / Fed Decision",time:"2:00 PM",impact:"High"});
     events.push({title:"FOMC Press Conference",time:"2:30 PM",impact:"High"});
   }
@@ -8034,7 +8040,7 @@ function contractMonthSortKey(code){
 // dates rather than a second list that could drift out of sync.
 function nextFomcMeetingISO(){
   var todayIso=new Date().toISOString().slice(0,10);
-  var future=FOMC_DECISION_DATES_2026.filter(function(d){return d>=todayIso;});
+  var future=FOMC_DECISION_DATES_ALL.filter(function(d){return d>=todayIso;});
   return future.length?future[0]:null;
 }
 // Standard CME-style single-step approximation for the NEXT meeting only:
@@ -8055,7 +8061,7 @@ function nextFomcMeetingISO(){
 function decidedMeetingIsoInMonth(monthCode){
   var todayIso=new Date().toISOString().slice(0,10);
   var found=null;
-  FOMC_DECISION_DATES_2026.forEach(function(iso){
+  FOMC_DECISION_DATES_ALL.forEach(function(iso){
     if(iso<=todayIso&&contractMonthCodeFromISO(iso)===monthCode) found=iso;
   });
   return found;
@@ -8070,7 +8076,7 @@ function nextContractMonthCode(code){
 // average, so it can't be used as a clean, undecomposed stand-in for "the
 // rate after our target meeting."
 function monthHasAnyFomcMeeting(monthCode){
-  return FOMC_DECISION_DATES_2026.some(function(iso){return contractMonthCodeFromISO(iso)===monthCode;});
+  return FOMC_DECISION_DATES_ALL.some(function(iso){return contractMonthCodeFromISO(iso)===monthCode;});
 }
 function computeFedProbability(meetingIso,curve,effr){
   var meetingCode=contractMonthCodeFromISO(meetingIso);
