@@ -7437,7 +7437,7 @@ function buildQraBadge(timeLabel,sub,col){
 }
 function buildQraDateSpinner(){
   var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  var DAYS_IN_MONTH=[31,29,31,30,31,30,31,31,30,31,30,31];
+  var DAYS_IN_MONTH=[31,28,31,30,31,30,31,31,30,31,30,31];
   var mi=ls("qra_spinner_month",0),day=ls("qra_spinner_day",1);
   if(typeof mi!=="number"||mi<0||mi>11) mi=0;
   if(typeof day!=="number"||day<1||day>31) day=1;
@@ -7454,7 +7454,7 @@ function buildQraDateSpinner(){
   dayBox.appendChild(dayDown);dayBox.appendChild(dayVal);dayBox.appendChild(dayUp);
   wrap.appendChild(monBox);wrap.appendChild(dayBox);
   function render(){
-    if(day>DAYS_IN_MONTH[mi]) day=DAYS_IN_MONTH[mi];
+    if(day>DAYS_IN_MONTH[mi]){day=DAYS_IN_MONTH[mi];ss("qra_spinner_day",day);}
     monVal.textContent=MONTHS[mi];
     dayVal.textContent=day;
   }
@@ -7467,7 +7467,7 @@ function buildQraDateSpinner(){
 }
 function buildQraScheduleBlock(){
   var wrap=div();wrap.style.cssText="margin-bottom:10px;";
-  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:nowrap;";
+  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;";
   var linkGroup=div();linkGroup.style.cssText="display:flex;align-items:baseline;gap:8px;min-width:0;overflow:hidden;";
   var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
   a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;white-space:nowrap;";
