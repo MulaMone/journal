@@ -7414,11 +7414,16 @@ function buildQraBadge(timeLabel,sub,col){
 }
 function buildQraScheduleBlock(){
   var wrap=div();wrap.style.cssText="margin-bottom:10px;";
-  var linkRow=div();linkRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;";
+  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;";
+  var linkGroup=div();linkGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
   var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
-  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
   a.textContent="Treasury QRA Docs →";
-  linkRow.appendChild(a);
+  linkGroup.appendChild(a);
+  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
+  noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
+  linkGroup.appendChild(noteEl);
+  linkRow.appendChild(linkGroup);
   var fwToggle=div();
   fwToggle.style.cssText="cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;flex-shrink:0;";
   var fwToggleLbl=div();fwToggleLbl.textContent="Two-Step Framework";
@@ -7442,9 +7447,6 @@ function buildQraScheduleBlock(){
   }
   monBadge.onclick=function(){toggle("mon",QRA_MON_DETAIL);};
   wedBadge.onclick=function(){toggle("wed",QRA_WED_DETAIL);};
-  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4;";
-  noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
-  wrap.appendChild(noteEl);
   var fwBody=div();fwBody.style.cssText="display:none;font-size:11px;color:var(--text);line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);";
   fwBody.innerHTML="<b style='color:var(--text);'>1. Monday 3:00 PM ET — \"How much\":</b> how many dollars Treasury needs, and whether the TGA target adds or subtracts liquidity from Net Liquidity = Fed Assets − (TGA + RRP).<br><b style='color:var(--text);'>2. Wednesday 8:30 AM ET — \"Which bucket\":</b> where those dollars come from — T-Bills or long-end coupons.<ul style='margin:6px 0 0 16px;padding:0;'><li>Funded by T-Bills → cash comes out of the RRP facility (bullish / painless).</li><li>Funded by long-end coupons → yields spike, pressuring NQ valuation multiples.</li></ul>";
   wrap.appendChild(fwBody);
