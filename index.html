@@ -8463,13 +8463,31 @@ function analystTab(){
   cotHead.textContent="COT & Open Interest";
   el.appendChild(cotHead);
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="flex-wrap:wrap;flex-shrink:0;";
+  var symBtns=[];
+  function paintSymBtns(){
+    symBtns.forEach(function(b){
+      if(b._sym===sym) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
+      else b.style.cssText="";
+    });
+  }
   Object.keys(COT_SYMS).forEach(function(s){
     var b=h("button",{className:"btn"});
-    b.textContent=s;b.title=COT_SYMS[s].name;
-    if(sym===s) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
-    b.addEventListener("click",function(){State.analyst_symbol=s;render();});
+    b.textContent=s;b.title=COT_SYMS[s].name;b._sym=s;
+    symBtns.push(b);
+    b.addEventListener("click",function(){
+      if(sym===s) return;
+      sym=s;State.analyst_symbol=s;
+      paintSymBtns();
+      // Reload only the symbol-dependent COT sections in place — a full
+      // render() here would tear down and rebuild the whole Analyst tab
+      // (DXY, yield curve, Fed funds, liquidity too), and since those load
+      // asynchronously at different speeds, the page height would keep
+      // changing as each one popped in — the "jumps up and down" bug.
+      loadLegacy(true);load(true);loadCme(true);
+    });
     ctrlRow.appendChild(b);
   });
+  paintSymBtns();
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
 
