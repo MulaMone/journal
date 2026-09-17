@@ -7414,10 +7414,18 @@ function buildQraBadge(timeLabel,sub,col){
 }
 function buildQraScheduleBlock(){
   var wrap=div();wrap.style.cssText="margin-bottom:10px;";
+  var linkRow=div();linkRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;";
   var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
   a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
   a.textContent="Treasury QRA Docs →";
-  wrap.appendChild(a);
+  linkRow.appendChild(a);
+  var fwToggle=div();
+  fwToggle.style.cssText="cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;flex-shrink:0;";
+  var fwToggleLbl=div();fwToggleLbl.textContent="Two-Step Framework";
+  var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
+  fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
+  linkRow.appendChild(fwToggle);
+  wrap.appendChild(linkRow);
   var badgeRow=div();badgeRow.style.cssText="display:flex;gap:10px;margin-top:8px;";
   var monBadge=buildQraBadge("Mon 3:00 PM ET","Sets macro liquidity baseline","#ff8c00");
   var wedBadge=buildQraBadge("Wed 8:30 AM ET","Full Refunding Statement","#00d4d4");
@@ -7437,14 +7445,7 @@ function buildQraScheduleBlock(){
   var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4;";
   noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
   wrap.appendChild(noteEl);
-  var fwToggle=div();
-  fwToggle.style.cssText="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;";
-  var fwToggleLbl=div();fwToggleLbl.style.cssText="font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;";
-  fwToggleLbl.textContent="Two-Step Refunding Framework";
-  var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
-  fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
-  wrap.appendChild(fwToggle);
-  var fwBody=div();fwBody.style.cssText="display:none;font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;";
+  var fwBody=div();fwBody.style.cssText="display:none;font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);";
   fwBody.innerHTML="<b style='color:var(--text);'>1. Monday 3:00 PM ET — \"How much\":</b> how many dollars Treasury needs, and whether the TGA target adds or subtracts liquidity from Net Liquidity = Fed Assets − (TGA + RRP).<br><b style='color:var(--text);'>2. Wednesday 8:30 AM ET — \"Which bucket\":</b> where those dollars come from — T-Bills or long-end coupons.<ul style='margin:6px 0 0 16px;padding:0;'><li>Funded by T-Bills → cash comes out of the RRP facility (bullish / painless).</li><li>Funded by long-end coupons → yields spike, pressuring NQ valuation multiples.</li></ul>";
   wrap.appendChild(fwBody);
   fwToggle.addEventListener("click",function(){
