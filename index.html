@@ -7397,25 +7397,80 @@ function buildRrpShiftAlert(data,isM){
 // one can't be embedded directly.
 var MACRO_EXTERNAL_LINKS=[
   {label:"Atlanta Fed SOFR Skew →",url:"https://www.atlantafed.org/research-and-data/data/market-probability-tracker",note:"Market Probability Tracker — full options-implied SOFR distribution, not just point estimates"},
-  {label:"Treasury QRA Docs →",url:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",note:"Quarterly Refunding announcements — issuance guidance ahead of TGA-draining auction settlements"},
   {label:"Citi Surprise Index (CESI) →",url:"https://yardeni.com/charts/us-economy/us-economic-indicators/citigroup-economic-surprise",note:"Economic data vs. consensus — Yardeni Research's free chart page, no signup wall"}
 ];
+// Treasury's Quarterly Refunding process lands in two parts, a few days
+// apart — the Monday "how much" release and the Wednesday "which bucket"
+// release. Text below is Mula's own summary of what each one contains,
+// hardcoded rather than fetched (see MACRO_EXTERNAL_LINKS comment above —
+// no API for this either, and the QRA is quarterly, not worth polling for).
+var QRA_MON_DETAIL="<b style='color:var(--text);'>Sources and Uses of Funds</b><br>Treasury publishes a press release and data table breaking down two variables for the current and next quarter:<ul style='margin:6px 0 0 16px;padding:0;'><li><b>Target TGA Cash Balance</b> — how much cash Treasury wants sitting in its Fed checking account by each quarter-end (e.g. $950B by end of Q3, $850B by end of Q4).</li><li><b>Net Marketable Borrowing Estimate</b> — total debt Treasury needs to issue to private investors to fund operations and hit that TGA target.</li></ul>";
+var QRA_WED_DETAIL="<b style='color:var(--text);'>Quarterly Refunding Statement</b><br>Dictates market duration and auction sizes:<ul style='margin:6px 0 0 16px;padding:0;'><li><b>Exact Bond Auction Sizes</b> — the billion-dollar amounts planned across 2Y, 3Y, 5Y, 7Y, 10Y, 20Y and 30Y notes/bonds for the coming quarter.</li><li><b>Debt Mix Strategy</b> — whether funding leans on short-term T-Bills or long-term coupons.</li><li><b>TBAC Recommendations & Policy Guidance</b> — Treasury Borrowing Advisory Committee reports on long-term demand, buyback plans, and issuance structure.</li></ul>";
+function buildQraBadge(timeLabel,sub,col){
+  var el=div();
+  el.style.cssText="flex:1;background:var(--panel2);border:1px solid var(--border2);border-left:3px solid "+col+";border-radius:4px;padding:10px 12px;cursor:pointer;user-select:none;";
+  el.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>"+timeLabel+"</div><div style='font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4;'>"+sub+" <span style='color:"+col+";'>▸</span></div>";
+  return el;
+}
+function buildQraScheduleBlock(){
+  var wrap=div();wrap.style.cssText="margin-bottom:10px;";
+  var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
+  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  a.textContent="Treasury QRA Docs →";
+  wrap.appendChild(a);
+  var badgeRow=div();badgeRow.style.cssText="display:flex;gap:10px;margin-top:8px;";
+  var monBadge=buildQraBadge("Mon 3:00 PM ET","Sets macro liquidity baseline","#ff8c00");
+  var wedBadge=buildQraBadge("Wed 8:30 AM ET","Full Refunding Statement","#00d4d4");
+  badgeRow.appendChild(monBadge);
+  badgeRow.appendChild(wedBadge);
+  wrap.appendChild(badgeRow);
+  var detailPanel=div();detailPanel.style.cssText="display:none;margin-top:8px;font-size:11px;color:var(--text2);line-height:1.6;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 12px;";
+  wrap.appendChild(detailPanel);
+  function toggle(key,html){
+    if(detailPanel.style.display==="block"&&detailPanel.getAttribute("data-key")===key){
+      detailPanel.style.display="none";detailPanel.removeAttribute("data-key");return;
+    }
+    detailPanel.innerHTML=html;detailPanel.style.display="block";detailPanel.setAttribute("data-key",key);
+  }
+  monBadge.onclick=function(){toggle("mon",QRA_MON_DETAIL);};
+  wedBadge.onclick=function(){toggle("wed",QRA_WED_DETAIL);};
+  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4;";
+  noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
+  wrap.appendChild(noteEl);
+  var fw=div();fw.style.cssText="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);";
+  var fwHead=div();fwHead.style.cssText="font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";
+  fwHead.textContent="Two-Step Refunding Framework";
+  fw.appendChild(fwHead);
+  var fwBody=div();fwBody.style.cssText="font-size:11px;color:var(--text2);line-height:1.6;";
+  fwBody.innerHTML="<b style='color:var(--text);'>1. Monday 3:00 PM ET — \"How much\":</b> how many dollars Treasury needs, and whether the TGA target adds or subtracts liquidity from Net Liquidity = Fed Assets − (TGA + RRP).<br><b style='color:var(--text);'>2. Wednesday 8:30 AM ET — \"Which bucket\":</b> where those dollars come from — T-Bills or long-end coupons.<ul style='margin:6px 0 0 16px;padding:0;'><li>Funded by T-Bills → cash comes out of the RRP facility (bullish / painless).</li><li>Funded by long-end coupons → yields spike, pressuring NQ valuation multiples.</li></ul>";
+  fw.appendChild(fwBody);
+  wrap.appendChild(fw);
+  return wrap;
+}
 function buildMacroExternalLinks(){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-top:2px;";
   var head=div();head.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;";
   head.textContent="More Macro (external)";
   card.appendChild(head);
-  MACRO_EXTERNAL_LINKS.forEach(function(item,i){
-    var row=div();row.style.cssText="margin-bottom:"+(i<MACRO_EXTERNAL_LINKS.length-1?"10px":"0")+";";
-    var a=h("a",{href:item.url,target:"_blank",rel:"noopener"});
-    a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
-    a.textContent=item.label;
-    row.appendChild(a);
-    var n=div();n.style.cssText="font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4;";
-    n.textContent=item.note;
-    row.appendChild(n);
-    card.appendChild(row);
-  });
+  var atlantaRow=div();atlantaRow.style.cssText="margin-bottom:10px;";
+  var atlantaA=h("a",{href:MACRO_EXTERNAL_LINKS[0].url,target:"_blank",rel:"noopener"});
+  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  atlantaA.textContent=MACRO_EXTERNAL_LINKS[0].label;
+  atlantaRow.appendChild(atlantaA);
+  var atlantaNote=div();atlantaNote.style.cssText="font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4;";
+  atlantaNote.textContent=MACRO_EXTERNAL_LINKS[0].note;
+  atlantaRow.appendChild(atlantaNote);
+  card.appendChild(atlantaRow);
+  card.appendChild(buildQraScheduleBlock());
+  var cesiRow=div();
+  var cesiA=h("a",{href:MACRO_EXTERNAL_LINKS[1].url,target:"_blank",rel:"noopener"});
+  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  cesiA.textContent=MACRO_EXTERNAL_LINKS[1].label;
+  cesiRow.appendChild(cesiA);
+  var cesiNote=div();cesiNote.style.cssText="font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4;";
+  cesiNote.textContent=MACRO_EXTERNAL_LINKS[1].note;
+  cesiRow.appendChild(cesiNote);
+  card.appendChild(cesiRow);
   return card;
 }
 function buildLiquidityCard(fieldKey,label,col,note,data,isM){
