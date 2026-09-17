@@ -7362,6 +7362,62 @@ function buildNetLiquidityBanner(data,isM){
   el.appendChild(card);
   return el;
 }
+// Zero-RRP shift alert: while ON RRP usage still has room to fall, a
+// draining RRP is itself the bullish liquidity release valve (cash leaving
+// overnight lockup). But once RRP is down near its structural floor —
+// there's no meaningful buffer left in the facility — that valve is spent.
+// From that point on, further liquidity pressure (e.g. TGA rebuilding from
+// tax collection or auction settlement) has nowhere to be absorbed except
+// bank reserves directly, which drains liquidity faster than the printed
+// Net Liquidity trend alone would suggest. This flags that regime shift.
+var RRP_FLOOR=150e9; // ON RRP usage below ~$150B is considered structurally near-empty
+function buildRrpShiftAlert(data,isM){
+  var rows=data.rows.filter(function(r){return typeof r.rrp==="number"&&typeof r.tga==="number";});
+  if(rows.length<5) return null;
+  var latest=rows[rows.length-1];
+  if(latest.rrp>RRP_FLOOR) return null; // buffer not exhausted yet — nothing to flag
+  var trendBase=rows[Math.max(0,rows.length-5)]; // ~4 prints back
+  var tgaRising=latest.tga>trendBase.tga;
+  var tgaChg=latest.tga-trendBase.tga;
+  var card=div();
+  var col=tgaRising?"#ff4444":"#ffab00";
+  card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:14px 18px;margin-bottom:14px;";
+  var head="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>⚠ RRP Buffer Near Exhausted <span style='color:var(--text3);text-transform:none;letter-spacing:0;'>(bal "+fmtLiqDollar(latest.rrp)+")</span></div>";
+  var body;
+  if(tgaRising){
+    body="<div style='font-size:12px;line-height:1.6;color:var(--text2);'>RRP has drained toward its structural floor — the overnight-lockup buffer is mostly spent. TGA is rising ("+(tgaChg>=0?"+":"")+fmtLiqDollar(tgaChg)+" over trailing prints), and with RRP no longer able to absorb it, that TGA build is now pulling cash directly from bank reserves. Expect sharper liquidity drawdowns than the Net Liquidity trend alone implies — watch for this around heavy tax-collection weeks or large Treasury auction settlements.</div>";
+  } else {
+    body="<div style='font-size:12px;line-height:1.6;color:var(--text2);'>RRP is near its structural floor, so the drain-driven liquidity tailwind is largely spent. TGA isn't currently rising, so reserves aren't under direct pressure yet — but with no RRP buffer left, any future TGA rebuild (tax weeks, large auction settlements) will hit bank reserves directly instead of being cushioned.</div>";
+  }
+  card.innerHTML=head+body;
+  return card;
+}
+// External macro tools with no free API/feed to pull client-side — link out
+// instead of faking a data widget for them. See card comments for why each
+// one can't be embedded directly.
+var MACRO_EXTERNAL_LINKS=[
+  {label:"Atlanta Fed SOFR Skew →",url:"https://www.atlantafed.org/research-and-data/data/market-probability-tracker",note:"Market Probability Tracker — full options-implied SOFR distribution, not just point estimates"},
+  {label:"Treasury QRA Docs →",url:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",note:"Quarterly Refunding announcements — issuance guidance ahead of TGA-draining auction settlements"},
+  {label:"Citi Surprise Index (CESI) →",url:"https://en.macromicro.me/charts/55674/us-citi-surprise-index-earnings-revision",note:"Economic data vs. consensus — proprietary Citi feed, viewable here"}
+];
+function buildMacroExternalLinks(){
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-top:2px;";
+  var head=div();head.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;";
+  head.textContent="More Macro (external)";
+  card.appendChild(head);
+  MACRO_EXTERNAL_LINKS.forEach(function(item,i){
+    var row=div();row.style.cssText="margin-bottom:"+(i<MACRO_EXTERNAL_LINKS.length-1?"10px":"0")+";";
+    var a=h("a",{href:item.url,target:"_blank",rel:"noopener"});
+    a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+    a.textContent=item.label;
+    row.appendChild(a);
+    var n=div();n.style.cssText="font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4;";
+    n.textContent=item.note;
+    row.appendChild(n);
+    card.appendChild(row);
+  });
+  return card;
+}
 function buildLiquidityCard(fieldKey,label,col,note,data,isM){
   var series=data.rows.map(function(r){
     var v=r[fieldKey];
@@ -8554,6 +8610,8 @@ function analystTab(){
       if(myToken!==_liqLoadToken||State.tab!=="analyst") return;
       liqBody.innerHTML="";
       liqBody.appendChild(buildNetLiquidityBanner(data,isM));
+      var rrpAlert=buildRrpShiftAlert(data,isM);
+      if(rrpAlert) liqBody.appendChild(rrpAlert);
       var liqRow=div("g3");
       liqRow.appendChild(buildLiquidityCard("fedAssets","Fed Total Assets","#00d4d4",
         "The Fed's balance sheet — QE expands it, QT shrinks it. A larger balance sheet generally means more system liquidity available to flow into risk assets.",data,isM));
@@ -8562,6 +8620,7 @@ function analystTab(){
       liqRow.appendChild(buildLiquidityCard("rrp","Reverse Repo Facility","#b06aff",
         "Cash parked overnight at the Fed by money-market funds, sidelined from the market. A falling RRP balance means that cash is leaving overnight storage and flowing back into market liquidity — bullish; a rising RRP drains system liquidity.",data,isM));
       liqBody.appendChild(liqRow);
+      liqBody.appendChild(buildMacroExternalLinks());
       liqBody.style.opacity="1";
     }).catch(function(err){
       if(myToken!==_liqLoadToken) return;
