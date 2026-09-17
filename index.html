@@ -7126,10 +7126,6 @@ function buildCOTLegacyView(sym,data,isM){
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" contracts vs prior week</div>";
   oiTop.appendChild(oiL);
   oiCard.appendChild(oiTop);
-  var oiHist=rows.slice(-26).map(function(r){return {v:+r.open_interest_all||0,l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
-  var oiChartWrap=div();oiChartWrap.style.cssText="margin-top:10px;height:80px;";
-  oiChartWrap.appendChild(lineSVG(oiHist,isM?300:640,80,"#e0c97a",fmtCotNum));
-  oiCard.appendChild(oiChartWrap);
   el.appendChild(oiCard);
 
   // ── Positioning by trader category ──
