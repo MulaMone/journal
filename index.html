@@ -1914,7 +1914,7 @@ function openSettings(){
   tnxTokRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
   var tnxTokInfo=document.createElement("div");tnxTokInfo.style.cssText="min-width:0;";
   var tnxTokLbl=document.createElement("div");tnxTokLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";tnxTokLbl.textContent="GitHub Token (TNX)";
-  var tnxTokDesc=document.createElement("div");tnxTokDesc.style.cssText="font-size:10px;color:var(--text3);";tnxTokDesc.textContent="Repo-scoped, Actions: write — lets Trigger Update pull a fresh $TNX quote on demand";
+  var tnxTokDesc=document.createElement("div");tnxTokDesc.style.cssText="font-size:10px;color:var(--text3);";tnxTokDesc.textContent="Repo-scoped, Actions: write — lets Trigger All Data Updates pull fresh data on demand";
   tnxTokInfo.appendChild(tnxTokLbl);tnxTokInfo.appendChild(tnxTokDesc);
   var tnxTokRight=document.createElement("div");tnxTokRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
   var tnxTokInp=document.createElement("input");
@@ -7716,72 +7716,15 @@ function updateTnxLiveBadge(){
     if(cached) paintTnxBadge(cached);
   });
 }
-// ── On-demand trigger: since the direct browser fetch is CORS-blocked,
-// this instead calls GitHub's own API to kick off the "Update TNX quote"
-// Action right now, then polls tnx.json for the new commit — genuinely
-// fresh data on your schedule instead of waiting for the 15-min cron.
-// Needs a GitHub token (repo-scoped, Actions:write) saved once; stored
-// client-side same as the OANDA token elsewhere in this app.
 var GH_OWNER="mulamone";
 var GH_REPO="journal";
-var GH_WORKFLOW_FILE="update-tnx.yml";
 var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
-// Updates every visible status surface at once — the text row in Settings
-// (if that modal happens to be open) and the small ⚡ icon on the card
-// itself (via its title tooltip + color), so either one reflects the same
-// state regardless of which the person is looking at.
-function setTnxTriggerStatus(text,color){
-  var statusEl=document.getElementById("tnx-trigger-status");
-  if(statusEl){statusEl.textContent=text;statusEl.style.color=color;}
-  var iconEl=document.getElementById("tnx-inline-trigger-btn");
-  if(iconEl){iconEl.title=text;iconEl.style.color=color;}
-}
-function triggerTnxWorkflow(){
-  var tok=ls("gh_token","");
-  if(!tok){setTnxTriggerStatus("Set a GitHub token first","var(--red)");return;}
-  setTnxTriggerStatus("Triggering…","var(--text3)");
-  // Baseline to diff future polls against — the source's own written
-  // fetchedAt (not this client's Date.now()), so we can tell "same file
-  // still" from "the Action actually produced a new commit" once polling
-  // starts, rather than accepting the very next successful fetch (which
-  // is very likely still the pre-trigger file) as if it were fresh.
-  var baseline=(_tnxMemCache&&_tnxMemCache.sourceFetchedAt)||null;
-  fetch("https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/"+GH_WORKFLOW_FILE+"/dispatches",{
-    method:"POST",
-    headers:{"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json","Content-Type":"application/json"},
-    body:JSON.stringify({ref:GH_BRANCH})
-  }).then(function(r){
-    if(!r.ok) return r.text().then(function(t){throw new Error("HTTP "+r.status+(t?": "+t.slice(0,120):""));});
-    setTnxTriggerStatus("Waiting for Action to finish…","var(--text3)");
-    pollForFreshTnx(0,baseline);
-  }).catch(function(err){
-    setTnxTriggerStatus("Trigger failed — "+(err&&err.message?err.message:"error"),"var(--red)");
-  });
-}
-function pollForFreshTnx(attempt,baseline){
-  if(attempt>=10){ // ~50s of polling, matches a typical checkout+run+commit cycle
-    setTnxTriggerStatus("Still waiting — check the Actions tab","var(--amber)");
-    return;
-  }
-  setTimeout(function(){
-    fetchTnxFromFile().then(function(data){
-      if(baseline&&data.sourceFetchedAt===baseline){
-        pollForFreshTnx(attempt+1,baseline); // same file as before the trigger — keep waiting
-        return;
-      }
-      paintTnxBadge(data);
-      setTnxTriggerStatus("Updated ✓","var(--green)");
-    }).catch(function(){
-      pollForFreshTnx(attempt+1,baseline);
-    });
-  },5000);
-}
 // ── Trigger all data workflows at once — fire-and-forget, no per-file
-// polling (unlike triggerTnxWorkflow above). Dispatches all four Actions
-// that keep this app's same-origin JSON files fresh, using the same
-// token and repo already configured for the TNX trigger. Reports which
-// dispatches succeeded/failed; the person verifies actual completion via
-// the Actions tab rather than the app polling four separate JSON files.
+// polling. Dispatches all four Actions that keep this app's same-origin
+// JSON files fresh, using the GitHub token saved in Settings. Reports
+// which dispatches succeeded/failed; the person verifies actual
+// completion via the Actions tab rather than the app polling four
+// separate JSON files.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml"];
 function triggerAllWorkflows(statusElId){
   var tok=ls("gh_token","");
