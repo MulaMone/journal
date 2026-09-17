@@ -7336,15 +7336,42 @@ function fetchYcFromFile(force){
     return {rows:json.rows,sourceFetchedAt:json.fetchedAt,fetchedAt:Date.now()};
   });
 }
+// Merges the Supabase-table result and the static-file result by date
+// instead of picking one and trusting it — the two are written by
+// independent pipelines (Supabase pg_cron vs a GitHub Action) that can
+// legitimately disagree on any given day about who has the freshest
+// print. Taking the union means whichever source has today's row wins,
+// automatically, with no dependency on either pipeline's own dedupe
+// logic or timing.
+function mergeYcResults(results){
+  var byDate={};
+  results.forEach(function(r){
+    if(!r||!r.rows) return;
+    r.rows.forEach(function(row){ if(row&&row.d) byDate[row.d]=row; });
+  });
+  var mergedRows=Object.keys(byDate).sort().map(function(d){return byDate[d];});
+  var latestFetchedAt=results.reduce(function(acc,r){
+    var t=r&&r.sourceFetchedAt?Date.parse(r.sourceFetchedAt):NaN;
+    return (!isNaN(t)&&t>acc)?t:acc;
+  },0);
+  return {
+    rows:mergedRows,
+    sourceFetchedAt:latestFetchedAt?new Date(latestFetchedAt).toISOString():null,
+    fetchedAt:Date.now()
+  };
+}
 function loadYieldCurveData(force){
   var cached=_ycMemCache||ycCacheGet();
   var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetchYcFromSupabase().catch(function(){
-    return fetchYcFromFile(force);
-  }).then(function(obj){
-    _ycMemCache=obj;ycCacheSet(obj);
-    return obj;
+  return Promise.all([
+    fetchYcFromSupabase().catch(function(){return null;}),
+    fetchYcFromFile(force).catch(function(){return null;})
+  ]).then(function(results){
+    var merged=mergeYcResults(results);
+    if(!merged.rows.length) throw new Error("both yield-curve sources failed");
+    _ycMemCache=merged;ycCacheSet(merged);
+    return merged;
   }).catch(function(err){
     if(cached){_ycMemCache=cached;return cached;}
     throw err;
