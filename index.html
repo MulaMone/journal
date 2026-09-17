@@ -7115,25 +7115,21 @@ function buildCOTLegacyView(sym,data,isM){
   staleNote.textContent="Report week ending "+asOf+", updated weekly (Fridays)";
   el.appendChild(staleNote);
 
-  // ── Open Interest summary ──
+  // ── Open Interest summary — built here, inserted into the trader-category
+  // grid below (right next to Commercial) rather than shown standalone ──
   var oi=+latest.open_interest_all||0;
   var oiChg=+latest.change_in_open_interest_all||0;
-  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px 18px;margin-bottom:14px;";
-  var oiTop=div("rjb");oiTop.style.alignItems="flex-start";
-  var oiL=div();
-  oiL.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Total Open Interest — "+COT_SYMS[sym].name+"</div>"
-    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtCotNum(oi)+"</div>"
-    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" contracts vs prior week</div>";
-  oiTop.appendChild(oiL);
-  oiCard.appendChild(oiTop);
-  el.appendChild(oiCard);
+  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;";
+  oiCard.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Total Open Interest</div>"
+    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtCotNum(oi)+"</div>"
+    +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" vs prior week</div>";
 
   // ── Positioning by trader category ──
   var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:#ffffff;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
   catHead.textContent="Positioning by Trader Category";
   el.appendChild(catHead);
 
-  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr 1fr")+";gap:10px;margin-bottom:16px;";
   COT_LEGACY_CATS.forEach(function(cat){
     var lk=cat.lk,sk=cat.sk;
     var long=+latest[lk]||0,short=+latest[sk]||0,net=long-short;
@@ -7153,6 +7149,7 @@ function buildCOTLegacyView(sym,data,isM){
       +"<div style='color:"+(netChg>=0?"#00e676":"#ff4444")+";'>"+fmtCotChg(netChg)+" wow</div>";
     card.appendChild(netRow);
     grid.appendChild(card);
+    if(cat.label==="Commercial") grid.appendChild(oiCard);
   });
   el.appendChild(grid);
 
