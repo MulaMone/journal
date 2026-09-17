@@ -7435,24 +7435,52 @@ function buildQraBadge(timeLabel,sub,col){
   el.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>"+timeLabel+"</div><div style='font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4;'>"+sub+" <span style='color:"+col+";'>▸</span></div>";
   return el;
 }
+function buildQraDateSpinner(){
+  var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var DAYS_IN_MONTH=[31,29,31,30,31,30,31,31,30,31,30,31];
+  var mi=0,day=1;
+  function spinBox(){var b=div();b.style.cssText="display:flex;align-items:center;background:var(--panel2);border:1px solid var(--border2);border-radius:3px;";return b;}
+  function arrowBtn(txt){var el=div();el.style.cssText="padding:2px 6px;cursor:pointer;color:var(--text3);font-size:10px;";el.textContent=txt;return el;}
+  var wrap=div();wrap.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
+  var monBox=spinBox();
+  var monDown=arrowBtn("◂"),monVal=div(),monUp=arrowBtn("▸");
+  monVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--text2);min-width:26px;text-align:center;";
+  monBox.appendChild(monDown);monBox.appendChild(monVal);monBox.appendChild(monUp);
+  var dayBox=spinBox();
+  var dayDown=arrowBtn("◂"),dayVal=div(),dayUp=arrowBtn("▸");
+  dayVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--text2);min-width:18px;text-align:center;";
+  dayBox.appendChild(dayDown);dayBox.appendChild(dayVal);dayBox.appendChild(dayUp);
+  wrap.appendChild(monBox);wrap.appendChild(dayBox);
+  function render(){
+    if(day>DAYS_IN_MONTH[mi]) day=DAYS_IN_MONTH[mi];
+    monVal.textContent=MONTHS[mi];
+    dayVal.textContent=day;
+  }
+  monUp.onclick=function(){mi=(mi+1)%12;render();};
+  monDown.onclick=function(){mi=(mi+11)%12;render();};
+  dayUp.onclick=function(){day=(day%DAYS_IN_MONTH[mi])+1;render();};
+  dayDown.onclick=function(){day=((day+DAYS_IN_MONTH[mi]-2)%DAYS_IN_MONTH[mi])+1;render();};
+  render();
+  return wrap;
+}
 function buildQraScheduleBlock(){
   var wrap=div();wrap.style.cssText="margin-bottom:10px;";
-  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;";
-  var linkGroup=div();linkGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
+  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:nowrap;";
+  var linkGroup=div();linkGroup.style.cssText="display:flex;align-items:baseline;gap:8px;min-width:0;overflow:hidden;";
   var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
-  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;white-space:nowrap;";
   a.textContent="Treasury QRA Docs →";
   linkGroup.appendChild(a);
-  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
-  noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
-  linkGroup.appendChild(noteEl);
   linkRow.appendChild(linkGroup);
+  var rightGroup=div();rightGroup.style.cssText="display:flex;align-items:center;gap:14px;flex-shrink:0;";
+  rightGroup.appendChild(buildQraDateSpinner());
   var fwToggle=div();
   fwToggle.style.cssText="cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;flex-shrink:0;";
   var fwToggleLbl=div();fwToggleLbl.textContent="Two-Step Framework";
   var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
   fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
-  linkRow.appendChild(fwToggle);
+  rightGroup.appendChild(fwToggle);
+  linkRow.appendChild(rightGroup);
   wrap.appendChild(linkRow);
   var badgeRow=div();badgeRow.style.cssText="display:flex;gap:10px;margin-top:8px;";
   var monBadge=buildQraBadge("Mon 3:00 PM ET","Sets macro liquidity baseline","#ff8c00");
@@ -8114,13 +8142,7 @@ function buildFedFundsView(data,isM){
     });
   }
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  if(liveApplied&&livePrevApplied){
-    staleNote.appendChild(document.createTextNode("LIVE (delayed) "+data.live.symbol+" & "+data.livePrev.symbol+" · rest of curve from CME bulletin, "+(data.dateStr||"?")+"  "));
-  } else if(liveApplied){
-    staleNote.appendChild(document.createTextNode("LIVE (delayed) "+data.live.symbol+(data.live.asOf?" as of "+data.live.asOf:"")+" · curve otherwise from CME bulletin, "+(data.dateStr||"?")+"  "));
-  } else {
-    staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
-  }
+  staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
   var cmeLink=h("a",{href:"https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",target:"_blank",rel:"noopener"});
   cmeLink.style.cssText="color:var(--text3);text-decoration:underline;";
   cmeLink.textContent="CME Fed →";
