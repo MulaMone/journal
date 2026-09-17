@@ -7444,11 +7444,11 @@ function buildQraDateSpinner(){
   var wrap=div();wrap.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
   var monBox=spinBox();
   var monDown=arrowBtn("◂"),monVal=div(),monUp=arrowBtn("▸");
-  monVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--text2);min-width:26px;text-align:center;";
+  monVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--green);min-width:26px;text-align:center;";
   monBox.appendChild(monDown);monBox.appendChild(monVal);monBox.appendChild(monUp);
   var dayBox=spinBox();
   var dayDown=arrowBtn("◂"),dayVal=div(),dayUp=arrowBtn("▸");
-  dayVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--text2);min-width:18px;text-align:center;";
+  dayVal.style.cssText="padding:2px 4px;font-size:11px;color:var(--red);min-width:18px;text-align:center;";
   dayBox.appendChild(dayDown);dayBox.appendChild(dayVal);dayBox.appendChild(dayUp);
   wrap.appendChild(monBox);wrap.appendChild(dayBox);
   function render(){
@@ -7471,6 +7471,9 @@ function buildQraScheduleBlock(){
   a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;white-space:nowrap;";
   a.textContent="Treasury QRA Docs →";
   linkGroup.appendChild(a);
+  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+  noteEl.textContent="Quarterly Refunding";
+  linkGroup.appendChild(noteEl);
   linkRow.appendChild(linkGroup);
   var rightGroup=div();rightGroup.style.cssText="display:flex;align-items:center;gap:14px;flex-shrink:0;";
   rightGroup.appendChild(buildQraDateSpinner());
