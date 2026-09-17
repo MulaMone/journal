@@ -8060,6 +8060,18 @@ function decidedMeetingIsoInMonth(monthCode){
   });
   return found;
 }
+function nextContractMonthCode(code){
+  var mo=MONTH_CODES.indexOf(code.slice(0,3)),yr=parseInt(code.slice(3),10);
+  mo++; if(mo>11){mo=0;yr++;}
+  return MONTH_CODES[mo]+(yr<10?"0"+yr:""+yr);
+}
+// True if ANY FOMC decision — past or future — falls inside this contract
+// month. A month containing a meeting blends two different rates into one
+// average, so it can't be used as a clean, undecomposed stand-in for "the
+// rate after our target meeting."
+function monthHasAnyFomcMeeting(monthCode){
+  return FOMC_DECISION_DATES_2026.some(function(iso){return contractMonthCodeFromISO(iso)===monthCode;});
+}
 function computeFedProbability(meetingIso,curve,effr){
   var meetingCode=contractMonthCodeFromISO(meetingIso);
   var byCode={};curve.forEach(function(c){byCode[c.code]=c;});
@@ -8096,11 +8108,27 @@ function computeFedProbability(meetingIso,curve,effr){
   } else {
     return null;
   }
-  var Rnext=(Ravg*N-Rstart*D)/(N-D);
+  // Prefer reading the post-decision rate directly off the NEXT contract
+  // month when it's present and clean (no FOMC meeting embedded in it) —
+  // that month's whole-month average already IS the answer, no
+  // decomposition required. The fallback below instead solves from this
+  // meeting's own month, dividing by (N-D) "after" days — for a meeting late
+  // in its month that's only a handful of days, so dRnext/dRavg = N/(N-D)
+  // amplifies any settlement-price rounding noise sharply (e.g. ~10x for a
+  // day-28 meeting in a 31-day month). That amplification is what was
+  // producing visibly-off hold/move splits versus actual CME FedWatch reads.
+  var nextCode=nextContractMonthCode(meetingCode);
+  var nextRow=byCode[nextCode];
+  var Rnext,rnextSource;
+  if(nextRow&&!monthHasAnyFomcMeeting(nextCode)){
+    Rnext=nextRow.rate;rnextSource="next-month-clean";
+  } else {
+    Rnext=(Ravg*N-Rstart*D)/(N-D);rnextSource="decomposed";
+  }
   if(!isFinite(Rnext)) return null;
   var deltaBp=(Rnext-Rstart)*100;
   var stepProb=Math.max(0,Math.min(100,Math.abs(deltaBp)/25*100));
-  return {meetingCode:meetingCode,Rprior:Rstart,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb,anchor:anchor,effrDate:effrDate};
+  return {meetingCode:meetingCode,Rprior:Rstart,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb,anchor:anchor,effrDate:effrDate,rnextSource:rnextSource};
 }
 
 // ─── Fed probability history — tracks the HOLD/MOVE read over time so the
@@ -8212,11 +8240,14 @@ function buildFedFundsView(data,isM){
     var isCut=prob.deltaBp<-0.5,isHike=prob.deltaBp>0.5;
     var moveLbl=isCut?"25bp CUT":isHike?"25bp HIKE":"25bp MOVE";
     var moveCol=isCut?"#00e676":isHike?"#ff4444":"var(--text3)";
-    var anchorNote=prob.anchor==="effr"
+    var anchorNote=(prob.anchor==="effr"
       ? "anchored on NY Fed EFFR"+(prob.effrDate?" ("+prob.effrDate+")":"")+" — prior contract month has rolled off the curve"
       : prob.anchor==="contract-unblended"
       ? "anchored on the prior month's own post-decision rate (its raw average was split by a mid-month move, so unblended first)"
-      : "single-step approximation, assumes at most one 25bp move this meeting";
+      : "single-step approximation, assumes at most one 25bp move this meeting")
+      +(prob.rnextSource==="next-month-clean"
+        ? " · read directly off next month's contract (no embedded meeting, so no decomposition needed)"
+        : " · decomposed from this meeting's own month (fewer \"after\" days = more noise-sensitive)");
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+moveCol+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
       +"<div style='display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;'>"
