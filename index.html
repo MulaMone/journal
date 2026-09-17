@@ -7119,7 +7119,7 @@ function buildCOTLegacyView(sym,data,isM){
   // grid below (right next to Commercial) rather than shown standalone ──
   var oi=+latest.open_interest_all||0;
   var oiChg=+latest.change_in_open_interest_all||0;
-  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;";
+  var oiCard=div();oiCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #e0c97a;border-radius:4px;padding:14px 16px;";
   oiCard.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Total Open Interest</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtCotNum(oi)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" vs prior week</div>";
@@ -7129,7 +7129,8 @@ function buildCOTLegacyView(sym,data,isM){
   catHead.textContent="Positioning by Trader Category";
   el.appendChild(catHead);
 
-  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  var catCards={};
   COT_LEGACY_CATS.forEach(function(cat){
     var lk=cat.lk,sk=cat.sk;
     var long=+latest[lk]||0,short=+latest[sk]||0,net=long-short;
@@ -7148,8 +7149,14 @@ function buildCOTLegacyView(sym,data,isM){
     netRow.innerHTML="<div><span style='color:var(--text3);'>NET </span><span style='color:"+(net>=0?"#00e676":"#ff4444")+";font-weight:700;'>"+fmtCotChg(net)+"</span></div>"
       +"<div style='color:"+(netChg>=0?"#00e676":"#ff4444")+";'>"+fmtCotChg(netChg)+" wow</div>";
     card.appendChild(netRow);
-    grid.appendChild(card);
-    if(cat.label==="Commercial") grid.appendChild(oiCard);
+    catCards[cat.label]=card;
+  });
+  // Total OI + Commercial share the top row; the remaining categories fill
+  // in below in their original order.
+  grid.appendChild(oiCard);
+  grid.appendChild(catCards["Commercial"]);
+  COT_LEGACY_CATS.forEach(function(cat){
+    if(cat.label!=="Commercial") grid.appendChild(catCards[cat.label]);
   });
   el.appendChild(grid);
 
