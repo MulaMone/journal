@@ -7241,15 +7241,6 @@ function buildCOTView(sym,data,isM){
   });
   el.appendChild(grid);
 
-  // ── Leveraged Funds net positioning trend (most-watched speculative read) ──
-  var trendHead=div();trendHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
-  trendHead.textContent="Leveraged Funds — Net Position Trend";
-  el.appendChild(trendHead);
-  var lfHist=rows.slice(-26).map(function(r){return {v:(+r.lev_money_positions_long||0)-(+r.lev_money_positions_short||0),l:r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(5,10):""};});
-  var trendCard=div();trendCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:14px;";
-  trendCard.appendChild(lineSVG(lfHist,isM?300:640,100,"#00d4d4",fmtCotNum));
-  el.appendChild(trendCard);
-
   return el;
 }
 
