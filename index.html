@@ -1939,7 +1939,7 @@ function openSettings(){
   var allTrigStatus=document.createElement("div");allTrigStatus.id="trigger-all-status";allTrigStatus.style.cssText="font-size:10px;color:var(--text3);";allTrigStatus.textContent="TNX, liquidity, yields, calendar — all at once";
   allTrigInfo.appendChild(allTrigLbl);allTrigInfo.appendChild(allTrigStatus);
   var allTrigBtn=document.createElement("button");
-  allTrigBtn.textContent="⚡ DATA";
+  allTrigBtn.textContent="⚡ DATA 💾";
   allTrigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0;";
   allTrigBtn.onclick=function(){triggerAllWorkflows();};
   allTrigRow.appendChild(allTrigInfo);allTrigRow.appendChild(allTrigBtn);
@@ -7852,16 +7852,8 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   card.appendChild(l);
   var tnxBadge=div();tnxBadge.id="live-tnx";
   tnxBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-  tnxBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>TNX<button id='tnx-inline-trigger-btn' title='Trigger live update' style='background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0 0 0 4px;line-height:1;'>⚡</button></div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
+  tnxBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>TNX</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-sub' style='font-size:9px;color:var(--text3);margin-top:1px;'></div>";
   card.appendChild(tnxBadge);
-  var tnxInlineBtn=tnxBadge.querySelector("#tnx-inline-trigger-btn");
-  if(tnxInlineBtn){
-    tnxInlineBtn.addEventListener("click",function(e){
-      e.stopPropagation();
-      if(!ls("gh_token","")){openSettings();return;}
-      triggerTnxWorkflow();
-    });
-  }
   var cutoff=ycRangeCutoff(rangeKey);
   var hist=cutoff?series.filter(function(s){return s.l>=cutoff;}):series;
   if(hist.length<2) hist=series.slice(-2);
