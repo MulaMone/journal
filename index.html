@@ -8240,21 +8240,13 @@ function buildFedFundsView(data,isM){
     var isCut=prob.deltaBp<-0.5,isHike=prob.deltaBp>0.5;
     var moveLbl=isCut?"25bp CUT":isHike?"25bp HIKE":"25bp MOVE";
     var moveCol=isCut?"#00e676":isHike?"#ff4444":"var(--text3)";
-    var anchorNote=(prob.anchor==="effr"
-      ? "anchored on NY Fed EFFR"+(prob.effrDate?" ("+prob.effrDate+")":"")+" — prior contract month has rolled off the curve"
-      : prob.anchor==="contract-unblended"
-      ? "anchored on the prior month's own post-decision rate (its raw average was split by a mid-month move, so unblended first)"
-      : "single-step approximation, assumes at most one 25bp move this meeting")
-      +(prob.rnextSource==="next-month-clean"
-        ? " · read directly off next month's contract (no embedded meeting, so no decomposition needed)"
-        : " · decomposed from this meeting's own month (fewer \"after\" days = more noise-sensitive)");
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+moveCol+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
       +"<div style='display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;'>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
       +"</div>"
-      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp) · "+anchorNote+"</div>";
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
     el.appendChild(card);
 
     recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
