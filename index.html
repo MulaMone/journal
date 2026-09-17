@@ -7309,11 +7309,19 @@ function ycCacheSet(obj){
 //   2. fetchYcFromFile — yields.json, written by that GitHub Action.
 //      Kept as a last resort in case Supabase itself is ever down.
 function fetchYcFromSupabase(){
-  return supaFetch("GET","yield_curve_rows?select=d,m3,y2,y5,y10,y30,fetched_at&order=d.asc").then(function(r){
+  // order=d.desc + explicit limit — PostgREST caps an unbounded request at
+  // its default max-rows (1000), and this table now has more history than
+  // that. Sorting ascending with no limit was silently keeping only the
+  // OLDEST 1000 rows, cutting off everything newer than ~early 2026.
+  // Fetching newest-first guarantees today's rows are in the page even
+  // once the table outgrows the limit; reverse back to ascending after,
+  // since the rest of this module expects oldest → newest.
+  return supaFetch("GET","yield_curve_rows?select=d,m3,y2,y5,y10,y30,fetched_at&order=d.desc&limit=5000").then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(rows){
     if(!rows||!rows.length) throw new Error("yield_curve_rows empty");
+    rows=rows.reverse();
     var sourceFetchedAt=rows[rows.length-1].fetched_at||null;
     var cleanRows=rows.map(function(r){return {d:r.d,m3:r.m3,y2:r.y2,y5:r.y5,y10:r.y10,y30:r.y30};});
     return {rows:cleanRows,sourceFetchedAt:sourceFetchedAt,fetchedAt:Date.now()};
