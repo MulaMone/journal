@@ -1618,7 +1618,18 @@ function switchTab(id){
   if(!VIEWS[id]) id="home";
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
   if(id!=="analytics"){State.rv_selected_day=null;}
-  render();window.scrollTo(0,0);
+  render();
+  // Chart tab on mobile: the fixed topbar + symbol/timeframe controls above
+  // it push the actual candles below the fold, so scrolling to the plain
+  // page top just shows those controls and still needs a manual scroll to
+  // reach the chart. Land on the chart itself instead.
+  if(id==="chart"&&isMobile()){
+    var chartAnchor=document.getElementById("chart-canvas-anchor");
+    if(chartAnchor) chartAnchor.scrollIntoView({block:"start"});
+    else window.scrollTo(0,0);
+  } else {
+    window.scrollTo(0,0);
+  }
 }
 
 // More tabs (not in bottom nav)
@@ -5358,7 +5369,11 @@ function chartTab(){
 
   // ── Chart container ───────────────────────────────────────
   var chartDiv=div();
-  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border);border-radius:4px;background:#040d1a;position:relative;";
+  chartDiv.id="chart-canvas-anchor";
+  // Border bumped from the barely-visible default --border to --border2
+  // plus a real box-shadow, so the whole panel — price axis and time axis
+  // included — reads as one bounded unit instead of blending into the page.
+  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;";
   el.appendChild(chartDiv);
 
   // Double-click (double-tap on mobile — a tap fires the same "dblclick"
@@ -5577,20 +5592,28 @@ function chartTab(){
           weekLineWrap=div();weekLineWrap.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;";
           chartDiv.appendChild(weekLineWrap);
         }
-        var cw=chartDiv.clientWidth;
+        // timeToCoordinate() returns a position within the CANDLE PANE only
+        // — it does not include the reserved price-axis gutter on the
+        // right. Comparing against the full container width (which DOES
+        // include that gutter) let the line and its label land past the
+        // real plot edge, on top of the price labels. Use the pane width
+        // (container minus the price scale's own width) as the bound
+        // instead, so nothing ever gets drawn into the price axis.
+        var priceScaleW=chart.priceScale("right").width()||0;
+        var paneW=chartDiv.clientWidth-priceScaleW;
         weekLineWrap.innerHTML="";
         weekBoundaries.forEach(function(wt){
           var x=chart.timeScale().timeToCoordinate(wt);
-          if(x==null||x<0||x>cw) return; // off-screen at this pan/zoom/size
+          if(x==null||x<0||x>paneW) return; // off-screen, or would sit in the price axis
           var line=div();
           line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,var(--accent) 0,var(--accent) 4px,transparent 4px,transparent 8px);opacity:.6;";
           weekLineWrap.appendChild(line);
           // Flip the label to the left of the line once there's no room to
-          // the right — otherwise it runs off the plot edge and gets
-          // clipped (visible in both the desktop and mobile screenshots).
-          var flip=x>cw-34;
+          // the right before the price axis starts — otherwise it runs
+          // into the price labels and gets clipped.
+          var flip=x>paneW-34;
           var lbl=div();
-          lbl.style.cssText="position:absolute;top:2px;"+(flip?"right:"+(cw-x+4)+"px;":"left:"+(x+4)+"px;")+"font-size:9px;letter-spacing:1.5px;color:var(--accent);font-family:'Courier New',monospace;white-space:nowrap;";
+          lbl.style.cssText="position:absolute;top:2px;"+(flip?"right:"+(paneW-x+4)+"px;":"left:"+(x+4)+"px;")+"font-size:9px;letter-spacing:1.5px;color:var(--accent);font-family:'Courier New',monospace;white-space:nowrap;";
           lbl.textContent="WEEK";
           weekLineWrap.appendChild(lbl);
         });
