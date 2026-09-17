@@ -7139,9 +7139,10 @@ function buildCOTLegacyView(sym,data,isM){
   var prev=rows.length>1?rows[rows.length-2]:null;
   var el=div();
 
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;white-space:nowrap;";
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;"+(isM?"margin-bottom:14px;":"white-space:nowrap;");
   var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
   staleNote.innerHTML="Report week ending <span style='color:#ffffff;'>"+asOf+"</span>, updated weekly (Fridays)";
+  if(isM) el.appendChild(staleNote);
 
   // ── Open Interest summary — built here, inserted into the trader-category
   // grid below (right next to Commercial) rather than shown standalone ──
@@ -7157,7 +7158,7 @@ function buildCOTLegacyView(sym,data,isM){
   var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:#ffffff;text-transform:uppercase;";
   catHead.textContent="Positioning by Trader Category";
   catHeadRow.appendChild(catHead);
-  catHeadRow.appendChild(staleNote);
+  if(!isM) catHeadRow.appendChild(staleNote);
   el.appendChild(catHeadRow);
 
   var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
