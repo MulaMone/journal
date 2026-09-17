@@ -7612,8 +7612,30 @@ function fetchTnxFromFile(){
     return obj;
   });
 }
+// Middle rung: a tnx_quotes row kept fresh by a Supabase Edge Function on
+// its own pg_cron schedule (see supabase/functions/update-tnx + the
+// cron.schedule SQL). Runs inside Supabase's own Postgres instead of
+// GitHub's shared Actions queue, so it isn't subject to GitHub's
+// load-based scheduling delays or its 60-day-inactivity auto-disable —
+// that's the actual fix for the "scheduling may not work" issue.
+function fetchTnxFromSupabase(){
+  return supaFetch("GET","tnx_quotes?id=eq.1&select=*").then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(rows){
+    var row=rows&&rows[0];
+    if(!row||typeof row.yield_val!=="number") throw new Error("tnx_quotes missing yield_val");
+    var obj={yieldVal:row.yield_val,marketTime:row.market_time||null,sourceFetchedAt:row.fetched_at||null,fetchedAt:Date.now(),source:"supabase"};
+    _tnxMemCache=obj;tnxCacheSet(obj);
+    return obj;
+  });
+}
 function fetchTnxJson(){
-  return fetchTnxDirect().catch(function(){return fetchTnxFromFile();});
+  return fetchTnxDirect().catch(function(){
+    return fetchTnxFromSupabase().catch(function(){
+      return fetchTnxFromFile();
+    });
+  });
 }
 function updateTnxLiveBadge(){
   fetchTnxJson().then(function(data){
