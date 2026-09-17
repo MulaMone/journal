@@ -7925,19 +7925,24 @@ function buildFedFundsView(data,isM){
   var el=div();
   var meetingIso=nextFomcMeetingISO();
   var meetingCode=meetingIso?contractMonthCodeFromISO(meetingIso):null;
-  // Live quote only applies if it's actually for the current meeting's
-  // contract month — guards against a stale/mismatched symbol slipping
-  // through if the meeting rolled over between the fetch firing and
-  // resolving.
+  var prevCode=meetingCode?prevContractMonthCode(meetingCode):null;
+  // Live quotes only apply if they're actually for the expected contract
+  // months — guards against a stale/mismatched symbol slipping through if
+  // the meeting rolled over between the fetch firing and resolving.
   var liveApplied=!!(data.live&&meetingCode&&data.live.symbol===cbotYahooTicker(meetingCode));
+  var livePrevApplied=!!(data.livePrev&&prevCode&&data.livePrev.symbol===cbotYahooTicker(prevCode));
   var curveForCalc=data.curve;
-  if(liveApplied){
+  if(liveApplied||livePrevApplied){
     curveForCalc=data.curve.map(function(c){
-      return c.code===meetingCode?{code:c.code,rate:data.live.rate,rateChg:c.rateChg}:c;
+      if(liveApplied&&c.code===meetingCode) return {code:c.code,rate:data.live.rate,rateChg:c.rateChg};
+      if(livePrevApplied&&c.code===prevCode) return {code:c.code,rate:data.livePrev.rate,rateChg:c.rateChg};
+      return c;
     });
   }
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  if(liveApplied){
+  if(liveApplied&&livePrevApplied){
+    staleNote.appendChild(document.createTextNode("LIVE (delayed) "+data.live.symbol+" & "+data.livePrev.symbol+" · rest of curve from CME bulletin, "+(data.dateStr||"?")+"  "));
+  } else if(liveApplied){
     staleNote.appendChild(document.createTextNode("LIVE (delayed) "+data.live.symbol+(data.live.asOf?" as of "+data.live.asOf:"")+" · curve otherwise from CME bulletin, "+(data.dateStr||"?")+"  "));
   } else {
     staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
@@ -7947,6 +7952,7 @@ function buildFedFundsView(data,isM){
   cmeLink.textContent="CME Fed →";
   staleNote.appendChild(cmeLink);
   el.appendChild(staleNote);
+
 
   var prob=meetingIso?computeFedProbability(meetingIso,curveForCalc,data.effr):null;
   if(prob){
@@ -8546,11 +8552,23 @@ function analystTab(){
     if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
     else showFedLoading();
     var liveMeetingIso=nextFomcMeetingISO();
-    var liveP=liveMeetingIso?fetchLiveZQQuote(contractMonthCodeFromISO(liveMeetingIso)):Promise.resolve(null);
-    Promise.all([loadFedFundsData(force),liveP]).then(function(results){
+    var liveMeetingCode=liveMeetingIso?contractMonthCodeFromISO(liveMeetingIso):null;
+    var livePrevCode=liveMeetingCode?prevContractMonthCode(liveMeetingCode):null;
+    // Fetch live for BOTH the meeting-month contract and its anchor
+    // (immediately-prior) contract. Only the meeting-month contract is
+    // guaranteed to matter, but when the anchor method turns out to be
+    // "contract" (prior month still on the curve) rather than the EFFR
+    // fallback, that prior month needs to be just as fresh — otherwise the
+    // calc ends up diffing a live post-event price against a stale
+    // pre-event one and produces a nonsense jump. Cheap to always fetch
+    // both; buildFedFundsView only applies whichever ones actually match.
+    var liveMeetingP=liveMeetingCode?fetchLiveZQQuote(liveMeetingCode):Promise.resolve(null);
+    var livePrevP=livePrevCode?fetchLiveZQQuote(livePrevCode):Promise.resolve(null);
+    Promise.all([loadFedFundsData(force),liveMeetingP,livePrevP]).then(function(results){
       if(myToken!==_fedLoadToken||State.tab!=="analyst") return;
       var data=results[0];
       data.live=results[1];
+      data.livePrev=results[2];
       fedBody.innerHTML="";
       fedBody.appendChild(buildFedFundsView(data,isM));
       fedBody.style.opacity="1";
