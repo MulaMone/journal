@@ -7573,13 +7573,19 @@ function buildLiquidityCard(fieldKey,label,col,note,data,isM){
 
 // Treasury's own par yield curve (above) only prints once a day, so this
 // tracks CBOE's $TNX ticker instead for a more frequently-updating read.
-// Primary path: try a direct client-side fetch to Yahoo's chart endpoint —
-// this only works if Yahoo's response allows cross-origin browser requests
-// (not guaranteed; their CORS policy on this endpoint isn't something we
-// control and may block it outright). Fallback path: tnx.json, written by
-// a server-side GitHub Action on a schedule — same same-origin-static-file
-// pattern as yields.json/calendar.json — which sidesteps CORS entirely but
-// is only as fresh as that Action's last run.
+// Three-rung fallback, each one only used if the rung before it fails:
+//   1. fetchTnxDirect  — live client-side fetch to Yahoo's chart endpoint.
+//      Not CORS-guaranteed (Yahoo's policy on this endpoint isn't
+//      something we control), but when it works it's real-time.
+//   2. fetchTnxFromSupabase — a tnx_quotes row kept fresh by a Supabase
+//      Edge Function on its own pg_cron schedule (currently every 5 min,
+//      trading hours only). Runs inside Supabase's own Postgres, so it
+//      isn't subject to GitHub Actions' load-based delays or its
+//      60-day-inactivity auto-disable.
+//   3. fetchTnxFromFile — tnx.json, written by a server-side GitHub
+//      Action, same same-origin-static-file pattern as
+//      yields.json/calendar.json. Oldest/slowest rung, kept as a last
+//      resort in case Supabase itself is ever down.
 var _tnxMemCache=null;
 var _tnxLiveTimer=null;
 var _tnxLiveBaseline=null; // latest official Treasury 10Y print — the badge's up/down color is measured against this
@@ -7612,12 +7618,6 @@ function fetchTnxFromFile(){
     return obj;
   });
 }
-// Middle rung: a tnx_quotes row kept fresh by a Supabase Edge Function on
-// its own pg_cron schedule (see supabase/functions/update-tnx + the
-// cron.schedule SQL). Runs inside Supabase's own Postgres instead of
-// GitHub's shared Actions queue, so it isn't subject to GitHub's
-// load-based scheduling delays or its 60-day-inactivity auto-disable —
-// that's the actual fix for the "scheduling may not work" issue.
 function fetchTnxFromSupabase(){
   return supaFetch("GET","tnx_quotes?id=eq.1&select=*").then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
