@@ -8336,6 +8336,24 @@ var _dxyLoadToken=0;
 function dxyCacheGet(){try{var raw=localStorage.getItem("edge_dxy_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function dxyCacheSet(obj){try{localStorage.setItem("edge_dxy_v1",JSON.stringify(obj));}catch(e){}}
 
+// OANDA "D" granularity candles start-align at 17:00 New York time, and
+// the `time` field on each candle is its OPEN — 5pm ET the evening
+// *before* the trading day it represents. 5pm ET is still the same UTC
+// calendar day, so naively slicing that raw timestamp (c.time.slice(0,10))
+// tags every close with the date the candle opened, one day too early
+// (e.g. Monday's close was being filed under Sunday's date). Convert to
+// ET first, then advance a day to land on the date the candle actually
+// closes on. Same DST approximation (Apr–Sep = EDT) used elsewhere in
+// this file for consistency.
+function oandaTradingDate(rawTime){
+  var utcMs=Date.parse(rawTime);
+  var d=new Date(utcMs);
+  var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;
+  var etOffset=isDST?4:5;
+  var etMs=utcMs-(etOffset*3600000)+86400000; // -> ET, then +1 day: open's ET-date -> the trading day it closes on
+  var ed=new Date(etMs);
+  return ed.getUTCFullYear()+"-"+pad(ed.getUTCMonth()+1)+"-"+pad(ed.getUTCDate());
+}
 function fetchOandaDailyCloses(inst,tok){
   var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=400";
   return fetch(url,{headers:{Authorization:"Bearer "+tok}}).then(function(r){
@@ -8349,7 +8367,7 @@ function fetchOandaDailyCloses(inst,tok){
     var out={};
     (json.candles||[]).forEach(function(c){
       if(!c.complete) return;
-      out[c.time.slice(0,10)]=parseFloat(c.mid.c); // date -> mid close
+      out[oandaTradingDate(c.time)]=parseFloat(c.mid.c); // trading date -> mid close
     });
     return out;
   });
