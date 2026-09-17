@@ -7139,9 +7139,9 @@ function buildCOTLegacyView(sym,data,isM){
   var prev=rows.length>1?rows[rows.length-2]:null;
   var el=div();
 
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:#ffffff;letter-spacing:1px;white-space:nowrap;";
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;white-space:nowrap;";
   var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
-  staleNote.textContent="Report week ending "+asOf+", updated weekly (Fridays)";
+  staleNote.innerHTML="Report week ending <span style='color:#ffffff;'>"+asOf+"</span>, updated weekly (Fridays)";
 
   // ── Open Interest summary — built here, inserted into the trader-category
   // grid below (right next to Commercial) rather than shown standalone ──
