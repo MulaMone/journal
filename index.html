@@ -7438,7 +7438,9 @@ function buildQraBadge(timeLabel,sub,col){
 function buildQraDateSpinner(){
   var MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var DAYS_IN_MONTH=[31,29,31,30,31,30,31,31,30,31,30,31];
-  var mi=0,day=1;
+  var mi=ls("qra_spinner_month",0),day=ls("qra_spinner_day",1);
+  if(typeof mi!=="number"||mi<0||mi>11) mi=0;
+  if(typeof day!=="number"||day<1||day>31) day=1;
   function spinBox(){var b=div();b.style.cssText="display:flex;align-items:center;background:var(--panel2);border:1px solid var(--border2);border-radius:3px;";return b;}
   function arrowBtn(txt){var el=div();el.style.cssText="padding:2px 6px;cursor:pointer;color:var(--text3);font-size:10px;";el.textContent=txt;return el;}
   var wrap=div();wrap.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
@@ -7456,10 +7458,10 @@ function buildQraDateSpinner(){
     monVal.textContent=MONTHS[mi];
     dayVal.textContent=day;
   }
-  monUp.onclick=function(){mi=(mi+1)%12;render();};
-  monDown.onclick=function(){mi=(mi+11)%12;render();};
-  dayUp.onclick=function(){day=(day%DAYS_IN_MONTH[mi])+1;render();};
-  dayDown.onclick=function(){day=((day+DAYS_IN_MONTH[mi]-2)%DAYS_IN_MONTH[mi])+1;render();};
+  monUp.onclick=function(){mi=(mi+1)%12;ss("qra_spinner_month",mi);render();};
+  monDown.onclick=function(){mi=(mi+11)%12;ss("qra_spinner_month",mi);render();};
+  dayUp.onclick=function(){day=(day%DAYS_IN_MONTH[mi])+1;ss("qra_spinner_day",day);render();};
+  dayDown.onclick=function(){day=((day+DAYS_IN_MONTH[mi]-2)%DAYS_IN_MONTH[mi])+1;ss("qra_spinner_day",day);render();};
   render();
   return wrap;
 }
