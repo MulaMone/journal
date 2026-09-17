@@ -7397,7 +7397,7 @@ function buildRrpShiftAlert(data,isM){
 // one can't be embedded directly.
 var MACRO_EXTERNAL_LINKS=[
   {label:"Atlanta Fed SOFR Skew →",url:"https://www.atlantafed.org/research-and-data/data/market-probability-tracker",note:"Market Probability Tracker — full options-implied SOFR distribution, not just point estimates"},
-  {label:"Citi Surprise Index (CESI) →",url:"https://yardeni.com/charts/us-economy/us-economic-indicators/citigroup-economic-surprise",note:"Economic data vs. consensus — Yardeni Research's free chart page, no signup wall"}
+  {label:"Citi Surprise Index (CESI) →",url:"https://yardeni.com/charts/us-economy/us-economic-indicators/citigroup-economic-surprise",note:"Economic data vs. consensus"}
 ];
 // Treasury's Quarterly Refunding process lands in two parts, a few days
 // apart — the Monday "how much" release and the Wednesday "which bucket"
@@ -7437,14 +7437,21 @@ function buildQraScheduleBlock(){
   var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4;";
   noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
   wrap.appendChild(noteEl);
-  var fw=div();fw.style.cssText="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);";
-  var fwHead=div();fwHead.style.cssText="font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";
-  fwHead.textContent="Two-Step Refunding Framework";
-  fw.appendChild(fwHead);
-  var fwBody=div();fwBody.style.cssText="font-size:11px;color:var(--text2);line-height:1.6;";
+  var fwToggle=div();
+  fwToggle.style.cssText="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;";
+  var fwToggleLbl=div();fwToggleLbl.style.cssText="font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;";
+  fwToggleLbl.textContent="Two-Step Refunding Framework";
+  var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
+  fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
+  wrap.appendChild(fwToggle);
+  var fwBody=div();fwBody.style.cssText="display:none;font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;";
   fwBody.innerHTML="<b style='color:var(--text);'>1. Monday 3:00 PM ET — \"How much\":</b> how many dollars Treasury needs, and whether the TGA target adds or subtracts liquidity from Net Liquidity = Fed Assets − (TGA + RRP).<br><b style='color:var(--text);'>2. Wednesday 8:30 AM ET — \"Which bucket\":</b> where those dollars come from — T-Bills or long-end coupons.<ul style='margin:6px 0 0 16px;padding:0;'><li>Funded by T-Bills → cash comes out of the RRP facility (bullish / painless).</li><li>Funded by long-end coupons → yields spike, pressuring NQ valuation multiples.</li></ul>";
-  fw.appendChild(fwBody);
-  wrap.appendChild(fw);
+  wrap.appendChild(fwBody);
+  fwToggle.addEventListener("click",function(){
+    var open=fwBody.style.display==="block";
+    fwBody.style.display=open?"none":"block";
+    fwToggleArrow.textContent=open?"▸":"▾";
+  });
   return wrap;
 }
 function buildMacroExternalLinks(){
