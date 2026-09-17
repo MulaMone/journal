@@ -7818,6 +7818,17 @@ function nextFomcMeetingISO(){
 // trading a few days before a mid-month meeting with no clean pre-meeting
 // month left — fall back to anchoring on the NY Fed's actual published
 // daily EFFR fixing instead of giving up and showing only the rate path.
+// If a contract month contains an FOMC decision that's already happened,
+// find that meeting's ISO date — used to recognize when a month's own
+// blended average is contaminated by a mid-month rate change.
+function decidedMeetingIsoInMonth(monthCode){
+  var todayIso=new Date().toISOString().slice(0,10);
+  var found=null;
+  FOMC_DECISION_DATES_2026.forEach(function(iso){
+    if(iso<=todayIso&&contractMonthCodeFromISO(iso)===monthCode) found=iso;
+  });
+  return found;
+}
 function computeFedProbability(meetingIso,curve,effr){
   var meetingCode=contractMonthCodeFromISO(meetingIso);
   var byCode={};curve.forEach(function(c){byCode[c.code]=c;});
@@ -7828,10 +7839,27 @@ function computeFedProbability(meetingIso,curve,effr){
   var N=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();
   if(D>=N) return null; // meeting on the last day of the month — no "after" days to solve from
   var Ravg=meetingRow.rate;
-  var prevRow=byCode[prevContractMonthCode(meetingCode)];
+  var prevCode=prevContractMonthCode(meetingCode);
+  var prevRow=byCode[prevCode];
   var Rstart,anchor,effrDate=null;
   if(prevRow){
-    Rstart=prevRow.rate;anchor="contract";
+    // The prior month's own whole-month average is only a clean anchor if
+    // NOTHING changed during it. If a decision already landed inside that
+    // prior month, its blended average mixes the pre- and post-decision
+    // rates together and is systematically wrong as a "current rate" —
+    // worse, the error compounds the closer this meeting falls to its own
+    // month-end (fewer "after" days to solve from means more amplification
+    // of whatever bias the anchor carries). Recover the clean post-decision
+    // rate instead by recursively running this same decomposition on the
+    // prior month's own meeting — it terminates naturally once we reach a
+    // month with no embedded meeting or no further curve history.
+    var priorMeetingIso=decidedMeetingIsoInMonth(prevCode);
+    var priorSolved=priorMeetingIso?computeFedProbability(priorMeetingIso,curve,effr):null;
+    if(priorSolved){
+      Rstart=priorSolved.Rnext;anchor="contract-unblended";
+    } else {
+      Rstart=prevRow.rate;anchor="contract";
+    }
   } else if(effr&&isFinite(effr.rate)){
     Rstart=effr.rate;anchor="effr";effrDate=effr.date||null;
   } else {
@@ -7961,6 +7989,8 @@ function buildFedFundsView(data,isM){
     var moveCol=isCut?"#00e676":isHike?"#ff4444":"var(--text3)";
     var anchorNote=prob.anchor==="effr"
       ? "anchored on NY Fed EFFR"+(prob.effrDate?" ("+prob.effrDate+")":"")+" — prior contract month has rolled off the curve"
+      : prob.anchor==="contract-unblended"
+      ? "anchored on the prior month's own post-decision rate (its raw average was split by a mid-month move, so unblended first)"
       : "single-step approximation, assumes at most one 25bp move this meeting";
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+moveCol+";border-radius:4px;padding:16px 18px;margin-bottom:14px;";
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
