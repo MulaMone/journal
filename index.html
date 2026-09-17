@@ -7139,10 +7139,9 @@ function buildCOTLegacyView(sym,data,isM){
   var prev=rows.length>1?rows[rows.length-2]:null;
   var el=div();
 
-  var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
+  var staleNote=div();staleNote.style.cssText="font-size:11px;color:#ffffff;letter-spacing:1px;white-space:nowrap;";
   var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
   staleNote.textContent="Report week ending "+asOf+", updated weekly (Fridays)";
-  el.appendChild(staleNote);
 
   // ── Open Interest summary — built here, inserted into the trader-category
   // grid below (right next to Commercial) rather than shown standalone ──
@@ -7154,9 +7153,12 @@ function buildCOTLegacyView(sym,data,isM){
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(oiChg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+fmtCotChg(oiChg)+" vs prior week</div>";
 
   // ── Positioning by trader category ──
-  var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:#ffffff;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
+  var catHeadRow=div();catHeadRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);";
+  var catHead=div();catHead.style.cssText="font-size:13px;letter-spacing:3px;color:#ffffff;text-transform:uppercase;";
   catHead.textContent="Positioning by Trader Category";
-  el.appendChild(catHead);
+  catHeadRow.appendChild(catHead);
+  catHeadRow.appendChild(staleNote);
+  el.appendChild(catHeadRow);
 
   var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
   var catCards={};
