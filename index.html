@@ -5361,6 +5361,10 @@ function chartTab(){
   chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border);border-radius:4px;background:#040d1a;position:relative;";
   el.appendChild(chartDiv);
 
+  // Double-click (double-tap on mobile — a tap fires the same "dblclick"
+  // event) anywhere on the chart forces the same full reload as Refresh.
+  chartDiv.addEventListener("dblclick",function(e){e.preventDefault();render();});
+
   var loading=div();
   loading.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;letter-spacing:2px;";
   loading.textContent="LOADING CHART DATA...";
@@ -5559,27 +5563,40 @@ function chartTab(){
       for(var wbi=1;wbi<candles.length;wbi++){
         if(candles[wbi].time-candles[wbi-1].time>2*24*3600) weekBoundaries.push(candles[wbi].time);
       }
-      if(weekBoundaries.length){
-        var weekLineWrap=div();weekLineWrap.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:5;";
-        chartDiv.appendChild(weekLineWrap);
-        function drawWeekLines(){
-          weekLineWrap.innerHTML="";
-          weekBoundaries.forEach(function(wt){
-            var x=chart.timeScale().timeToCoordinate(wt);
-            if(x==null) return;
-            var line=div();
-            line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,var(--accent) 0,var(--accent) 4px,transparent 4px,transparent 8px);opacity:.6;";
-            weekLineWrap.appendChild(line);
-            var lbl=div();
-            lbl.style.cssText="position:absolute;top:2px;left:"+(x+4)+"px;font-size:9px;letter-spacing:1.5px;color:var(--accent);font-family:'Courier New',monospace;white-space:nowrap;";
-            lbl.textContent="WEEK";
-            weekLineWrap.appendChild(lbl);
-          });
+      // Defined unconditionally (not just when boundaries exist) so the
+      // ResizeObserver below can always call it safely — it no-ops when
+      // there's nothing to draw. Previously this only redrew on pan/zoom
+      // and on a window "resize" event, so a pure container-size change
+      // (mobile viewport settle, orientation change, layout reflow with no
+      // window resize event) left the dashed lines at their old pixel
+      // positions — exactly the "not gridded right" misalignment.
+      var weekLineWrap=null;
+      function drawWeekLines(){
+        if(!weekBoundaries.length) return;
+        if(!weekLineWrap){
+          weekLineWrap=div();weekLineWrap.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;";
+          chartDiv.appendChild(weekLineWrap);
         }
-        drawWeekLines();
-        chart.timeScale().subscribeVisibleLogicalRangeChange(drawWeekLines);
-        window.addEventListener("resize",drawWeekLines);
+        var cw=chartDiv.clientWidth;
+        weekLineWrap.innerHTML="";
+        weekBoundaries.forEach(function(wt){
+          var x=chart.timeScale().timeToCoordinate(wt);
+          if(x==null||x<0||x>cw) return; // off-screen at this pan/zoom/size
+          var line=div();
+          line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,var(--accent) 0,var(--accent) 4px,transparent 4px,transparent 8px);opacity:.6;";
+          weekLineWrap.appendChild(line);
+          // Flip the label to the left of the line once there's no room to
+          // the right — otherwise it runs off the plot edge and gets
+          // clipped (visible in both the desktop and mobile screenshots).
+          var flip=x>cw-34;
+          var lbl=div();
+          lbl.style.cssText="position:absolute;top:2px;"+(flip?"right:"+(cw-x+4)+"px;":"left:"+(x+4)+"px;")+"font-size:9px;letter-spacing:1.5px;color:var(--accent);font-family:'Courier New',monospace;white-space:nowrap;";
+          lbl.textContent="WEEK";
+          weekLineWrap.appendChild(lbl);
+        });
       }
+      drawWeekLines();
+      chart.timeScale().subscribeVisibleLogicalRangeChange(drawWeekLines);
 
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
@@ -5734,10 +5751,17 @@ function chartTab(){
         }
         var listWrap=div();
         listWrap.style.cssText="margin-top:"+(selectedIds.length?"4px":"10px")+";max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;";
+        // Two-line grid per trade (checkbox/badge/time on line 1, price info
+        // lined up underneath on line 2) instead of one flex row with
+        // margin-left:auto pushing the price to the far edge — that squeezed
+        // and wrapped unpredictably once the timestamp got long, especially
+        // on a narrow/mobile width. The grid keeps every row's columns
+        // aligned regardless of container width.
         windowPoints.filter(function(p){return p.kind==="entry";}).slice().reverse().forEach(function(p){
-          var row=div("row gap8");
-          row.style.cssText="padding:6px 10px;border-bottom:1px solid var(--border);align-items:center;font-family:monospace;font-size:12px;cursor:pointer;";
+          var row=div();
+          row.style.cssText="display:grid;grid-template-columns:auto auto 1fr;column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace;font-size:12px;cursor:pointer;";
           var cb=h("input",{type:"checkbox"});
+          cb.style.cssText="grid-row:1;grid-column:1;";
           cb.checked=selectedIds.indexOf(p.id)>-1;
           cb.addEventListener("click",function(e){
             e.stopPropagation();
@@ -5748,10 +5772,12 @@ function chartTab(){
             render();
           });
           row.appendChild(cb);
-          row.appendChild(makeBadge(p.isLong?"bg":"br",p.isLong?"L":"S"));
-          var when=span("m");when.style.marginLeft="8px";when.textContent=new Date(p.ts*1000).toLocaleString();
+          var badge=makeBadge(p.isLong?"bg":"br",p.isLong?"L":"S");
+          badge.style.cssText+=";grid-row:1;grid-column:2;";
+          row.appendChild(badge);
+          var when=span("m");when.style.cssText="grid-row:1;grid-column:3;";when.textContent=new Date(p.ts*1000).toLocaleString();
           row.appendChild(when);
-          var px=span();px.style.cssText="margin-left:auto;color:var(--text3)";px.textContent=p.entry+" → "+p.exit+" ("+p.ctr+")"+(p.hasExitTime?"":" · exit time unknown");
+          var px=span();px.style.cssText="grid-row:2;grid-column:2/4;color:var(--text3);";px.textContent=p.entry+" → "+p.exit+" ("+p.ctr+")"+(p.hasExitTime?"":" · exit time unknown");
           row.appendChild(px);
           listWrap.appendChild(row);
         });
@@ -5818,6 +5844,7 @@ function chartTab(){
       var ro=new ResizeObserver(function(){
         chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
         renderCountdown(); // reposition the badge — resizing shifts the price-to-pixel mapping
+        drawWeekLines(); // container size just changed — week markers were still at the old pixel positions
       });
       ro.observe(chartDiv);
 
