@@ -8495,7 +8495,7 @@ function analystTab(){
   var sh=div("sh");sh.innerHTML="Analyst — <span style='color:#e8f0ff;'>The Fundamentals</span>";el.appendChild(sh);
 
   // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
-  var dxyHeadRow=div();dxyHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var dxyHeadRow=div();dxyHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
   dxyHead.textContent="Intermarket & Cross-Asset Correlations";
   dxyHeadRow.appendChild(dxyHead);
@@ -8524,7 +8524,7 @@ function analystTab(){
   goldOilBody.style.transition="opacity .15s";
 
   // ── Yield Curve Spreads — separate section, own data source ──
-  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   ycHead.textContent="Yield Curve Spreads";
   el.appendChild(ycHead);
 
@@ -8554,14 +8554,14 @@ function analystTab(){
   ycBody.style.transition="opacity .15s";
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
-  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   fedHead.textContent="Fed Rate Probabilities";
   el.appendChild(fedHead);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
 
   // ── Liquidity & Fed Balance Sheet Metrics ──
-  var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";
   el.appendChild(liqHead);
   var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
@@ -8569,7 +8569,7 @@ function analystTab(){
 
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
-  var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
+  var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   cotHead.textContent="COT & Open Interest";
   el.appendChild(cotHead);
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="flex-wrap:wrap;flex-shrink:0;";
@@ -8698,7 +8698,7 @@ function analystTab(){
   // Auto-check for a newer bulletin every time this tab opens.
   loadCme(false);
 
-  var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--amber);";
+  var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   legacyHead.textContent="Legacy Report — Non-Comm / Comm / Non-Rept";
   el.appendChild(legacyHead);
 
@@ -8728,7 +8728,7 @@ function analystTab(){
   }
 
   // ── TFF report — separate section, rendered below Legacy ──
-  var tffHead=div();tffHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--amber);";
+  var tffHead=div();tffHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   tffHead.textContent="TFF Report — Dealer / Asset Mgr / Lev Funds / Other";
   el.appendChild(tffHead);
 
