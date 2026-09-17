@@ -5552,8 +5552,8 @@ function chartTab(){
       }
 
       var chart=LightweightCharts.createChart(chartDiv,{
-        width:chartDiv.offsetWidth,
-        height:chartDiv.offsetHeight,
+        width:chartDiv.clientWidth,
+        height:chartDiv.clientHeight,
         layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
         grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
@@ -5865,7 +5865,7 @@ function chartTab(){
       },1000);
 
       var ro=new ResizeObserver(function(){
-        chart.applyOptions({width:chartDiv.offsetWidth,height:chartDiv.offsetHeight});
+        chart.applyOptions({width:chartDiv.clientWidth,height:chartDiv.clientHeight});
         renderCountdown(); // reposition the badge — resizing shifts the price-to-pixel mapping
         drawWeekLines(); // container size just changed — week markers were still at the old pixel positions
       });
