@@ -7412,9 +7412,26 @@ function buildQraBadge(timeLabel,sub,col){
   el.innerHTML="<div style='font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;'>"+timeLabel+"</div><div style='font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4;'>"+sub+" <span style='color:"+col+";'>▸</span></div>";
   return el;
 }
-function buildQraBadges(){
-  var wrap=div();
-  var badgeRow=div();badgeRow.style.cssText="display:flex;gap:10px;";
+function buildQraScheduleBlock(){
+  var wrap=div();wrap.style.cssText="margin-bottom:10px;";
+  var linkRow=div();linkRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;";
+  var linkGroup=div();linkGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
+  var a=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
+  a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  a.textContent="Treasury QRA Docs →";
+  linkGroup.appendChild(a);
+  var noteEl=div();noteEl.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
+  noteEl.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
+  linkGroup.appendChild(noteEl);
+  linkRow.appendChild(linkGroup);
+  var fwToggle=div();
+  fwToggle.style.cssText="cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;flex-shrink:0;";
+  var fwToggleLbl=div();fwToggleLbl.textContent="Two-Step Framework";
+  var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
+  fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
+  linkRow.appendChild(fwToggle);
+  wrap.appendChild(linkRow);
+  var badgeRow=div();badgeRow.style.cssText="display:flex;gap:10px;margin-top:8px;";
   var monBadge=buildQraBadge("Mon 3:00 PM ET","Sets macro liquidity baseline","#ff8c00");
   var wedBadge=buildQraBadge("Wed 8:30 AM ET","Full Refunding Statement","#00d4d4");
   badgeRow.appendChild(monBadge);
@@ -7433,56 +7450,39 @@ function buildQraBadges(){
   var fwBody=div();fwBody.style.cssText="display:none;font-size:11px;color:var(--text);line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);";
   fwBody.innerHTML="<b style='color:var(--text);'>1. Monday 3:00 PM ET — \"How much\":</b> how many dollars Treasury needs, and whether the TGA target adds or subtracts liquidity from Net Liquidity = Fed Assets − (TGA + RRP).<br><b style='color:var(--text);'>2. Wednesday 8:30 AM ET — \"Which bucket\":</b> where those dollars come from — T-Bills or long-end coupons.<ul style='margin:6px 0 0 16px;padding:0;'><li>Funded by T-Bills → cash comes out of the RRP facility (bullish / painless).</li><li>Funded by long-end coupons → yields spike, pressuring NQ valuation multiples.</li></ul>";
   wrap.appendChild(fwBody);
-  return {el:wrap,fwBody:fwBody};
+  fwToggle.addEventListener("click",function(){
+    var open=fwBody.style.display==="block";
+    fwBody.style.display=open?"none":"block";
+    fwToggleArrow.textContent=open?"▸":"▾";
+  });
+  return wrap;
 }
 function buildMacroExternalLinks(){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-top:2px;";
   var head=div();head.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;";
   head.textContent="More Macro (external)";
   card.appendChild(head);
-  var topRow=div();topRow.style.cssText="display:flex;align-items:baseline;gap:20px;flex-wrap:wrap;";
-  var treasuryCol=div();treasuryCol.style.cssText="flex:1;min-width:220px;display:flex;flex-direction:column;gap:2px;";
-  var treasuryA=h("a",{href:"https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents",target:"_blank",rel:"noopener"});
-  treasuryA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
-  treasuryA.textContent="Treasury QRA Docs →";
-  treasuryCol.appendChild(treasuryA);
-  var treasuryNote=div();treasuryNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
-  treasuryNote.textContent="Quarterly Refunding — issuance guidance ahead of TGA-draining auction settlements";
-  treasuryCol.appendChild(treasuryNote);
-  topRow.appendChild(treasuryCol);
-  var atlantaCol=div();atlantaCol.style.cssText="flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px;";
+  card.appendChild(buildQraScheduleBlock());
+  var linksRow=div();linksRow.style.cssText="display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 28px;margin-top:8px;padding-top:10px;border-top:1px solid var(--border);";
+  var atlantaGroup=div();atlantaGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
   var atlantaA=h("a",{href:MACRO_EXTERNAL_LINKS[0].url,target:"_blank",rel:"noopener"});
-  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
   atlantaA.textContent=MACRO_EXTERNAL_LINKS[0].label;
-  atlantaCol.appendChild(atlantaA);
+  atlantaGroup.appendChild(atlantaA);
   var atlantaNote=div();atlantaNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
   atlantaNote.textContent=MACRO_EXTERNAL_LINKS[0].note;
-  atlantaCol.appendChild(atlantaNote);
-  topRow.appendChild(atlantaCol);
-  var cesiCol=div();cesiCol.style.cssText="flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px;";
+  atlantaGroup.appendChild(atlantaNote);
+  linksRow.appendChild(atlantaGroup);
+  var cesiGroup=div();cesiGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
   var cesiA=h("a",{href:MACRO_EXTERNAL_LINKS[1].url,target:"_blank",rel:"noopener"});
-  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;";
+  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
   cesiA.textContent=MACRO_EXTERNAL_LINKS[1].label;
-  cesiCol.appendChild(cesiA);
+  cesiGroup.appendChild(cesiA);
   var cesiNote=div();cesiNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
   cesiNote.textContent=MACRO_EXTERNAL_LINKS[1].note;
-  cesiCol.appendChild(cesiNote);
-  topRow.appendChild(cesiCol);
-  var fwToggle=div();
-  fwToggle.style.cssText="cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;flex-shrink:0;";
-  var fwToggleLbl=div();fwToggleLbl.textContent="Two-Step Framework";
-  var fwToggleArrow=div();fwToggleArrow.style.cssText="color:var(--accent);font-size:11px;";fwToggleArrow.textContent="▸";
-  fwToggle.appendChild(fwToggleLbl);fwToggle.appendChild(fwToggleArrow);
-  topRow.appendChild(fwToggle);
-  card.appendChild(topRow);
-  var badges=buildQraBadges();
-  badges.el.style.marginTop="10px";badges.el.style.paddingTop="10px";badges.el.style.borderTop="1px solid var(--border)";
-  card.appendChild(badges.el);
-  fwToggle.addEventListener("click",function(){
-    var open=badges.fwBody.style.display==="block";
-    badges.fwBody.style.display=open?"none":"block";
-    fwToggleArrow.textContent=open?"▸":"▾";
-  });
+  cesiGroup.appendChild(cesiNote);
+  linksRow.appendChild(cesiGroup);
+  card.appendChild(linksRow);
   return card;
 }
 function buildLiquidityCard(fieldKey,label,col,note,data,isM){
