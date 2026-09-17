@@ -6828,9 +6828,13 @@ function fmtCotChg(n){
 // This pulls from "Section11" (the per-contract-month settlement table) —
 // NOT Section01C, which is only the aggregate across every expiration month
 // combined. Section11 lists each contract month as its own row (SEP26,
-// DEC26, MAR27, ...) directly under a product header line, so the front
-// (nearest/most active) month's OI is simply the first row under that
-// header, not the total.
+// DEC26, MAR27, ...) directly under a product header line, in expiration
+// order — nearest month first. That is NOT the same as the actively-traded
+// month: index futures roll before expiration once OI/volume shifts to the
+// next contract, so the "front by listing order" row can be the dying
+// contract while the real action sits a row or two down. extractFrontMonthOI
+// below reads every contract-month row under the header and picks whichever
+// has the highest open interest, rather than just taking the first row.
 // pdf.js is lazy-loaded (only fetched when this feature is actually used).
 // If a real Worker can't be created (e.g. this page is opened via file://,
 // where browsers refuse to instantiate Workers), pdf.js automatically falls
@@ -6945,37 +6949,56 @@ function pageItemsToText(tc){
 function extractFrontMonthOI(fullText,sym){
   var pat=CME_ROW_PATTERNS[sym];
   var escLabel=pat.label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-  var re=new RegExp(escLabel+"\\n([^\\n]+)");
-  var m=fullText.match(re);
-  if(!m){
-    // Diagnostic fallback: surface real extracted lines instead of a bare
-    // "not found" — if the format genuinely changed, this shows us exactly
-    // what it looks like now instead of guessing again.
-    var lines=fullText.split("\n");
-    var firstWord=pat.label.split(" ")[0];
-    var near=lines.filter(function(l){return new RegExp(firstWord,"i").test(l);}).slice(0,3);
-    throw new Error("could not find \""+pat.label+"\" header — nearby line(s): "+(near.length?'"'+near.join('" | "')+'"':"(none found at all)"));
+  // CME lists contract months in expiration order (nearest first) — that is
+  // NOT the same thing as the actively-traded contract. Index futures roll
+  // well before expiration once volume/OI has shifted to the next month, so
+  // by the time a front-by-expiration contract (e.g. SEP26) is a few weeks
+  // from expiring, the real action has already moved to the next one (e.g.
+  // DEC26), which sits lower in this same list with far higher OI. Taking
+  // just the first row after the header was silently tracking the dying
+  // contract instead of the one the market actually trades. Fix: capture
+  // every contract-month row under this header, then pick whichever has the
+  // HIGHEST open interest — that's the real active month, independent of
+  // where the bulletin happens to list it.
+  var headerRe=new RegExp(escLabel+"\\n");
+  var hm=fullText.match(headerRe);
+  if(!hm){
+    var lines0=fullText.split("\n");
+    var firstWord0=pat.label.split(" ")[0];
+    var near0=lines0.filter(function(l){return new RegExp(firstWord0,"i").test(l);}).slice(0,3);
+    throw new Error("could not find \""+pat.label+"\" header — nearby line(s): "+(near0.length?'"'+near0.join('" | "')+'"':"(none found at all)"));
   }
-  var line=m[1].trim();
-  var tokens=line.split(/\s+/);
-  var contractMonth=tokens[0];
-  var idx=-1;
-  var signPos=-1;
-  for(var i=tokens.length-1;i>=0;i--){
-    if(tokens[i]==="+"||tokens[i]==="-"||tokens[i]==="UNCH"){ idx=i-1; signPos=i; break; }
-  }
-  if(idx<0) throw new Error("front-month row matched but couldn't locate OI in it: \""+line+"\"");
-  var oiTok=tokens[idx];
-  if(oiTok==="----") throw new Error("front-month contract ("+contractMonth+") shows no open interest: \""+line+"\"");
-  var oi=parseInt(oiTok.replace(/,/g,""),10);
-  if(isNaN(oi)) throw new Error("OI token wasn't numeric: \""+oiTok+"\" (line: \""+line+"\")");
-  var change=0;
-  if(tokens[signPos]==="+"||tokens[signPos]==="-"){
-    var chgTok=tokens[signPos+1];
-    var chgNum=chgTok?parseInt(chgTok.replace(/,/g,""),10):NaN;
-    if(!isNaN(chgNum)) change=tokens[signPos]==="-"?-chgNum:chgNum;
-  }
-  return {oi:oi,change:change,contractMonth:contractMonth};
+  var afterHeader=fullText.slice(hm.index+hm[0].length);
+  var candidateLines=afterHeader.split("\n").slice(0,20); // contract-month rows always immediately follow; 20 is generous headroom
+  var MONTH_ROW_RE=/^[A-Z]{3}\d{2}\s/;
+  var rows=[];
+  var errors=[];
+  candidateLines.forEach(function(line){
+    line=line.trim();
+    if(!MONTH_ROW_RE.test(line)) return; // stops matching once we've run past the contract rows (TOTAL line, next header, etc.)
+    var tokens=line.split(/\s+/);
+    var contractMonth=tokens[0];
+    var idx=-1,signPos=-1;
+    for(var i=tokens.length-1;i>=0;i--){
+      if(tokens[i]==="+"||tokens[i]==="-"||tokens[i]==="UNCH"){ idx=i-1; signPos=i; break; }
+    }
+    if(idx<0) return;
+    var oiTok=tokens[idx];
+    if(oiTok==="----") return; // this contract shows no OI — skip, don't error the whole parse over it
+    var oi=parseInt(oiTok.replace(/,/g,""),10);
+    if(isNaN(oi)) return;
+    var change=0;
+    if(tokens[signPos]==="+"||tokens[signPos]==="-"){
+      var chgTok=tokens[signPos+1];
+      var chgNum=chgTok?parseInt(chgTok.replace(/,/g,""),10):NaN;
+      if(!isNaN(chgNum)) change=tokens[signPos]==="-"?-chgNum:chgNum;
+    }
+    rows.push({oi:oi,change:change,contractMonth:contractMonth});
+  });
+  if(!rows.length) throw new Error("found \""+pat.label+"\" header but no parseable contract-month rows followed it");
+  var best=rows[0];
+  rows.forEach(function(r){ if(r.oi>best.oi) best=r; });
+  return best;
 }
 
 function fetchCmeDailyOI(sym,statusCb){
