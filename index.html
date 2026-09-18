@@ -321,6 +321,11 @@ svg text{font-family:'Courier New',monospace}
   #edge-lock .lk-icon{display:none}
   #edge-lock .lk-key{min-height:58px;font-size:24px}
 }
+#topbar-data-ind{position:absolute;left:0;top:0;width:18px;height:18px;margin-top:-9px;color:var(--accent);opacity:0;pointer-events:none;z-index:3;filter:drop-shadow(0 0 5px #00d4d4aa)}
+#topbar-data-ind svg{display:block;width:100%;height:100%}
+#topbar-data-ind.play{animation:dataIndFade 3s ease-in-out 1 forwards}
+@keyframes dataIndFade{0%{opacity:0}18%{opacity:1}72%{opacity:1}100%{opacity:0}}
+@media(max-width:480px){#topbar-data-ind{width:14px;height:14px;margin-top:-7px}}
 </style>
 </head>
 <body>
@@ -359,6 +364,7 @@ svg text{font-family:'Courier New',monospace}
   <div id="topbar">
     <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">TERMINAL</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
     <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));window.location.reload();" style="cursor:pointer" title="Refresh">BILLION$</div>
+    <span id="topbar-data-ind" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span>
     <div id="topbar-stats"></div>
     <button id="topbar-import-btn" onclick="switchTab('import')" title="Import" class="hide-xs" style="position:absolute;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;transition:color .15s;">⬆</button>
   </div>
@@ -7886,6 +7892,31 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 // liquidity / calendar / COT data and repaints if you're on Analyst or Prep. A
 // second pass ~50s later catches a slow Pages deploy.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml"];
+// ── "New data" sign: a teal database icon that fades in/out just left of
+// BILLION$ in the header. It's absolutely positioned (out of flow) and only
+// animates opacity, so nothing in the header can shift. Positioned from the
+// title's real rect so it works on desktop and phone; on very narrow phones
+// (<=380px) the title is hidden, so it sits at the header's center instead.
+function positionDataIndicator(){
+  var ind=document.getElementById("topbar-data-ind"),tb=document.getElementById("topbar"),b=document.querySelector("#topbar .brand-name");
+  if(!ind||!tb||!b) return;
+  var tr=tb.getBoundingClientRect(),br=b.getBoundingClientRect();
+  var w=ind.offsetWidth||18,gap=window.innerWidth<=480?8:14,x,y;
+  if(br.width>0){x=br.left-tr.left-w-gap;y=br.top-tr.top+br.height/2;}
+  else{
+    var lg=tb.querySelector(".logo"),lr=lg?lg.getBoundingClientRect():null;
+    x=(tr.width-w)/2;y=lr?lr.top-tr.top+lr.height/2:tr.height/2;
+  }
+  ind.style.left=Math.max(0,Math.round(x))+"px";
+  ind.style.top=Math.round(y)+"px";
+}
+function showDataIndicator(){
+  var ind=document.getElementById("topbar-data-ind");
+  if(!ind) return;
+  positionDataIndicator();
+  ind.classList.remove("play");void ind.offsetWidth;ind.classList.add("play");
+}
+window.addEventListener("resize",positionDataIndicator);
 // Fingerprint of the yield/liquidity cache, to tell whether a refresh actually
 // pulled newer data (used to decide if the second pass is needed).
 function trigSnapshot(){
@@ -7931,7 +7962,10 @@ function triggerAllWorkflows(statusElId){
         var hm=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
         if(bad.length) setStatus("Refreshed "+hm+" — workflow failed: "+bad.join(", "),"var(--red)");
         else setStatus("Refreshed "+hm+" ✓","var(--green)");
-        if(trigSnapshot()===snap0) setTimeout(refreshTriggeredData,50000); // Pages deploy hadn't landed yet — one more try
+        if(!bad.length) showDataIndicator();
+        if(trigSnapshot()===snap0) setTimeout(function(){ // Pages deploy hadn't landed yet — one more try
+          refreshTriggeredData().then(function(){ if(!bad.length&&trigSnapshot()!==snap0) showDataIndicator(); });
+        },50000);
       });
     },25000);
   }
@@ -9823,10 +9857,10 @@ function settingsTab(){
 
   var trigRow=mRow();
   var trigInfo=document.createElement("div");
-  trigInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>Trigger all data updates</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;' id='m-trigger-all-status'>TNX, liquidity, yields, calendar</div>";
+  trigInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>Trigger all data updates</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;' id='m-trigger-all-status'>TNX, liquidity, yields, calendar, COT</div>";
   var trigBtn=document.createElement("button");
-  trigBtn.textContent="⚡ Trigger";
-  trigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;flex-shrink:0;";
+  trigBtn.textContent="⚡ DATA 💾";
+  trigBtn.style.cssText="background:none;border:1px solid var(--ca);color:var(--ca);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0;";
   trigBtn.addEventListener("click",function(){triggerAllWorkflows("m-trigger-all-status");});
   trigRow.appendChild(trigInfo);trigRow.appendChild(trigBtn);
   el.appendChild(trigRow);
