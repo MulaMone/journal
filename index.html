@@ -7336,6 +7336,7 @@ var _ycMemCache=null;
 var _ycLoadToken=0;
 var _fedLoadToken=0;
 var _ycAutoInterval=null;
+var _analystVisHandler=null; // current visibilitychange catch-up, re-bound each Analyst-tab render
 function ycCacheGet(){
   try{var raw=localStorage.getItem("edge_yc_v2");return raw?JSON.parse(raw):null;}catch(e){return null;}
 }
@@ -8970,13 +8971,34 @@ function analystTab(){
     });
   }
 
-  rbtn.addEventListener("click",function(){loadLegacy(true);load(true);loadCme(true);loadYc(true);loadLiq(true);loadFed(true);loadDxy(true);});
+  function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);}
+  rbtn.addEventListener("click",function(){refreshAnalystData(true);});
   loadLegacy(false);
   load(false);
   loadYc(false);
   loadLiq(false);
   loadFed(false);
   loadDxy(false);
+
+  // Catch up the moment the app regains focus (e.g. coming back from the
+  // mobile background) — each section's staleness window only gets
+  // re-checked when these load() functions run, and until now nothing
+  // called them on resume, so the tab could sit showing pre-background
+  // data until you switched tabs or hit Refresh. force=false so this only
+  // actually refetches whatever's genuinely past its own staleness
+  // window — same threshold as any normal load, no extra API calls for a
+  // quick app-switch and back. Re-bound each render so a stale prior
+  // handler never stacks with this one.
+  if(_analystVisHandler) document.removeEventListener("visibilitychange",_analystVisHandler);
+  _analystVisHandler=function(){
+    if(!document.hidden && State.tab==="analyst") refreshAnalystData(false);
+  };
+  document.addEventListener("visibilitychange",_analystVisHandler);
+
+  // ── Soft divider before More Macro ──
+  var cotBottomDivider=div();
+  cotBottomDivider.style.cssText="border-top:1px solid var(--border);opacity:.4;margin:20px 0 0;";
+  el.appendChild(cotBottomDivider);
 
   // "More Macro (external)" — static links/content, no data fetch needed,
   // so it's appended once directly rather than inside any of the async
