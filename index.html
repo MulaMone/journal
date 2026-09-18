@@ -8287,7 +8287,12 @@ function buildFedFundsView(data,isM){
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
       +"</div>"
-      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>"
+      // Debug line: which anchor method actually fired for Rstart, and (for
+      // the EFFR-based ones) the date it's dated — makes it visible from the
+      // rendered page whether the EFFR fetch is even succeeding, instead of
+      // having to guess from outside or open devtools.
+      +"<div style='font-size:9px;color:var(--text3);opacity:.6;margin-top:4px;'>anchor: "+prob.anchor+(prob.effrDate?" ("+prob.effrDate+")":"")+" · rnext: "+prob.rnextSource+"</div>";
     el.appendChild(card);
 
     recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
