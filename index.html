@@ -7471,6 +7471,60 @@ function fmtLiqDollar(n){
   if(abs>=1e6) return sign+"$"+(abs/1e6).toFixed(1)+"M";
   return sign+"$"+abs.toFixed(0);
 }
+// Click-to-explain popups for the Net Liquidity banner and the three
+// Fed Balance Sheet cards (Fed Total Assets, TGA, RRP). Each has a
+// "Description" section and a "The Edge" section (why it matters for
+// trading risk assets) — The Edge text is always green regardless of
+// the metric's own accent color.
+var LIQUIDITY_INFO={
+  netLiquidity:{
+    title:"Net Liquidity",
+    col:"#00e676",
+    desc:"The ultimate measure of fiat money actively circulating in the financial system. It is calculated by taking the Fed's Total Assets and subtracting the sidelined cash parked in the TGA and RRP (Net Liquidity = Fed Assets − TGA − RRP).",
+    edge:"Highly financialized risk assets (like the S&P 500, Nasdaq, and Bitcoin) closely track Net Liquidity. It is the \"tide that lifts all boats.\" If Net Liquidity is rising, the macroeconomic wind is at your back to be long risk assets. If it is falling (as seen with the bearish tailwind on your dashboard), markets typically experience friction, signaling a time to reduce leverage or favor defensive positioning."
+  },
+  fedAssets:{
+    title:"Fed Total Assets",
+    col:"#00d4d4",
+    desc:"The total size of the Federal Reserve's balance sheet. It expands during Quantitative Easing (QE) when the Fed buys bonds, and shrinks during Quantitative Tightening (QT) when they let bonds mature.",
+    edge:"A rising balance sheet artificially injects capital into the banking system and suppresses yields, forcing investors further out the risk curve to find returns (highly bullish). A shrinking balance sheet removes this baseline structural support, creating a headwind for equities."
+  },
+  tga:{
+    title:"Treasury General Account (TGA)",
+    col:"#ffab00",
+    desc:"The US government's official checking account at the Federal Reserve, used to collect taxes and pay for federal spending.",
+    edge:"Think of the TGA as a sponge. When the TGA balance rises (e.g., during tax season or heavy debt issuance), it absorbs cash from the private banking system—draining liquidity (Bearish). When the TGA balance falls (the government is spending money into the economy faster than it is collecting it), that cash flows directly into the private sector—injecting liquidity (Bullish)."
+  },
+  rrp:{
+    title:"Reverse Repo Facility (RRP)",
+    col:"#b06aff",
+    desc:"A facility where money-market funds and institutions park excess cash overnight at the Fed in exchange for a guaranteed, risk-free yield. This cash is completely sidelined from the stock market.",
+    edge:"The RRP is essentially a waiting room for capital. A rising RRP means institutions are hoarding cash for safety or yield, starving the broader market of capital—draining liquidity (Bearish). A falling RRP means institutions are pulling cash out of the Fed's vault and deploying it back into the financial markets to chase better returns—injecting liquidity (Bullish)."
+  }
+};
+function showLiqInfoModal(key){
+  var info=LIQUIDITY_INFO[key];if(!info) return;
+  var existing=document.getElementById("liq-info-modal");if(existing) existing.remove();
+  var overlay=div();overlay.id="liq-info-modal";
+  overlay.style.cssText="position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
+  overlay.addEventListener("click",function(e){if(e.target===overlay) overlay.remove();});
+  var box=div();box.style.cssText="background:#071428;border:1px solid #1a3260;border-left:3px solid "+info.col+";border-radius:6px;max-width:420px;width:100%;padding:22px 24px;position:relative;max-height:80vh;overflow-y:auto;";
+  var closeBtn=div();closeBtn.style.cssText="position:absolute;top:10px;right:14px;cursor:pointer;color:var(--text3);font-size:20px;font-weight:700;line-height:1;";closeBtn.textContent="×";
+  closeBtn.addEventListener("click",function(){overlay.remove();});
+  box.appendChild(closeBtn);
+  var title=div();title.style.cssText="font-size:15px;font-weight:700;letter-spacing:1px;color:"+info.col+";margin-bottom:14px;padding-right:20px;";title.textContent=info.title;
+  box.appendChild(title);
+  var descLabel=div();descLabel.style.cssText="font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";descLabel.textContent="Description";
+  box.appendChild(descLabel);
+  var descBody=div();descBody.style.cssText="font-size:13px;line-height:1.6;color:var(--text2);margin-bottom:16px;";descBody.textContent=info.desc;
+  box.appendChild(descBody);
+  var edgeLabel=div();edgeLabel.style.cssText="font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";edgeLabel.textContent="The Edge";
+  box.appendChild(edgeLabel);
+  var edgeBody=div();edgeBody.style.cssText="font-size:13px;line-height:1.6;color:#00e676;";edgeBody.textContent=info.edge;
+  box.appendChild(edgeBody);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
 // Computed banner: Net Liquidity = Fed Total Assets − (TGA + RRP). Not a
 // FRED series on its own — derived client-side from the three fetched
 // fields on each row. Trend arrow is measured over the trailing 4 prints
@@ -7493,7 +7547,8 @@ function buildNetLiquidityBanner(data,isM){
   var trendBase=series[trendBaseIdx];
   var trendUp=latest.v>=trendBase.v;
   var col="#00e676";
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;cursor:pointer;";
+  card.addEventListener("click",function(){showLiqInfoModal("netLiquidity");});
   var badgeCol=trendUp?"#00e676":"#ff4444";
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Net Liquidity <span style='color:var(--text3);text-transform:none;letter-spacing:0;'>= Fed Assets − (TGA + RRP)</span></div>"
     +"<div style='display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;'>"
@@ -7677,7 +7732,8 @@ function buildLiquidityCard(fieldKey,label,col,note,data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;height:100%;display:flex;flex-direction:column;box-sizing:border-box;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;height:100%;display:flex;flex-direction:column;box-sizing:border-box;cursor:pointer;";
+  card.addEventListener("click",function(){showLiqInfoModal(fieldKey);});
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+label+"</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+fmtLiqDollar(latest.v)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+fmtLiqDollar(chg)+" vs prior print</div>";
@@ -8469,6 +8525,16 @@ function paintLiveBadge(id,val,baseline,decimals){
   var up=baseline!=null&&val>=baseline;
   v.style.color=baseline!=null?(up?"#00e676":"#ff4444"):"var(--text3)";
   v.textContent=val.toFixed(decimals);
+  var c=badge.querySelector(".live-chg");
+  if(c){
+    if(baseline!=null){
+      var chg=val-baseline,pctChg=baseline?chg/baseline*100:0;
+      c.style.color=up?"#00e676":"#ff4444";
+      c.textContent=(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%)";
+    } else {
+      c.textContent="";
+    }
+  }
 }
 // Small reusable price card (used for Gold and Oil) — same shape as the
 // DXY card but without the DXY-specific formula/legend line.
@@ -8488,7 +8554,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
     liveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-    liveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div>";
+    liveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-chg' style='font-size:10px;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'></div>";
     card.appendChild(liveBadge);
   }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
@@ -8522,7 +8588,7 @@ function buildDxyView(data,isM){
   card.appendChild(top);
   var dxyLiveBadge=div();dxyLiveBadge.id="live-dxy";
   dxyLiveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
-  dxyLiveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div>";
+  dxyLiveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-chg' style='font-size:10px;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'></div>";
   card.appendChild(dxyLiveBadge);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
