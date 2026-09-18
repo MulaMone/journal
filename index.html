@@ -8052,10 +8052,6 @@ function prevContractMonthCode(code){
   mo--; if(mo<0){mo=11;yr--;}
   return MONTH_CODES[mo]+(yr<10?"0"+yr:""+yr);
 }
-function contractMonthSortKey(code){
-  var mo=MONTH_CODES.indexOf(code.slice(0,3)),yr=parseInt(code.slice(3),10);
-  return yr*12+mo;
-}
 // Next FOMC date on/after today, from the same lookup Prep already uses
 // for the news calendar — kept as the single source of truth for meeting
 // dates rather than a second list that could drift out of sync.
