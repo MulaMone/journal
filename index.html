@@ -7828,34 +7828,80 @@ function updateTnxLiveBadge(){
 var GH_OWNER="mulamone";
 var GH_REPO="journal";
 var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
-// ── Trigger all data workflows at once — fire-and-forget, no per-file
-// polling. Dispatches all four Actions that keep this app's same-origin
-// JSON files fresh, using the GitHub token saved in Settings. Reports
-// which dispatches succeeded/failed; the person verifies actual
-// completion via the Actions tab rather than the app polling four
-// separate JSON files.
+// ── Trigger all data workflows at once, then auto-refresh when the data
+// lands. Dispatches the four Actions that keep this app's same-origin JSON
+// files fresh, polls their runs until they finish (falls back to a fixed
+// wait if the runs API isn't readable with this token), gives Pages ~25s to
+// redeploy the committed JSON, then force-reloads the cached yield /
+// liquidity / calendar data and repaints if you're on Analyst or Prep. A
+// second pass ~50s later catches a slow Pages deploy.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml"];
+function refreshTriggeredData(){
+  return Promise.all([
+    loadYieldCurveData(true).catch(function(){}),
+    loadLiquidityData(true).catch(function(){}),
+    loadLocalCalendar(true).catch(function(){})
+  ]).then(function(){
+    if(State.tab==="analyst"||State.tab==="prep") render();
+  });
+}
 function triggerAllWorkflows(statusElId){
+  var sid=statusElId||"trigger-all-status";
+  function setStatus(msg,color){var el=document.getElementById(sid);if(el){el.textContent=msg;el.style.color=color||"var(--text3)";}}
   var tok=ls("gh_token","");
-  var statusEl=document.getElementById(statusElId||"trigger-all-status");
-  if(!tok){if(statusEl){statusEl.textContent="Set a GitHub token first";statusEl.style.color="var(--red)";}return;}
-  if(statusEl){statusEl.textContent="Triggering all "+GH_ALL_WORKFLOWS.length+"…";statusEl.style.color="var(--text3)";}
+  if(!tok){setStatus("Set a GitHub token first","var(--red)");return;}
+  var t0=Date.now();
+  var base="https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/";
+  var authHdr={"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json"};
+  function pollRun(file){
+    return fetch(base+file+"/runs?event=workflow_dispatch&per_page=5",{headers:authHdr,cache:"no-store"})
+      .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
+      .then(function(j){
+        var run=(j.workflow_runs||[]).filter(function(x){return Date.parse(x.created_at)>=t0-15000;})[0];
+        return {file:file,status:run?run.status:"pending",conclusion:run?run.conclusion:null};
+      }).catch(function(){return {file:file,status:"unknown"};});
+  }
+  function landData(bad){
+    setStatus("Deploying data…");
+    setTimeout(function(){
+      refreshTriggeredData().then(function(){
+        var hm=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+        if(bad.length) setStatus("Refreshed "+hm+" — workflow failed: "+bad.join(", "),"var(--red)");
+        else setStatus("Refreshed "+hm+" ✓","var(--green)");
+        setTimeout(refreshTriggeredData,50000);
+      });
+    },25000);
+  }
+  function waitForRuns(){
+    var tries=0;
+    (function tick(){
+      Promise.all(GH_ALL_WORKFLOWS.map(pollRun)).then(function(rs){
+        if(rs.every(function(r){return r.status==="unknown";})){
+          setStatus("Triggered — refreshing in ~90s");
+          setTimeout(function(){landData([]);},65000);
+          return;
+        }
+        var done=rs.filter(function(r){return r.status==="completed";});
+        if(done.length<rs.length&&++tries<40){
+          setStatus("Running… "+done.length+"/"+rs.length+" done");
+          setTimeout(tick,6000);
+          return;
+        }
+        landData(done.filter(function(r){return r.conclusion!=="success";}).map(function(r){return r.file;}));
+      });
+    })();
+  }
+  setStatus("Triggering all "+GH_ALL_WORKFLOWS.length+"…");
   Promise.all(GH_ALL_WORKFLOWS.map(function(file){
-    return fetch("https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/"+file+"/dispatches",{
+    return fetch(base+file+"/dispatches",{
       method:"POST",
-      headers:{"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json","Content-Type":"application/json"},
+      headers:{"Authorization":authHdr.Authorization,"Accept":authHdr.Accept,"Content-Type":"application/json"},
       body:JSON.stringify({ref:GH_BRANCH})
     }).then(function(r){return {file:file,ok:r.ok};}).catch(function(){return {file:file,ok:false};});
   })).then(function(results){
     var failed=results.filter(function(r){return !r.ok;});
-    if(!statusEl) return;
-    if(!failed.length){
-      statusEl.textContent="Triggered all "+results.length+" — check Actions tab in ~30s";
-      statusEl.style.color="var(--green)";
-    } else {
-      statusEl.textContent="Failed: "+failed.map(function(f){return f.file;}).join(", ");
-      statusEl.style.color="var(--red)";
-    }
+    if(failed.length){setStatus("Failed: "+failed.map(function(f){return f.file;}).join(", "),"var(--red)");return;}
+    waitForRuns();
   });
 }
 function paintTnxBadge(data){
