@@ -8111,38 +8111,40 @@ function computeFedProbability(meetingIso,curve,effr){
   var prevCode=prevContractMonthCode(meetingCode);
   var prevRow=byCode[prevCode];
   var Rstart,anchor,effrDate=null;
-  if(prevRow){
+  // If a decision already landed inside the PRIOR contract month, the
+  // most reliable anchor for "today's actual rate" is a fresh EFFR print
+  // dated on/after that decision — that number already IS the repriced
+  // rate, no reconstruction needed. Prefer it over the blended-average /
+  // recursive-unblend paths below whenever it's available and dated
+  // correctly; only fall back to those when it isn't.
+  //
+  // Getting the "dated correctly" check right matters: an EFFR print
+  // fetched as "latest" always reflects TODAY, so it's only valid as this
+  // anchor when today is already on/after the decision it needs to
+  // reflect. Using it unconditionally previously caused the amplified
+  // recursive error (using an unrelated period's EFFR as if it were
+  // pre-decision); blocking it outright then caused the opposite failure
+  // (falling back to a blended average that understates the post-decision
+  // rate and reads as a near-100% move). Checking the actual date is what
+  // makes it correct both ways.
+  var priorMeetingIso=prevRow?decidedMeetingIsoInMonth(prevCode):null;
+  if(priorMeetingIso&&effr&&isFinite(effr.rate)&&effr.date&&effr.date>=priorMeetingIso){
+    Rstart=effr.rate;anchor="effr-postdecision";effrDate=effr.date;
+  } else if(prevRow){
     // The prior month's own whole-month average is only a clean anchor if
-    // NOTHING changed during it. If a decision already landed inside that
-    // prior month, its blended average mixes the pre- and post-decision
-    // rates together and is systematically wrong as a "current rate" —
-    // worse, the error compounds the closer this meeting falls to its own
-    // month-end (fewer "after" days to solve from means more amplification
-    // of whatever bias the anchor carries). Recover the clean post-decision
-    // rate instead by recursively running this same decomposition on the
-    // prior month's own meeting — it terminates naturally once we reach a
-    // month with no embedded meeting or no further curve history.
-    var priorMeetingIso=decidedMeetingIsoInMonth(prevCode);
+    // NOTHING changed during it. If a decision landed inside that prior
+    // month and we don't have a usable post-decision EFFR (branch above),
+    // recover the clean post-decision rate instead by recursively running
+    // this same decomposition on the prior month's own meeting — it
+    // terminates naturally once we reach a month with no embedded meeting
+    // or no further curve history.
     var priorSolved=priorMeetingIso?computeFedProbability(priorMeetingIso,curve,effr):null;
     if(priorSolved){
       Rstart=priorSolved.Rnext;anchor="contract-unblended";
     } else {
       Rstart=prevRow.rate;anchor="contract";
     }
-  } else if(effr&&isFinite(effr.rate)&&meetingIso>=new Date().toISOString().slice(0,10)){
-    // fetchEffrLatest() always returns the MOST RECENT EFFR print — i.e.
-    // today's rate. That's a valid stand-in for "the rate right before
-    // THIS meeting" only when the meeting is still upcoming. For an
-    // already-decided meeting (this branch is reached recursively, above,
-    // once that meeting's own prior month has rolled off the curve),
-    // today's EFFR is the POST-decision rate, not the pre-decision
-    // baseline this anchor is supposed to be — using it mislabels a hike
-    // that already happened as "no change yet," and that error then gets
-    // amplified several-fold by the decomposition math below for any
-    // meeting that lands late in its contract month. Guard on meetingIso
-    // being todayIso-or-later so a past meeting falls through to `return
-    // null` instead, letting the caller use the plain (blended but not
-    // mis-anchored) contract-average branch above.
+  } else if(effr&&isFinite(effr.rate)){
     Rstart=effr.rate;anchor="effr";effrDate=effr.date||null;
   } else {
     return null;
