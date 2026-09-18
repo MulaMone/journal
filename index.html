@@ -7886,6 +7886,12 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 // liquidity / calendar / COT data and repaints if you're on Analyst or Prep. A
 // second pass ~50s later catches a slow Pages deploy.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml"];
+// Fingerprint of the yield/liquidity cache, to tell whether a refresh actually
+// pulled newer data (used to decide if the second pass is needed).
+function trigSnapshot(){
+  var y=ycCacheGet(),l=liqCacheGet();
+  return ((y&&y.sourceFetchedAt)||"")+"|"+((l&&l.sourceFetchedAt)||"");
+}
 function refreshTriggeredData(){
   return Promise.all([
     loadYieldCurveData(true).catch(function(){}),
@@ -7894,7 +7900,11 @@ function refreshTriggeredData(){
     loadCOTData("ES",true).catch(function(){}),loadCOTData("NQ",true).catch(function(){}),
     loadCOTLegacyData("ES",true).catch(function(){}),loadCOTLegacyData("NQ",true).catch(function(){})
   ]).then(function(){
-    if(State.tab==="analyst"||State.tab==="prep") render();
+    // Repaint the open Analyst sections in place. A full render() rebuilds the
+    // whole tab (loading placeholders, then sections popping in at different
+    // heights, and on desktop the scroll resets) — that was the page jump.
+    // Prep isn't repainted; it reads the fresh cache next time it opens.
+    if(State.tab==="analyst"&&typeof window._analystRefreshTriggered==="function") window._analystRefreshTriggered();
   });
 }
 function triggerAllWorkflows(statusElId){
@@ -7903,6 +7913,7 @@ function triggerAllWorkflows(statusElId){
   var tok=ls("gh_token","");
   if(!tok){setStatus("Set a GitHub token first","var(--red)");return;}
   var t0=Date.now();
+  var snap0=trigSnapshot();
   var base="https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/";
   var authHdr={"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json"};
   function pollRun(file){
@@ -7920,7 +7931,7 @@ function triggerAllWorkflows(statusElId){
         var hm=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
         if(bad.length) setStatus("Refreshed "+hm+" — workflow failed: "+bad.join(", "),"var(--red)");
         else setStatus("Refreshed "+hm+" ✓","var(--green)");
-        setTimeout(refreshTriggeredData,50000);
+        if(trigSnapshot()===snap0) setTimeout(refreshTriggeredData,50000); // Pages deploy hadn't landed yet — one more try
       });
     },25000);
   }
@@ -9142,6 +9153,9 @@ function analystTab(){
   }
 
   function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);}
+  // Trigger All calls this to repaint just the sections its workflows feed
+  // (COT, yields/10Y, liquidity) in place — no full render(), no page jump.
+  window._analystRefreshTriggered=function(){loadLegacy(true);load(true);loadYc(true);loadLiq(true);};
   rbtn.addEventListener("click",function(){refreshAnalystData(true);});
   loadLegacy(false);
   load(false);
