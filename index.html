@@ -8542,9 +8542,9 @@ function paintLiveBadge(id,val,baseline,decimals){
 // DXY card but without the DXY-specific formula/legend line.
 // Color-codes directional / sentiment terms in analyst notes (green = up/bullish/dovish, red = down/bearish/hawkish)
 function colorizeNote(s){
-  var GREEN={"bullish":1,"dovish":1,"rallies":1,"spike":1,"gold strength":1,"up":1};
+  var GREEN={"bullish":1,"dovish":1,"rallies":1,"spike":1,"gold strength":1,"risk-friendlier":1,"up":1};
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/\b(bullish|dovish|rallies|spike|gold strength|up|bearish|hawkish|sell(?:ing)? off|falling|down)\b/gi,function(m){
+    .replace(/\b(bullish|dovish|rallies|spike|gold strength|risk-friendlier|up|bearish|hawkish|sell(?:ing)? off|falling|down)\b/gi,function(m){
       return "<span class='"+(GREEN[m.toLowerCase()]?"g":"r")+"'>"+m+"</span>";
     });
 }
