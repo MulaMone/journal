@@ -7744,7 +7744,7 @@ function buildLiquidityCard(fieldKey,label,col,note,data,isM){
   card.appendChild(chartWrap);
   if(note&&!isM){
     var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;flex:1;";
-    n.textContent=note;
+    n.innerHTML=colorizeSentiment(note);
     card.appendChild(n);
   }
   el.appendChild(card);
@@ -8538,6 +8538,16 @@ function paintLiveBadge(id,val,baseline,decimals){
     }
   }
 }
+// Colors market-sentiment terms in Analyst descriptions: green = bullish /
+// risk-friendly, red = bearish / risk-off. Input is escaped first.
+var SENT_GREEN="bullish|dovish|disinflationary|risk-friendlier|risk-on|gold strength|dollar down \\+ yields down|falling real yields|falling oil|more system liquidity|flowing back into market liquidity|flows back out into the system";
+var SENT_RED="bearish|hawkish|higher-for-longer|tighter liquidity|richer discount rates|hardest on nq|sell(?:ing)?[ -]off|risk-off|weigh on risk assets|sustained spike|higher input costs|dollar up \\+ yields up|draining liquidity|drains system liquidity";
+var SENT_RE=new RegExp("("+SENT_GREEN+")|("+SENT_RED+")","gi");
+function colorizeSentiment(text){
+  return escapeHtml(text).replace(SENT_RE,function(m,g,r){
+    return "<span style='color:"+(g?"#00e676":"#ff4444")+";font-weight:700;'>"+m+"</span>";
+  });
+}
 // Small reusable price card (used for Gold and Oil) — same shape as the
 // DXY card but without the DXY-specific formula/legend line.
 function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
@@ -8564,7 +8574,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   card.appendChild(chartWrap);
   if(note&&!isMobile()){
     var n=div();n.style.cssText="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;";
-    n.textContent=note;
+    n.innerHTML=colorizeSentiment(note);
     card.appendChild(n);
   }
   return card;
@@ -8638,7 +8648,7 @@ function analystTab(){
 
   if(!isM){
     var dxyTnxNote=div();dxyTnxNote.style.cssText="background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.6;";
-    dxyTnxNote.innerHTML="<b style='color:#00e676;'>Reading DXY & TNX against ES/NQ:</b> Dollar up + yields up is usually the bearish combo for equities — tighter liquidity and richer discount rates, hardest on NQ. Dollar down + yields down is usually the bullish mirror. Either can decouple during regime shifts (risk-off rallies dollar, bonds, and yield-down together while stocks still sell off), so treat this as context, not a rule.";
+    dxyTnxNote.innerHTML="<b style='color:#00e676;'>Reading DXY & TNX against ES/NQ:</b> "+colorizeSentiment("Dollar up + yields up is usually the bearish combo for equities — tighter liquidity and richer discount rates, hardest on NQ. Dollar down + yields down is usually the bullish mirror. Either can decouple during regime shifts (risk-off rallies dollar, bonds, and yield-down together while stocks still sell off), so treat this as context, not a rule.");
     el.appendChild(dxyTnxNote);
   }
 
