@@ -1947,7 +1947,7 @@ function openSettings(){
   allTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
   var allTrigInfo=document.createElement("div");allTrigInfo.style.cssText="min-width:0;";
   var allTrigLbl=document.createElement("div");allTrigLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";allTrigLbl.textContent="Trigger All Data Updates";
-  var allTrigStatus=document.createElement("div");allTrigStatus.id="trigger-all-status";allTrigStatus.style.cssText="font-size:10px;color:var(--text3);";allTrigStatus.textContent="TNX, liquidity, yields, calendar — all at once";
+  var allTrigStatus=document.createElement("div");allTrigStatus.id="trigger-all-status";allTrigStatus.style.cssText="font-size:10px;color:var(--text3);";allTrigStatus.textContent="TNX, liquidity, yields, calendar, COT — all at once";
   allTrigInfo.appendChild(allTrigLbl);allTrigInfo.appendChild(allTrigStatus);
   var allTrigBtn=document.createElement("button");
   allTrigBtn.textContent="⚡ DATA 💾";
@@ -6825,12 +6825,12 @@ function loadCOTData(sym,force){
     if(!rows||!rows.length) throw new Error("empty response");
     rows.sort(function(a,b){return a.report_date_as_yyyy_mm_dd<b.report_date_as_yyyy_mm_dd?-1:1;});
     return cotMergeFile(rows,"tff",sym).then(function(m){
-      var obj={rows:m.rows,fetchedAt:Date.now(),fromFile:m.fromFile};
+      var obj={rows:m.rows,fetchedAt:Date.now()};
       _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
       return obj;
     });
   }).catch(function(err){
-    if(cached){_cotMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
+    if(cached){console.warn("COT (TFF) fetch failed, using cache:",err&&err.message);_cotMemCache[sym]=cached;return cached;}
     throw err;
   });
 }
@@ -6852,69 +6852,46 @@ function loadCOTLegacyData(sym,force){
     if(!rows||!rows.length) throw new Error("empty response");
     rows.sort(function(a,b){return a.report_date_as_yyyy_mm_dd<b.report_date_as_yyyy_mm_dd?-1:1;});
     return cotMergeFile(rows,"legacy",sym).then(function(m){
-      var obj={rows:m.rows,fetchedAt:Date.now(),fromFile:m.fromFile};
+      var obj={rows:m.rows,fetchedAt:Date.now()};
       _cotLegacyMemCache[sym]=obj;cotLegacyCacheSet(sym,obj);
       return obj;
     });
   }).catch(function(err){
-    if(cached){_cotLegacyMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
+    if(cached){console.warn("COT (Legacy) fetch failed, using cache:",err&&err.message);_cotLegacyMemCache[sym]=cached;return cached;}
     throw err;
   });
 }
 
-// ── COT freshness — the loaders above silently fall back to cache on any
-// failure, which looks exactly like "no new report". These make it visible:
-// expected newest report = the Tuesday behind the latest Friday 3:30pm ET
-// release that has already happened. If the API is behind that (or the
-// fetch failed), show a note and retry every 3 min while the tab is open.
+// ── COT fallback — the CFTC's Socrata API can lag cftc.gov's static pages by
+// hours after the Friday 3:30pm ET release. Expected newest report = the
+// Tuesday behind the latest Friday 3:30pm ET release that has already
+// happened. When the API is behind that, cotMergeFile() appends the week
+// from cot.json (written by update-cot.yml from cftc.gov itself); once the
+// API has the week, its own row is used and cot.json is never fetched.
 function cotExpectedReportDate(){
-  var et=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
-  var back=(et.getDay()-5+7)%7;
-  if(back===0&&(et.getHours()*60+et.getMinutes())<15*60+30) back=7;
-  var tue=new Date(et.getFullYear(),et.getMonth(),et.getDate()-back-3);
-  var m=tue.getMonth()+1,d=tue.getDate();
-  return tue.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(d<10?"0":"")+d;
+  var p={};
+  new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",hour12:false})
+    .formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
+  var dow={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.weekday];
+  var mins=(parseInt(p.hour,10)%24)*60+parseInt(p.minute,10);
+  var back=(dow-5+7)%7;
+  if(back===0&&mins<15*60+30) back=7;
+  var t=new Date(Date.UTC(+p.year,+p.month-1,+p.day-back-3));
+  return t.toISOString().slice(0,10);
 }
-function cotLatestDate(data){
-  var r=data&&data.rows&&data.rows.length?data.rows[data.rows.length-1]:null;
-  return r&&r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(0,10):null;
-}
-function cotNeedsRetry(data){
-  if(!data) return false;
-  if(data.fetchError) return true;
-  var last=cotLatestDate(data);
-  return !!last&&last<cotExpectedReportDate();
-}
-// When the CFTC API is behind the newest release, pull that week from
-// cot.json (written by update-cot.yml from cftc.gov's own static pages) and
-// append it as the latest row. Once the API has the week, its row wins.
 function cotMergeFile(rows,kind,sym){
   var last=rows.length&&rows[rows.length-1].report_date_as_yyyy_mm_dd?rows[rows.length-1].report_date_as_yyyy_mm_dd.slice(0,10):"";
-  if(last>=cotExpectedReportDate()) return Promise.resolve({rows:rows,fromFile:false});
+  if(last>=cotExpectedReportDate()) return Promise.resolve({rows:rows});
   return fetch("cot.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(j){
     var row=j&&j[kind]&&j[kind][sym];
-    if(!row||!row.report_date_as_yyyy_mm_dd||row.report_date_as_yyyy_mm_dd.slice(0,10)<=last) return {rows:rows,fromFile:false};
-    return {rows:rows.concat([row]),fromFile:true};
-  }).catch(function(){return {rows:rows,fromFile:false};});
+    if(!row||!row.report_date_as_yyyy_mm_dd||row.report_date_as_yyyy_mm_dd.slice(0,10)<=last) return {rows:rows};
+    return {rows:rows.concat([row])};
+  }).catch(function(){return {rows:rows};});
 }
-function cotFreshNote(data){
-  var msg=null,col="#ffab00";
-  if(data&&data.fetchError) msg="CFTC fetch failed ("+data.fetchError+") — showing cached "+(cotLatestDate(data)||"?")+" data. Retrying every 3 min.";
-  else if(data&&data.fromFile){msg="CFTC API hasn't posted "+cotLatestDate(data)+" yet — showing it from cftc.gov (cot.json).";col="var(--text3)";}
-  else if(cotNeedsRetry(data)) msg="CFTC API still returning "+cotLatestDate(data)+" — newer report ("+cotExpectedReportDate()+") expected. Retrying every 3 min.";
-  if(!msg) return null;
-  var n=document.createElement("div");
-  n.style.cssText="font-size:11px;color:"+col+";font-family:Courier New,monospace;letter-spacing:.5px;margin:0 0 10px;";
-  n.textContent=(col==="#ffab00"?"⚠ ":"")+msg;
-  return n;
-}
-function cotScheduleRetry(data,alive,fn){
-  if(!cotNeedsRetry(data)) return;
-  setTimeout(function(){ if(alive()&&State.tab==="analyst") fn(); },180000);
-}
+
 function longShortBar(long,short){
   var total=long+short||1;
   var longPct=Math.max(0,Math.min(100,long/total*100));
@@ -7828,7 +7805,9 @@ var _tnxLiveTimer=null;
 var _tnxLiveBaseline=null; // latest official Treasury 10Y print — the badge's up/down color is measured against this
 function tnxCacheGet(){try{var raw=localStorage.getItem("edge_tnx_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function tnxCacheSet(obj){try{localStorage.setItem("edge_tnx_v1",JSON.stringify(obj));}catch(e){}}
+var _tnxDirectBlocked=false; // Yahoo blocks this origin (CORS) — try once per page load, not every minute
 function fetchTnxDirect(){
+  if(_tnxDirectBlocked) return Promise.reject(new Error("direct fetch blocked"));
   var url="https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1m&range=1d&_="+Date.now();
   return fetch(url).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
@@ -7842,7 +7821,7 @@ function fetchTnxDirect(){
     var obj={yieldVal:price,marketTime:marketTimeIso,fetchedAt:Date.now(),source:"direct"};
     _tnxMemCache=obj;tnxCacheSet(obj);
     return obj;
-  });
+  }).catch(function(err){_tnxDirectBlocked=true;throw err;});
 }
 function fetchTnxFromFile(){
   return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
@@ -7869,8 +7848,22 @@ function fetchTnxFromSupabase(){
 }
 function fetchTnxJson(){
   return fetchTnxDirect().catch(function(){
-    return fetchTnxFromSupabase().catch(function(){
-      return fetchTnxFromFile();
+    // Supabase and tnx.json can disagree on freshness (a stalled pg_cron, or
+    // Trigger All just refreshed the file) — the first rung to answer isn't
+    // necessarily the newest, so ask both and take whichever is newer.
+    return Promise.all([
+      fetchTnxFromSupabase().catch(function(){return null;}),
+      fetchTnxFromFile().catch(function(){return null;})
+    ]).then(function(rs){
+      var best=null,bestT=-1;
+      rs.forEach(function(o){
+        if(!o) return;
+        var t=Date.parse(o.sourceFetchedAt||o.marketTime||"");if(isNaN(t)) t=0;
+        if(t>bestT){best=o;bestT=t;}
+      });
+      if(!best) throw new Error("all TNX sources failed");
+      _tnxMemCache=best;tnxCacheSet(best);
+      return best;
     });
   });
 }
@@ -7890,7 +7883,7 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 // files fresh, polls their runs until they finish (falls back to a fixed
 // wait if the runs API isn't readable with this token), gives Pages ~25s to
 // redeploy the committed JSON, then force-reloads the cached yield /
-// liquidity / calendar data and repaints if you're on Analyst or Prep. A
+// liquidity / calendar / COT data and repaints if you're on Analyst or Prep. A
 // second pass ~50s later catches a slow Pages deploy.
 var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml"];
 function refreshTriggeredData(){
@@ -7916,7 +7909,7 @@ function triggerAllWorkflows(statusElId){
     return fetch(base+file+"/runs?event=workflow_dispatch&per_page=5",{headers:authHdr,cache:"no-store"})
       .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
       .then(function(j){
-        var run=(j.workflow_runs||[]).filter(function(x){return Date.parse(x.created_at)>=t0-15000;})[0];
+        var run=(j.workflow_runs||[]).filter(function(x){return Date.parse(x.created_at)>=t0-30000;})[0];
         return {file:file,status:run?run.status:"pending",conclusion:run?run.conclusion:null};
       }).catch(function(){return {file:file,status:"unknown"};});
   }
@@ -8953,10 +8946,8 @@ function analystTab(){
     loadCOTLegacyData(sym,force).then(function(data){
       if(myToken!==_cotLegacyLoadToken||State.tab!=="analyst") return;
       legacyBody.innerHTML="";
-      var _lgNote=cotFreshNote(data);if(_lgNote) legacyBody.appendChild(_lgNote);
       legacyBody.appendChild(buildCOTLegacyView(sym,data,isM));
       legacyBody.style.opacity="1";
-      cotScheduleRetry(data,function(){return myToken===_cotLegacyLoadToken;},function(){loadLegacy(true);});
     }).catch(function(err){
       if(myToken!==_cotLegacyLoadToken) return;
       legacyBody.style.opacity="1";
@@ -8982,10 +8973,8 @@ function analystTab(){
     loadCOTData(sym,force).then(function(data){
       if(myToken!==_cotLoadToken||State.tab!=="analyst") return;
       body.innerHTML="";
-      var _tffNote=cotFreshNote(data);if(_tffNote) body.appendChild(_tffNote);
       body.appendChild(buildCOTView(sym,data,isM));
       body.style.opacity="1";
-      cotScheduleRetry(data,function(){return myToken===_cotLoadToken;},function(){load(true);});
     }).catch(function(err){
       if(myToken!==_cotLoadToken) return;
       body.style.opacity="1";
