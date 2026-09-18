@@ -3,11 +3,13 @@ name: update-cot
 on:
   workflow_dispatch:
   schedule:
-    # CFTC releases Fridays 3:30pm ET (19:30 UTC in EDT, 20:30 in EST); Monday
-    # covers holiday-delayed weeks. GitHub cron can skip runs — Trigger All
-    # in the app dispatches this on demand.
-    - cron: "*/10 19-23 * * 5"
-    - cron: "*/10 19-23 * * 1"
+    # Fridays only, two runs after the 3:30pm ET CFTC release. Times are UTC
+    # and chosen to land after the release in both EDT and EST:
+    #   20:45 UTC = 4:45pm EDT / 3:45pm EST
+    #   22:00 UTC = 6:00pm EDT / 5:00pm EST (retry)
+    # GitHub cron can run late or skip — Trigger All in the app is the backup.
+    - cron: "45 20 * * 5"
+    - cron: "0 22 * * 5"
 
 concurrency:
   group: update-cot
