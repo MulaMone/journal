@@ -6818,7 +6818,7 @@ function loadCOTData(sym,force){
   var market=COT_SYMS[sym].market;
   var where="market_and_exchange_names='"+market+"'";
   var url=COT_TFF_URL+"?$where="+encodeURIComponent(where)+"&$order=report_date_as_yyyy_mm_dd DESC&$limit=60";
-  return fetch(url).then(function(r){
+  return fetch(url,{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(rows){
@@ -6828,7 +6828,7 @@ function loadCOTData(sym,force){
     _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
     return obj;
   }).catch(function(err){
-    if(cached){_cotMemCache[sym]=cached;return cached;}
+    if(cached){_cotMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
     throw err;
   });
 }
@@ -6843,7 +6843,7 @@ function loadCOTLegacyData(sym,force){
   var market=COT_SYMS[sym].market;
   var where="market_and_exchange_names='"+market+"'";
   var url=COT_LEGACY_URL+"?$where="+encodeURIComponent(where)+"&$order=report_date_as_yyyy_mm_dd DESC&$limit=60";
-  return fetch(url).then(function(r){
+  return fetch(url,{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(rows){
@@ -6853,11 +6853,48 @@ function loadCOTLegacyData(sym,force){
     _cotLegacyMemCache[sym]=obj;cotLegacyCacheSet(sym,obj);
     return obj;
   }).catch(function(err){
-    if(cached){_cotLegacyMemCache[sym]=cached;return cached;}
+    if(cached){_cotLegacyMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
     throw err;
   });
 }
 
+// ── COT freshness — the loaders above silently fall back to cache on any
+// failure, which looks exactly like "no new report". These make it visible:
+// expected newest report = the Tuesday behind the latest Friday 3:30pm ET
+// release that has already happened. If the API is behind that (or the
+// fetch failed), show a note and retry every 3 min while the tab is open.
+function cotExpectedReportDate(){
+  var et=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+  var back=(et.getDay()-5+7)%7;
+  if(back===0&&(et.getHours()*60+et.getMinutes())<15*60+30) back=7;
+  var tue=new Date(et.getFullYear(),et.getMonth(),et.getDate()-back-3);
+  var m=tue.getMonth()+1,d=tue.getDate();
+  return tue.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(d<10?"0":"")+d;
+}
+function cotLatestDate(data){
+  var r=data&&data.rows&&data.rows.length?data.rows[data.rows.length-1]:null;
+  return r&&r.report_date_as_yyyy_mm_dd?r.report_date_as_yyyy_mm_dd.slice(0,10):null;
+}
+function cotNeedsRetry(data){
+  if(!data) return false;
+  if(data.fetchError) return true;
+  var last=cotLatestDate(data);
+  return !!last&&last<cotExpectedReportDate();
+}
+function cotFreshNote(data){
+  var msg=null;
+  if(data&&data.fetchError) msg="CFTC fetch failed ("+data.fetchError+") — showing cached "+(cotLatestDate(data)||"?")+" data. Retrying every 3 min.";
+  else if(cotNeedsRetry(data)) msg="CFTC API still returning "+cotLatestDate(data)+" — newer report ("+cotExpectedReportDate()+") expected. Retrying every 3 min.";
+  if(!msg) return null;
+  var n=document.createElement("div");
+  n.style.cssText="font-size:11px;color:#ffab00;font-family:Courier New,monospace;letter-spacing:.5px;margin:0 0 10px;";
+  n.textContent="⚠ "+msg;
+  return n;
+}
+function cotScheduleRetry(data,alive,fn){
+  if(!cotNeedsRetry(data)) return;
+  setTimeout(function(){ if(alive()&&State.tab==="analyst") fn(); },180000);
+}
 function longShortBar(long,short){
   var total=long+short||1;
   var longPct=Math.max(0,Math.min(100,long/total*100));
@@ -8894,8 +8931,10 @@ function analystTab(){
     loadCOTLegacyData(sym,force).then(function(data){
       if(myToken!==_cotLegacyLoadToken||State.tab!=="analyst") return;
       legacyBody.innerHTML="";
+      var _lgNote=cotFreshNote(data);if(_lgNote) legacyBody.appendChild(_lgNote);
       legacyBody.appendChild(buildCOTLegacyView(sym,data,isM));
       legacyBody.style.opacity="1";
+      cotScheduleRetry(data,function(){return myToken===_cotLegacyLoadToken;},function(){loadLegacy(true);});
     }).catch(function(err){
       if(myToken!==_cotLegacyLoadToken) return;
       legacyBody.style.opacity="1";
@@ -8921,8 +8960,10 @@ function analystTab(){
     loadCOTData(sym,force).then(function(data){
       if(myToken!==_cotLoadToken||State.tab!=="analyst") return;
       body.innerHTML="";
+      var _tffNote=cotFreshNote(data);if(_tffNote) body.appendChild(_tffNote);
       body.appendChild(buildCOTView(sym,data,isM));
       body.style.opacity="1";
+      cotScheduleRetry(data,function(){return myToken===_cotLoadToken;},function(){load(true);});
     }).catch(function(err){
       if(myToken!==_cotLoadToken) return;
       body.style.opacity="1";
