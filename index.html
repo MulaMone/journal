@@ -6824,9 +6824,11 @@ function loadCOTData(sym,force){
   }).then(function(rows){
     if(!rows||!rows.length) throw new Error("empty response");
     rows.sort(function(a,b){return a.report_date_as_yyyy_mm_dd<b.report_date_as_yyyy_mm_dd?-1:1;});
-    var obj={rows:rows,fetchedAt:Date.now()};
-    _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
-    return obj;
+    return cotMergeFile(rows,"tff",sym).then(function(m){
+      var obj={rows:m.rows,fetchedAt:Date.now(),fromFile:m.fromFile};
+      _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
+      return obj;
+    });
   }).catch(function(err){
     if(cached){_cotMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
     throw err;
@@ -6849,9 +6851,11 @@ function loadCOTLegacyData(sym,force){
   }).then(function(rows){
     if(!rows||!rows.length) throw new Error("empty response");
     rows.sort(function(a,b){return a.report_date_as_yyyy_mm_dd<b.report_date_as_yyyy_mm_dd?-1:1;});
-    var obj={rows:rows,fetchedAt:Date.now()};
-    _cotLegacyMemCache[sym]=obj;cotLegacyCacheSet(sym,obj);
-    return obj;
+    return cotMergeFile(rows,"legacy",sym).then(function(m){
+      var obj={rows:m.rows,fetchedAt:Date.now(),fromFile:m.fromFile};
+      _cotLegacyMemCache[sym]=obj;cotLegacyCacheSet(sym,obj);
+      return obj;
+    });
   }).catch(function(err){
     if(cached){_cotLegacyMemCache[sym]=cached;return {rows:cached.rows,fetchedAt:cached.fetchedAt,fetchError:(err&&err.message)||"network error"};}
     throw err;
@@ -6881,14 +6885,30 @@ function cotNeedsRetry(data){
   var last=cotLatestDate(data);
   return !!last&&last<cotExpectedReportDate();
 }
+// When the CFTC API is behind the newest release, pull that week from
+// cot.json (written by update-cot.yml from cftc.gov's own static pages) and
+// append it as the latest row. Once the API has the week, its row wins.
+function cotMergeFile(rows,kind,sym){
+  var last=rows.length&&rows[rows.length-1].report_date_as_yyyy_mm_dd?rows[rows.length-1].report_date_as_yyyy_mm_dd.slice(0,10):"";
+  if(last>=cotExpectedReportDate()) return Promise.resolve({rows:rows,fromFile:false});
+  return fetch("cot.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    var row=j&&j[kind]&&j[kind][sym];
+    if(!row||!row.report_date_as_yyyy_mm_dd||row.report_date_as_yyyy_mm_dd.slice(0,10)<=last) return {rows:rows,fromFile:false};
+    return {rows:rows.concat([row]),fromFile:true};
+  }).catch(function(){return {rows:rows,fromFile:false};});
+}
 function cotFreshNote(data){
-  var msg=null;
+  var msg=null,col="#ffab00";
   if(data&&data.fetchError) msg="CFTC fetch failed ("+data.fetchError+") — showing cached "+(cotLatestDate(data)||"?")+" data. Retrying every 3 min.";
+  else if(data&&data.fromFile){msg="CFTC API hasn't posted "+cotLatestDate(data)+" yet — showing it from cftc.gov (cot.json).";col="var(--text3)";}
   else if(cotNeedsRetry(data)) msg="CFTC API still returning "+cotLatestDate(data)+" — newer report ("+cotExpectedReportDate()+") expected. Retrying every 3 min.";
   if(!msg) return null;
   var n=document.createElement("div");
-  n.style.cssText="font-size:11px;color:#ffab00;font-family:Courier New,monospace;letter-spacing:.5px;margin:0 0 10px;";
-  n.textContent="⚠ "+msg;
+  n.style.cssText="font-size:11px;color:"+col+";font-family:Courier New,monospace;letter-spacing:.5px;margin:0 0 10px;";
+  n.textContent=(col==="#ffab00"?"⚠ ":"")+msg;
   return n;
 }
 function cotScheduleRetry(data,alive,fn){
@@ -7872,12 +7892,14 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 // redeploy the committed JSON, then force-reloads the cached yield /
 // liquidity / calendar data and repaints if you're on Analyst or Prep. A
 // second pass ~50s later catches a slow Pages deploy.
-var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml"];
+var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml"];
 function refreshTriggeredData(){
   return Promise.all([
     loadYieldCurveData(true).catch(function(){}),
     loadLiquidityData(true).catch(function(){}),
-    loadLocalCalendar(true).catch(function(){})
+    loadLocalCalendar(true).catch(function(){}),
+    loadCOTData("ES",true).catch(function(){}),loadCOTData("NQ",true).catch(function(){}),
+    loadCOTLegacyData("ES",true).catch(function(){}),loadCOTLegacyData("NQ",true).catch(function(){})
   ]).then(function(){
     if(State.tab==="analyst"||State.tab==="prep") render();
   });
