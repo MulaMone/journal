@@ -8134,7 +8134,12 @@ function computeFedProbability(meetingIso,curve,effr){
     // or no further curve history.
     var priorSolved=priorMeetingIso?computeFedProbability(priorMeetingIso,curve,effr):null;
     if(priorSolved){
-      Rstart=priorSolved.Rnext;anchor="contract-unblended";
+      // Carry the inner (prior-meeting) call's own anchor choice along
+      // instead of discarding it — "contract-unblended" alone doesn't say
+      // whether that recursive solve itself landed on a clean prior
+      // contract-month average or had to fall back to EFFR, and that's
+      // exactly the ambiguity worth being able to see rather than infer.
+      Rstart=priorSolved.Rnext;anchor="contract-unblended["+priorSolved.anchor+(priorSolved.effrDate?"@"+priorSolved.effrDate:"")+"]";
     } else {
       Rstart=prevRow.rate;anchor="contract";
     }
@@ -8281,7 +8286,12 @@ function buildFedFundsView(data,isM){
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
       +"</div>"
-      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>"
+      // Debug line: which anchor path fired (now including the inner
+      // recursive call's own anchor when "contract-unblended" is in play),
+      // so it's visible on the page which branch actually ran instead of
+      // having to infer it.
+      +"<div style='font-size:9px;color:var(--text3);opacity:.6;margin-top:4px;'>anchor: "+prob.anchor+(prob.effrDate?" ("+prob.effrDate+")":"")+" · rnext: "+prob.rnextSource+"</div>";
     el.appendChild(card);
 
     recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
