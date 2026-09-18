@@ -8128,7 +8128,13 @@ function computeFedProbability(meetingIso,curve,effr){
   // rate and reads as a near-100% move). Checking the actual date is what
   // makes it correct both ways.
   var priorMeetingIso=prevRow?decidedMeetingIsoInMonth(prevCode):null;
-  if(priorMeetingIso&&effr&&isFinite(effr.rate)&&effr.date&&effr.date>=priorMeetingIso){
+  // Strictly AFTER the decision date, not on/equal to it: NY Fed's EFFR is
+  // a volume-weighted read across the WHOLE trading day, so the print
+  // dated the decision day itself is a blend of pre-announcement and
+  // post-announcement trades — not yet a clean fully-repriced number. The
+  // first EFFR print that's entirely post-decision is the one dated the
+  // NEXT business day.
+  if(priorMeetingIso&&effr&&isFinite(effr.rate)&&effr.date&&effr.date>priorMeetingIso){
     Rstart=effr.rate;anchor="effr-postdecision";effrDate=effr.date;
   } else if(prevRow){
     // The prior month's own whole-month average is only a clean anchor if
