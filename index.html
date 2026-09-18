@@ -8312,7 +8312,14 @@ function buildFedFundsView(data,isM){
   }
 
   if(!isM){
-    var sorted=data.curve.slice().sort(function(a,b){return contractMonthSortKey(a.code)-contractMonthSortKey(b.code);});
+    // Use curveForCalc, not the raw bulletin data.curve — curveForCalc is
+    // data.curve with the meeting-month (and prior-month) rate swapped for
+    // a live ZQ quote when one applied (see liveApplied/livePrevApplied
+    // above). Charting data.curve directly meant this chart silently fell
+    // back to the stale once-daily bulletin curve even when the HOLD/MOVE
+    // card above it was already showing a live-adjusted read — the two
+    // would disagree on the meeting-month point.
+    var sorted=curveForCalc.slice().sort(function(a,b){return contractMonthSortKey(a.code)-contractMonthSortKey(b.code);});
     var pathData=sorted.map(function(c){return {v:c.rate,l:c.code};});
     var pathHead=div();pathHead.style.cssText="font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;";
     pathHead.textContent="Implied Rate Path — by Contract Month";
