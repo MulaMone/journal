@@ -8113,27 +8113,15 @@ function computeFedProbability(meetingIso,curve,effr){
   var Rstart,anchor,effrDate=null;
   // If a decision already landed inside the PRIOR contract month, the
   // most reliable anchor for "today's actual rate" is a fresh EFFR print
-  // dated on/after that decision — that number already IS the repriced
-  // rate, no reconstruction needed. Prefer it over the blended-average /
-  // recursive-unblend paths below whenever it's available and dated
-  // correctly; only fall back to those when it isn't.
-  //
-  // Getting the "dated correctly" check right matters: an EFFR print
-  // fetched as "latest" always reflects TODAY, so it's only valid as this
-  // anchor when today is already on/after the decision it needs to
-  // reflect. Using it unconditionally previously caused the amplified
-  // recursive error (using an unrelated period's EFFR as if it were
-  // pre-decision); blocking it outright then caused the opposite failure
-  // (falling back to a blended average that understates the post-decision
-  // rate and reads as a near-100% move). Checking the actual date is what
-  // makes it correct both ways.
+  // dated strictly AFTER that decision — NY Fed's EFFR is a volume-weighted
+  // read across the whole trading day, so a print dated the decision day
+  // itself is still a blend of pre- and post-announcement trades, not a
+  // clean repriced number. Prefer a genuinely post-decision EFFR print over
+  // the blended-average / recursive-unblend paths below whenever one's
+  // available; only fall back to those otherwise (e.g. while the prior
+  // month's own contract is still clean and on the curve, or before NY Fed
+  // has published a print dated after the decision).
   var priorMeetingIso=prevRow?decidedMeetingIsoInMonth(prevCode):null;
-  // Strictly AFTER the decision date, not on/equal to it: NY Fed's EFFR is
-  // a volume-weighted read across the WHOLE trading day, so the print
-  // dated the decision day itself is a blend of pre-announcement and
-  // post-announcement trades — not yet a clean fully-repriced number. The
-  // first EFFR print that's entirely post-decision is the one dated the
-  // NEXT business day.
   if(priorMeetingIso&&effr&&isFinite(effr.rate)&&effr.date&&effr.date>priorMeetingIso){
     Rstart=effr.rate;anchor="effr-postdecision";effrDate=effr.date;
   } else if(prevRow){
@@ -8293,12 +8281,7 @@ function buildFedFundsView(data,isM){
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
       +"</div>"
-      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>"
-      // Debug line: which anchor method actually fired for Rstart, and (for
-      // the EFFR-based ones) the date it's dated — makes it visible from the
-      // rendered page whether the EFFR fetch is even succeeding, instead of
-      // having to guess from outside or open devtools.
-      +"<div style='font-size:9px;color:var(--text3);opacity:.6;margin-top:4px;'>anchor: "+prob.anchor+(prob.effrDate?" ("+prob.effrDate+")":"")+" · rnext: "+prob.rnextSource+"</div>";
+      +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
     el.appendChild(card);
 
     recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
