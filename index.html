@@ -7502,6 +7502,7 @@ var LIQUIDITY_INFO={
     edge:"The RRP is essentially a waiting room for capital. A rising RRP means institutions are hoarding cash for safety or yield, starving the broader market of capital—draining liquidity (Bearish). A falling RRP means institutions are pulling cash out of the Fed's vault and deploying it back into the financial markets to chase better returns—injecting liquidity (Bullish)."
   }
 };
+function escapeHtml(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function showLiqInfoModal(key){
   var info=LIQUIDITY_INFO[key];if(!info) return;
   var existing=document.getElementById("liq-info-modal");if(existing) existing.remove();
@@ -7514,13 +7515,14 @@ function showLiqInfoModal(key){
   box.appendChild(closeBtn);
   var title=div();title.style.cssText="font-size:15px;font-weight:700;letter-spacing:1px;color:"+info.col+";margin-bottom:14px;padding-right:20px;";title.textContent=info.title;
   box.appendChild(title);
-  var descLabel=div();descLabel.style.cssText="font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";descLabel.textContent="Description";
+  var descLabel=div();descLabel.style.cssText="font-size:11px;letter-spacing:2px;color:#ff4444;text-transform:uppercase;margin-bottom:6px;";descLabel.textContent="Description";
   box.appendChild(descLabel);
-  var descBody=div();descBody.style.cssText="font-size:13px;line-height:1.6;color:var(--text2);margin-bottom:16px;";descBody.textContent=info.desc;
+  var descBody=div();descBody.style.cssText="font-size:13px;line-height:1.6;color:#5a7aa8;margin-bottom:16px;";descBody.textContent=info.desc;
   box.appendChild(descBody);
-  var edgeLabel=div();edgeLabel.style.cssText="font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;";edgeLabel.textContent="The Edge";
+  var edgeLabel=div();edgeLabel.style.cssText="font-size:11px;letter-spacing:2px;color:#00e676;text-transform:uppercase;margin-bottom:6px;";edgeLabel.textContent="The Edge";
   box.appendChild(edgeLabel);
-  var edgeBody=div();edgeBody.style.cssText="font-size:13px;line-height:1.6;color:#00e676;";edgeBody.textContent=info.edge;
+  var edgeBody=div();edgeBody.style.cssText="font-size:13px;line-height:1.6;color:#ffffff;";
+  edgeBody.innerHTML=escapeHtml(info.edge).replace(/bullish/gi,function(m){return "<span style='color:#00e676;'>"+m+"</span>";}).replace(/bearish/gi,function(m){return "<span style='color:#ff4444;'>"+m+"</span>";});
   box.appendChild(edgeBody);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
