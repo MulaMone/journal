@@ -1429,13 +1429,17 @@ function voiComboSVG(data,w,h2,sym){
   function oiY(v){return padT+H-((v-minOi)/oiRng)*H;}
   var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
   [0.25,0.5,0.75,1].forEach(function(f){var y=padT+H*(1-f); svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>';});
-  // Volume bars
+  // Volume bars — same blue for both, but backfilled (Yahoo, no contract
+  // month on record) bars are dimmed relative to confirmed CME-print bars,
+  // since that's the only place a color distinction can actually show
+  // (native <title> tooltips can't carry color at all).
   data.forEach(function(d,i){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
     var ttl=d.cm
       ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
       : d.d+": "+d.vol.toLocaleString()+" vol";
-    svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+ttl+'</title></rect>';
+    var fillCol=d.cm?"#2f5fc4":"#2f5fc466";
+    svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="'+fillCol+'" rx="1"><title>'+ttl+'</title></rect>';
   });
   // OI line — only draw between consecutive points that both have OI, so
   // a gap in the (still-growing) daily capture doesn't draw a misleading
