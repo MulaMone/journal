@@ -1431,14 +1431,18 @@ function voiComboSVG(data,w,h2,sym){
   [0.25,0.5,0.75,1].forEach(function(f){var y=padT+H*(1-f); svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>';});
   // Volume bars — data-tip carries the same info the <title> hover shows,
   // for a tap handler below (SVG <title> tooltips don't fire on mobile
-  // touch, only desktop hover).
+  // touch, only desktop hover). The visual bar is often only a few px
+  // wide, too thin to tap reliably, so a wider invisible rect spanning
+  // the bar's full column sits on top as the actual hit target.
+  var slotW=W/n;
   data.forEach(function(d,i){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
     var ttl=d.cm
       ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
       : d.d+": "+d.vol.toLocaleString()+" vol";
     var ttlAttr=ttl.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
-    svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+ttl+'</title></rect>';
+    svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"/>';
+    svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-slotW/2)+'" y="'+padT+'" width="'+slotW+'" height="'+H+'" fill="transparent"><title>'+ttl+'</title></rect>';
   });
   // OI line — only draw between consecutive points that both have OI, so
   // a gap in the (still-growing) daily capture doesn't draw a misleading
