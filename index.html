@@ -7078,8 +7078,21 @@ function fetchYahooVolumeHistory(sym){
     return r.json();
   }).then(function(j){
     var rows=(j&&j.rows)||[];
-    return rows.filter(function(r){return r&&r.d&&typeof r.vol==="number";});
+    var today=chicagoTodayISO();
+    return rows.filter(function(r){return r&&r.d&&typeof r.vol==="number"&&r.d<today;});
   });
+}
+// Today's calendar date in America/Chicago, as YYYY-MM-DD. CME's bulletin
+// for a session never posts before ~midnight CT the FOLLOWING day, so
+// there is never real same-day data — Yahoo's bar for "today" is a live,
+// still-changing intraday number, not a finished print. Filtering it out
+// here (rather than just letting our own capture overwrite it later) is
+// what keeps a bar from appearing before CME has actually dropped it.
+function chicagoTodayISO(){
+  var p={};
+  new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"})
+    .formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
+  return p.year+"-"+p.month+"-"+p.day;
 }
 function loadYahooVolumeHistory(sym,force){
   var cached=voiYahooCacheGet(sym);
@@ -9157,9 +9170,6 @@ function analystTab(){
   var voiHead=div();voiHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;";
   voiHead.textContent="Daily Volume & Open Interest";
   voiHeadRow.appendChild(voiHead);
-  var voiNote=div();voiNote.style.cssText="font-size:10px;color:var(--text3);";
-  voiNote.textContent="Volume: Yahoo backfill + CME print · OI: CME print only, builds up day by day";
-  voiHeadRow.appendChild(voiNote);
   el.appendChild(voiHeadRow);
   var voiBody=div();voiBody.id="voi-chart-body";voiBody.style.cssText="height:180px;transition:opacity .15s;";
   el.appendChild(voiBody);
