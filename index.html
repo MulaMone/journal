@@ -1429,13 +1429,16 @@ function voiComboSVG(data,w,h2,sym){
   function oiY(v){return padT+H-((v-minOi)/oiRng)*H;}
   var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
   [0.25,0.5,0.75,1].forEach(function(f){var y=padT+H*(1-f); svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>';});
-  // Volume bars
+  // Volume bars — data-tip carries the same info the <title> hover shows,
+  // for a tap handler below (SVG <title> tooltips don't fire on mobile
+  // touch, only desktop hover).
   data.forEach(function(d,i){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
     var ttl=d.cm
       ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
       : d.d+": "+d.vol.toLocaleString()+" vol";
-    svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+ttl+'</title></rect>';
+    var ttlAttr=ttl.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+    svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+ttl+'</title></rect>';
   });
   // OI line — only draw between consecutive points that both have OI, so
   // a gap in the (still-growing) daily capture doesn't draw a misleading
@@ -1469,7 +1472,23 @@ function voiComboSVG(data,w,h2,sym){
     svg+='<text x="'+bx(i)+'" y="'+(h2-3)+'" text-anchor="middle" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+d.d.slice(5)+'</text>';
   });
   svg+='</svg>';
-  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
+  var wrap=div("chart-wrap");wrap.style.cssText="height:"+h2+"px;position:relative;";wrap.innerHTML=svg;
+  // Tap-to-show info for mobile — SVG <title> only fires on desktop hover,
+  // so a tap on a volume bar shows the same text in a small floating label
+  // instead; tapping elsewhere in the chart (or another bar) dismisses it.
+  var tip=document.createElement("div");
+  tip.style.cssText="position:absolute;top:2px;left:50%;transform:translateX(-50%);background:#0d1b3d;border:1px solid #2f5fc4;color:#e8eef7;font-size:10px;font-family:Courier New,monospace;padding:3px 7px;border-radius:3px;white-space:nowrap;display:none;pointer-events:none;z-index:2;";
+  wrap.appendChild(tip);
+  wrap.addEventListener("click",function(e){
+    var bar=e.target.closest?e.target.closest(".voi-bar"):null;
+    if(bar){
+      tip.textContent=bar.getAttribute("data-tip");
+      tip.style.display="block";
+    } else {
+      tip.style.display="none";
+    }
+  });
+  return wrap;
 }
 
 // Catmull-Rom -> cubic Bezier, standard 1/6-tension conversion — gives a
@@ -9117,8 +9136,7 @@ function analystTab(){
     var chgCol=eff.change>0?"#00e676":eff.change<0?"#ff4444":"var(--text2)";
     var chgText=eff.change===0?"UNCH":fmtCotChg(eff.change);
     var label=data.final?"":" <span style='color:var(--text3)'>· prelim</span>";
-    var volTxt=typeof eff.volume==="number"?fmtCotNum(eff.volume)+" vol · ":"";
-    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+volTxt+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" <span style='color:#fff'>("+data.date+")</span>":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
+    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" <span style='color:#fff'>("+data.date+")</span>":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
     var line2="";
     if(data.prelim&&data.final){
       var revDelta=data.final.change-data.prelim.change;
