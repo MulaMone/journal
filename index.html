@@ -1488,6 +1488,10 @@ function voiComboSVG(data,w,h2,sym){
       tip.style.display="none";
     }
   });
+  // Dismiss on any tap/click outside this chart too (not just inside it).
+  document.addEventListener("click",function(e){
+    if(!wrap.contains(e.target)) tip.style.display="none";
+  });
   return wrap;
 }
 
