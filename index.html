@@ -1408,6 +1408,65 @@ function lineSVG(data,w,h2,col,fmt){
   var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
 }
 
+// Volume (bars, left axis) + Open Interest (line, right axis) combo chart
+// — same layout as CME's own product Volume & Open Interest page. data is
+// [{d,vol,oi}], ascending by date; oi may be null on early/backfilled
+// points (Yahoo has no OI) — those just don't get a line segment there.
+function voiComboSVG(data,w,h2){
+  if(!data||!data.length) return div("chart-wrap");
+  var vols=data.map(function(d){return d.vol;});
+  var maxVol=Math.max.apply(null,vols.concat([1]))*1.12;
+  var oiVals=data.filter(function(d){return typeof d.oi==="number";}).map(function(d){return d.oi;});
+  var hasOi=oiVals.length>0;
+  var minOi=hasOi?Math.min.apply(null,oiVals):0,maxOi=hasOi?Math.max.apply(null,oiVals):1;
+  var oiRng=(maxOi-minOi)||1;
+  var padL=54,padR=hasOi?54:10,padB=18,padT=8;
+  var W=w-padL-padR,H=h2-padB-padT;
+  var n=data.length;
+  var bw=Math.max(1,Math.floor(W/n*0.62));
+  function bx(i){return padL+(i+0.5)*(W/n);}
+  function volY(v){return padT+H-(v/maxVol)*H;}
+  function oiY(v){return padT+H-((v-minOi)/oiRng)*H;}
+  var svg='<svg width="100%" height="100%" viewBox="0 0 '+w+" "+h2+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">';
+  [0.25,0.5,0.75,1].forEach(function(f){var y=padT+H*(1-f); svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+W)+'" y2="'+y+'" stroke="#1a3260" stroke-dasharray="2 4"/>';});
+  // Volume bars
+  data.forEach(function(d,i){
+    var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
+    svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+d.d+': '+d.vol.toLocaleString()+' vol</title></rect>';
+  });
+  // OI line — only draw between consecutive points that both have OI, so
+  // a gap in the (still-growing) daily capture doesn't draw a misleading
+  // straight line across it.
+  if(hasOi){
+    var segs=[],cur=[];
+    data.forEach(function(d,i){
+      if(typeof d.oi==="number"){cur.push(bx(i)+","+oiY(d.oi));}
+      else if(cur.length){segs.push(cur);cur=[];}
+    });
+    if(cur.length) segs.push(cur);
+    segs.forEach(function(pts){svg+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#4fc3f7" stroke-width="2"/>';});
+    data.forEach(function(d,i){
+      if(typeof d.oi!=="number") return;
+      svg+='<circle cx="'+bx(i)+'" cy="'+oiY(d.oi)+'" r="2.5" fill="#4fc3f7"><title>'+d.d+': '+d.oi.toLocaleString()+' OI</title></circle>';
+    });
+  }
+  // Axis labels
+  svg+='<text x="4" y="'+(padT+4)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+Math.round(maxVol).toLocaleString()+'</text>';
+  svg+='<text x="4" y="'+(padT+H)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">0</text>';
+  if(hasOi){
+    svg+='<text x="'+(w-4)+'" y="'+(padT+4)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4fc3f7">'+Math.round(maxOi).toLocaleString()+'</text>';
+    svg+='<text x="'+(w-4)+'" y="'+(padT+H)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4fc3f7">'+Math.round(minOi).toLocaleString()+'</text>';
+  }
+  // A handful of x-axis date labels rather than one per bar
+  var labelEvery=Math.max(1,Math.ceil(n/6));
+  data.forEach(function(d,i){
+    if(i%labelEvery!==0&&i!==n-1) return;
+    svg+='<text x="'+bx(i)+'" y="'+(h2-3)+'" text-anchor="middle" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+d.d.slice(5)+'</text>';
+  });
+  svg+='</svg>';
+  var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
+}
+
 // Catmull-Rom -> cubic Bezier, standard 1/6-tension conversion — gives a
 // smooth curve through every point without needing any extra library.
 function catmullRom2bezier(pts){
@@ -6947,6 +7006,100 @@ var CME_ROW_PATTERNS={
   ES:{label:"EMINI S&P FUT",name:"E-mini S&P 500"},
   NQ:{label:"EMINI NASD FUT",name:"E-mini Nasdaq-100"}
 };
+// CME's own product page for each symbol — just a quick-link out to
+// cmegroup.com, not a data source (no CORS-friendly JSON API for these).
+var CME_PRODUCT_URLS={
+  ES:"https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.volume.html",
+  NQ:"https://www.cmegroup.com/markets/equities/nasdaq/e-mini-nasdaq-100.volume.html"
+};
+
+// ── Daily Volume & OI history — our own running log ─────────────────────
+// CME's live bulletin URL only ever serves the CURRENT trade date (per
+// their own docs: "files are available top day only") — no free endpoint
+// serves a rolling window of past days. So instead of trying to backfill
+// from CME itself, this just logs each day's (volume, OI) snapshot as we
+// see it via the bulletin fetch above, building our own history forward
+// from today. Volume's actual backfill for the chart comes from Yahoo's
+// free daily-bars history (see fetchYahooVolumeHistory below) — OI has no
+// free historical source, so its line just starts sparse and fills in a
+// real day at a time.
+function voiHistCacheGet(sym){
+  try{var raw=localStorage.getItem("edge_cme_voi_hist_v1_"+sym);return raw?JSON.parse(raw):[];}catch(e){return [];}
+}
+function voiHistCacheSet(sym,arr){
+  try{localStorage.setItem("edge_cme_voi_hist_v1_"+sym,JSON.stringify(arr));}catch(e){}
+}
+// Upserts one day's snapshot (keyed on CME's own dateStr, converted to
+// YYYY-MM-DD so it sorts and matches Yahoo's date format) — a later call
+// for the same trade date (e.g. Prelim → Final) overwrites rather than
+// duplicates. Keeps a generous 180-day cap so this never grows unbounded.
+function logDailyVoi(sym,dateStr,vol,oi){
+  if(!dateStr||typeof vol!=="number"||typeof oi!=="number"||isNaN(vol)||isNaN(oi)) return;
+  var iso=cmeDateStrToISO(dateStr);
+  if(!iso) return;
+  var hist=voiHistCacheGet(sym);
+  var idx=hist.findIndex(function(r){return r.d===iso;});
+  var row={d:iso,vol:vol,oi:oi};
+  if(idx>=0) hist[idx]=row; else hist.push(row);
+  hist.sort(function(a,b){return a.d<b.d?-1:1;});
+  if(hist.length>180) hist=hist.slice(hist.length-180);
+  voiHistCacheSet(sym,hist);
+}
+// CME's bulletin date string looks like "Thu, Sep 18, 2026" — convert to
+// ISO so it sorts correctly and lines up with Yahoo's date format.
+function cmeDateStrToISO(dateStr){
+  var m=dateStr.match(/([A-Z][a-z]{2}) (\d{2}), (\d{4})/);
+  if(!m) return null;
+  var mi=MONTH_CODES_SHORT.indexOf(m[1].toUpperCase());
+  if(mi<0) return null;
+  return m[3]+"-"+String(mi+1).padStart(2,"0")+"-"+m[2];
+}
+var MONTH_CODES_SHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+// ── Volume backfill — Yahoo daily bars, front-month continuous contract ──
+// CME has no free rolling-window volume endpoint (see note above), but
+// Yahoo's v8 chart API has full daily history for free — same problem and
+// same fix as the ZQ live quote below (Yahoo sends no CORS headers, so
+// this goes through the same Supabase Edge Function that re-serves it
+// with CORS added). Front-month volume is a very close stand-in for
+// CME's own total volume on ES/NQ specifically, since that's where nearly
+// all the volume sits at any given time.
+var YAHOO_VOL_TICKER={ES:"ES=F",NQ:"NQ=F"};
+function voiYahooCacheGet(sym){try{var raw=localStorage.getItem("edge_voi_yahoo_v1_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function voiYahooCacheSet(sym,obj){try{localStorage.setItem("edge_voi_yahoo_v1_"+sym,JSON.stringify(obj));}catch(e){}}
+function fetchYahooVolumeHistory(sym){
+  var ticker=YAHOO_VOL_TICKER[sym];
+  if(!ticker) return Promise.resolve([]);
+  return fetch(SUPA_URL+"/functions/v1/yahoo-history?symbol="+encodeURIComponent(ticker)+"&range=2mo&interval=1d").then(function(r){
+    if(!r.ok) throw new Error("yahoo-history HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    var rows=(j&&j.rows)||[];
+    return rows.filter(function(r){return r&&r.d&&typeof r.vol==="number";});
+  });
+}
+function loadYahooVolumeHistory(sym,force){
+  var cached=voiYahooCacheGet(sym);
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>12*60*60*1000;
+  if(cached&&!force&&!stale) return Promise.resolve(cached.rows);
+  return fetchYahooVolumeHistory(sym).then(function(rows){
+    voiYahooCacheSet(sym,{rows:rows,fetchedAt:Date.now()});
+    return rows;
+  }).catch(function(err){
+    console.warn("Yahoo volume backfill failed:",err&&err.message);
+    return cached?cached.rows:[]; // never let a failed backfill blank out the chart
+  });
+}
+// Merges Yahoo's backfilled daily volume with our own CME-bulletin capture
+// (date, vol, oi). Own capture always wins on a shared date — it's the
+// real exchange print vs Yahoo's front-month proxy. Yahoo has no OI at
+// all, so oi is only ever populated by our own rows.
+function mergeVoiHistory(yahooRows,ownRows){
+  var byDate={};
+  yahooRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:null};});
+  ownRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi};});
+  return Object.keys(byDate).sort().map(function(d){return byDate[d];});
+}
 var PDFJS_CDNS=[
   {js:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",worker:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"},
   {js:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",worker:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js"}
@@ -7095,7 +7248,16 @@ function extractFrontMonthOI(fullText,sym){
       var chgNum=chgTok?parseInt(chgTok.replace(/,/g,""),10):NaN;
       if(!isNaN(chgNum)) change=tokens[signPos]==="-"?-chgNum:chgNum;
     }
-    rows.push({oi:oi,change:change,contractMonth:contractMonth});
+    // Volume: the two tokens immediately to the left of OI are [pnt vol]
+    // [globex vol] (see the row-format note above extractFrontMonthOI) —
+    // same right-anchored position as OI itself, so this holds regardless
+    // of which earlier columns collapsed. "----" (no PNT volume that day)
+    // parses to 0 rather than dropping the row.
+    var globexVolTok=tokens[idx-1],pntVolTok=tokens[idx-2];
+    var globexVol=globexVolTok&&globexVolTok!=="----"?parseInt(globexVolTok.replace(/,/g,""),10):0;
+    var pntVol=pntVolTok&&pntVolTok!=="----"?parseInt(pntVolTok.replace(/,/g,""),10):0;
+    var volume=(isNaN(globexVol)?0:globexVol)+(isNaN(pntVol)?0:pntVol);
+    rows.push({oi:oi,change:change,volume:volume,contractMonth:contractMonth});
   });
   if(!rows.length) throw new Error("found \""+pat.label+"\" header but no parseable contract-month rows followed it");
   var best=rows[0];
@@ -7131,7 +7293,7 @@ function fetchCmeDailyOI(sym,statusCb){
     var fullText=pageTexts.join("\n");
     var result=extractFrontMonthOI(fullText,sym);
     var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
-    return {oi:result.oi,change:result.change,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+    return {oi:result.oi,change:result.change,volume:result.volume,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
   });
 }
 
@@ -7176,7 +7338,7 @@ function isPastCmeFinalTime(){
 // dateStr before 10am CT keeps updating prelim; same dateStr at/after
 // 10am CT is the final bulletin.
 function cmeOiFold(cached,fresh){
-  var snap={oi:fresh.oi,change:fresh.change,fetchedAt:fresh.fetchedAt};
+  var snap={oi:fresh.oi,change:fresh.change,volume:fresh.volume,fetchedAt:fresh.fetchedAt};
   if(!cached||cached.date!==fresh.dateStr){
     // New trade date. Before dropping the old record, carry forward its
     // best-known snapshot (Final if we captured one, else whatever Prelim
@@ -7217,6 +7379,8 @@ function loadCmeDailyOI(sym,force,statusCb){
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
     var folded=cmeOiFold(cached,data);
     cmeOiCacheSet(sym,folded);
+    var eff=folded.final||folded.prelim;
+    if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi);
     return folded;
   }).catch(function(err){
     if(cached) return cached;
@@ -8861,16 +9025,24 @@ function analystTab(){
       if(sym===s) return;
       sym=s;State.analyst_symbol=s;
       paintSymBtns();
+      paintCmeLink();
       // Reload only the symbol-dependent COT sections in place — a full
       // render() here would tear down and rebuild the whole Analyst tab
       // (DXY, yield curve, Fed funds, liquidity too), and since those load
       // asynchronously at different speeds, the page height would keep
       // changing as each one popped in — the "jumps up and down" bug.
-      loadLegacy(true);load(true);loadCme(true);
+      loadLegacy(true);load(true);loadCme(true);loadVoiChart(true);
     });
     ctrlRow.appendChild(b);
   });
   paintSymBtns();
+  var cmeLink=h("a",{className:"btn"});
+  cmeLink.target="_blank";cmeLink.rel="noopener";
+  cmeLink.style.cssText="text-decoration:none;display:inline-flex;align-items:center;";
+  cmeLink.title="Open on cmegroup.com";
+  function paintCmeLink(){cmeLink.href=CME_PRODUCT_URLS[sym]||"#";cmeLink.textContent=(isM?"↗":"↗ CME.com");}
+  paintCmeLink();
+  ctrlRow.appendChild(cmeLink);
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
 
@@ -8892,7 +9064,8 @@ function analystTab(){
     var chgCol=eff.change>0?"#00e676":eff.change<0?"#ff4444":"var(--text2)";
     var chgText=eff.change===0?"UNCH":fmtCotChg(eff.change);
     var label=data.final?"":" <span style='color:var(--text3)'>· prelim</span>";
-    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" ("+data.date+")":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
+    var volTxt=typeof eff.volume==="number"?fmtCotNum(eff.volume)+" vol · ":"";
+    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+volTxt+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" ("+data.date+")":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
     var line2="";
     if(data.prelim&&data.final){
       var revDelta=data.final.change-data.prelim.change;
@@ -8970,6 +9143,47 @@ function analystTab(){
 
   // Auto-check for a newer bulletin every time this tab opens.
   loadCme(false);
+
+  // ── Daily Volume & Open Interest chart — bars = daily volume (Yahoo
+  // backfill, then our own CME-bulletin print once a day has one),
+  // line = OI (our own capture only — no free OI history exists). ──
+  var voiHeadRow=div();voiHeadRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
+  var voiHead=div();voiHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;";
+  voiHead.textContent="Daily Volume & Open Interest";
+  voiHeadRow.appendChild(voiHead);
+  var voiNote=div();voiNote.style.cssText="font-size:10px;color:var(--text3);";
+  voiNote.textContent="Volume: Yahoo backfill + CME print · OI: CME print only, builds up day by day";
+  voiHeadRow.appendChild(voiNote);
+  el.appendChild(voiHeadRow);
+  var voiBody=div();voiBody.id="voi-chart-body";voiBody.style.cssText="height:180px;transition:opacity .15s;";
+  el.appendChild(voiBody);
+
+  var _voiLoadToken=0;
+  function renderVoiChart(sym2,series){
+    voiBody.innerHTML="";
+    if(!series.length){
+      voiBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">No volume/OI data yet.</div>';
+      return;
+    }
+    var tail=series.slice(-45); // ~last 45 trade dates, same window CME's own chart shows
+    voiBody.appendChild(voiComboSVG(tail,isM?340:900,180));
+  }
+  function loadVoiChart(force){
+    var myToken=++_voiLoadToken;
+    voiBody.style.opacity="0.45";
+    Promise.all([loadYahooVolumeHistory(sym,force),Promise.resolve(voiHistCacheGet(sym))]).then(function(res){
+      if(myToken!==_voiLoadToken) return;
+      var merged=mergeVoiHistory(res[0],res[1]);
+      renderVoiChart(sym,merged);
+      voiBody.style.opacity="1";
+    }).catch(function(){
+      if(myToken!==_voiLoadToken) return;
+      voiBody.style.opacity="1";
+    });
+  }
+  // Show whatever's cached immediately, no blank flash, then refresh.
+  renderVoiChart(sym,mergeVoiHistory((voiYahooCacheGet(sym)||{rows:[]}).rows,voiHistCacheGet(sym)));
+  loadVoiChart(false);
 
   var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
   legacyHead.textContent="Legacy Report — Non-Comm / Comm / Non-Rept";
@@ -9186,7 +9400,7 @@ function analystTab(){
     });
   }
 
-  function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);}
+  function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadVoiChart(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);}
   // Trigger All calls this to repaint just the sections its workflows feed
   // (COT, yields/10Y, liquidity) in place — no full render(), no page jump.
   window._analystRefreshTriggered=function(){loadLegacy(true);load(true);loadYc(true);loadLiq(true);};
