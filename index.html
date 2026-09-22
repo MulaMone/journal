@@ -1447,19 +1447,20 @@ function voiComboSVG(data,w,h2,sym){
       else if(cur.length){segs.push(cur);cur=[];}
     });
     if(cur.length) segs.push(cur);
-    segs.forEach(function(pts){svg+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#4fc3f7" stroke-width="2"/>';});
+    segs.forEach(function(pts){svg+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#00e676" stroke-width="2"/>';});
     data.forEach(function(d,i){
       if(typeof d.oi!=="number") return;
-      svg+='<circle cx="'+bx(i)+'" cy="'+oiY(d.oi)+'" r="2.5" fill="#4fc3f7"><title>'+d.d+': '+d.oi.toLocaleString()+' OI</title></circle>';
+      svg+='<circle cx="'+bx(i)+'" cy="'+oiY(d.oi)+'" r="2.5" fill="#00e676"><title>'+d.d+': '+d.oi.toLocaleString()+' OI</title></circle>';
     });
   }
-  // Axis labels
-  svg+='<text x="4" y="'+(padT+4)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+Math.round(maxVol).toLocaleString()+'</text>';
-  svg+='<text x="4" y="'+(padT+H)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">0</text>';
-  if(hasOi){
-    svg+='<text x="'+(w-4)+'" y="'+(padT+4)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4fc3f7">'+Math.round(maxOi).toLocaleString()+'</text>';
-    svg+='<text x="'+(w-4)+'" y="'+(padT+H)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4fc3f7">'+Math.round(minOi).toLocaleString()+'</text>';
-  }
+  // Axis labels — full 0/25/50/75/100% tick set on both sides, same
+  // fractions as the gridlines above, matching CME's own chart layout
+  // rather than just a min/max pair.
+  [0,0.25,0.5,0.75,1].forEach(function(f){
+    var y=padT+H*(1-f)+3;
+    svg+='<text x="4" y="'+y+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+Math.round(maxVol*f).toLocaleString()+'</text>';
+    if(hasOi) svg+='<text x="'+(w-4)+'" y="'+y+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#00e676">'+Math.round(maxOi*f).toLocaleString()+'</text>';
+  });
   // A handful of x-axis date labels rather than one per bar
   var labelEvery=Math.max(1,Math.ceil(n/6));
   data.forEach(function(d,i){
