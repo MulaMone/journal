@@ -7067,11 +7067,12 @@ var MONTH_CODES_SHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OC
 var YAHOO_VOL_TICKER={ES:"ES=F",NQ:"NQ=F"};
 function voiYahooCacheGet(sym){try{var raw=localStorage.getItem("edge_voi_yahoo_v1_"+sym);return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function voiYahooCacheSet(sym,obj){try{localStorage.setItem("edge_voi_yahoo_v1_"+sym,JSON.stringify(obj));}catch(e){}}
+var _yahooVolLastError={};
 function fetchYahooVolumeHistory(sym){
   var ticker=YAHOO_VOL_TICKER[sym];
   if(!ticker) return Promise.resolve([]);
   return fetch(SUPA_URL+"/functions/v1/yahoo-history?symbol="+encodeURIComponent(ticker)+"&range=2mo&interval=1d").then(function(r){
-    if(!r.ok) throw new Error("yahoo-history HTTP "+r.status);
+    if(!r.ok) return r.text().then(function(t){throw new Error("HTTP "+r.status+(t?": "+t.slice(0,180):""));});
     return r.json();
   }).then(function(j){
     var rows=(j&&j.rows)||[];
@@ -7084,9 +7085,11 @@ function loadYahooVolumeHistory(sym,force){
   if(cached&&!force&&!stale) return Promise.resolve(cached.rows);
   return fetchYahooVolumeHistory(sym).then(function(rows){
     voiYahooCacheSet(sym,{rows:rows,fetchedAt:Date.now()});
+    delete _yahooVolLastError[sym];
     return rows;
   }).catch(function(err){
     console.warn("Yahoo volume backfill failed:",err&&err.message);
+    _yahooVolLastError[sym]=err&&err.message?err.message:String(err);
     return cached?cached.rows:[]; // never let a failed backfill blank out the chart
   });
 }
@@ -9164,10 +9167,15 @@ function analystTab(){
     voiBody.innerHTML="";
     if(!series.length){
       voiBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">No volume/OI data yet.</div>';
-      return;
+    } else {
+      var tail=series.slice(-45); // ~last 45 trade dates, same window CME's own chart shows
+      voiBody.appendChild(voiComboSVG(tail,isM?340:900,180));
     }
-    var tail=series.slice(-45); // ~last 45 trade dates, same window CME's own chart shows
-    voiBody.appendChild(voiComboSVG(tail,isM?340:900,180));
+    if(_yahooVolLastError[sym2]){
+      var errLine=div();errLine.style.cssText="font-size:10px;font-family:Courier New,monospace;color:#ff4444;margin-top:4px;";
+      errLine.textContent="Yahoo backfill failed: "+_yahooVolLastError[sym2];
+      voiBody.appendChild(errLine);
+    }
   }
   function loadVoiChart(force){
     var myToken=++_voiLoadToken;
