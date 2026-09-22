@@ -1441,7 +1441,7 @@ function voiComboSVG(data,w,h2,sym){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
     var ttl=(d.cm&&i===lastCmIdx)
       ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
-      : d.d+": "+d.vol.toLocaleString()+" vol";
+      : d.d+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"");
     var ttlAttr=ttl.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
     svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"/>';
     svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-slotW/2)+'" y="'+padT+'" width="'+slotW+'" height="'+H+'" fill="transparent"><title>'+ttl+'</title></rect>';
