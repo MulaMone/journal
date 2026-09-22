@@ -1435,9 +1435,11 @@ function voiComboSVG(data,w,h2,sym){
   // wide, too thin to tap reliably, so a wider invisible rect spanning
   // the bar's full column sits on top as the actual hit target.
   var slotW=W/n;
+  var lastCmIdx=-1;
+  data.forEach(function(d,i){if(d.cm) lastCmIdx=i;});
   data.forEach(function(d,i){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
-    var ttl=d.cm
+    var ttl=(d.cm&&i===lastCmIdx)
       ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
       : d.d+": "+d.vol.toLocaleString()+" vol";
     var ttlAttr=ttl.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
