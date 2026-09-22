@@ -7112,9 +7112,26 @@ function loadYahooVolumeHistory(sym,force){
 // (date, vol, oi). Own capture always wins on a shared date — it's the
 // real exchange print vs Yahoo's front-month proxy. Yahoo has no OI at
 // all, so oi is only ever populated by our own rows.
+// Merges Yahoo's backfilled daily volume with our own CME-bulletin capture
+// (date, vol, oi). Own capture always wins on a shared date — it's the
+// real exchange print vs Yahoo's front-month proxy. Yahoo has no OI at
+// all, so oi is only ever populated by our own rows.
+//
+// Critically: this also caps how RECENT a Yahoo-only bar is allowed to
+// be. Yahoo's daily bar for a session settles faster than CME's own
+// bulletin posts (CME's Prelim is only "approximately" midnight CT, and
+// can lag) — so trusting Yahoo right up to "today" showed bars for days
+// CME itself hadn't confirmed yet. Instead, once we have at least one of
+// our own captured dates, any Yahoo date newer than our latest own
+// capture is dropped — the chart's right edge only ever advances once
+// CME's bulletin has actually confirmed that day, never ahead of it.
 function mergeVoiHistory(yahooRows,ownRows){
   var byDate={};
-  yahooRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:null};});
+  var maxOwnDate=ownRows.reduce(function(m,r){return r.d>m?r.d:m;},null);
+  yahooRows.forEach(function(r){
+    if(maxOwnDate&&r.d>maxOwnDate) return; // CME hasn't confirmed this date yet — don't show it
+    byDate[r.d]={d:r.d,vol:r.vol,oi:null};
+  });
   ownRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi};});
   return Object.keys(byDate).sort().map(function(d){return byDate[d];});
 }
