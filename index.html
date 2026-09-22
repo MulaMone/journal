@@ -9118,7 +9118,7 @@ function analystTab(){
     var chgText=eff.change===0?"UNCH":fmtCotChg(eff.change);
     var label=data.final?"":" <span style='color:var(--text3)'>· prelim</span>";
     var volTxt=typeof eff.volume==="number"?fmtCotNum(eff.volume)+" vol · ":"";
-    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+volTxt+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" ("+data.date+")":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
+    var line1=(fromCache?"":"✓ ")+sym+" "+(data.contractMonth||"")+": "+volTxt+fmtCotNum(eff.oi)+" OI <span style='color:"+chgCol+"'>"+chgText+"</span>"+(data.date?" <span style='color:#fff'>("+data.date+")</span>":"")+label+(fromCache?" <span style='color:var(--text3)'>· cached</span>":"");
     var line2="";
     if(data.prelim&&data.final){
       var revDelta=data.final.change-data.prelim.change;
