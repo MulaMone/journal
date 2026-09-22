@@ -1418,8 +1418,8 @@ function voiComboSVG(data,w,h2,sym){
   var maxVol=Math.max.apply(null,vols.concat([1]))*1.12;
   var oiVals=data.filter(function(d){return typeof d.oi==="number";}).map(function(d){return d.oi;});
   var hasOi=oiVals.length>0;
-  var minOi=hasOi?Math.min.apply(null,oiVals):0,maxOi=hasOi?Math.max.apply(null,oiVals):1;
-  var oiRng=(maxOi-minOi)||1;
+  var minOi=0,maxOi=hasOi?Math.max.apply(null,oiVals)*1.12:1;
+  var oiRng=maxOi||1;
   var padL=54,padR=hasOi?54:10,padB=18,padT=8;
   var W=w-padL-padR,H=h2-padB-padT;
   var n=data.length;
