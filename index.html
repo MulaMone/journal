@@ -9129,6 +9129,7 @@ function analystTab(){
       if(myToken!==_cmeLoadToken) return;
       renderCmeResult(data,false);
       cmeResult.style.opacity="1";
+      loadVoiChart(false); // today's row just landed in the voi history log — refresh the chart
     }).catch(function(err){
       if(myToken!==_cmeLoadToken) return;
       cmeResult.style.opacity="1";
