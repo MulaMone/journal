@@ -1439,19 +1439,20 @@ function voiComboSVG(data,w,h2,sym){
   });
   // OI line — only draw between consecutive points that both have OI, so
   // a gap in the (still-growing) daily capture doesn't draw a misleading
-  // straight line across it.
+  // straight line across it. No per-point dots (matches CME's own chart,
+  // which is a plain line) — just one dot marking the current/latest day.
   if(hasOi){
-    var segs=[],cur=[];
+    var segs=[],cur=[],lastOiIdx=-1;
     data.forEach(function(d,i){
-      if(typeof d.oi==="number"){cur.push(bx(i)+","+oiY(d.oi));}
+      if(typeof d.oi==="number"){cur.push(bx(i)+","+oiY(d.oi));lastOiIdx=i;}
       else if(cur.length){segs.push(cur);cur=[];}
     });
     if(cur.length) segs.push(cur);
     segs.forEach(function(pts){svg+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#00e676" stroke-width="2"/>';});
-    data.forEach(function(d,i){
-      if(typeof d.oi!=="number") return;
-      svg+='<circle cx="'+bx(i)+'" cy="'+oiY(d.oi)+'" r="2.5" fill="#00e676"><title>'+d.d+': '+d.oi.toLocaleString()+' OI</title></circle>';
-    });
+    if(lastOiIdx>=0){
+      var ld=data[lastOiIdx];
+      svg+='<circle cx="'+bx(lastOiIdx)+'" cy="'+oiY(ld.oi)+'" r="3" fill="#00e676"><title>'+ld.d+': '+ld.oi.toLocaleString()+' OI</title></circle>';
+    }
   }
   // Axis labels — full 0/25/50/75/100% tick set on both sides, same
   // fractions as the gridlines above, matching CME's own chart layout
