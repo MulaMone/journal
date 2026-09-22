@@ -9089,13 +9089,6 @@ function analystTab(){
     ctrlRow.appendChild(b);
   });
   paintSymBtns();
-  var cmeQuickLink=h("a",{className:"btn"});
-  cmeQuickLink.target="_blank";cmeQuickLink.rel="noopener";
-  cmeQuickLink.style.cssText="text-decoration:none;display:inline-flex;align-items:center;";
-  cmeQuickLink.title="Open on cmegroup.com";
-  function paintCmeQuickLink(){cmeQuickLink.href=CME_PRODUCT_URLS[sym]||"#";cmeQuickLink.textContent=(isM?"↗":"↗ CME.com");}
-  paintCmeQuickLink();
-  ctrlRow.appendChild(cmeQuickLink);
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
 
@@ -9205,6 +9198,13 @@ function analystTab(){
   var voiHead=div();voiHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;";
   voiHead.textContent="Daily Volume & Open Interest";
   voiHeadRow.appendChild(voiHead);
+  var cmeQuickLink=isM?h("a",{className:"btn"}):h("a",{});
+  cmeQuickLink.target="_blank";cmeQuickLink.rel="noopener";
+  cmeQuickLink.style.cssText=isM?"text-decoration:none;display:inline-flex;align-items:center;":"color:var(--text3);text-decoration:underline;font-size:12px;";
+  cmeQuickLink.title="Open on cmegroup.com";
+  function paintCmeQuickLink(){cmeQuickLink.href=CME_PRODUCT_URLS[sym]||"#";cmeQuickLink.textContent=(isM?"↗ CME":"CME.com →");}
+  paintCmeQuickLink();
+  voiHeadRow.appendChild(cmeQuickLink);
   el.appendChild(voiHeadRow);
   var voiBody=div();voiBody.id="voi-chart-body";voiBody.style.cssText="height:180px;transition:opacity .15s;";
   el.appendChild(voiBody);
