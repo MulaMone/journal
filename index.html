@@ -7454,7 +7454,7 @@ function buildCOTLegacyView(sym,data,isM){
 
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);letter-spacing:1px;"+(isM?"margin-bottom:14px;":"white-space:nowrap;");
   var asOf=latest.report_date_as_yyyy_mm_dd?latest.report_date_as_yyyy_mm_dd.slice(0,10):"?";
-  staleNote.innerHTML="Report week ending <span style='color:#ffffff;'>"+asOf+"</span>, updated weekly (Fridays)";
+  staleNote.innerHTML="Report week ending <span style='color:#ffffff;'>"+asOf+"</span>"+(isM?"":", updated weekly (Fridays)");
   if(isM) el.appendChild(staleNote);
 
   // ── Open Interest summary — built here, inserted into the trader-category
@@ -9093,7 +9093,7 @@ function analystTab(){
   cmeQuickLink.target="_blank";cmeQuickLink.rel="noopener";
   cmeQuickLink.style.cssText=isM?"text-decoration:none;display:inline-flex;align-items:center;":"color:var(--text3);text-decoration:underline;font-size:12px;";
   cmeQuickLink.title="Open on cmegroup.com";
-  function paintCmeQuickLink(){cmeQuickLink.href=CME_PRODUCT_URLS[sym]||"#";cmeQuickLink.textContent=(isM?"↗ CME":"CME.com →");}
+  function paintCmeQuickLink(){cmeQuickLink.href=CME_PRODUCT_URLS[sym]||"#";cmeQuickLink.textContent=(isM?"↗":"CME.com →");}
   paintCmeQuickLink();
   if(isM) ctrlRow.appendChild(cmeQuickLink); // mobile: unchanged, stays next to ES/NQ as before
 
