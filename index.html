@@ -7129,14 +7129,27 @@ function loadYahooVolumeHistory(sym,force){
 // our own captured dates, any Yahoo date newer than our latest own
 // capture is dropped — the chart's right edge only ever advances once
 // CME's bulletin has actually confirmed that day, never ahead of it.
-function mergeVoiHistory(yahooRows,ownRows){
+// The single source of truth for "what date has CME actually confirmed":
+// the same cmeOiCacheGet record the OI card text above renders from. Using
+// this directly (rather than re-deriving a cutoff from voiHistCacheGet's
+// own contents) guarantees the chart can never show anything more recent
+// than what the card itself displays — the two can't drift apart.
+function confirmedCmeDateISO(sym){
+  var c=cmeOiCacheGet(sym);
+  if(!c||!c.date) return null;
+  return cmeDateStrToISO(c.date);
+}
+function mergeVoiHistory(yahooRows,ownRows,cutoffDate){
   var byDate={};
-  var maxOwnDate=ownRows.reduce(function(m,r){return r.d>m?r.d:m;},null);
+  if(!cutoffDate) return []; // nothing confirmed yet — show nothing rather than guess
   yahooRows.forEach(function(r){
-    if(maxOwnDate&&r.d>maxOwnDate) return; // CME hasn't confirmed this date yet — don't show it
+    if(r.d>cutoffDate) return;
     byDate[r.d]={d:r.d,vol:r.vol,oi:null,cm:null};
   });
-  ownRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi,cm:r.cm||null};});
+  ownRows.forEach(function(r){
+    if(r.d>cutoffDate) return; // same gate applies to our own capture too
+    byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi,cm:r.cm||null};
+  });
   return Object.keys(byDate).sort().map(function(d){return byDate[d];});
 }
 var PDFJS_CDNS=[
@@ -9213,7 +9226,7 @@ function analystTab(){
     voiBody.style.opacity="0.45";
     Promise.all([loadYahooVolumeHistory(sym,force),Promise.resolve(voiHistCacheGet(sym))]).then(function(res){
       if(myToken!==_voiLoadToken) return;
-      var merged=mergeVoiHistory(res[0],res[1]);
+      var merged=mergeVoiHistory(res[0],res[1],confirmedCmeDateISO(sym));
       renderVoiChart(sym,merged);
       voiBody.style.opacity="1";
     }).catch(function(){
@@ -9222,7 +9235,7 @@ function analystTab(){
     });
   }
   // Show whatever's cached immediately, no blank flash, then refresh.
-  renderVoiChart(sym,mergeVoiHistory((voiYahooCacheGet(sym)||{rows:[]}).rows,voiHistCacheGet(sym)));
+  renderVoiChart(sym,mergeVoiHistory((voiYahooCacheGet(sym)||{rows:[]}).rows,voiHistCacheGet(sym),confirmedCmeDateISO(sym)));
   loadVoiChart(false);
 
   var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
