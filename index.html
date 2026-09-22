@@ -573,6 +573,11 @@ function syncToCloud(){
     trades:State.trades,
     levels:State.levels,
     week_levels:State.weekLevels,
+    // CME volume/OI card + chart data — synced too so a device that hasn't
+    // fetched the bulletin itself (e.g. mobile) picks up whatever the last
+    // device to fetch it saw, instead of needing its own manual refresh.
+    cme_oi:{ES:cmeOiCacheGet("ES"),NQ:cmeOiCacheGet("NQ")},
+    voi_hist:{ES:voiHistCacheGet("ES"),NQ:voiHistCacheGet("NQ")},
     settings:{
       note:State.note,wkGoal:State.wkGoal,moGoal:State.moGoal,
       mindsetChecks:State.mindsetChecks,mindsetChecksDate:State.mindsetChecksDate,
@@ -629,6 +634,21 @@ function loadFromCloud(syncId,callback){
     }
     if(d.levels) {State.levels=d.levels.filter(function(l){return l.l!=="BIZZ";});ss("levels",State.levels);}
     if(d.week_levels) State.weekLevels=d.week_levels;
+    // CME volume/OI — take the cloud version only if it's actually newer
+    // than what's already local (fetchedAt on the effective prelim/final
+    // snapshot is the freshness marker), so this never clobbers a fresher
+    // local fetch with a stale cloud one.
+    if(d.cme_oi){
+      var _cmeEff=function(o){if(!o)return 0;var e=o.final||o.prelim;return e&&e.fetchedAt?e.fetchedAt:0;};
+      ["ES","NQ"].forEach(function(sym2){
+        var cloudOi=d.cme_oi[sym2];
+        if(!cloudOi) return;
+        if(_cmeEff(cloudOi)>_cmeEff(cmeOiCacheGet(sym2))){
+          cmeOiCacheSet(sym2,cloudOi);
+          if(d.voi_hist&&d.voi_hist[sym2]) voiHistCacheSet(sym2,d.voi_hist[sym2]);
+        }
+      });
+    }
     // Migrate renamed setups in cloud-loaded trades
     if(State.trades&&State.trades.forEach){
       var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation","Failed Auction":"Tape Read — Failed Auction","Momentum Shift":"Tape Read — Momentum Shift","Stop Run":"Tape Read — Stop Run","Naked POC Magnet":"Live Read — Naked POC Magnet","HTF Level Reaction":"Live Read — HTF Level Reaction","Trend Exhaustion":"Live Read — Trend Exhaustion"};
@@ -7463,6 +7483,10 @@ function loadCmeDailyOI(sym,force,statusCb){
     cmeOiCacheSet(sym,folded);
     var eff=folded.final||folded.prelim;
     if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi,folded.contractMonth);
+    // Push the freshly-fetched bulletin data up right away, so another
+    // device (e.g. mobile) picks it up on its next poll instead of having
+    // to fetch/parse the bulletin itself.
+    if(typeof syncToCloud==="function") syncToCloud();
     return folded;
   }).catch(function(err){
     if(cached) return cached;
