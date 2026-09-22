@@ -1412,7 +1412,7 @@ function lineSVG(data,w,h2,col,fmt){
 // — same layout as CME's own product Volume & Open Interest page. data is
 // [{d,vol,oi}], ascending by date; oi may be null on early/backfilled
 // points (Yahoo has no OI) — those just don't get a line segment there.
-function voiComboSVG(data,w,h2){
+function voiComboSVG(data,w,h2,sym){
   if(!data||!data.length) return div("chart-wrap");
   var vols=data.map(function(d){return d.vol;});
   var maxVol=Math.max.apply(null,vols.concat([1]))*1.12;
@@ -1432,7 +1432,9 @@ function voiComboSVG(data,w,h2){
   // Volume bars
   data.forEach(function(d,i){
     var yv=volY(d.vol),hbar=Math.max(1,padT+H-yv);
-    var ttl=d.d+': '+d.vol.toLocaleString()+' vol'+(typeof d.oi==="number"?' · '+d.oi.toLocaleString()+' OI':'');
+    var ttl=d.cm
+      ? "✓ "+(sym||"")+" "+d.cm+": "+d.vol.toLocaleString()+" vol"+(typeof d.oi==="number"?" · "+d.oi.toLocaleString()+" OI":"")
+      : d.d+": "+d.vol.toLocaleString()+" vol";
     svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"><title>'+ttl+'</title></rect>';
   });
   // OI line — only draw between consecutive points that both have OI, so
@@ -7034,13 +7036,13 @@ function voiHistCacheSet(sym,arr){
 // YYYY-MM-DD so it sorts and matches Yahoo's date format) — a later call
 // for the same trade date (e.g. Prelim → Final) overwrites rather than
 // duplicates. Keeps a generous 180-day cap so this never grows unbounded.
-function logDailyVoi(sym,dateStr,vol,oi){
+function logDailyVoi(sym,dateStr,vol,oi,contractMonth){
   if(!dateStr||typeof vol!=="number"||typeof oi!=="number"||isNaN(vol)||isNaN(oi)) return;
   var iso=cmeDateStrToISO(dateStr);
   if(!iso) return;
   var hist=voiHistCacheGet(sym);
   var idx=hist.findIndex(function(r){return r.d===iso;});
-  var row={d:iso,vol:vol,oi:oi};
+  var row={d:iso,vol:vol,oi:oi,cm:contractMonth||null};
   if(idx>=0) hist[idx]=row; else hist.push(row);
   hist.sort(function(a,b){return a.d<b.d?-1:1;});
   if(hist.length>180) hist=hist.slice(hist.length-180);
@@ -7131,9 +7133,9 @@ function mergeVoiHistory(yahooRows,ownRows){
   var maxOwnDate=ownRows.reduce(function(m,r){return r.d>m?r.d:m;},null);
   yahooRows.forEach(function(r){
     if(maxOwnDate&&r.d>maxOwnDate) return; // CME hasn't confirmed this date yet — don't show it
-    byDate[r.d]={d:r.d,vol:r.vol,oi:null};
+    byDate[r.d]={d:r.d,vol:r.vol,oi:null,cm:null};
   });
-  ownRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi};});
+  ownRows.forEach(function(r){byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi,cm:r.cm||null};});
   return Object.keys(byDate).sort().map(function(d){return byDate[d];});
 }
 var PDFJS_CDNS=[
@@ -7416,7 +7418,7 @@ function loadCmeDailyOI(sym,force,statusCb){
     var folded=cmeOiFold(cached,data);
     cmeOiCacheSet(sym,folded);
     var eff=folded.final||folded.prelim;
-    if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi);
+    if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi,folded.contractMonth);
     return folded;
   }).catch(function(err){
     if(cached) return cached;
@@ -9200,8 +9202,8 @@ function analystTab(){
     if(!series.length){
       voiBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">No volume/OI data yet.</div>';
     } else {
-      var tail=series.slice(-45); // ~last 45 trade dates, same window CME's own chart shows
-      voiBody.appendChild(voiComboSVG(tail,isM?340:900,180));
+      var tail=series.slice(-(isM?18:45)); // mobile: fewer, wider bars; desktop: same ~45-day window CME's own chart shows
+      voiBody.appendChild(voiComboSVG(tail,isM?340:900,180,sym));
     }
     voiErrLine.textContent=_yahooVolLastError[sym2]?("Yahoo backfill failed: "+_yahooVolLastError[sym2]):"";
   }
