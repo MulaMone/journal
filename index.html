@@ -7849,7 +7849,7 @@ var VOI_CHEATSHEET_ROWS=[
 var VOI_RELATIONSHIP_MATRIX=[
   {label:"High Volume + Rising OI (+OI)",col:"#00e676",desc:"Confirms Net New Position Entry. Buyers and sellers are opening new contracts, backing the move with fresh capital."},
   {label:"High Volume + Falling OI (-OI)",col:"#ff4444",desc:"Confirms Position Liquidation. One side is closing positions (e.g., shorts covering during a rally or longs liquidating during a selloff). The move is driven by existing positions exiting, not new money entering."},
-  {label:"Low Volume + Rising OI",col:"#ffab00",desc:"Confirms Quiet Accumulation/Distribution. Institutional positioning occurs within tight ranges or lower volume nodes without driving sharp directional momentum, coiling energy for a future breakout."}
+  {label:"Low Volume + Rising OI",col:"#b06aff",desc:"Confirms Quiet Accumulation/Distribution. Institutional positioning occurs within tight ranges or lower volume nodes without driving sharp directional momentum, coiling energy for a future breakout."}
 ];
 function showVoiCheatSheetModal(isMobile){
   var existing=document.getElementById("voi-cheatsheet-modal");if(existing) existing.remove();
@@ -7876,7 +7876,7 @@ function showVoiCheatSheetModal(isMobile){
       +"<td style='padding:8px 8px 8px 0;color:#fff;font-weight:700;'>"+r.pa+"</td>"
       +"<td style='padding:8px;'>"+r.vol+"</td>"
       +"<td style='padding:8px;color:"+r.oiCol+";font-weight:700;'>"+r.oi+"</td>"
-      +"<td style='padding:8px;color:#b06aff;'>"+r.interp+"</td>"
+      +"<td style='padding:8px;color:#ffab00;'>"+r.interp+"</td>"
       +"<td style='padding:8px 0;color:#fff;font-weight:700;'>"+r.inst+"</td>"
       +"</tr>";
   });
