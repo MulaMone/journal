@@ -9180,9 +9180,8 @@ function analystTab(){
   cmeQuickLink.title="Open on cmegroup.com";
   function paintCmeQuickLink(){cmeQuickLink.href=CME_PRODUCT_URLS[sym]||"#";cmeQuickLink.textContent=(isM?"↗":"CME.com →");}
   paintCmeQuickLink();
-  if(isM) ctrlRow.appendChild(cmeQuickLink); // mobile: unchanged, stays next to ES/NQ as before
 
-  // Cheat sheet link — icon-only next to ES/NQ + CME link on mobile,
+  // Cheat sheet link — icon-only next to the CME link on mobile,
   // text link next to the CME link in the section header on desktop.
   var voiCheatLink=isM?h("a",{className:"btn"}):h("a",{});
   voiCheatLink.href="#";
@@ -9195,7 +9194,15 @@ function analystTab(){
     voiCheatLink.textContent="Cheat Sheet";
   }
   voiCheatLink.addEventListener("click",function(e){e.preventDefault();showVoiCheatSheetModal(isM);});
-  if(isM) ctrlRow.appendChild(voiCheatLink); // mobile: icon, next to ES/NQ and the CME link
+
+  if(isM){
+    // Mobile: push CME + cheat sheet links to the right edge of the row,
+    // away from the ES/NQ symbol buttons.
+    var linkGroup=div("row gap8");linkGroup.style.cssText="margin-left:auto;flex-shrink:0;";
+    linkGroup.appendChild(cmeQuickLink);
+    linkGroup.appendChild(voiCheatLink);
+    ctrlRow.appendChild(linkGroup);
+  }
 
   var cmeResult=div();cmeResult.style.cssText="font-size:11px;font-family:Courier New,monospace;color:var(--text3);white-space:pre-line;transition:opacity .15s;";
 
