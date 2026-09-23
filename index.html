@@ -7887,7 +7887,7 @@ function showVoiCheatSheetModal(isMobile){
   if(!isMobile){
     var matrixLabel=div();matrixLabel.style.cssText="font-size:12px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-top:14px;border-top:1px solid var(--ca);";matrixLabel.textContent="The Relationship Matrix";
     box.appendChild(matrixLabel);
-    var matrixBody=div();matrixBody.style.cssText="font-size:12px;line-height:1.6;color:var(--text2);";
+    var matrixBody=div();matrixBody.style.cssText="font-size:12px;line-height:1.6;color:#fff;";
     matrixBody.innerHTML=VOI_RELATIONSHIP_MATRIX.map(function(m){
       return "<div style='margin-bottom:10px;'><span style='color:"+m.col+";font-weight:700;'>"+m.label+":</span> "+m.desc+"</div>";
     }).join("");
