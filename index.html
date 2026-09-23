@@ -1237,7 +1237,6 @@ function getSetups(t){
   if(t&&t.setup) return [t.setup];
   return [];
 }
-function setupString(t){return getSetups(t).join(", ");}
 function tradeHasSetup(t,name){return getSetups(t).indexOf(name)>-1;}
 // Returns a DOM span with each setup colored per SETUP_COLORS theme.
 // Setups not in the color map get default inherited color.
@@ -2283,14 +2282,6 @@ function openSettings(){
   document.body.appendChild(overlay);
 }
 function closeSettings(){var m=document.getElementById("settings-modal");if(m)m.remove();}
-
-function toggleMobileMode(){
-  var current=localStorage.getItem("edge_mobile_mode");
-  // If currently mobile (override=1 or auto), force desktop
-  if(isMobile()) localStorage.setItem("edge_mobile_mode","0");
-  else localStorage.setItem("edge_mobile_mode","1");
-  render();
-}
 
 // ─── MOBILE HELPER FUNCTIONS ─────────────────────────────────────────
 function isMobile(){
@@ -3946,25 +3937,6 @@ function logTab(){
 }
 
 // ─── OPPS TAB ─────────────────────────────────────────────────────────
-function oppsTab(){
-  var el=div();var sh=div("sh");sh.textContent="Best Opportunities";el.appendChild(sh);
-  var hl=activeTrades().filter(function(t){return t.hl||t.d>500});
-  if(!hl.length){var msg=div("card");var m=span("xs m");m.textContent="No highlighted trades yet. Mark trades as Highlight when logging.";msg.appendChild(m);el.appendChild(msg);return el;}
-  hl.forEach(function(t){
-    var opp=div("opp");
-    var oh=div("row gap8 mb8 fw7");oh.appendChild(makeBadge(t.dir==="Long"?"bg":"br",t.dir));var oi=span("fw7");oi.textContent=" "+t.inst+" ";oh.appendChild(oi);var oe=span("xs m");oe.textContent="@ "+t.entry+" → "+t.exit;oh.appendChild(oe);opp.appendChild(oh);
-    var om=div("row gap8 mb8");om.style.flexWrap="wrap";
-    var op=span("fw7 "+clr(t.d));op.style.fontSize="19px";op.textContent=dol(t.d);om.appendChild(op);
-    om.appendChild(makeBadge("bb",(t.pts||0).toFixed(2)+" PTS"));om.appendChild(makeBadge("bw",t.sess));om.appendChild(makeBadge("bw",t.date+" "+t.time));opp.appendChild(om);
-    var sep=div("sep");opp.appendChild(sep);
-    var sl=div("xs m mb8");sl.textContent="SETUP";opp.appendChild(sl);var sv2=div("xs mb8");sv2.style.color="#e0c97a";if(getSetups(t).length) sv2.appendChild(setupColoredEl(t)); else sv2.textContent="—";opp.appendChild(sv2);
-    var wl=div("xs m mb8");wl.textContent="WHY IT WORKED";opp.appendChild(wl);var wv=div("xs");wv.style.color="#e0c97a";wv.style.lineHeight="1.7";wv.textContent=t.post||t.conf||"—";opp.appendChild(wv);
-    var gr2=div("row gap8 mt8");gr2.appendChild(h("span",{className:"gr "+grc(t.ex)},[t.ex]));var gl=span("xs m");gl.style.lineHeight="21px";gl.textContent="Exec";gr2.appendChild(gl);var gs=h("span",{className:"gr "+grc(t.ru)},[t.ru]);gs.style.marginLeft="6px";gr2.appendChild(gs);var gl2=span("xs m");gl2.style.lineHeight="21px";gl2.textContent="Rules";gr2.appendChild(gl2);opp.appendChild(gr2);
-    el.appendChild(opp);
-  });
-  return el;
-}
-
 // ─── PLAYBOOK TAB ─────────────────────────────────────────────────────
 function playbookTab(){
   // Load custom playbook entries from localStorage, merge with built-in
