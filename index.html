@@ -7837,6 +7837,64 @@ function showLiqInfoModal(key){
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 }
+// ─── Volume/OI cheat sheet — quick-reference table + relationship matrix
+// for reading daily volume against open interest. Static content, opened
+// from a link next to the Daily Volume & Open Interest header. ──────────
+var VOI_CHEATSHEET_ROWS=[
+  {pa:"Trending",vol:"High",oi:"Rising (+)",oiCol:"#00e676",interp:"New positions entering in trend direction",inst:"Strong Trend Expansion"},
+  {pa:"Trending",vol:"High",oi:"Falling (-)",oiCol:"#ff4444",interp:"Existing positions closing out",inst:"Squeeze / Liquidation"},
+  {pa:"Range / Any",vol:"Low",oi:"Rising (+)",oiCol:"#00e676",interp:"Quiet accumulation / distribution",inst:"Breakout Loading (Coiling)"},
+  {pa:"Range / Any",vol:"Low",oi:"Unchanged",oiCol:"var(--text2)",interp:"Lack of institutional participation",inst:"Neutral / Range Drift"}
+];
+var VOI_RELATIONSHIP_MATRIX=[
+  {label:"High Volume + Rising OI (+OI)",col:"#00e676",desc:"Confirms Net New Position Entry. Buyers and sellers are opening new contracts, backing the move with fresh capital."},
+  {label:"High Volume + Falling OI (-OI)",col:"#ff4444",desc:"Confirms Position Liquidation. One side is closing positions (e.g., shorts covering during a rally or longs liquidating during a selloff). The move is driven by existing positions exiting, not new money entering."},
+  {label:"Low Volume + Rising OI",col:"#ffab00",desc:"Confirms Quiet Accumulation/Distribution. Institutional positioning occurs within tight ranges or lower volume nodes without driving sharp directional momentum, coiling energy for a future breakout."}
+];
+function showVoiCheatSheetModal(){
+  var existing=document.getElementById("voi-cheatsheet-modal");if(existing) existing.remove();
+  var overlay=div();overlay.id="voi-cheatsheet-modal";
+  overlay.style.cssText="position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
+  overlay.addEventListener("click",function(e){if(e.target===overlay) overlay.remove();});
+  var box=div();box.style.cssText="background:#071428;border:1px solid #1a3260;border-radius:6px;max-width:640px;width:100%;padding:22px 24px;position:relative;max-height:85vh;overflow-y:auto;";
+  var closeBtn=div();closeBtn.style.cssText="position:absolute;top:10px;right:14px;cursor:pointer;color:var(--text3);font-size:20px;font-weight:700;line-height:1;";closeBtn.textContent="×";
+  closeBtn.addEventListener("click",function(){overlay.remove();});
+  box.appendChild(closeBtn);
+  var title=div();title.style.cssText="font-size:14px;font-weight:700;letter-spacing:2px;color:#fff;text-transform:uppercase;margin-bottom:16px;padding-right:20px;";title.textContent="Complete CME Reference Cheat Sheet";
+  box.appendChild(title);
+
+  var tableWrap=div();tableWrap.style.cssText="overflow-x:auto;margin-bottom:20px;";
+  var table="<table style='width:100%;border-collapse:collapse;font-size:11px;color:var(--text2);'><thead><tr style='color:var(--text3);text-align:left;'>"
+    +"<th style='padding:6px 8px 8px 0;font-weight:400;'>Price Action</th>"
+    +"<th style='padding:6px 8px 8px 0;font-weight:400;'>Daily Volume</th>"
+    +"<th style='padding:6px 8px 8px 0;font-weight:400;'>Open Interest</th>"
+    +"<th style='padding:6px 8px 8px 0;font-weight:400;'>Market Interpretation</th>"
+    +"<th style='padding:6px 0 8px 0;font-weight:400;'>Institutional Action</th>"
+    +"</tr></thead><tbody>";
+  VOI_CHEATSHEET_ROWS.forEach(function(r){
+    table+="<tr style='border-top:1px solid var(--ca);'>"
+      +"<td style='padding:8px 8px 8px 0;color:#fff;font-weight:700;'>"+r.pa+"</td>"
+      +"<td style='padding:8px;'>"+r.vol+"</td>"
+      +"<td style='padding:8px;color:"+r.oiCol+";font-weight:700;'>"+r.oi+"</td>"
+      +"<td style='padding:8px;'>"+r.interp+"</td>"
+      +"<td style='padding:8px 0;color:#fff;font-weight:700;'>"+r.inst+"</td>"
+      +"</tr>";
+  });
+  table+="</tbody></table>";
+  tableWrap.innerHTML=table;
+  box.appendChild(tableWrap);
+
+  var matrixLabel=div();matrixLabel.style.cssText="font-size:12px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-top:14px;border-top:1px solid var(--ca);";matrixLabel.textContent="The Relationship Matrix";
+  box.appendChild(matrixLabel);
+  var matrixBody=div();matrixBody.style.cssText="font-size:12px;line-height:1.6;color:var(--text2);";
+  matrixBody.innerHTML=VOI_RELATIONSHIP_MATRIX.map(function(m){
+    return "<div style='margin-bottom:10px;'><span style='color:"+m.col+";font-weight:700;'>"+m.label+":</span> "+m.desc+"</div>";
+  }).join("");
+  box.appendChild(matrixBody);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
 // Computed banner: Net Liquidity = Fed Total Assets − (TGA + RRP). Not a
 // FRED series on its own — derived client-side from the three fetched
 // fields on each row. Trend arrow is measured over the trailing 4 prints
@@ -9113,7 +9171,7 @@ function analystTab(){
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  cotHead.textContent="COT & Open Interest";
+  cotHead.textContent="Market Structure & Positioning";
   el.appendChild(cotHead);
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="flex-wrap:wrap;flex-shrink:0;";
   var symBtns=[];
@@ -9257,7 +9315,15 @@ function analystTab(){
   var voiHead=div();voiHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;";
   voiHead.textContent="Daily Volume & Open Interest";
   voiHeadRow.appendChild(voiHead);
-  if(!isM) voiHeadRow.appendChild(cmeQuickLink); // desktop only — mobile already placed it next to ES/NQ
+  var voiLinksRow=div();voiLinksRow.style.cssText="display:flex;align-items:center;gap:14px;";
+  var voiCheatLink=isM?h("a",{className:"btn"}):h("a",{});
+  voiCheatLink.href="#";
+  voiCheatLink.style.cssText=isM?"text-decoration:none;display:inline-flex;align-items:center;":"color:var(--text3);text-decoration:underline;font-size:12px;";
+  voiCheatLink.textContent="Cheat Sheet";
+  voiCheatLink.addEventListener("click",function(e){e.preventDefault();showVoiCheatSheetModal();});
+  voiLinksRow.appendChild(voiCheatLink);
+  if(!isM) voiLinksRow.appendChild(cmeQuickLink); // desktop only — mobile already placed CME link next to ES/NQ
+  voiHeadRow.appendChild(voiLinksRow);
   el.appendChild(voiHeadRow);
   var voiBody=div();voiBody.id="voi-chart-body";voiBody.style.cssText="height:180px;transition:opacity .15s;";
   el.appendChild(voiBody);
