@@ -7849,9 +7849,9 @@ var VOI_CHEATSHEET_ROWS=[
 var VOI_RELATIONSHIP_MATRIX=[
   {label:"High Volume + Rising OI (+OI)",col:"#00e676",desc:"Confirms Net New Position Entry. Buyers and sellers are opening new contracts, backing the move with fresh capital."},
   {label:"High Volume + Falling OI (-OI)",col:"#ff4444",desc:"Confirms Position Liquidation. One side is closing positions (e.g., shorts covering during a rally or longs liquidating during a selloff). The move is driven by existing positions exiting, not new money entering."},
-  {label:"Low Volume + Rising OI",col:"#ffab00",desc:"Confirms Quiet Accumulation/Distribution. Institutional positioning occurs within tight ranges or lower volume nodes without driving sharp directional momentum, coiling energy for a future breakout."}
+  {label:"Low Volume + Rising OI",col:"#b06aff",desc:"Confirms Quiet Accumulation/Distribution. Institutional positioning occurs within tight ranges or lower volume nodes without driving sharp directional momentum, coiling energy for a future breakout."}
 ];
-function showVoiCheatSheetModal(){
+function showVoiCheatSheetModal(isMobile){
   var existing=document.getElementById("voi-cheatsheet-modal");if(existing) existing.remove();
   var overlay=div();overlay.id="voi-cheatsheet-modal";
   overlay.style.cssText="position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
@@ -7876,7 +7876,7 @@ function showVoiCheatSheetModal(){
       +"<td style='padding:8px 8px 8px 0;color:#fff;font-weight:700;'>"+r.pa+"</td>"
       +"<td style='padding:8px;'>"+r.vol+"</td>"
       +"<td style='padding:8px;color:"+r.oiCol+";font-weight:700;'>"+r.oi+"</td>"
-      +"<td style='padding:8px;'>"+r.interp+"</td>"
+      +"<td style='padding:8px;color:#ffab00;'>"+r.interp+"</td>"
       +"<td style='padding:8px 0;color:#fff;font-weight:700;'>"+r.inst+"</td>"
       +"</tr>";
   });
@@ -7884,13 +7884,15 @@ function showVoiCheatSheetModal(){
   tableWrap.innerHTML=table;
   box.appendChild(tableWrap);
 
-  var matrixLabel=div();matrixLabel.style.cssText="font-size:12px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-top:14px;border-top:1px solid var(--ca);";matrixLabel.textContent="The Relationship Matrix";
-  box.appendChild(matrixLabel);
-  var matrixBody=div();matrixBody.style.cssText="font-size:12px;line-height:1.6;color:var(--text2);";
-  matrixBody.innerHTML=VOI_RELATIONSHIP_MATRIX.map(function(m){
-    return "<div style='margin-bottom:10px;'><span style='color:"+m.col+";font-weight:700;'>"+m.label+":</span> "+m.desc+"</div>";
-  }).join("");
-  box.appendChild(matrixBody);
+  if(!isMobile){
+    var matrixLabel=div();matrixLabel.style.cssText="font-size:12px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-top:14px;border-top:1px solid var(--ca);";matrixLabel.textContent="The Relationship Matrix";
+    box.appendChild(matrixLabel);
+    var matrixBody=div();matrixBody.style.cssText="font-size:12px;line-height:1.6;color:var(--text2);";
+    matrixBody.innerHTML=VOI_RELATIONSHIP_MATRIX.map(function(m){
+      return "<div style='margin-bottom:10px;'><span style='color:"+m.col+";font-weight:700;'>"+m.label+":</span> "+m.desc+"</div>";
+    }).join("");
+    box.appendChild(matrixBody);
+  }
 
   overlay.appendChild(box);
   document.body.appendChild(overlay);
@@ -9320,7 +9322,7 @@ function analystTab(){
   voiCheatLink.href="#";
   voiCheatLink.style.cssText=isM?"text-decoration:none;display:inline-flex;align-items:center;":"color:var(--text3);text-decoration:underline;font-size:12px;";
   voiCheatLink.textContent="Cheat Sheet";
-  voiCheatLink.addEventListener("click",function(e){e.preventDefault();showVoiCheatSheetModal();});
+  voiCheatLink.addEventListener("click",function(e){e.preventDefault();showVoiCheatSheetModal(isM);});
   voiLinksRow.appendChild(voiCheatLink);
   if(!isM) voiLinksRow.appendChild(cmeQuickLink); // desktop only — mobile already placed CME link next to ES/NQ
   voiHeadRow.appendChild(voiLinksRow);
