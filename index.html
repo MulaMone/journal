@@ -8843,20 +8843,26 @@ function buildFomcCountdown(meetingIso){
   return wrap;
 }
 
-// Mobile: compact DAYS/HRS/MIN text (no seconds) that sits in the spare space
-// on the HOLD / MOVE row, so the card keeps its exact size.
+// Mobile: compact D/H/M/S line (grey letters, white numbers) that sits in the
+// spare space on the HOLD / MOVE row, so the card keeps its exact size.
 function buildFomcCountdownMini(meetingIso){
   var target=fomcDecisionMs(meetingIso);
   var wrap=div();wrap.style.cssText="flex:0 0 auto;margin-left:auto;text-align:right;";
   var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);";lbl.textContent="FOMC IN";
-  var val=div();val.style.cssText="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;line-height:1.2;white-space:nowrap;";
+  var val=div();val.style.cssText="font-size:14px;font-weight:700;font-family:Courier New,monospace;line-height:1.2;white-space:nowrap;";
+  var nums=[];
+  ["D","H","M","S"].forEach(function(u,i){
+    var n=h("span",{});n.style.color="#ffffff";
+    var l=h("span",{});l.style.cssText="color:var(--text3);"+(i<3?"margin-right:4px;":"");l.textContent=u;
+    val.appendChild(n);val.appendChild(l);nums.push(n);
+  });
   wrap.appendChild(lbl);wrap.appendChild(val);
   var timer=null;
   function tick(){
-    var m=Math.max(0,Math.floor((target-Date.now())/60000));
-    if(m===0&&Date.now()>=target){val.textContent="DECISION";clearInterval(timer);return;}
-    var d=Math.floor(m/1440),hh=Math.floor((m%1440)/60),mm=m%60;
-    val.textContent=d+"D "+(hh<10?"0":"")+hh+"H "+(mm<10?"0":"")+mm+"M";
+    var s=Math.max(0,Math.floor((target-Date.now())/1000));
+    var v=[Math.floor(s/86400),Math.floor((s%86400)/3600),Math.floor((s%3600)/60),s%60];
+    v.forEach(function(x,i){nums[i].textContent=(i>0&&x<10?"0":"")+x;});
+    if(s===0){lbl.textContent="FOMC DECISION";clearInterval(timer);}
   }
   tick();
   timer=setInterval(function(){
