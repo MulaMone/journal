@@ -9003,7 +9003,7 @@ var ASSET_ICONS={
   "Fed Rate Probabilities":{e:"\uD83C\uDFE6",c:"currentColor",p:"<path d='M3 21h18'/><path d='M3 10h18'/><path d='M5 6l7-3 7 3'/><path d='M4 10v11'/><path d='M20 10v11'/><path d='M8 14v3'/><path d='M12 14v3'/><path d='M16 14v3'/>"},
   "Gold":{e:"\uD83E\uDE99",c:"#ffab00",p:"<path d='M3 18l3-9h12l3 9z'/><path d='M8 14h8'/>"},
   "WTI Crude Oil":{e:"\uD83D\uDEE2\uFE0F",c:"#a855f7",p:"<path d='M7.5 19.4c2.6 2.1 6.4 2.1 9 0 2.6-2.1 3.3-5.7 1.6-8.5l-4.9-7.3c-.4-.6-1.3-.8-1.9-.4-.2.1-.3.2-.4.4l-4.9 7.3c-1.7 2.8-1 6.4 1.5 8.5z'/>"},
-  "10-Year Treasury Yield":{e:"\uD83D\uDCDC",c:"#378ADD",p:"<path d='M14 3v4a1 1 0 0 0 1 1h4'/><path d='M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z'/><path d='M9 13h6'/><path d='M9 17h4'/>"}
+  "10-Year Treasury Yield":{e:"\uD83D\uDCDC",c:"#378ADD",p:"<path d='M15 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0'/><path d='M13 17.5v4.5l2-1.5l2 1.5v-4.5'/><path d='M10 19h-5a2 2 0 0 1-2-2v-10c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-1 1.73'/><path d='M6 9h12'/><path d='M6 12h3'/><path d='M6 15h2'/>"},
 };
 function assetLabelHTML(label){
   var a=ASSET_ICONS[label];
@@ -9012,11 +9012,11 @@ function assetLabelHTML(label){
     +"<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='"+a.c+"' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"+a.p+"</svg>"
     +"<span>"+label+"</span></span>";
 }
-// Emoji shown next to the price. Gold's is desktop-only (iOS renders its coin emoji silver).
+// Emoji shown next to the price. On mobile, gold gets an inline coins SVG instead (iOS renders its coin emoji silver).
 function assetEmojiHTML(label){
   var a=ASSET_ICONS[label];
   if(!a) return "";
-  if(label==="Gold"&&isMobile()) return "";
+  if(label==="Gold"&&isMobile()) return " <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#ffab00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-4px;margin-left:4px;' aria-hidden='true'><path d='M9 14c0 1.657 2.686 3 6 3s6-1.343 6-3s-2.686-3-6-3s-6 1.343-6 3z'/><path d='M9 14v4c0 1.656 2.686 3 6 3s6-1.344 6-3v-4'/><path d='M3 6c0 1.072 1.144 2.062 3 2.598s4.144.536 6 0c1.856-.536 3-1.526 3-2.598c0-1.072-1.144-2.062-3-2.598s-4.144-.536-6 0c-1.856.536-3 1.526-3 2.598z'/><path d='M3 6v10c0 .888.772 1.45 2 2'/><path d='M3 11c0 .888.772 1.45 2 2'/></svg>";
   return " <span style='font-size:.75em;letter-spacing:0;'>"+a.e+"</span>";
 }
 function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
