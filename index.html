@@ -9293,22 +9293,36 @@ function analystTab(){
 
   var ycSpread=State.analyst_yc_spread||"2s10s";
   var ycCtrlRow=div("row gap8");ycCtrlRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  var ycSpreadBtns=[];
+  function paintYcSpreadBtns(){
+    ycSpreadBtns.forEach(function(b){
+      b.style.cssText=((State.analyst_yc_spread||"2s10s")===b._k)?"border-color:var(--accent);color:var(--accent);font-weight:700;":"";
+    });
+  }
   Object.keys(YC_SPREADS).forEach(function(k){
     var b=h("button",{className:"btn"});
     b.textContent=YC_SPREADS[k].btn||YC_SPREADS[k].label;
+    b._k=k;ycSpreadBtns.push(b);
     if(ycSpread===k) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
-    b.addEventListener("click",function(){State.analyst_yc_spread=k;render();});
+    // In-place repaint — a full render() would refetch every section (Fed included).
+    b.addEventListener("click",function(){State.analyst_yc_spread=k;paintYcSpreadBtns();repaintYcFromCache(false);});
     ycCtrlRow.appendChild(b);
   });
   el.appendChild(ycCtrlRow);
 
   var ycRange=State.analyst_yc_range||"1Y";
   var ycRangeRow=div("row gap8");ycRangeRow.style.cssText="margin-bottom:14px;flex-wrap:wrap;";
+  var ycRangeBtns=[];
+  function ycRangeBtnCss(rk){
+    return "padding:3px 10px;font-size:11px;"+(((State.analyst_yc_range||"1Y")===rk)?"border-color:var(--red);color:var(--red);font-weight:700;":"border-color:var(--green);color:var(--green);");
+  }
+  function paintYcRangeBtns(){ycRangeBtns.forEach(function(b){b.style.cssText=ycRangeBtnCss(b._rk);});}
   YC_RANGES.forEach(function(rk){
     var b=h("button",{className:"btn"});
     b.textContent=rk;
+    b._rk=rk;ycRangeBtns.push(b);
     b.style.cssText="padding:3px 10px;font-size:11px;"+(ycRange===rk?"border-color:var(--red);color:var(--red);font-weight:700;":"border-color:var(--green);color:var(--green);");
-    b.addEventListener("click",function(){State.analyst_yc_range=rk;render();});
+    b.addEventListener("click",function(){State.analyst_yc_range=rk;paintYcRangeBtns();repaintYcFromCache(true);});
     ycRangeRow.appendChild(b);
   });
   el.appendChild(ycRangeRow);
@@ -9598,6 +9612,21 @@ function analystTab(){
   function showYcLoading(){ycBody.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;letter-spacing:1px;">LOADING YIELD CURVE DATA…</div>';y10Body.innerHTML=ycBody.innerHTML;}
   function showYcError(msg){var m='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD YIELD CURVE DATA — '+msg+'</div>';ycBody.innerHTML=m;y10Body.innerHTML=m;}
 
+  // Redraw the yield sections from data already in memory: no fetch, no
+  // loading placeholder, no touching Fed/liquidity/COT/DXY. Spread changes
+  // only affect the curve; range changes affect the curve and the 10Y chart.
+  function repaintYcFromCache(includeY10){
+    var data=_ycMemCache||ycCacheGet();
+    if(!data||!data.rows||!ycBody.firstChild){loadYc(false);return;}
+    ycBody.innerHTML="";
+    ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",State.analyst_yc_range||"1Y",data,isM));
+    if(includeY10){
+      y10Body.innerHTML="";
+      y10Body.appendChild(buildYieldLevelView("y10","10-Year Treasury Yield",State.analyst_yc_range||"1Y",data,isM));
+      var tc=_tnxMemCache||tnxCacheGet();
+      if(tc) paintTnxBadge(tc);
+    }
+  }
   function loadYc(force){
     var myToken=++_ycLoadToken;
     clearInterval(_tnxLiveTimer);
@@ -9778,7 +9807,9 @@ function analystTab(){
   // handler never stacks with this one.
   if(_analystVisHandler) document.removeEventListener("visibilitychange",_analystVisHandler);
   _analystVisHandler=function(){
-    if(!document.hidden && State.tab==="analyst") refreshAnalystData(false);
+    // Fed intentionally excluded: it only changes when CME posts, and is
+    // reloaded on tab open or manual Refresh.
+    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadCme(false);loadVoiChart(false);loadYc(false);loadLiq(false);loadDxy(false);}
   };
   document.addEventListener("visibilitychange",_analystVisHandler);
 
