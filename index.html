@@ -8843,6 +8843,29 @@ function buildFomcCountdown(meetingIso){
   return wrap;
 }
 
+// Mobile: compact DAYS/HRS/MIN text (no seconds) that sits in the spare space
+// on the HOLD / MOVE row, so the card keeps its exact size.
+function buildFomcCountdownMini(meetingIso){
+  var target=fomcDecisionMs(meetingIso);
+  var wrap=div();wrap.style.cssText="flex:0 0 auto;margin-left:auto;text-align:right;";
+  var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);";lbl.textContent="FOMC IN";
+  var val=div();val.style.cssText="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;line-height:1.2;white-space:nowrap;";
+  wrap.appendChild(lbl);wrap.appendChild(val);
+  var timer=null;
+  function tick(){
+    var m=Math.max(0,Math.floor((target-Date.now())/60000));
+    if(m===0&&Date.now()>=target){val.textContent="DECISION";clearInterval(timer);return;}
+    var d=Math.floor(m/1440),hh=Math.floor((m%1440)/60),mm=m%60;
+    val.textContent=d+"D "+(hh<10?"0":"")+hh+"H "+(mm<10?"0":"")+mm+"M";
+  }
+  tick();
+  timer=setInterval(function(){
+    if(!wrap.isConnected){clearInterval(timer);return;}
+    tick();
+  },1000);
+  return wrap;
+}
+
 function buildFedFundsView(data,isM){
   var el=div();
   var meetingIso=nextFomcMeetingISO();
@@ -8886,6 +8909,7 @@ function buildFedFundsView(data,isM){
       +"</div>"
       +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
     el.appendChild(card);
+    if(isM&&card.children[1]) card.children[1].appendChild(buildFomcCountdownMini(meetingIso));
 
     recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
     var todayISO=liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr);
