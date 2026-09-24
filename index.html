@@ -8843,26 +8843,27 @@ function buildFomcCountdown(meetingIso){
   return wrap;
 }
 
-// Mobile: compact D/H/M/S line (grey letters, white numbers) that sits in the
-// spare space on the HOLD / MOVE row, so the card keeps its exact size.
+// Mobile: D/H/M on one line, seconds underneath (grey letters, white numbers).
+// Sits in the spare space on the HOLD / MOVE row and is centred on that row
+// (not baseline-aligned) so the card keeps its exact size.
 function buildFomcCountdownMini(meetingIso){
   var target=fomcDecisionMs(meetingIso);
-  var wrap=div();wrap.style.cssText="flex:0 0 auto;margin-left:auto;text-align:right;";
-  var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);";lbl.textContent="FOMC IN";
-  var val=div();val.style.cssText="font-size:14px;font-weight:700;font-family:Courier New,monospace;line-height:1.2;white-space:nowrap;";
+  var wrap=div();wrap.style.cssText="flex:0 0 auto;margin-left:auto;align-self:center;text-align:right;font-size:15px;font-weight:700;font-family:Courier New,monospace;line-height:1.2;white-space:nowrap;";
+  var line1=div(),line2=div();
   var nums=[];
   ["D","H","M","S"].forEach(function(u,i){
     var n=h("span",{});n.style.color="#ffffff";
-    var l=h("span",{});l.style.cssText="color:var(--text3);"+(i<3?"margin-right:4px;":"");l.textContent=u;
-    val.appendChild(n);val.appendChild(l);nums.push(n);
+    var l=h("span",{});l.style.cssText="color:var(--text3);"+(i<2?"margin-right:4px;":"");l.textContent=u;
+    var line=i<3?line1:line2;
+    line.appendChild(n);line.appendChild(l);nums.push(n);
   });
-  wrap.appendChild(lbl);wrap.appendChild(val);
+  wrap.appendChild(line1);wrap.appendChild(line2);
   var timer=null;
   function tick(){
     var s=Math.max(0,Math.floor((target-Date.now())/1000));
     var v=[Math.floor(s/86400),Math.floor((s%86400)/3600),Math.floor((s%3600)/60),s%60];
     v.forEach(function(x,i){nums[i].textContent=(i>0&&x<10?"0":"")+x;});
-    if(s===0){lbl.textContent="FOMC DECISION";clearInterval(timer);}
+    if(s===0){line1.style.display="none";line2.textContent="DECISION";line2.style.color="var(--text3)";clearInterval(timer);}
   }
   tick();
   timer=setInterval(function(){
