@@ -254,6 +254,9 @@ svg text{font-family:'Courier New',monospace}
   #m-bnav{display:block}
   #content{padding:12px!important}
   .g2,.g3,.g4{grid-template-columns:1fr!important;gap:8px}
+  /* Analyst tab: uniform 14px between every stacked card (cards carry their own 14px bottom margin, which stacked on the 8px grid gap) */
+  .analyst-tab .g2,.analyst-tab .g3{gap:14px!important;margin-bottom:14px!important}
+  .analyst-tab .g2>div>[style*="margin-bottom:14px"]{margin-bottom:0!important}
   .card{padding:12px;border-radius:8px}
   .fg{grid-template-columns:1fr 1fr!important}
   .fg .s4{grid-column:span 2!important}
@@ -9092,7 +9095,7 @@ function buildGoldOilRow(data,isM){
 
 function analystTab(){
   var isM=isMobile();
-  var el=div();
+  var el=div("analyst-tab");
   var sh=div("sh");sh.innerHTML="Analyst — <span style='color:#e8f0ff;'>The Fundamentals</span>";el.appendChild(sh);
 
   // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
