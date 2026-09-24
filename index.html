@@ -8762,7 +8762,10 @@ function buildFedFundsView(data,isM){
     });
   }
   var staleNote=div();staleNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:1px;";
-  staleNote.appendChild(document.createTextNode("As of "+(data.dateStr||"?")+" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
+  staleNote.appendChild(document.createTextNode("As of "));
+  var fedDateSpan=h("span",{});fedDateSpan.style.color="#ffffff";fedDateSpan.textContent=(data.dateStr||"?");
+  staleNote.appendChild(fedDateSpan);
+  staleNote.appendChild(document.createTextNode(" · derived from CME 30-Day Fed Fund (ZQ) futures settlements  "));
   var cmeLink=h("a",{href:"https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",target:"_blank",rel:"noopener"});
   cmeLink.style.cssText="color:var(--text3);text-decoration:underline;";
   cmeLink.textContent="CME Fed →";
