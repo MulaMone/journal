@@ -8344,7 +8344,7 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
-    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"%</div>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"%"+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"−")+Math.abs(chg).toFixed(2)+"% vs prior print</div>";
   card.appendChild(l);
   var tnxBadge=div();tnxBadge.id="live-tnx";
@@ -8996,21 +8996,27 @@ function colorizeNote(s){
       return "<span class='"+(GREEN[m.toLowerCase()]?"g":"r")+"'>"+m+"</span>";
     });
 }
-// Asset label = inline SVG icon (left) + name + emoji (right of name).
+// Asset label = inline SVG icon (left) + name. Emoji goes next to the price (assetEmojiHTML).
 // Unmapped labels fall through as plain text.
 var ASSET_ICONS={
   "US Dollar Index":{e:"\uD83D\uDCB5",c:"#00e676",p:"<circle cx='12' cy='12' r='9'/><path d='M14.8 9a2 2 0 0 0-1.8-1h-2a2 2 0 1 0 0 4h2a2 2 0 1 1 0 4h-2a2 2 0 0 1-1.8-1'/><path d='M12 7v10'/>"},
-  "Gold":{e:"\uD83E\uDE99",c:"#ffab00",p:"<path d='M3 18l3-9h12l3 9z'/><path d='M8 14h8'/>"},
+  "Gold":{e:"\uD83D\uDCB0",c:"#ffab00",p:"<path d='M3 18l3-9h12l3 9z'/><path d='M8 14h8'/>"},
   "WTI Crude Oil":{e:"\uD83D\uDEE2\uFE0F",c:"#a855f7",p:"<path d='M7.5 19.4c2.6 2.1 6.4 2.1 9 0 2.6-2.1 3.3-5.7 1.6-8.5l-4.9-7.3c-.4-.6-1.3-.8-1.9-.4-.2.1-.3.2-.4.4l-4.9 7.3c-1.7 2.8-1 6.4 1.5 8.5z'/>"},
-  "10-Year Treasury Yield":{e:"\uD83D\uDCDC",c:"#378ADD",p:"<path d='M14 3v4a1 1 0 0 0 1 1h4'/><path d='M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z'/><path d='M9 13h6'/><path d='M9 17h4'/>"},
-  "Fed Rate Probabilities":{e:"\uD83C\uDFE6",c:"currentColor",p:"<path d='M3 21h18'/><path d='M3 10h18'/><path d='M5 6l7-3 7 3'/><path d='M4 10v11'/><path d='M20 10v11'/><path d='M8 14v3'/><path d='M12 14v3'/><path d='M16 14v3'/>"}
+  "10-Year Treasury Yield":{e:"\uD83D\uDCDC",c:"#378ADD",p:"<path d='M14 3v4a1 1 0 0 0 1 1h4'/><path d='M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z'/><path d='M9 13h6'/><path d='M9 17h4'/>"}
 };
 function assetLabelHTML(label){
   var a=ASSET_ICONS[label];
   if(!a) return label;
   return "<span style='display:inline-flex;align-items:center;gap:8px;'>"
     +"<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='"+a.c+"' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"+a.p+"</svg>"
-    +"<span>"+label+"</span><span style='font-size:14px;letter-spacing:0;'>"+a.e+"</span></span>";
+    +"<span>"+label+"</span></span>";
+}
+// Emoji shown next to the price. Gold's is desktop-only (iOS renders its coin emoji silver).
+function assetEmojiHTML(label){
+  var a=ASSET_ICONS[label];
+  if(!a) return "";
+  if(label==="Gold"&&isMobile()) return "";
+  return " <span style='font-size:.75em;letter-spacing:0;'>"+a.e+"</span>";
 }
 function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   var series=rows.map(function(r){return {v:r.c,l:r.d||""};}).filter(function(s){return typeof s.v==="number";});
@@ -9023,7 +9029,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId){
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
-    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+"</div>"
+    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior close</div>";
   if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
@@ -9056,7 +9062,7 @@ function buildDxyView(data,isM){
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML("US Dollar Index")+"</div>"
-    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"</div>"
+    +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+assetEmojiHTML("US Dollar Index")+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
   top.appendChild(l);
   card.appendChild(top);
@@ -9149,7 +9155,7 @@ function analystTab(){
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  fedHead.innerHTML=assetLabelHTML("Fed Rate Probabilities");
+  fedHead.textContent="Fed Rate Probabilities";
   el.appendChild(fedHead);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
