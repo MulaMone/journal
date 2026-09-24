@@ -603,7 +603,8 @@ function syncToCloud(){
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
       accounts:State.accounts,
       activeAccount:State.activeAccount,
-      lk_pin:localStorage.getItem("edge_lk_pin")||null
+      lk_pin:localStorage.getItem("edge_lk_pin")||null,
+      fedprob_hist:fedProbHistGet()
     },
     updated_at:new Date().toISOString()
   };
@@ -713,6 +714,12 @@ function loadFromCloud(syncId,callback){
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
+      // Fed probability history — merge with local (never overwrite), then seed/push back if the cloud was missing rows
+      var _fpLocal=fedProbHistGet();
+      var _fpCloud=Array.isArray(s.fedprob_hist)?s.fedprob_hist:null;
+      var _fpMerged=fedProbHistMerge(_fpLocal,_fpCloud);
+      fedProbHistSet(_fpMerged);
+      if(_fpMerged.length>(_fpCloud?_fpCloud.length:0)) syncToCloud();
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
@@ -8687,6 +8694,21 @@ function computeFedProbability(meetingIso,curve,effr){
 // exactly the right pre/post granularity CME's feed can support.
 function fedProbHistGet(){try{var raw=localStorage.getItem("edge_fedprob_hist_v1");return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function fedProbHistSet(arr){try{localStorage.setItem("edge_fedprob_hist_v1",JSON.stringify(arr));}catch(e){}}
+// Union of two history lists, one row per (meeting, trading date). Earliest-written row wins on a
+// collision so every device resolves the same date to the same value. Same 60-day / 300-row trim as recording.
+function fedProbHistMerge(a,b){
+  var map={};
+  (a||[]).concat(b||[]).forEach(function(r){
+    if(!r||!r.meetingCode) return;
+    var k=r.meetingCode+"|"+(r.dateISO||("ts"+r.ts));
+    if(!map[k]||(r.ts||0)<(map[k].ts||0)) map[k]=r;
+  });
+  var out=Object.keys(map).map(function(k){return map[k];}).sort(function(x,y){return (x.ts||0)-(y.ts||0);});
+  var cutoff=Date.now()-60*24*60*60*1000;
+  out=out.filter(function(r){return r.ts>=cutoff;});
+  if(out.length>300) out=out.slice(out.length-300);
+  return out;
+}
 // Bulletin dateStr looks like "Wed, Sep 16, 2026" (matched at fetch time,
 // see fetchFedFundsData above) — normalize to a sortable "YYYY-MM-DD".
 function bulletinDateISO(dateStr){
@@ -8712,6 +8734,7 @@ function recordFedProbSnapshot(prob,dateISO){
   all=all.filter(function(r){return r.ts>=cutoff;});
   if(all.length>300) all=all.slice(all.length-300); // hard cap regardless of age
   fedProbHistSet(all);
+  if(typeof syncToCloud==="function") syncToCloud(); // same pattern as the CME OI cache — other devices pick it up on their next poll
 }
 // Most recent recorded row whose bulletin date is at least `days` calendar
 // days before `anchorISO` (today's bulletin date) — calendar-day lookback,
