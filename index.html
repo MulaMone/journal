@@ -2914,7 +2914,10 @@ var FOMC_DECISION_DATES_2026=["2026-01-28","2026-03-18","2026-04-29","2026-06-17
 // so monthHasAnyFomcMeeting/nextFomcMeetingISO/decidedMeetingIsoInMonth don't
 // silently go blind on 2027 meetings.
 var FOMC_DECISION_DATES_2027=["2027-01-27","2027-03-17","2027-04-28","2027-06-09","2027-07-28","2027-09-15","2027-10-27","2027-12-08"];
-var FOMC_DECISION_DATES_ALL=FOMC_DECISION_DATES_2026.concat(FOMC_DECISION_DATES_2027);
+// Fed's tentative Jan 2028 meeting (same 2025-09-05 release). The Fed adds the
+// next year's full schedule each September — append it here when it's out.
+var FOMC_DECISION_DATES_2028=["2028-01-26"];
+var FOMC_DECISION_DATES_ALL=FOMC_DECISION_DATES_2026.concat(FOMC_DECISION_DATES_2027,FOMC_DECISION_DATES_2028);
 function computeTodayMacroEvents(etTodayStr){
   var events=[];
   if(FOMC_DECISION_DATES_ALL.indexOf(etTodayStr)>-1){
@@ -8944,6 +8947,11 @@ function buildFedFundsView(data,isM){
       noteCard.appendChild(noteTxt);noteCard.appendChild(buildFomcCountdown(meetingIso));
     }
     el.appendChild(noteCard);
+  } else {
+    // Schedule list ran out — say so instead of silently dropping the card.
+    var noSched=div();noSched.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:11px;color:var(--text3);";
+    noSched.textContent="Next FOMC date isn't in the schedule list yet — add the newest dates to FOMC_DECISION_DATES in index.html (federalreserve.gov/monetarypolicy/fomccalendars.htm).";
+    el.appendChild(noSched);
   }
 
   return el;
