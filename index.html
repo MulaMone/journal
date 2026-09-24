@@ -8795,6 +8795,51 @@ function fmtFedDelta(fromMove,toMove){
   return {txt:(d>0?"▲+":"▼")+Math.abs(d).toFixed(0)+"pt",col:d>0?"var(--ca)":"var(--accent)"}; // ▲ = move-side probability gaining ground, ▼ = hold-side gaining ground — informational, not good/bad
 }
 
+// ─── FOMC countdown (desktop Fed card) ──────────────────────────────────
+// Counts down to the 2:00 PM ET statement release on the meeting's final
+// day — the same target CME FedWatch's own countdown uses. The date comes
+// from the same FOMC_DECISION_DATES_ALL list as the card, so the two can't
+// disagree. 2 PM ET is resolved through Intl (not a fixed offset), so it
+// stays right across the DST changes.
+function fomcDecisionMs(iso){
+  var p=iso.split("-"),base=Date.UTC(+p[0],+p[1]-1,+p[2]);
+  var f=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",hourCycle:"h23"});
+  for(var uh=18;uh<=19;uh++){ // 2 PM EDT = 18:00 UTC, 2 PM EST = 19:00 UTC
+    var t=base+uh*3600000;
+    if(parseInt(f.format(new Date(t)),10)===14) return t;
+  }
+  return base+19*3600000;
+}
+function buildFomcCountdown(meetingIso){
+  var target=fomcDecisionMs(meetingIso);
+  var wrap=div();wrap.style.cssText="flex:0 0 auto;";
+  var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:5px;";lbl.textContent="FOMC IN";
+  var row=div();row.style.cssText="display:flex;gap:6px;";
+  var vEls=[];
+  ["DAYS","HRS","MIN","SEC"].forEach(function(u){
+    var box=div();box.style.cssText="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 9px;text-align:center;min-width:46px;";
+    var v=div();v.style.cssText="font-size:17px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;line-height:1.2;";
+    var l=div();l.style.cssText="font-size:9px;letter-spacing:1px;color:var(--text3);";l.textContent=u;
+    box.appendChild(v);box.appendChild(l);row.appendChild(box);vEls.push(v);
+  });
+  wrap.appendChild(lbl);wrap.appendChild(row);
+  var timer=null;
+  function tick(){
+    var s=Math.max(0,Math.floor((target-Date.now())/1000));
+    var vals=[Math.floor(s/86400),Math.floor((s%86400)/3600),Math.floor((s%3600)/60),s%60];
+    vals.forEach(function(n,i){vEls[i].textContent=(n<10?"0":"")+n;});
+    if(s===0){lbl.textContent="FOMC DECISION";clearInterval(timer);}
+  }
+  tick();
+  // Self-cancelling: once the card is replaced/removed (reload, tab switch)
+  // the timer stops itself, so refreshes never stack intervals.
+  timer=setInterval(function(){
+    if(!wrap.isConnected){clearInterval(timer);return;}
+    tick();
+  },1000);
+  return wrap;
+}
+
 function buildFedFundsView(data,isM){
   var el=div();
   var meetingIso=nextFomcMeetingISO();
@@ -8871,6 +8916,8 @@ function buildFedFundsView(data,isM){
         var fomcDivider=div();fomcDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;";
         histRow.style.cssText="display:flex;gap:28px;align-items:center;flex:1;";
         card.appendChild(fomcLeft);card.appendChild(fomcDivider);card.appendChild(histRow);
+        var cdDivider=div();cdDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;margin-left:auto;";
+        histRow.appendChild(cdDivider);histRow.appendChild(buildFomcCountdown(meetingIso));
       } else {
         el.appendChild(histRow);
       }
@@ -8878,10 +8925,24 @@ function buildFedFundsView(data,isM){
       var histNote=div();histNote.style.cssText="font-size:11px;color:var(--text3);margin-bottom:14px;letter-spacing:.5px;";
       histNote.textContent="Tracking this meeting's probability over time — change history will show here once the read shifts again.";
       el.appendChild(histNote);
+      if(!isM){
+        var cdLeft=div();cdLeft.style.cssText="flex:0 0 auto;";
+        while(card.firstChild) cdLeft.appendChild(card.firstChild);
+        card.style.display="flex";card.style.gap="28px";card.style.alignItems="stretch";card.style.flexWrap="wrap";
+        var cdDiv2=div();cdDiv2.style.cssText="width:1px;background:var(--border);align-self:stretch;";
+        var cdRight=div();cdRight.style.cssText="display:flex;align-items:center;justify-content:flex-end;flex:1;";
+        cdRight.appendChild(buildFomcCountdown(meetingIso));
+        card.appendChild(cdLeft);card.appendChild(cdDiv2);card.appendChild(cdRight);
+      }
     }
   } else if(meetingIso){
     var noteCard=div();noteCard.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:11px;color:var(--text3);";
     noteCard.textContent="Next FOMC: "+meetingIso+" — can't isolate a probability yet (prior contract month has rolled off the curve and the NY Fed EFFR fetch failed)."+(isM?"":" Showing the implied rate path below instead.");
+    if(!isM){
+      var noteTxt=div();noteTxt.style.cssText="flex:1;";noteTxt.textContent=noteCard.textContent;noteCard.textContent="";
+      noteCard.style.display="flex";noteCard.style.alignItems="center";noteCard.style.gap="28px";
+      noteCard.appendChild(noteTxt);noteCard.appendChild(buildFomcCountdown(meetingIso));
+    }
     el.appendChild(noteCard);
   }
 
