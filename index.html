@@ -8853,7 +8853,7 @@ function buildFomcCountdownMini(meetingIso){
   var nums=[];
   ["D","H","M","S"].forEach(function(u,i){
     var n=h("span",{});n.style.color="#ffffff";
-    var l=h("span",{});l.style.cssText="color:#b8c0cc;"+(i<2?"margin-right:4px;":"");l.textContent=u;
+    var l=h("span",{});l.style.cssText="color:#8a93a3;"+(i<2?"margin-right:4px;":"");l.textContent=u;
     var line=i<3?line1:line2;
     line.appendChild(n);line.appendChild(l);nums.push(n);
   });
@@ -8863,7 +8863,7 @@ function buildFomcCountdownMini(meetingIso){
     var s=Math.max(0,Math.floor((target-Date.now())/1000));
     var v=[Math.floor(s/86400),Math.floor((s%86400)/3600),Math.floor((s%3600)/60),s%60];
     v.forEach(function(x,i){nums[i].textContent=(i>0&&x<10?"0":"")+x;});
-    if(s===0){line1.style.display="none";line2.textContent="DECISION";line2.style.color="#b8c0cc";clearInterval(timer);}
+    if(s===0){line1.style.display="none";line2.textContent="DECISION";line2.style.color="#8a93a3";clearInterval(timer);}
   }
   tick();
   timer=setInterval(function(){
