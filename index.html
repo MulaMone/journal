@@ -256,8 +256,8 @@ svg text{font-family:'Courier New',monospace}
   .g2,.g3,.g4{grid-template-columns:1fr!important;gap:8px}
   /* Analyst tab: uniform 14px between every stacked card (cards carry their own 14px bottom margin, which stacked on the 8px grid gap) */
   .analyst-tab .g2,.analyst-tab .g3{gap:14px!important;margin-bottom:14px!important}
-  .analyst-tab .g2 [style*="margin-bottom:14px"]{margin-bottom:0!important}
-  .analyst-tab [style*="display:grid"]{gap:14px!important;margin-bottom:14px!important}
+  .analyst-tab .g2 .a-g2card{margin-bottom:0!important}
+  .analyst-tab .a-cotgrid{gap:14px!important;margin-bottom:14px!important}
   .card{padding:12px;border-radius:8px}
   .fg{grid-template-columns:1fr 1fr!important}
   .fg .s4{grid-column:span 2!important}
@@ -7503,7 +7503,7 @@ function buildCOTLegacyView(sym,data,isM){
   if(!isM) catHeadRow.appendChild(staleNote);
   el.appendChild(catHeadRow);
 
-  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  var grid=div();grid.className="a-cotgrid";grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
   var catCards={};
   COT_LEGACY_CATS.forEach(function(cat){
     var lk=cat.lk,sk=cat.sk;
@@ -7563,7 +7563,7 @@ function buildCOTView(sym,data,isM){
   catHead.textContent="Positioning by Trader Category";
   el.appendChild(catHead);
 
-  var grid=div();grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
+  var grid=div();grid.className="a-cotgrid";grid.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:10px;margin-bottom:16px;";
   COT_CATS.forEach(function(cat){
     var lk=cat.lk,sk=cat.sk;
     var long=+latest[lk]||0,short=+latest[sk]||0,net=long-short;
@@ -8345,7 +8345,7 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v;
   var col="#00d4d4";
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+col+";border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";card.className="a-g2card";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"%"+assetEmojiHTML(label)+"</div>"
@@ -9063,7 +9063,7 @@ function buildDxyView(data,isM){
   var latest=series[series.length-1],prev=series[series.length-2];
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
-  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";
+  var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";card.className="a-g2card";
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML("US Dollar Index")+"</div>"
