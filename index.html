@@ -603,8 +603,7 @@ function syncToCloud(){
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
       accounts:State.accounts,
       activeAccount:State.activeAccount,
-      lk_pin:localStorage.getItem("edge_lk_pin")||null,
-      fedprob_hist:fedProbHistGet()
+      lk_pin:localStorage.getItem("edge_lk_pin")||null
     },
     updated_at:new Date().toISOString()
   };
@@ -714,26 +713,6 @@ function loadFromCloud(syncId,callback){
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
-      // Fed probability history — desktop is the single source of truth.
-      // Mobile mirrors the cloud copy exactly (its own stale rows are discarded); desktop keeps its own rows
-      // on any collision and pushes if the cloud copy differs.
-      var _fpCloud=Array.isArray(s.fedprob_hist)?s.fedprob_hist:null;
-      if(isMobile()){
-        if(_fpCloud) fedProbHistSet(fedProbHistMerge(_fpCloud,null)); // never blank local history just because the cloud copy isn't there yet
-      } else {
-        // ONE-TIME restore (delete after it has run once): puts back the two desktop rows that an earlier merge overwrote,
-        // so 1-day shows 58% -> 70% and 1-week shows 55% -> 70% again.
-        if(!localStorage.getItem("edge_fedprob_restore_v1")){
-          var _fpRest=fedProbHistGet().filter(function(r){return !(r.meetingCode==="OCT26"&&(r.dateISO==="2026-09-22"||r.dateISO==="2026-09-16"));});
-          _fpRest.push({meetingCode:"OCT26",hold:42,move:58,deltaBp:14.5,ts:Date.UTC(2026,8,22,20,0,0),dateISO:"2026-09-22"});
-          _fpRest.push({meetingCode:"OCT26",hold:45,move:55,deltaBp:13.75,ts:Date.UTC(2026,8,16,20,0,0),dateISO:"2026-09-16"});
-          fedProbHistSet(_fpRest);
-          try{localStorage.setItem("edge_fedprob_restore_v1","1");}catch(e){}
-        }
-        var _fpMerged=fedProbHistMerge(fedProbHistGet(),_fpCloud);
-        fedProbHistSet(_fpMerged);
-        if(JSON.stringify(_fpMerged)!==JSON.stringify(_fpCloud||[])) syncToCloud();
-      }
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
@@ -811,6 +790,35 @@ function loadImagesFromCloud(callback){
     var d=data[0];
     if(d.updated_at) _lastKnownImagesUpdatedAt=d.updated_at;
     if(d.settings&&d.settings.playbook_images) ss("playbook_images",d.settings.playbook_images);
+    if(callback) callback(true);
+  })
+  .catch(function(){if(callback) callback(false);});
+}
+// ── Fed probability history — its own row (same pattern as the images row above) so it can never
+// interfere with the main trades/settings save. Desktop is the only writer; mobile just mirrors it.
+function getFedProbSyncId(){return getSyncId()+"__fedprob";}
+function syncFedProbToCloud(){
+  if(isMobile()) return;
+  var payload={
+    user_id:getFedProbSyncId(),
+    trades:[],levels:[],week_levels:[],
+    settings:{fedprob_hist:fedProbHistGet()},
+    updated_at:new Date().toISOString()
+  };
+  supaFetch("POST","edge_data",payload).catch(function(){});
+}
+function loadFedProbFromCloud(callback){
+  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getFedProbSyncId())+"&select=settings")
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var cloud=(Array.isArray(data)&&data.length&&data[0].settings&&Array.isArray(data[0].settings.fedprob_hist))?data[0].settings.fedprob_hist:null;
+    if(isMobile()){
+      if(cloud) fedProbHistSet(fedProbHistMerge(cloud,null)); // mirror desktop; never blank local if the cloud copy isn't there yet
+    } else {
+      var merged=fedProbHistMerge(fedProbHistGet(),cloud); // desktop's own rows win
+      fedProbHistSet(merged);
+      if(JSON.stringify(merged)!==JSON.stringify(cloud||[])) syncFedProbToCloud();
+    }
     if(callback) callback(true);
   })
   .catch(function(){if(callback) callback(false);});
@@ -8751,7 +8759,7 @@ function recordFedProbSnapshot(prob,dateISO){
   all=all.filter(function(r){return r.ts>=cutoff;});
   if(all.length>300) all=all.slice(all.length-300); // hard cap regardless of age
   fedProbHistSet(all);
-  if(typeof syncToCloud==="function") syncToCloud(); // same pattern as the CME OI cache — other devices pick it up on their next poll
+  syncFedProbToCloud();
 }
 // Most recent recorded row whose bulletin date is at least `days` calendar
 // days before `anchorISO` (today's bulletin date) — calendar-day lookback,
@@ -9565,6 +9573,7 @@ function analystTab(){
   function showFedError(msg){fedBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD FED FUNDS DATA — '+msg+'</div>';}
   function loadFed(force){
     var myToken=++_fedLoadToken;
+    loadFedProbFromCloud();
     if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
     else showFedLoading();
     var liveMeetingIso=nextFomcMeetingISO();
@@ -10466,6 +10475,7 @@ initAutoSync();
       else recoverOrphanedTrades();   // on successful load, reassign trades with unknown accountId
       if(ok) render();
       else{ syncToCloud(); render(); }
+      loadFedProbFromCloud();
       loadImagesFromCloud(function(imgOk){ if(imgOk) render(); }); // separate row, own timing — doesn't block the main load above
     });
   } else {
