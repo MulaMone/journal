@@ -714,12 +714,17 @@ function loadFromCloud(syncId,callback){
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
       if(s.activeAccount!==undefined){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
-      // Fed probability history — merge with local (never overwrite), then seed/push back if the cloud was missing rows
-      var _fpLocal=fedProbHistGet();
+      // Fed probability history — desktop is the single source of truth.
+      // Mobile mirrors the cloud copy exactly (its own stale rows are discarded); desktop keeps its own rows
+      // on any collision and pushes if the cloud copy differs.
       var _fpCloud=Array.isArray(s.fedprob_hist)?s.fedprob_hist:null;
-      var _fpMerged=fedProbHistMerge(_fpLocal,_fpCloud);
-      fedProbHistSet(_fpMerged);
-      if(_fpMerged.length>(_fpCloud?_fpCloud.length:0)) syncToCloud();
+      if(isMobile()){
+        fedProbHistSet(_fpCloud?fedProbHistMerge(_fpCloud,null):[]);
+      } else {
+        var _fpMerged=fedProbHistMerge(fedProbHistGet(),_fpCloud);
+        fedProbHistSet(_fpMerged);
+        if(JSON.stringify(_fpMerged)!==JSON.stringify(_fpCloud||[])) syncToCloud();
+      }
     }
     // ── Post-cloud level migrations — runs every load so new builtins always appear ──
     var ORDERED_BUILTINS=[
@@ -8694,14 +8699,16 @@ function computeFedProbability(meetingIso,curve,effr){
 // exactly the right pre/post granularity CME's feed can support.
 function fedProbHistGet(){try{var raw=localStorage.getItem("edge_fedprob_hist_v1");return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function fedProbHistSet(arr){try{localStorage.setItem("edge_fedprob_hist_v1",JSON.stringify(arr));}catch(e){}}
-// Union of two history lists, one row per (meeting, trading date). Earliest-written row wins on a
-// collision so every device resolves the same date to the same value. Same 60-day / 300-row trim as recording.
-function fedProbHistMerge(a,b){
+// Union of two history lists, one row per (meeting, trading date). `primary` wins any collision.
+// Desktop is the only device that records history (see recordFedProbSnapshot), so it passes its own
+// rows as primary. Same 60-day / 300-row trim as recording.
+function fedProbHistMerge(primary,secondary){
   var map={};
-  (a||[]).concat(b||[]).forEach(function(r){
-    if(!r||!r.meetingCode) return;
-    var k=r.meetingCode+"|"+(r.dateISO||("ts"+r.ts));
-    if(!map[k]||(r.ts||0)<(map[k].ts||0)) map[k]=r;
+  [secondary||[],primary||[]].forEach(function(list){
+    list.forEach(function(r){
+      if(!r||!r.meetingCode) return;
+      map[r.meetingCode+"|"+(r.dateISO||("ts"+r.ts))]=r;
+    });
   });
   var out=Object.keys(map).map(function(k){return map[k];}).sort(function(x,y){return (x.ts||0)-(y.ts||0);});
   var cutoff=Date.now()-60*24*60*60*1000;
@@ -8725,6 +8732,7 @@ function bulletinDateISO(dateStr){
 // date comes from the bulletin (day-behind) or a live quote (today).
 function recordFedProbSnapshot(prob,dateISO){
   if(!prob) return;
+  if(isMobile()) return; // desktop is the single writer — mobile only mirrors the synced copy, so devices can't diverge
   var all=fedProbHistGet();
   var lastForMeeting=null;
   for(var i=all.length-1;i>=0;i--){ if(all[i].meetingCode===prob.meetingCode){ lastForMeeting=all[i]; break; } }
