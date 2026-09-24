@@ -9156,7 +9156,7 @@ function analystTab(){
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  fedHead.innerHTML=assetLabelHTML("Fed Rate Probabilities")+" <span style='font-size:16px;letter-spacing:0;vertical-align:middle;'>"+ASSET_ICONS["Fed Rate Probabilities"].e+"</span>";
+  fedHead.innerHTML=assetLabelHTML("Fed Rate Probabilities").replace(/<\/span><\/span>$/,"</span><span style='font-size:16px;letter-spacing:0;line-height:1;'>"+ASSET_ICONS["Fed Rate Probabilities"].e+"</span></span>");
   el.appendChild(fedHead);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
