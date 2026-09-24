@@ -719,8 +719,17 @@ function loadFromCloud(syncId,callback){
       // on any collision and pushes if the cloud copy differs.
       var _fpCloud=Array.isArray(s.fedprob_hist)?s.fedprob_hist:null;
       if(isMobile()){
-        fedProbHistSet(_fpCloud?fedProbHistMerge(_fpCloud,null):[]);
+        if(_fpCloud) fedProbHistSet(fedProbHistMerge(_fpCloud,null)); // never blank local history just because the cloud copy isn't there yet
       } else {
+        // ONE-TIME restore (delete after it has run once): puts back the two desktop rows that an earlier merge overwrote,
+        // so 1-day shows 58% -> 70% and 1-week shows 55% -> 70% again.
+        if(!localStorage.getItem("edge_fedprob_restore_v1")){
+          var _fpRest=fedProbHistGet().filter(function(r){return !(r.meetingCode==="OCT26"&&(r.dateISO==="2026-09-22"||r.dateISO==="2026-09-16"));});
+          _fpRest.push({meetingCode:"OCT26",hold:42,move:58,deltaBp:14.5,ts:Date.UTC(2026,8,22,20,0,0),dateISO:"2026-09-22"});
+          _fpRest.push({meetingCode:"OCT26",hold:45,move:55,deltaBp:13.75,ts:Date.UTC(2026,8,16,20,0,0),dateISO:"2026-09-16"});
+          fedProbHistSet(_fpRest);
+          try{localStorage.setItem("edge_fedprob_restore_v1","1");}catch(e){}
+        }
         var _fpMerged=fedProbHistMerge(fedProbHistGet(),_fpCloud);
         fedProbHistSet(_fpMerged);
         if(JSON.stringify(_fpMerged)!==JSON.stringify(_fpCloud||[])) syncToCloud();
