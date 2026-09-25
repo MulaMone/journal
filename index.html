@@ -798,7 +798,6 @@ function loadImagesFromCloud(callback){
 // interfere with the main trades/settings save. Desktop is the only writer; mobile just mirrors it.
 function getFedProbSyncId(){return getSyncId()+"__fedprob";}
 function syncFedProbToCloud(){
-  if(isMobile()) return;
   var payload={
     user_id:getFedProbSyncId(),
     trades:[],levels:[],week_levels:[],
@@ -807,21 +806,20 @@ function syncFedProbToCloud(){
   };
   supaFetch("POST","edge_data",payload).catch(function(){});
 }
+// Same path on every device: union local + cloud, push back if the cloud was missing anything.
+// Returns a promise (always resolves) so the Fed card can wait for it before computing chips.
 function loadFedProbFromCloud(callback){
-  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getFedProbSyncId())+"&select=settings")
+  return supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getFedProbSyncId())+"&select=settings")
   .then(function(r){return r.json();})
   .then(function(data){
     var cloud=(Array.isArray(data)&&data.length&&data[0].settings&&Array.isArray(data[0].settings.fedprob_hist))?data[0].settings.fedprob_hist:null;
-    if(isMobile()){
-      if(cloud) fedProbHistSet(fedProbHistMerge(cloud,null)); // mirror desktop; never blank local if the cloud copy isn't there yet
-    } else {
-      var merged=fedProbHistMerge(fedProbHistGet(),cloud); // desktop's own rows win
-      fedProbHistSet(merged);
-      if(JSON.stringify(merged)!==JSON.stringify(cloud||[])) syncFedProbToCloud();
-    }
+    var merged=fedProbHistMerge(fedProbHistGet(),cloud);
+    fedProbHistSet(merged);
+    if(JSON.stringify(merged)!==JSON.stringify(cloud||[])) syncFedProbToCloud();
     if(callback) callback(true);
+    return true;
   })
-  .catch(function(){if(callback) callback(false);});
+  .catch(function(){if(callback) callback(false);return false;});
 }
 function checkImagesChanged(callback){
   supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getImagesSyncId())+"&select=updated_at")
@@ -8719,15 +8717,16 @@ function computeFedProbability(meetingIso,curve,effr){
 // exactly the right pre/post granularity CME's feed can support.
 function fedProbHistGet(){try{var raw=localStorage.getItem("edge_fedprob_hist_v1");return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function fedProbHistSet(arr){try{localStorage.setItem("edge_fedprob_hist_v1",JSON.stringify(arr));}catch(e){}}
-// Union of two history lists, one row per (meeting, trading date). `primary` wins any collision.
-// Desktop is the only device that records history (see recordFedProbSnapshot), so it passes its own
-// rows as primary. Same 60-day / 300-row trim as recording.
+// Union of two history lists, one row per (meeting, trading date). Every device records, so on a
+// collision the earliest-recorded row wins — deterministic, so all devices converge on identical rows.
+// Same 60-day / 300-row trim as recording.
 function fedProbHistMerge(primary,secondary){
   var map={};
   [secondary||[],primary||[]].forEach(function(list){
     list.forEach(function(r){
       if(!r||!r.meetingCode) return;
-      map[r.meetingCode+"|"+(r.dateISO||("ts"+r.ts))]=r;
+      var k=r.meetingCode+"|"+(r.dateISO||("ts"+r.ts));
+      if(!map[k]||(r.ts||0)<(map[k].ts||0)) map[k]=r;
     });
   });
   var out=Object.keys(map).map(function(k){return map[k];}).sort(function(x,y){return (x.ts||0)-(y.ts||0);});
@@ -8752,7 +8751,6 @@ function bulletinDateISO(dateStr){
 // date comes from the bulletin (day-behind) or a live quote (today).
 function recordFedProbSnapshot(prob,dateISO){
   if(!prob) return;
-  if(isMobile()) return; // desktop is the single writer — mobile only mirrors the synced copy, so devices can't diverge
   var all=fedProbHistGet();
   var lastForMeeting=null;
   for(var i=all.length-1;i>=0;i--){ if(all[i].meetingCode===prob.meetingCode){ lastForMeeting=all[i]; break; } }
@@ -8768,17 +8766,26 @@ function recordFedProbSnapshot(prob,dateISO){
 // days before `anchorISO` (today's bulletin date) — calendar-day lookback,
 // not a 24h/7*24h millisecond window, since CME only ever gives us one
 // dated print per trading day.
+// Exact-date lookup: the row must be dated exactly `days` before the anchor (a
+// Sat/Sun target rolls back to Friday). No fallback to older rows — that made a
+// "1-day" chip show a 2-day-old number. No row that day => null => chip shows "—".
 function fedProbSnapshotDaysAgo(hist,anchorISO,days){
   if(!anchorISO) return null;
+  var DAY=24*60*60*1000;
   var anchor=new Date(anchorISO+"T00:00:00Z").getTime();
-  var target=anchor-days*24*60*60*1000;
-  var best=null,bestT=null;
+  var target=anchor-days*DAY;
+  var wd=new Date(target).getUTCDay();
+  if(wd===6) target-=DAY; else if(wd===0) target-=2*DAY; // Sat/Sun -> Fri
+  var best=null;
   hist.forEach(function(r){
     if(!r.dateISO) return;
-    var t=new Date(r.dateISO+"T00:00:00Z").getTime();
-    if(t<=target&&(bestT===null||t>bestT)){ best=r;bestT=t; }
+    if(new Date(r.dateISO+"T00:00:00Z").getTime()===target) best=r;
   });
   return best;
+}
+function etDateISO(){ // today's date in New York, not UTC (UTC flips to "tomorrow" after 8pm ET)
+  try{ return new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); }
+  catch(e){ return new Date().toISOString().slice(0,10); }
 }
 // Pulls together everything the card needs to show 1-day / 1-week /
 // 1-month change for the CURRENT meeting only — mixing in a stale prior
@@ -8918,8 +8925,8 @@ function buildFedFundsView(data,isM){
     el.appendChild(card);
     if(isM&&card.children[1]) card.children[1].appendChild(buildFomcCountdownMini(meetingIso));
 
-    recordFedProbSnapshot(prob,liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr));
-    var todayISO=liveApplied?new Date().toISOString().slice(0,10):bulletinDateISO(data.dateStr);
+    recordFedProbSnapshot(prob,liveApplied?etDateISO():bulletinDateISO(data.dateStr));
+    var todayISO=liveApplied?etDateISO():bulletinDateISO(data.dateStr);
     var deltas=fedProbDeltas(prob,todayISO);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
@@ -9702,7 +9709,7 @@ function analystTab(){
   function showFedError(msg){fedBody.innerHTML='<div style="padding:30px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD FED FUNDS DATA — '+msg+'</div>';}
   function loadFed(force){
     var myToken=++_fedLoadToken;
-    loadFedProbFromCloud();
+    var fedHistP=loadFedProbFromCloud(); // must finish before the card reads history, or mobile renders off stale local rows
     if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
     else showFedLoading();
     var liveMeetingIso=nextFomcMeetingISO();
@@ -9718,7 +9725,7 @@ function analystTab(){
     // both; buildFedFundsView only applies whichever ones actually match.
     var liveMeetingP=liveMeetingCode?fetchLiveZQQuote(liveMeetingCode):Promise.resolve(null);
     var livePrevP=livePrevCode?fetchLiveZQQuote(livePrevCode):Promise.resolve(null);
-    Promise.all([loadFedFundsData(force),liveMeetingP,livePrevP]).then(function(results){
+    Promise.all([loadFedFundsData(force),liveMeetingP,livePrevP,fedHistP]).then(function(results){
       if(myToken!==_fedLoadToken||State.tab!=="analyst") return;
       var data=results[0];
       data.live=results[1];
