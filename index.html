@@ -9036,9 +9036,18 @@ function oandaTradingDate(rawTime){
   var ed=new Date(etMs);
   return ed.getUTCFullYear()+"-"+pad(ed.getUTCMonth()+1)+"-"+pad(ed.getUTCDate());
 }
+// Guards a single leg's request with a timeout so one slow/hung instrument
+// (USD_SEK in particular — thinner liquidity than the other majors) can't
+// stall the whole Promise.all batch, which is what made DXY loading feel
+// much slower than Gold/Oil (each fetched from the same batch anyway).
+function fetchWithTimeout(url,opts,ms){
+  var ctrl=new AbortController();
+  var t=setTimeout(function(){ctrl.abort();},ms||8000);
+  return fetch(url,Object.assign({},opts,{signal:ctrl.signal})).finally(function(){clearTimeout(t);});
+}
 function fetchOandaDailyCloses(inst,tok){
   var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=400";
-  return fetch(url,{headers:{Authorization:"Bearer "+tok}}).then(function(r){
+  return fetchWithTimeout(url,{headers:{Authorization:"Bearer "+tok}},8000).then(function(r){
     if(!r.ok) return r.text().then(function(t){
       var msg="HTTP "+r.status;
       try{var j=JSON.parse(t);if(j.errorMessage) msg=j.errorMessage;}catch(e){}
@@ -9109,18 +9118,25 @@ function loadDxyData(force){
 // Color is up/down vs each instrument's own last daily CLOSE (the same
 // "prior close" baseline the card's big number is already measured
 // against), stored in _dxyLiveBaselines when the daily data loads.
+// Per-leg last-good cache so one flaky/slow FX pair (commonly USD_SEK —
+// thinner liquidity than the other five majors) doesn't blank the whole
+// DXY badge every 30s poll. DXY needs all 6 legs to compute; Gold/Oil each
+// only need themselves, which is why they were staying live while DXY froze.
+var _dxyLiveLastGood={};
 function updateDxyLiveBadges(){
   var tok=ls("oanda_token","");
   if(!tok||!_dxyLiveBaselines) return;
   var insts=OANDA_DXY_PAIRS.map(function(p){return p.inst;}).concat(["XAU_USD","WTICO_USD"]);
   Promise.all(insts.map(function(inst){
     var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=1";
-    return fetch(url,{headers:{Authorization:"Bearer "+tok}})
+    return fetchWithTimeout(url,{headers:{Authorization:"Bearer "+tok}},6000)
       .then(function(r){return r.ok?r.json():null;})
       .then(function(j){
         var c=j&&j.candles&&j.candles[j.candles.length-1];
-        return c?parseFloat(c.mid.c):null;
-      }).catch(function(){return null;});
+        var v=c?parseFloat(c.mid.c):null;
+        if(v!=null) _dxyLiveLastGood[inst]=v;
+        return v!=null?v:(_dxyLiveLastGood[inst]!=null?_dxyLiveLastGood[inst]:null);
+      }).catch(function(){return _dxyLiveLastGood[inst]!=null?_dxyLiveLastGood[inst]:null;});
   })).then(function(vals){
     var closesByPair={};
     OANDA_DXY_PAIRS.forEach(function(p,i){if(vals[i]!=null) closesByPair[p.inst]=vals[i];});
