@@ -5376,7 +5376,7 @@ function loadNTFile(){
 // OANDA practice-account token for chart data only; your trades still
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
-var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",MNQ:"NAS100_USD",GBPCAD:"GBP_CAD",CL:"WTICO_USD",GC:"XAU_USD"};
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",GBPCAD:"GBP_CAD",CL:"WTICO_USD",GC:"XAU_USD"};
 var OANDA_GRAN={"1m":"M1","5m":"M5","15m":"M15","1h":"H1","4h":"H4","8h":"H8"};
 
 function tradeTs(t){
@@ -5424,7 +5424,7 @@ function chartTab(){
   ctrlRow.style.flexWrap="wrap";
   ctrlRow.style.rowGap="8px";
 
-  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
@@ -5623,25 +5623,52 @@ function chartTab(){
     url+="&count=500";
   }
 
+  // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
+  // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
+  function chartFetchJson(u){
+    var hdr={headers:{Authorization:"Bearer "+tok}};
+    function one(x){
+      return fetch(x,hdr).then(function(r){
+        if(!r.ok){
+          return r.json().catch(function(){return null;}).then(function(body){
+            var reason=body&&(body.errorMessage||body.message)?": "+(body.errorMessage||body.message):"";
+            throw new Error("HTTP "+r.status+reason);
+          });
+        }
+        return r.json();
+      });
+    }
+    if(sym!=="DXY") return one(u);
+    return Promise.all(OANDA_DXY_PAIRS.map(function(p){
+      return one(u.replace("/instruments/DXY/","/instruments/"+p.inst+"/"));
+    })).then(function(res){
+      var maps=res.map(function(d){
+        var m={};
+        ((d&&d.candles)||[]).forEach(function(c){ if(c.mid) m[c.time]=c.mid; });
+        return m;
+      });
+      var out=[];
+      ((res[0]&&res[0].candles)||[]).forEach(function(c0){
+        var t=c0.time, ok=true;
+        maps.forEach(function(m){ if(!m[t]) ok=false; });
+        if(!ok) return;
+        var vals=["o","h","l","c"].map(function(k){
+          var v=50.14348112;
+          OANDA_DXY_PAIRS.forEach(function(p,i){ v*=Math.pow(parseFloat(maps[i][t][k]),p.weight); });
+          return v;
+        });
+        out.push({time:t,complete:c0.complete,mid:{o:vals[0],h:Math.max.apply(null,vals),l:Math.min.apply(null,vals),c:vals[3]}});
+      });
+      return {candles:out};
+    });
+  }
   function fetchAndRender(){
     // Stop any live-poll loop (and countdown ticker) from a previous chart
     // load up front — covers the case where this new load itself fails,
     // which the success-path clearInterval below wouldn't reach.
     clearInterval(_chartLiveTimer);
     clearInterval(_chartCountdownTimer);
-    fetch(url,{headers:{Authorization:"Bearer "+tok}})
-    .then(function(r){
-      if(!r.ok){
-        // Surface OANDA's actual error body instead of just the status code —
-        // "HTTP 400" alone doesn't say whether it's an expired token, a bad
-        // date range, etc. OANDA returns JSON with an errorMessage field.
-        return r.json().catch(function(){return null;}).then(function(body){
-          var reason=body&&(body.errorMessage||body.message)?": "+(body.errorMessage||body.message):"";
-          throw new Error("HTTP "+r.status+reason);
-        });
-      }
-      return r.json();
-    })
+    chartFetchJson(url)
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
       // chartTab() call is now the current one — let that one own the DOM
@@ -6014,8 +6041,7 @@ function chartTab(){
       _chartLiveTimer=setInterval(function(){
         if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
         var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-        fetch(liveUrl,{headers:{Authorization:"Bearer "+tok}})
-        .then(function(r){return r.ok?r.json():null;})
+        chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
           if(!freshCandles.length) return;
