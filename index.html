@@ -6535,6 +6535,13 @@ function openNtkLightbox(idx){
   box.style.cssText="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;-webkit-overflow-scrolling:touch";
   var img=document.createElement("img");
   box.style.overscrollBehavior="contain";ov.style.overscrollBehavior="contain";
+  var tx=null,ty=null;
+  box.addEventListener("touchstart",function(e){if(zoom||e.touches.length!==1){tx=null;return;}tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+  box.addEventListener("touchend",function(e){
+    if(zoom||tx===null)return;
+    var t=e.changedTouches[0],dx=t.clientX-tx,dy=t.clientY-ty;tx=null;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){go(dx<0?1:-1);}
+  },{passive:true});
   bar.addEventListener("touchmove",function(e){e.preventDefault();},{passive:false});
   ov.addEventListener("touchmove",function(e){if(!zoom&&e.touches.length<2)e.preventDefault();},{passive:false});
   box.appendChild(img);ov.appendChild(bar);ov.appendChild(box);
