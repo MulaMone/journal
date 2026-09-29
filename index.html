@@ -6508,6 +6508,63 @@ function mobileAnalyticsTab(){
   return el;
 }
 
+// ─── NEED TO KNOW (Notes) ─────────────────────────────────────────────
+var NTK_IMAGES=[
+  {src:"need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
+  {src:"need-to-know-2.png",title:"Comparative Gamma Regime Analysis"}
+];
+function openNtkLightbox(idx){
+  var old=document.getElementById("ntk-lb");if(old)old.remove();
+  var cur=idx,zoom=false;
+  var ov=document.createElement("div");ov.id="ntk-lb";
+  ov.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.94);display:flex;flex-direction:column";
+  var bar=document.createElement("div");
+  bar.style.cssText="display:flex;align-items:center;gap:10px;padding:10px 12px;color:#fff;flex-shrink:0";
+  var ttl=document.createElement("div");ttl.style.cssText="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  function mkBtn(t){var b=document.createElement("button");b.textContent=t;b.style.cssText="background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer";return b;}
+  var prev=mkBtn("‹"),next=mkBtn("›"),zb=mkBtn("Zoom"),cl=mkBtn("✕");
+  bar.appendChild(ttl);bar.appendChild(prev);bar.appendChild(next);bar.appendChild(zb);bar.appendChild(cl);
+  var box=document.createElement("div");
+  box.style.cssText="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;-webkit-overflow-scrolling:touch";
+  var img=document.createElement("img");
+  box.appendChild(img);ov.appendChild(bar);ov.appendChild(box);
+  function show(){
+    var it=NTK_IMAGES[cur];img.src=it.src;img.alt=it.title;ttl.textContent=it.title+"  ("+(cur+1)+"/"+NTK_IMAGES.length+")";
+    if(zoom){img.style.cssText="width:250%;max-width:none;height:auto;cursor:zoom-out;margin:auto";box.style.alignItems="flex-start";box.style.justifyContent="flex-start";zb.textContent="Fit";}
+    else{img.style.cssText="max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;margin:auto";box.style.alignItems="center";box.style.justifyContent="center";zb.textContent="Zoom";}
+  }
+  function go(d){cur=(cur+d+NTK_IMAGES.length)%NTK_IMAGES.length;zoom=false;show();}
+  function close(){document.removeEventListener("keydown",key);ov.remove();}
+  function key(e){if(e.key==="Escape")close();else if(e.key==="ArrowLeft")go(-1);else if(e.key==="ArrowRight")go(1);}
+  prev.onclick=function(e){e.stopPropagation();go(-1);};
+  next.onclick=function(e){e.stopPropagation();go(1);};
+  zb.onclick=img.onclick=function(e){e.stopPropagation();zoom=!zoom;show();};
+  cl.onclick=close;
+  box.onclick=function(e){if(e.target===box)close();};
+  document.addEventListener("keydown",key);
+  document.body.appendChild(ov);show();
+}
+function needToKnowSection(){
+  var card=div();
+  card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px";
+  var hd=div();hd.style.cssText="font-size:15px;font-weight:700;color:var(--ca);margin-bottom:10px";hd.textContent="Need to Know";
+  var sub=div();sub.style.cssText="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px";sub.textContent="Gamma Regimes";
+  var grid=div();
+  grid.style.cssText="display:grid;gap:12px;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr");
+  NTK_IMAGES.forEach(function(it,i){
+    var t=div();
+    t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden";
+    var im=document.createElement("img");im.src=it.src;im.alt=it.title;im.loading="lazy";
+    im.style.cssText="width:100%;height:auto;display:block";
+    var cap=div();cap.style.cssText="padding:8px 10px;font-size:12px;color:var(--text)";cap.textContent=it.title+" — tap to enlarge";
+    t.appendChild(im);t.appendChild(cap);
+    t.onclick=function(){openNtkLightbox(i);};
+    grid.appendChild(t);
+  });
+  card.appendChild(hd);card.appendChild(sub);card.appendChild(grid);
+  return card;
+}
+
 // ─── NOTES TAB ────────────────────────────────────────────────────────
 function notesTab(){
   var el=div();
@@ -6538,6 +6595,7 @@ function notesTab(){
   var todaySession=sessionNotes[notesToday]||"";
 
   var sh=div("sh");sh.innerHTML="Notes";el.appendChild(sh);
+  el.appendChild(needToKnowSection());
 
   if(isM){
     // ── MOBILE: stacked cards ──
