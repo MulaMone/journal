@@ -866,7 +866,7 @@ function checkCloudChanged(syncId,callback){
 function updateSyncStatus(status){
   var el=document.getElementById("sync-status");
   if(!el) return;
-  if(status==="synced"){el.textContent="✓ SYNCED";el.style.color="var(--green)";}
+  if(status==="synced"){el.textContent="✓ SYNCED v3";el.style.color="var(--green)";}
   else if(status==="syncing"){el.textContent="↻ SYNCING";el.style.color="var(--amber)";}
   else if(status==="error"){el.textContent="✗ SYNC ERR";el.style.color="var(--red)";}
   else if(status==="offline"){el.textContent="⊘ OFFLINE";el.style.color="var(--text3)";}
