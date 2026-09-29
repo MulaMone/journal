@@ -6509,6 +6509,7 @@ function mobileAnalyticsTab(){
 }
 
 // ─── NEED TO KNOW (Notes) ─────────────────────────────────────────────
+var NTK_COLORS={"Gamma Regimes":"#4ade80","Volume":"#38bdf8","Volume Profile":"#a78bfa"};
 var NTK_IMAGES=[
   {g:"Gamma Regimes",src:"need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
   {g:"Gamma Regimes",src:"need-to-know-2.png",title:"Comparative Gamma Regime Analysis"},
@@ -6569,15 +6570,16 @@ function needToKnowSection(){
   var groups=[];
   NTK_IMAGES.forEach(function(it,i){if(groups.indexOf(it.g)<0)groups.push(it.g);});
   groups.forEach(function(g,gi){
-    var sub=div();sub.style.cssText="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:"+(gi?"16px":"0")+" 0 8px";sub.textContent=g;
+    var gc=NTK_COLORS[g]||"var(--accent)";
+    var sub=div();sub.style.cssText="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:"+gc+";margin:"+(gi?"16px":"0")+" 0 8px";sub.textContent=g;
     var grid=div();
     grid.style.cssText="display:grid;gap:12px;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr");
     NTK_IMAGES.forEach(function(it,i){
       if(it.g!==g)return;
       var t=div();
-      t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px";
+      t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-left:3px solid "+gc+";border-radius:10px;padding:14px;font-size:13px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px";
       var l=document.createElement("span");l.textContent=it.title;
-      var r=document.createElement("span");r.textContent="View ›";r.style.cssText="color:var(--accent);white-space:nowrap";
+      var r=document.createElement("span");r.textContent="View ›";r.style.cssText="color:"+gc+";white-space:nowrap";
       t.appendChild(l);t.appendChild(r);
       t.onclick=function(){openNtkLightbox(i);};
       grid.appendChild(t);
