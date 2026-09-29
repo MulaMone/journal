@@ -573,20 +573,7 @@ function getSyncId(){
 // Before every upload, check whether another device switched the active account more recently.
 // If so, adopt it instead of clobbering it with this device's stale value.
 function syncToCloud(){
-  return supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getSyncId())+"&select=settings->activeAccount,settings->activeAccountAt")
-  .then(function(r){return r.json();})
-  .then(function(rows){
-    if(Array.isArray(rows)&&rows.length){
-      var cAt=rows[0].activeAccountAt||0, cAcc=rows[0].activeAccount;
-      var lAt=ls("activeAccountAt",0)||0;
-      if(cAcc&&cAt>lAt&&cAcc!==State.activeAccount){
-        State.activeAccount=cAcc;ss("activeAccount",cAcc);ss("activeAccountAt",cAt);
-        try{render();}catch(e){}
-      }
-    }
-  })
-  .catch(function(){})
-  .then(function(){return _syncToCloudNow();});
+  return Promise.resolve(_syncToCloudNow());
 }
 function _syncToCloudNow(){
   var id=getSyncId();
@@ -620,8 +607,6 @@ function _syncToCloudNow(){
       oanda_token:ls("oanda_token",""),
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
       accounts:State.accounts,
-      activeAccount:State.activeAccount,
-      activeAccountAt:ls("activeAccountAt",0),
       lk_pin:localStorage.getItem("edge_lk_pin")||null
     },
     updated_at:new Date().toISOString()
@@ -730,11 +715,10 @@ function loadFromCloud(syncId,callback){
       if(s.oanda_token!==undefined) ss("oanda_token",s.oanda_token);
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);if(_as.qra_spinner_month!==null&&_as.qra_spinner_month!==undefined)localStorage.setItem("edge_qra_spinner_month",_as.qra_spinner_month);if(_as.qra_spinner_day!==null&&_as.qra_spinner_day!==undefined)localStorage.setItem("edge_qra_spinner_day",_as.qra_spinner_day);}
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
-      // Active account syncs across devices, but only if the cloud value was set more recently than the local one
-      if(s.activeAccount!==undefined){
-        var _locOk=State.activeAccount&&State.accounts&&State.accounts.some(function(x){return x.id===State.activeAccount;});
-        var _cloudAt=s.activeAccountAt||0, _locAt=ls("activeAccountAt",0)||0;
-        if(!_locOk||_cloudAt>_locAt){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);ss("activeAccountAt",_cloudAt);}
+      // Legacy: active account used to ride in this blob. Only use it as a one-time seed when this device has none valid
+      // and no dedicated active-account row exists yet; the dedicated row (pullActiveAccount) is authoritative.
+      if(s.activeAccount!==undefined&&!(State.activeAccount&&State.accounts&&State.accounts.some(function(x){return x.id===State.activeAccount;}))){
+        State.activeAccount=s.activeAccount;try{localStorage.setItem("edge_activeAccount",JSON.stringify(s.activeAccount));}catch(e){}
       }
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
     }
@@ -817,6 +801,56 @@ function loadImagesFromCloud(callback){
     if(callback) callback(true);
   })
   .catch(function(){if(callback) callback(false);});
+}
+// ── Active account — its own tiny row so switching accounts on one device reaches the other
+// without depending on the big trades blob (last-writer-wins by activeAccountAt).
+function getActiveSyncId(){return getSyncId()+"__active";}
+var _activePushing=false;
+function _setActiveLocal(id,at){
+  State.activeAccount=id;
+  try{localStorage.setItem("edge_activeAccount",JSON.stringify(id));localStorage.setItem("edge_activeAccountAt",JSON.stringify(at));}catch(e){}
+}
+function syncActiveAccountToCloud(){
+  if(!supaClient) return Promise.resolve();
+  _activePushing=true;
+  var at=ls("activeAccountAt",0)||0;
+  var payload={user_id:getActiveSyncId(),trades:[],levels:[],week_levels:[],
+    settings:{activeAccount:State.activeAccount,activeAccountAt:at},updated_at:new Date().toISOString()};
+  return supaFetch("POST","edge_data",payload).catch(function(){}).then(function(){_activePushing=false;});
+}
+function setActiveAccount(id){
+  _setActiveLocal(id,Date.now());
+  syncActiveAccountToCloud();
+}
+function pullActiveAccount(cb){
+  if(!supaClient||_activePushing){if(cb)cb(false);return;}
+  supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getActiveSyncId())+"&select=settings")
+  .then(function(r){return r.json();})
+  .then(function(rows){
+    if(_activePushing){if(cb)cb(false);return;}
+    var s=Array.isArray(rows)&&rows.length?rows[0].settings:null;
+    var lAt=ls("activeAccountAt",0)||0;
+    if(!s||!s.activeAccount){
+      // no cloud value yet: seed it from this device
+      if(State.activeAccount){if(!lAt) localStorage.setItem("edge_activeAccountAt",JSON.stringify(lAt=Date.now()));syncActiveAccountToCloud();}
+      if(cb)cb(false);return;
+    }
+    var cAt=s.activeAccountAt||0;
+    if(cAt>lAt){
+      var ok=!State.accounts||!State.accounts.length||State.accounts.some(function(x){return x.id===s.activeAccount;});
+      if(ok&&s.activeAccount!==State.activeAccount){_setActiveLocal(s.activeAccount,cAt);if(cb)cb(true);return;}
+      localStorage.setItem("edge_activeAccountAt",JSON.stringify(cAt));
+    } else if(lAt>cAt){
+      syncActiveAccountToCloud(); // local is newer — re-push
+    }
+    if(cb)cb(false);
+  })
+  .catch(function(){if(cb)cb(false);});
+}
+function pollActiveAccount(){
+  if(document.hidden) return;
+  if(State.adding||State.editing||State.pb_adding||State.pb_editing!==undefined) return;
+  pullActiveAccount(function(changed){if(changed) render();});
 }
 // ── Fed probability history — its own row (same pattern as the images row above) so it can never
 // interfere with the main trades/settings save. Desktop is the only writer; mobile just mirrors it.
@@ -10335,7 +10369,7 @@ function accountsTab(){
           if(!confirm('Delete account "'+a.name+'"? Trades assigned to it will remain but become unfiltered.')) return;
           State.accounts=State.accounts.filter(function(x){return x.id!==a.id;});
           if(State.activeAccount===a.id) State.activeAccount=State.accounts.length?State.accounts[0].id:null;
-          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);ss("activeAccountAt",Date.now());syncToCloud();render();
+          ss("accounts",State.accounts);setActiveAccount(State.activeAccount);syncToCloud();render();
         };
         editBtn.onclick=function(){openForm(a);};
       })(acct);
@@ -10392,7 +10426,7 @@ function accountsTab(){
         setBtn.onmouseover=function(){this.style.borderColor="var(--accent)";this.style.color="var(--accent)";this.style.background="var(--accentglow)";};
         setBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";this.style.background="none";};
         (function(a){
-          setBtn.onclick=function(){State.activeAccount=a.id;ss("activeAccount",a.id);ss("activeAccountAt",Date.now());try{syncToCloud();}catch(e){}render();};
+          setBtn.onclick=function(){setActiveAccount(a.id);render();};
         })(acct);
       }
       card.appendChild(setBtn);
@@ -10544,8 +10578,7 @@ function accountsTab(){
       // First account: set active and tag ALL trades before anything else
       var isFirstAcct=State.accounts.length===1||!State.activeAccount;
       if(isFirstAcct){
-        State.activeAccount=na.id;
-        localStorage.setItem("edge_activeAccount",JSON.stringify(na.id));
+        setActiveAccount(na.id);
         State.trades=State.trades.map(function(t){
           return Object.assign({},t,{accountId:na.id});
         });
@@ -10773,14 +10806,13 @@ initAutoSync();
     var defId="acct_default_mula_live";
     var defAcct={id:defId,name:"Mula Live",broker:"Tradovate",type:"Live",balance:"",accountNum:"",notes:"",createdAt:new Date().toISOString()};
     State.accounts=[defAcct];
-    State.activeAccount=defId;
+    _setActiveLocal(defId,Date.now());
     // Tag all untagged trades to this account
     State.trades=State.trades.map(function(t){
       if(!t.accountId) return Object.assign({},t,{accountId:defId});
       return t;
     });
     ss("accounts",State.accounts);
-    ss("activeAccount",State.activeAccount);
     ss("trades",State.trades);
     syncToCloud();
   }
@@ -10793,6 +10825,7 @@ initAutoSync();
       else recoverOrphanedTrades();   // on successful load, reassign trades with unknown accountId
       if(ok) render();
       else{ syncToCloud(); render(); }
+      pullActiveAccount(function(ch){ if(ch) render(); });
       loadFedProbFromCloud();
       loadImagesFromCloud(function(imgOk){ if(imgOk) render(); }); // separate row, own timing — doesn't block the main load above
     });
@@ -10830,8 +10863,9 @@ function pollCloud(){
 setInterval(pollCloud,10000);
 // Catch up immediately when the tab becomes visible again, instead of waiting up to 10s
 document.addEventListener("visibilitychange",function(){
-  if(!document.hidden) pollCloud();
+  if(!document.hidden){ pollActiveAccount(); pollCloud(); }
 });
+setInterval(pollActiveAccount,8000);
 
 // Images change far less often than trades/notes, so this polls on a much
 // slower cadence and only pulls the (potentially large) image blob when
