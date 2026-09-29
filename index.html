@@ -5447,10 +5447,6 @@ function chartTab(){
   });
 
   var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp2);
-  var rbtn=h("button",{className:"btn"});
-  rbtn.textContent="↻ Refresh";
-  rbtn.addEventListener("click",function(){render();});
-  ctrlRow.appendChild(rbtn);
 
   // Show/hide trade markers toggle — eye icon, on by default.
   var showTrades=State.chart_show_trades!==false;
