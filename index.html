@@ -603,6 +603,7 @@ function syncToCloud(){
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
       accounts:State.accounts,
       activeAccount:State.activeAccount,
+      activeAccountAt:ls("activeAccountAt",0),
       lk_pin:localStorage.getItem("edge_lk_pin")||null
     },
     updated_at:new Date().toISOString()
@@ -711,10 +712,11 @@ function loadFromCloud(syncId,callback){
       if(s.oanda_token!==undefined) ss("oanda_token",s.oanda_token);
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);if(_as.qra_spinner_month!==null&&_as.qra_spinner_month!==undefined)localStorage.setItem("edge_qra_spinner_month",_as.qra_spinner_month);if(_as.qra_spinner_day!==null&&_as.qra_spinner_day!==undefined)localStorage.setItem("edge_qra_spinner_day",_as.qra_spinner_day);}
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
-      // Active account is per-device: only adopt the cloud value if nothing valid is set locally
+      // Active account syncs across devices, but only if the cloud value was set more recently than the local one
       if(s.activeAccount!==undefined){
         var _locOk=State.activeAccount&&State.accounts&&State.accounts.some(function(x){return x.id===State.activeAccount;});
-        if(!_locOk){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);}
+        var _cloudAt=s.activeAccountAt||0, _locAt=ls("activeAccountAt",0)||0;
+        if(!_locOk||_cloudAt>_locAt){State.activeAccount=s.activeAccount;ss("activeAccount",s.activeAccount);ss("activeAccountAt",_cloudAt);}
       }
       if(s.lk_pin){try{localStorage.setItem("edge_lk_pin",s.lk_pin);}catch(e){}}
     }
@@ -10315,7 +10317,7 @@ function accountsTab(){
           if(!confirm('Delete account "'+a.name+'"? Trades assigned to it will remain but become unfiltered.')) return;
           State.accounts=State.accounts.filter(function(x){return x.id!==a.id;});
           if(State.activeAccount===a.id) State.activeAccount=State.accounts.length?State.accounts[0].id:null;
-          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);syncToCloud();render();
+          ss("accounts",State.accounts);ss("activeAccount",State.activeAccount);ss("activeAccountAt",Date.now());syncToCloud();render();
         };
         editBtn.onclick=function(){openForm(a);};
       })(acct);
@@ -10372,7 +10374,7 @@ function accountsTab(){
         setBtn.onmouseover=function(){this.style.borderColor="var(--accent)";this.style.color="var(--accent)";this.style.background="var(--accentglow)";};
         setBtn.onmouseout=function(){this.style.borderColor="var(--border2)";this.style.color="var(--text3)";this.style.background="none";};
         (function(a){
-          setBtn.onclick=function(){State.activeAccount=a.id;ss("activeAccount",a.id);try{syncToCloud();}catch(e){}render();};
+          setBtn.onclick=function(){State.activeAccount=a.id;ss("activeAccount",a.id);ss("activeAccountAt",Date.now());try{syncToCloud();}catch(e){}render();};
         })(acct);
       }
       card.appendChild(setBtn);
