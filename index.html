@@ -6510,8 +6510,12 @@ function mobileAnalyticsTab(){
 
 // ─── NEED TO KNOW (Notes) ─────────────────────────────────────────────
 var NTK_IMAGES=[
-  {src:"need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
-  {src:"need-to-know-2.png",title:"Comparative Gamma Regime Analysis"}
+  {g:"Gamma Regimes",src:"need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
+  {g:"Gamma Regimes",src:"need-to-know-2.png",title:"Comparative Gamma Regime Analysis"},
+  {g:"Volume",src:"need-to-know-3.png",title:"Volume Price Analysis — How to Read the Volume Indicator"},
+  {g:"Volume",src:"need-to-know-5.jpg",title:"Volume Indicator Guide — How to Read It & Use It"},
+  {g:"Volume Profile",src:"need-to-know-4.png",title:"Volume Price Analysis — Volume Profile / Market Profile"},
+  {g:"Volume Profile",src:"need-to-know-6.png",title:"How High and Low Volume Nodes Behave"}
 ];
 function openNtkLightbox(idx){
   var old=document.getElementById("ntk-lb");if(old)old.remove();
@@ -6548,19 +6552,25 @@ function needToKnowSection(){
   var card=div();
   card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px";
   var hd=div();hd.style.cssText="font-size:15px;font-weight:700;color:var(--ca);margin-bottom:10px";hd.textContent="Need to Know";
-  var sub=div();sub.style.cssText="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px";sub.textContent="Gamma Regimes";
-  var grid=div();
-  grid.style.cssText="display:grid;gap:12px;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr");
-  NTK_IMAGES.forEach(function(it,i){
-    var t=div();
-    t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px";
-    var l=document.createElement("span");l.textContent=it.title;
-    var r=document.createElement("span");r.textContent="View ›";r.style.cssText="color:var(--accent);white-space:nowrap";
-    t.appendChild(l);t.appendChild(r);
-    t.onclick=function(){openNtkLightbox(i);};
-    grid.appendChild(t);
+  card.appendChild(hd);
+  var groups=[];
+  NTK_IMAGES.forEach(function(it,i){if(groups.indexOf(it.g)<0)groups.push(it.g);});
+  groups.forEach(function(g,gi){
+    var sub=div();sub.style.cssText="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:"+(gi?"16px":"0")+" 0 8px";sub.textContent=g;
+    var grid=div();
+    grid.style.cssText="display:grid;gap:12px;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr");
+    NTK_IMAGES.forEach(function(it,i){
+      if(it.g!==g)return;
+      var t=div();
+      t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px";
+      var l=document.createElement("span");l.textContent=it.title;
+      var r=document.createElement("span");r.textContent="View ›";r.style.cssText="color:var(--accent);white-space:nowrap";
+      t.appendChild(l);t.appendChild(r);
+      t.onclick=function(){openNtkLightbox(i);};
+      grid.appendChild(t);
+    });
+    card.appendChild(sub);card.appendChild(grid);
   });
-  card.appendChild(hd);card.appendChild(sub);card.appendChild(grid);
   return card;
 }
 
