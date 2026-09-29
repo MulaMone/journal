@@ -367,7 +367,7 @@ svg text{font-family:'Courier New',monospace}
 <div id="app">
   <div id="topbar">
     <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">TERMINAL</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
-    <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" style="cursor:pointer" title="Refresh">BILLION$<sup style="font-size:8px;opacity:.5;margin-left:3px;letter-spacing:0">v4</sup></div>
+    <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" style="cursor:pointer" title="Refresh">BILLION$</div>
     <span id="topbar-data-ind" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span>
     <div id="topbar-stats"></div>
     <button id="topbar-import-btn" onclick="switchTab('import')" title="Import" class="hide-xs" style="position:absolute;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;transition:color .15s;">⬆</button>
@@ -614,6 +614,7 @@ function _syncToCloudNow(){
   // Hold the poll off until upload actually settles
   _syncInFlight=true;
   clearTimeout(_syncInFlightTimer);
+  _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},20000); // safety net if the request hangs
   return supaFetch("POST","edge_data",payload)
   .then(function(r){
     if(r.ok||r.status===201||r.status===204){ updateSyncStatus("synced"); _lastKnownUpdatedAt=payload.updated_at; }
@@ -628,16 +629,20 @@ function _syncToCloudNow(){
   });
 }
 
+var _loadingFromCloud=false;
 function loadFromCloud(syncId,callback){
   supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(syncId)+"&select=*")
   .then(function(r){return r.json();})
   .then(function(data){
     if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
     var d=data[0];
-    if(d.updated_at) _lastKnownUpdatedAt=d.updated_at;
     // Never overwrite local trades while a sync upload is still in flight — protects against poll eating a just-saved trade
+    // (bail BEFORE recording updated_at, so the change is still seen as new on the next poll)
+    if(_syncInFlight){if(callback) callback(false);return;}
+    if(d.updated_at) _lastKnownUpdatedAt=d.updated_at;
+    // Applying cloud data writes localStorage via ss(); that must NOT trigger an upload back (ping-pong between devices)
+    _loadingFromCloud=true;
     if(d.trades){
-      if(_syncInFlight){if(callback) callback(false);return;}
       State.trades=d.trades;
     }
     if(d.levels) {State.levels=d.levels.filter(function(l){return l.l!=="BIZZ";});ss("levels",State.levels);}
@@ -763,9 +768,10 @@ function loadFromCloud(syncId,callback){
         syncToCloud();
       }
     }
+    _loadingFromCloud=false;
     if(callback) callback(true);
   })
-  .catch(function(){if(callback) callback(false);});
+  .catch(function(){_loadingFromCloud=false;if(callback) callback(false);});
 }
 
 // ── Playbook reference images — synced as a SEPARATE row from the main
@@ -797,7 +803,7 @@ function loadImagesFromCloud(callback){
     if(!Array.isArray(data)||!data.length){if(callback) callback(false);return;}
     var d=data[0];
     if(d.updated_at) _lastKnownImagesUpdatedAt=d.updated_at;
-    if(d.settings&&d.settings.playbook_images) ss("playbook_images",d.settings.playbook_images);
+    if(d.settings&&d.settings.playbook_images){_loadingFromCloud=true;try{ss("playbook_images",d.settings.playbook_images);}finally{_loadingFromCloud=false;}}
     if(callback) callback(true);
   })
   .catch(function(){if(callback) callback(false);});
@@ -918,7 +924,7 @@ function checkCloudChanged(syncId,callback){
 function updateSyncStatus(status){
   var el=document.getElementById("sync-status");
   if(!el) return;
-  if(status==="synced"){el.textContent="✓ SYNCED v4";el.style.color="var(--green)";}
+  if(status==="synced"){el.textContent="✓ SYNCED";el.style.color="var(--green)";}
   else if(status==="syncing"){el.textContent="↻ SYNCING";el.style.color="var(--amber)";}
   else if(status==="error"){el.textContent="✗ SYNC ERR";el.style.color="var(--red)";}
   else if(status==="offline"){el.textContent="⊘ OFFLINE";el.style.color="var(--text3)";}
@@ -942,6 +948,7 @@ function initAutoSync(){
   _ss_orig=ss;
   var syncTimer=null;
   window._syncToCloud=function(){
+    if(_loadingFromCloud) return; // writes caused by applying cloud data are not user changes
     updateSyncStatus("syncing");
     // Block the background poll from overwriting while upload is pending
     _syncInFlight=true;
@@ -949,9 +956,7 @@ function initAutoSync(){
     _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},8000);
     clearTimeout(syncTimer);
     syncTimer=setTimeout(function(){
-      syncToCloud();
-      clearTimeout(_syncInFlightTimer);
-      _syncInFlightTimer=setTimeout(function(){_syncInFlight=false;},3000);
+      syncToCloud(); // upload manages _syncInFlight itself and clears it when it settles
     },1500);
   };
 }
