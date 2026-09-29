@@ -6517,9 +6517,9 @@ function openNtkLightbox(idx){
   var old=document.getElementById("ntk-lb");if(old)old.remove();
   var cur=idx,zoom=false;
   var ov=document.createElement("div");ov.id="ntk-lb";
-  ov.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.94);display:flex;flex-direction:column";
+  ov.style.cssText="position:fixed;inset:0;z-index:99999;background:#000;padding-bottom:env(safe-area-inset-bottom,0px);display:flex;flex-direction:column";
   var bar=document.createElement("div");
-  bar.style.cssText="display:flex;align-items:center;gap:10px;padding:10px 12px;color:#fff;flex-shrink:0";
+  bar.style.cssText="display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(env(safe-area-inset-top,0px) + 10px);color:#fff;flex-shrink:0";
   var ttl=document.createElement("div");ttl.style.cssText="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
   function mkBtn(t){var b=document.createElement("button");b.textContent=t;b.style.cssText="background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer";return b;}
   var prev=mkBtn("‹"),next=mkBtn("›"),zb=mkBtn("Zoom"),cl=mkBtn("✕");
