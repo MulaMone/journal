@@ -5639,6 +5639,9 @@ function chartTab(){
       });
     }
     if(sym!=="DXY") return one(u);
+    // Live poll asks for count=1; legs can print a new candle at slightly different
+    // moments, so pull a few and let the per-time intersection pick the latest common one.
+    u=u.replace("&count=1&","&count=3&");
     return Promise.all(OANDA_DXY_PAIRS.map(function(p){
       return one(u.replace("/instruments/DXY/","/instruments/"+p.inst+"/"));
     })).then(function(res){
