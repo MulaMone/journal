@@ -367,7 +367,7 @@ svg text{font-family:'Courier New',monospace}
 <div id="app">
   <div id="topbar">
     <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">TERMINAL</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
-    <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" style="cursor:pointer" title="Refresh">BILLION$</div>
+    <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" style="cursor:pointer" title="Refresh">BILLION$<sup style="font-size:8px;opacity:.5;margin-left:3px;letter-spacing:0">v4</sup></div>
     <span id="topbar-data-ind" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span>
     <div id="topbar-stats"></div>
     <button id="topbar-import-btn" onclick="switchTab('import')" title="Import" class="hide-xs" style="position:absolute;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:0 2px;line-height:1;transition:color .15s;">⬆</button>
