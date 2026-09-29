@@ -570,7 +570,25 @@ function getSyncId(){
   return "mula-edge-journal";
 }
 
+// Before every upload, check whether another device switched the active account more recently.
+// If so, adopt it instead of clobbering it with this device's stale value.
 function syncToCloud(){
+  return supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getSyncId())+"&select=settings->activeAccount,settings->activeAccountAt")
+  .then(function(r){return r.json();})
+  .then(function(rows){
+    if(Array.isArray(rows)&&rows.length){
+      var cAt=rows[0].activeAccountAt||0, cAcc=rows[0].activeAccount;
+      var lAt=ls("activeAccountAt",0)||0;
+      if(cAcc&&cAt>lAt&&cAcc!==State.activeAccount){
+        State.activeAccount=cAcc;ss("activeAccount",cAcc);ss("activeAccountAt",cAt);
+        try{render();}catch(e){}
+      }
+    }
+  })
+  .catch(function(){})
+  .then(function(){return _syncToCloudNow();});
+}
+function _syncToCloudNow(){
   var id=getSyncId();
   var payload={
     user_id:id,
@@ -866,7 +884,7 @@ function checkCloudChanged(syncId,callback){
 function updateSyncStatus(status){
   var el=document.getElementById("sync-status");
   if(!el) return;
-  if(status==="synced"){el.textContent="✓ SYNCED v3";el.style.color="var(--green)";}
+  if(status==="synced"){el.textContent="✓ SYNCED v4";el.style.color="var(--green)";}
   else if(status==="syncing"){el.textContent="↻ SYNCING";el.style.color="var(--amber)";}
   else if(status==="error"){el.textContent="✗ SYNC ERR";el.style.color="var(--red)";}
   else if(status==="offline"){el.textContent="⊘ OFFLINE";el.style.color="var(--text3)";}
