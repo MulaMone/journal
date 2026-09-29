@@ -9315,7 +9315,6 @@ function assetEmojiHTML(label){
 function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartSym){
   var series=rows.map(function(r){return {v:r.c,l:r.d||""};}).filter(function(s){return typeof s.v==="number";});
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid "+accentColor+";border-radius:4px;padding:16px 18px;position:relative;";
-  if(chartSym) goToChartOnTap(card,chartSym);
   if(series.length<2){
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;'>"+assetLabelHTML(label)+"</div><div style='font-size:12px;color:var(--text3);margin-top:8px;'>Not enough data yet.</div>";
     return card;
@@ -9326,6 +9325,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior close</div>";
+  if(chartSym){ goToChartOnTap(card.children[1],chartSym); goToChartOnTap(card.children[2],chartSym); }
   if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
     liveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
@@ -9342,10 +9342,12 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
   }
   return card;
 }
-// Tap/click a card -> open that symbol in the Chart tab.
+// Tap/click the EOD quote (price + change line) -> open that symbol in the Chart tab.
 function goToChartOnTap(node,sym){
   node.style.cursor="pointer";
-  node.addEventListener("click",function(){
+  node.title="Open "+sym+" on chart";
+  node.addEventListener("click",function(e){
+    e.stopPropagation();
     State.chart_symbol=sym;
     State.chart_focus_ts=null;
     State.chart_selected_ids=[];
@@ -9364,12 +9366,12 @@ function buildDxyView(data,isM){
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
   var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid #00e676;border-radius:4px;padding:16px 18px;margin-bottom:14px;position:relative;";card.className="a-g2card";
-  goToChartOnTap(card,"DXY");
   var top=div("rjb");top.style.alignItems="flex-start";
   var l=div();
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML("US Dollar Index")+"</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+assetEmojiHTML("US Dollar Index")+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
+  goToChartOnTap(l.children[1],"DXY"); goToChartOnTap(l.children[2],"DXY");
   top.appendChild(l);
   card.appendChild(top);
   var dxyLiveBadge=div();dxyLiveBadge.id="live-dxy";
