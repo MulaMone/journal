@@ -1453,7 +1453,7 @@ function lineSVG(data,w,h2,col,fmt){
   // first and last so the axis reads as time rather than bare numbers.
   if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
   var lastL=data[data.length-1].l;
-  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
+  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#ffffff">'+lastL+'</text>';
   svg+='</svg>';
   var wrap=div("chart-wrap");wrap.style.height=h2+"px";wrap.innerHTML=svg;return wrap;
 }
@@ -1525,7 +1525,7 @@ function voiComboSVG(data,w,h2,sym){
   var labelEvery=Math.max(1,Math.ceil(n/6));
   data.forEach(function(d,i){
     if(i%labelEvery!==0&&i!==n-1) return;
-    svg+='<text x="'+bx(i)+'" y="'+(h2-3)+'" text-anchor="middle" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+d.d.slice(5)+'</text>';
+    svg+='<text x="'+bx(i)+'" y="'+(h2-3)+'" text-anchor="middle" font-size="8" font-family="Courier New,monospace" fill="'+(i===n-1?"#ffffff":"#4d7ab8")+'">'+d.d.slice(5)+'</text>';
   });
   svg+='</svg>';
   var wrap=div("chart-wrap");wrap.style.cssText="height:"+h2+"px;position:relative;";wrap.innerHTML=svg;
@@ -1632,7 +1632,7 @@ function areaSVG(data,w,h2,col,fmt){
   svg+='<path d="'+linePath+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
   if(data[0].l) svg+='<text x="'+padL+'" y="'+(h2-2)+'" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+data[0].l+'</text>';
   var lastL=data[data.length-1].l;
-  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#4d7ab8">'+lastL+'</text>';
+  if(lastL) svg+='<text x="'+(padL+W)+'" y="'+(h2-2)+'" text-anchor="end" font-size="8" font-family="Courier New,monospace" fill="#ffffff">'+lastL+'</text>';
   // ── Hover/touch crosshair — snaps to nearest data point, shows its
   // date on the x-axis and its value near the top-left. Hidden until
   // the first pointer interaction so it never appears in a static
