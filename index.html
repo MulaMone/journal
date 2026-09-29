@@ -6553,11 +6553,10 @@ function needToKnowSection(){
   grid.style.cssText="display:grid;gap:12px;grid-template-columns:"+(isMobile()?"1fr":"1fr 1fr");
   NTK_IMAGES.forEach(function(it,i){
     var t=div();
-    t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden";
-    var im=document.createElement("img");im.src=it.src;im.alt=it.title;im.loading="lazy";
-    im.style.cssText="width:100%;height:auto;display:block";
-    var cap=div();cap.style.cssText="padding:8px 10px;font-size:12px;color:var(--text)";cap.textContent=it.title+" — tap to enlarge";
-    t.appendChild(im);t.appendChild(cap);
+    t.style.cssText="cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px";
+    var l=document.createElement("span");l.textContent=it.title;
+    var r=document.createElement("span");r.textContent="View ›";r.style.cssText="color:var(--accent);white-space:nowrap";
+    t.appendChild(l);t.appendChild(r);
     t.onclick=function(){openNtkLightbox(i);};
     grid.appendChild(t);
   });
@@ -6595,7 +6594,6 @@ function notesTab(){
   var todaySession=sessionNotes[notesToday]||"";
 
   var sh=div("sh");sh.innerHTML="Notes";el.appendChild(sh);
-  el.appendChild(needToKnowSection());
 
   if(isM){
     // ── MOBILE: stacked cards ──
@@ -6938,6 +6936,7 @@ function notesTab(){
     el.appendChild(botG);
   }
 
+  el.appendChild(needToKnowSection());
   return el;
 }
 
