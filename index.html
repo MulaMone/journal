@@ -9856,27 +9856,36 @@ function analystTab(){
     tnote.textContent="Same free OANDA practice token as the Chart tab — used here to build a synthetic Dollar Index from six major FX pairs, since there's no free direct DXY feed. Stored client-side, visible in this page's source/network tab.";
     dxyBody.appendChild(tnote);
   }
+  function paintDxy(data,myToken){
+    dxyBody.innerHTML="";
+    dxyBody.appendChild(buildDxyView(data,isM));
+    dxyBody.style.opacity="1";
+    goldOilBody.innerHTML="";
+    goldOilBody.appendChild(buildGoldOilRow(data,isM));
+    goldOilBody.style.opacity="1";
+    var dxyRows=data.rows,goldRows=data.goldRows||[],oilRows=data.oilRows||[];
+    _dxyLiveBaselines={
+      dxy:dxyRows.length?dxyRows[dxyRows.length-1].c:null,
+      gold:goldRows.length?goldRows[goldRows.length-1].c:null,
+      oil:oilRows.length?oilRows[oilRows.length-1].c:null
+    };
+    updateDxyLiveBadges();
+  }
   function loadDxy(force){
     clearInterval(_dxyLiveTimer);
     if(!ls("oanda_token","")){renderDxyTokenGate();return;}
     var myToken=++_dxyLoadToken;
-    if(force&&dxyBody.firstChild){dxyBody.style.opacity="0.45";goldOilBody.style.opacity="0.45";}
+    // Always show the last cached EOD data immediately (even if stale) so the
+    // card + live badge never vanish behind a loading placeholder.
+    var cachedNow=_dxyMemCache||dxyCacheGet();
+    var hasCached=!!(cachedNow&&cachedNow.rows&&cachedNow.rows.length);
+    var showing=!!dxyBody.querySelector(".live-val,#live-dxy");
+    if(hasCached&&!showing){paintDxy(cachedNow,myToken);showing=true;}
+    if(showing){dxyBody.style.opacity="0.7";goldOilBody.style.opacity="0.7";}
     else showDxyLoading();
     loadDxyData(force).then(function(data){
       if(myToken!==_dxyLoadToken||State.tab!=="analyst") return;
-      dxyBody.innerHTML="";
-      dxyBody.appendChild(buildDxyView(data,isM));
-      dxyBody.style.opacity="1";
-      goldOilBody.innerHTML="";
-      goldOilBody.appendChild(buildGoldOilRow(data,isM));
-      goldOilBody.style.opacity="1";
-      var dxyRows=data.rows,goldRows=data.goldRows||[],oilRows=data.oilRows||[];
-      _dxyLiveBaselines={
-        dxy:dxyRows.length?dxyRows[dxyRows.length-1].c:null,
-        gold:goldRows.length?goldRows[goldRows.length-1].c:null,
-        oil:oilRows.length?oilRows[oilRows.length-1].c:null
-      };
-      updateDxyLiveBadges();
+      paintDxy(data,myToken);
       _dxyLiveTimer=setInterval(function(){
         if(myToken!==_dxyLoadToken||State.tab!=="analyst"){clearInterval(_dxyLiveTimer);return;}
         updateDxyLiveBadges();
@@ -9885,6 +9894,14 @@ function analystTab(){
       if(myToken!==_dxyLoadToken) return;
       if(err&&err.code==="NO_TOKEN"){renderDxyTokenGate();return;}
       dxyBody.style.opacity="1";goldOilBody.style.opacity="1";
+      if(showing){
+        // keep cached EOD card + live badge; keep live polling going
+        _dxyLiveTimer=setInterval(function(){
+          if(myToken!==_dxyLoadToken||State.tab!=="analyst"){clearInterval(_dxyLiveTimer);return;}
+          updateDxyLiveBadges();
+        },30000);
+        return;
+      }
       showDxyError(err&&err.message?err.message:"network error");
     });
   }
