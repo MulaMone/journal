@@ -9836,29 +9836,44 @@ function analystTab(){
       if(tc) paintTnxBadge(tc);
     }
   }
+  function paintYc(data){
+    ycBody.innerHTML="";
+    ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",State.analyst_yc_range||"1Y",data,isM));
+    ycBody.style.opacity="1";
+    y10Body.innerHTML="";
+    y10Body.appendChild(buildYieldLevelView("y10","10-Year Treasury Yield",State.analyst_yc_range||"1Y",data,isM));
+    y10Body.style.opacity="1";
+    var y10Rows=data.rows.filter(function(r){return typeof r.y10==="number";});
+    _tnxLiveBaseline=y10Rows.length?y10Rows[y10Rows.length-1].y10:null;
+    updateTnxLiveBadge();
+  }
+  function startTnxLiveTimer(myToken){
+    clearInterval(_tnxLiveTimer);
+    _tnxLiveTimer=setInterval(function(){
+      if(myToken!==_ycLoadToken||State.tab!=="analyst"){clearInterval(_tnxLiveTimer);return;}
+      updateTnxLiveBadge();
+    },30000);
+  }
+  // Same flow as loadDxy: show the last cached data immediately (never a loading
+  // placeholder over an already-visible card), dim while refreshing, and keep the
+  // live TNX badge polling even if the refresh fails.
   function loadYc(force){
     var myToken=++_ycLoadToken;
     clearInterval(_tnxLiveTimer);
-    if(force&&ycBody.firstChild){ycBody.style.opacity="0.45";y10Body.style.opacity="0.45";}
+    var cachedNow=_ycMemCache||ycCacheGet();
+    var hasCached=!!(cachedNow&&cachedNow.rows&&cachedNow.rows.length);
+    var showing=!!y10Body.querySelector("#live-tnx");
+    if(hasCached&&!showing){paintYc(cachedNow);showing=true;}
+    if(showing){ycBody.style.opacity="0.7";y10Body.style.opacity="0.7";}
     else showYcLoading();
     loadYieldCurveData(force).then(function(data){
       if(myToken!==_ycLoadToken||State.tab!=="analyst") return;
-      ycBody.innerHTML="";
-      ycBody.appendChild(buildYieldCurveView(State.analyst_yc_spread||"2s10s",State.analyst_yc_range||"1Y",data,isM));
-      ycBody.style.opacity="1";
-      y10Body.innerHTML="";
-      y10Body.appendChild(buildYieldLevelView("y10","10-Year Treasury Yield",State.analyst_yc_range||"1Y",data,isM));
-      y10Body.style.opacity="1";
-      var y10Rows=data.rows.filter(function(r){return typeof r.y10==="number";});
-      _tnxLiveBaseline=y10Rows.length?y10Rows[y10Rows.length-1].y10:null;
-      updateTnxLiveBadge();
-      _tnxLiveTimer=setInterval(function(){
-        if(myToken!==_ycLoadToken||State.tab!=="analyst"){clearInterval(_tnxLiveTimer);return;}
-        updateTnxLiveBadge();
-      },60000);
+      paintYc(data);
+      startTnxLiveTimer(myToken);
     }).catch(function(err){
       if(myToken!==_ycLoadToken) return;
       ycBody.style.opacity="1";y10Body.style.opacity="1";
+      if(showing){startTnxLiveTimer(myToken);return;}
       showYcError(err&&err.message?err.message:"network error");
     });
   }
