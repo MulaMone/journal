@@ -10801,10 +10801,10 @@ function pollCloud(){
     if(changed===false) return; // nothing new — skip the full fetch
     // changed===true or changed===null (check failed) fall through to the real load,
     // same as the old unconditional behavior, so a flaky check never blocks a real sync
-    var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
+    var snapBefore=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts,aa:State.activeAccount});
     loadFromCloud(currentId,function(ok){
       if(!ok) return;
-      var snapAfter=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts});
+      var snapAfter=JSON.stringify({trades:State.trades,levels:State.levels,weekLevels:State.weekLevels,accounts:State.accounts,aa:State.activeAccount});
       if(snapAfter!==snapBefore) render();
     });
   });
