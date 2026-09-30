@@ -586,8 +586,6 @@ function _syncToCloudNow(){
     // CME volume/OI card + chart data — synced too so a device that hasn't
     // fetched the bulletin itself (e.g. mobile) picks up whatever the last
     // device to fetch it saw, instead of needing its own manual refresh.
-    cme_oi:{ES:cmeOiCacheGet("ES"),NQ:cmeOiCacheGet("NQ")},
-    voi_hist:{ES:voiHistCacheGet("ES"),NQ:voiHistCacheGet("NQ")},
     settings:{
       note:State.note,wkGoal:State.wkGoal,moGoal:State.moGoal,
       mindsetChecks:State.mindsetChecks,mindsetChecksDate:State.mindsetChecksDate,
@@ -899,6 +897,47 @@ function checkImagesChanged(callback){
   .catch(function(){callback(null);});
 }
 
+// ── Market-data sync (CME OI/volume + Fed curve) ──
+// Lives in its OWN cloud row so a stale device pushing the main journal blob
+// can never overwrite it. Newest fetch wins on pull; union-by-date for history.
+function getMktSyncId(){return getSyncId()+"__mkt";}
+var _mktPullP=null,_mktPullAt=0;
+function _cmeEffAt(o){if(!o)return 0;var e=o.final||o.prelim;return e&&e.fetchedAt?e.fetchedAt:0;}
+function loadMktFromCloud(force){
+  if(!force&&_mktPullP&&(Date.now()-_mktPullAt)<20000) return _mktPullP;
+  _mktPullAt=Date.now();
+  _mktPullP=supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getMktSyncId())+"&select=settings")
+    .then(function(r){return r.json();}).then(function(rows){
+      var s=Array.isArray(rows)&&rows.length?rows[0].settings:null; if(!s) return false;
+      var changed=false;
+      ["ES","NQ"].forEach(function(sym2){
+        var c=s.cme_oi&&s.cme_oi[sym2];
+        if(c&&_cmeEffAt(c)>_cmeEffAt(cmeOiCacheGet(sym2))){cmeOiCacheSet(sym2,c);changed=true;}
+        var ch=s.voi_hist&&s.voi_hist[sym2];
+        if(ch&&ch.length){
+          var local=voiHistCacheGet(sym2),by={};
+          ch.forEach(function(r2){by[r2.d]=r2;});
+          local.forEach(function(r2){var o=by[r2.d];if(!o||r2.oi!=null||o.oi==null) by[r2.d]=r2;});
+          var out=Object.keys(by).sort().map(function(d){return by[d];}).slice(-180);
+          if(JSON.stringify(out)!==JSON.stringify(local)){voiHistCacheSet(sym2,out);changed=true;}
+        }
+      });
+      var ff=s.fedfunds,lf=fedFundsCacheGet();
+      if(ff&&ff.fetchedAt&&(!lf||ff.fetchedAt>(lf.fetchedAt||0))){fedFundsCacheSet(ff);changed=true;}
+      return changed;
+    }).catch(function(){return false;});
+  return _mktPullP;
+}
+function syncMktToCloud(){
+  return loadMktFromCloud(true).then(function(){
+    var payload={user_id:getMktSyncId(),trades:[],levels:[],week_levels:[],
+      settings:{cme_oi:{ES:cmeOiCacheGet("ES"),NQ:cmeOiCacheGet("NQ")},
+                voi_hist:{ES:voiHistCacheGet("ES"),NQ:voiHistCacheGet("NQ")},
+                fedfunds:fedFundsCacheGet()},
+      updated_at:new Date().toISOString()};
+    return supaFetch("POST","edge_data",payload);
+  }).catch(function(){});
+}
 // Cheap poll step: fetch only updated_at and compare to what we already have.
 // Only triggers the full select=* row (trades/levels/settings) via
 // loadFromCloud when the timestamp actually moved. Playbook images sync
@@ -7600,6 +7639,15 @@ function fetchCmeDailyOI(sym,statusCb){
   });
 }
 
+function ctWall(ms){var p={};new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",hour12:false}).formatToParts(new Date(ms)).forEach(function(x){p[x.type]=x.value;});return {y:+p.year,m:+p.month,d:+p.day,h:(+p.hour)%24,mi:+p.minute};}
+function ctMs(y,m,d,h,mi){var g=Date.UTC(y,m-1,d,h,mi);var w=ctWall(g);return g-(Date.UTC(w.y,w.m-1,w.d,w.h,w.mi)-g);}
+// Most recent CME publish boundary (prelim ~00:15 CT, final ~10:15 CT). Data fetched before it is stale.
+function cmeLastBoundaryMs(){
+  var n=ctWall(Date.now()),out=0;
+  [[0,15],[10,15]].forEach(function(b){var t=ctMs(n.y,n.m,n.d,b[0],b[1]);if(t<=Date.now()&&t>out)out=t;});
+  if(!out) out=ctMs(n.y,n.m,n.d-1,10,15);
+  return out;
+}
 function cmeOiCacheGet(sym){
   try{
     var raw=localStorage.getItem("edge_cme_oi_v6_"+sym);
@@ -7674,9 +7722,12 @@ function cmeOiFold(cached,fresh){
 // a Final snapshot for the current trade date yet, that overrides the 6h
 // window so we don't keep serving a stale Preliminary all day.
 function loadCmeDailyOI(sym,force,statusCb){
+  return loadMktFromCloud(false).then(function(){return loadCmeDailyOI2(sym,force,statusCb);});
+}
+function loadCmeDailyOI2(sym,force,statusCb){
   var cached=cmeOiCacheGet(sym);
   var lastFetchedAt=cached?((cached.final||cached.prelim||{}).fetchedAt):null;
-  var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000;
+  var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000||lastFetchedAt<cmeLastBoundaryMs();
   var missingFinal=cached&&!cached.final&&isPastCmeFinalTime();
   if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
@@ -7687,7 +7738,7 @@ function loadCmeDailyOI(sym,force,statusCb){
     // Push the freshly-fetched bulletin data up right away, so another
     // device (e.g. mobile) picks it up on its next poll instead of having
     // to fetch/parse the bulletin itself.
-    if(typeof syncToCloud==="function") syncToCloud();
+    syncMktToCloud();
     return folded;
   }).catch(function(err){
     if(cached) return cached;
@@ -8735,10 +8786,13 @@ function fetchFedFundsData(){
   });
 }
 function loadFedFundsData(force){
+  return loadMktFromCloud(false).then(function(){return loadFedFundsData2(force);});
+}
+function loadFedFundsData2(force){
   var cached=fedFundsCacheGet();
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000;
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000||cached.fetchedAt<cmeLastBoundaryMs();
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetchFedFundsData().then(function(data){fedFundsCacheSet(data);return data;}).catch(function(err){
+  return fetchFedFundsData().then(function(data){fedFundsCacheSet(data);syncMktToCloud();return data;}).catch(function(err){
     if(cached) return cached;
     throw err;
   });
@@ -9909,7 +9963,7 @@ function analystTab(){
   // switching spreads) never stack up duplicate timers.
   if(_ycAutoInterval) clearInterval(_ycAutoInterval);
   _ycAutoInterval=setInterval(function(){
-    if(State.tab==="analyst") loadYc(false);
+    if(State.tab==="analyst"){loadYc(false);loadCme(false);loadVoiChart(false);loadFed(false);}
   },15*60*1000);
 
   // ── Liquidity & Fed Balance Sheet — separate section, own data source ──
@@ -9951,7 +10005,7 @@ function analystTab(){
   function loadFed(force){
     var myToken=++_fedLoadToken;
     var fedHistP=loadFedProbFromCloud(); // must finish before the card reads history, or mobile renders off stale local rows
-    if(force&&fedBody.firstChild) fedBody.style.opacity="0.45";
+    if(fedBody.firstChild) fedBody.style.opacity="0.45";
     else showFedLoading();
     var liveMeetingIso=nextFomcMeetingISO();
     var liveMeetingCode=liveMeetingIso?contractMonthCodeFromISO(liveMeetingIso):null;
@@ -10072,9 +10126,7 @@ function analystTab(){
   // handler never stacks with this one.
   if(_analystVisHandler) document.removeEventListener("visibilitychange",_analystVisHandler);
   _analystVisHandler=function(){
-    // Fed intentionally excluded: it only changes when CME posts, and is
-    // reloaded on tab open or manual Refresh.
-    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadCme(false);loadVoiChart(false);loadYc(false);loadLiq(false);loadDxy(false);}
+    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadCme(false);loadVoiChart(false);loadYc(false);loadLiq(false);loadDxy(false);loadFed(false);}
   };
   document.addEventListener("visibilitychange",_analystVisHandler);
 
