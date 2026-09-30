@@ -5912,7 +5912,7 @@ function chartTab(){
             return nearest.close-p.price;
           }
 
-          var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});
+          var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
           var seenTs={};
           var lineData=[];
           var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
