@@ -9412,11 +9412,11 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
     +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior close</div>";
-  if(chartSym){ goToChartOnTap(card.children[1],chartSym); goToChartOnTap(card.children[2],chartSym); }
-  if(liveId){
+    if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
     liveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
     liveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-chg' style='font-size:10px;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'></div>";
+    if(chartSym) goToChartOnTap(liveBadge,chartSym);
     card.appendChild(liveBadge);
   }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
@@ -9429,7 +9429,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
   }
   return card;
 }
-// Tap/click the EOD quote (price + change line) -> open that symbol in the Chart tab.
+// Tap/click the live quote badge -> open that symbol in the Chart tab.
 function goToChartOnTap(node,sym){
   node.style.cursor="pointer";
   node.title="Open "+sym+" on chart";
@@ -9458,12 +9458,13 @@ function buildDxyView(data,isM){
   l.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML("US Dollar Index")+"</div>"
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+assetEmojiHTML("US Dollar Index")+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(2)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior print</div>";
-  goToChartOnTap(l.children[1],"DXY"); goToChartOnTap(l.children[2],"DXY");
+
   top.appendChild(l);
   card.appendChild(top);
   var dxyLiveBadge=div();dxyLiveBadge.id="live-dxy";
   dxyLiveBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
   dxyLiveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-chg' style='font-size:10px;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'></div>";
+  goToChartOnTap(dxyLiveBadge,"DXY");
   card.appendChild(dxyLiveBadge);
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:100px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isM?300:640,100,"#00e676",function(v){return v.toFixed(1);}));
