@@ -6659,7 +6659,7 @@ function openNtkLightbox(idx){
   ov.addEventListener("touchmove",function(e){if(!zoom&&e.touches.length<2)e.preventDefault();},{passive:false});
   box.appendChild(img);ov.appendChild(bar);ov.appendChild(box);
   function show(){
-    var it=NTK_IMAGES[cur];img.src=it.src;img.alt=it.title;ttl.textContent=it.title+"  ("+(cur+1)+"/"+NTK_IMAGES.length+")";
+    var it=NTK_IMAGES[cur];img.src=it.src;img.alt=it.title;ttl.textContent=it.title+"  ("+(cur+1)+"/"+NTK_IMAGES.length+")";ttl.style.color=NTK_COLORS[it.g]||"#fff";
     if(zoom){img.style.cssText="width:250%;max-width:none;height:auto;cursor:zoom-out;margin:auto";box.style.alignItems="flex-start";box.style.justifyContent="flex-start";zb.textContent="Fit";}
     else{img.style.cssText="max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;margin:auto";box.style.alignItems="center";box.style.justifyContent="center";zb.textContent="Zoom";}
   }
