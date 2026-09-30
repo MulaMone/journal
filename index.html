@@ -5533,7 +5533,14 @@ function chartTab(){
   eyeBtn.style.cssText="display:flex;align-items:center;justify-content:center;padding:6px 10px;"+(showTrades?"border-color:var(--accent);color:var(--accent);":"border-color:var(--border);color:var(--text3);");
   eyeBtn.innerHTML=showTrades?EYE_OPEN:EYE_OFF;
   eyeBtn.title=showTrades?"Hide trade markers":"Show trade markers";
-  eyeBtn.addEventListener("click",function(){State.chart_show_trades=!showTrades;render();});
+  var applyTradeVisibility=null;
+  eyeBtn.addEventListener("click",function(){
+    showTrades=!showTrades;State.chart_show_trades=showTrades;
+    eyeBtn.style.cssText="display:flex;align-items:center;justify-content:center;padding:6px 10px;"+(showTrades?"border-color:var(--accent);color:var(--accent);":"border-color:var(--border);color:var(--text3);");
+    eyeBtn.innerHTML=showTrades?EYE_OPEN:EYE_OFF;
+    eyeBtn.title=showTrades?"Hide trade markers":"Show trade markers";
+    if(applyTradeVisibility)applyTradeVisibility();
+  });
   ctrlRow.appendChild(eyeBtn);
 
   if(focusTs){
@@ -5877,9 +5884,10 @@ function chartTab(){
       // Narrow further to whatever the person has checked in the list below.
       // Empty selection = show everything in the window (the default).
       var selectedIds=State.chart_selected_ids||[];
-      var displayPoints=(State.chart_show_trades===false)?[]:(selectedIds.length
+      var displayPoints=(selectedIds.length
         ? windowPoints.filter(function(p){return selectedIds.indexOf(p.id)>-1;})
         : windowPoints);
+      applyTradeVisibility=null;
 
       if(windowPoints.length){
         if(displayPoints.length){
@@ -5939,7 +5947,8 @@ function chartTab(){
             };
           });
           markerSeries.setData(lineData);
-          markerSeries.setMarkers(markers);
+          applyTradeVisibility=function(){markerSeries.setMarkers(showTrades?markers:[]);if(!showTrades)tip.style.display="none";};
+          markerSeries.setMarkers(showTrades?markers:[]);
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
           note.textContent="OANDA (each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
@@ -5953,7 +5962,7 @@ function chartTab(){
           tip.style.cssText="position:absolute;pointer-events:none;display:none;z-index:20;background:var(--panel2);border:1px solid var(--border2);border-radius:4px;padding:8px 10px;font-family:monospace;font-size:11px;color:var(--text);white-space:nowrap;box-shadow:0 4px 12px #00000060;";
           chartDiv.appendChild(tip);
           chart.subscribeCrosshairMove(function(param){
-            if(!param||!param.point){tip.style.display="none";return;}
+            if(!showTrades||!param||!param.point){tip.style.display="none";return;}
             var mx=param.point.x,my=param.point.y;
             var best=null,bestD=18*18; // 18px hit radius
             for(var i=0;i<hoverPoints.length;i++){
