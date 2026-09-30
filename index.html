@@ -2229,7 +2229,7 @@ function openSettings(){
   }));
   body.appendChild(actionRow("Delete All Trades","Permanently removes all trades for the active account","DELETE","var(--red)",function(){
     // Passcode modal
-    var pc=document.createElement("div");
+    var pc=document.createElement("div");pc.id="pc-modal";
     pc.style.cssText="position:fixed;inset:0;background:#00000090;z-index:10000;display:flex;align-items:center;justify-content:center;";
     var pcBox=document.createElement("div");
     pcBox.style.cssText="background:var(--panel);border:1px solid var(--red);border-radius:5px;width:300px;font-family:'Courier New',monospace;overflow:hidden;";
@@ -4243,7 +4243,7 @@ function playbookTab(){
     var lbName=State.pb_lightbox.name,lbIdx=State.pb_lightbox.idx;
     var lbImages=getSetupImages(lbName);
     if(lbImages[lbIdx]!==undefined){
-      var lbOverlay=div();
+      var lbOverlay=div();lbOverlay.id="pb-lightbox";
       lbOverlay.style.cssText="position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:8px;";
       lbOverlay.addEventListener("click",function(e){if(e.target===lbOverlay){State.pb_lightbox=null;render();}});
       var lbBox=div();lbBox.style.cssText="max-width:97vw;max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:12px;";
@@ -10767,6 +10767,28 @@ function render(){
   }
   if(_firstRender){ window.scrollTo(0,0); _firstRender=false; }
 }
+
+// ─── GLOBAL MODAL SCROLL LOCK ─────────────────────────────────────
+var _sl={on:false,y:0,sv:null,raf:0};
+var _SL_IDS=["ot-modal","liq-info-modal","voi-cheatsheet-modal","settings-modal","pc-modal","pb-lightbox","edge-lock"];
+function scrollLockCheck(){
+  var open=_SL_IDS.some(function(id){var e=document.getElementById(id);return e&&getComputedStyle(e).display!=="none";});
+  var bs=document.body.style,hs=document.documentElement.style;
+  if(open&&!_sl.on){
+    _sl.on=true;_sl.y=window.scrollY||document.documentElement.scrollTop||0;
+    _sl.sv={p:bs.position,t:bs.top,w:bs.width,o:bs.overflow,ho:hs.overflow};
+    bs.position="fixed";bs.top=(-_sl.y)+"px";bs.width="100%";bs.overflow="hidden";hs.overflow="hidden";
+  }else if(!open&&_sl.on){
+    _sl.on=false;var s=_sl.sv;
+    bs.position=s.p;bs.top=s.t;bs.width=s.w;bs.overflow=s.o;hs.overflow=s.ho;
+    window.scrollTo(0,_sl.y);
+  }
+}
+new MutationObserver(function(){
+  if(_sl.raf)return;
+  _sl.raf=requestAnimationFrame(function(){_sl.raf=0;scrollLockCheck();});
+}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["style"]});
+scrollLockCheck();
 
 // ─── INIT ─────────────────────────────────────────────────────────
 // Mobile mode: auto-detect on first visit only, never reset after that
