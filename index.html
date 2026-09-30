@@ -2588,7 +2588,20 @@ function mobileStreakDots(trades,n){
 }
 
 // ─── HOME TAB ─────────────────────────────────────────────────────────
+var _newsSyncDay=null;
+function syncTodayNews(){
+  var etToday=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
+  if(_newsSyncDay===etToday) return;
+  _newsSyncDay=etToday;
+  var changed=autoSelectNewsLabels(computeTodayMacroEvents(etToday));
+  loadLocalCalendar(false).then(function(data){
+    var todays=data.rows.filter(function(ev){return ev.date&&ev.date.slice(0,10)===etToday&&ev.country==="USD"&&ev.impact==="High";}).map(function(ev){return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};});
+    if(autoSelectNewsLabels(todays)&&State.tab==="home") render();
+  }).catch(function(){});
+  if(changed&&State.tab==="home") setTimeout(render,0);
+}
 function homeTab(){
+  syncTodayNews();
   if(isMobile()) return mobileHomeTab();
   var el=div();
   var td=sessionToday();
