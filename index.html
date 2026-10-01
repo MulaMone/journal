@@ -3036,9 +3036,9 @@ function localCalendarCacheGet(){try{var raw=localStorage.getItem("edge_local_ca
 function localCalendarCacheSet(obj){try{localStorage.setItem("edge_local_calendar_v1",JSON.stringify(obj));}catch(e){}}
 function loadLocalCalendar(force){
   var cached=localCalendarCacheGet();
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>3*60*60*1000;
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>5*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetch(LOCAL_CALENDAR_URL+(force?"?_="+Date.now():"")).then(function(r){
+  return fetch(LOCAL_CALENDAR_URL+"?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(data){
