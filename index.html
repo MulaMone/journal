@@ -2640,6 +2640,33 @@ function syncTodayNews(){
   }).catch(function(){});
   if(changed&&State.tab==="home") setTimeout(render,0);
 }
+// ─── OPEX SCHEDULE ───────────────────────────────────────────────────
+// Monthly options expiration: third Friday, shifted to Thursday on an exchange holiday.
+// Hardcoded; add the next year when it rolls over. Mar/Jun/Sep/Dec are quarterly.
+var OPEX_DATES=["2026-01-16","2026-02-20","2026-03-20","2026-04-17","2026-05-15","2026-06-18","2026-07-17","2026-08-21","2026-09-18","2026-10-16","2026-11-20","2026-12-18",
+"2027-01-15","2027-02-19","2027-03-19","2027-04-16","2027-05-21","2027-06-17","2027-07-16","2027-08-20","2027-09-17","2027-10-15","2027-11-19","2027-12-17"];
+var OPEX_MOVED={"2026-06-18":"Juneteenth","2027-06-17":"Juneteenth"};
+var OPEX_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function opexLocalISO(){var d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function opexIsQuarterly(iso){var m=parseInt(iso.slice(5,7),10);return m%3===0;}
+function opexParse(iso){var p=iso.split("-");return new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10));}
+// Returns {iso,quarterly,day:"FRI"|"THU",md:"10/16"} when today falls Mon–Fri of an expiry week, else null
+function opexWeekInfo(){
+  var t=opexParse(opexLocalISO());
+  for(var i=0;i<OPEX_DATES.length;i++){
+    var e=opexParse(OPEX_DATES[i]);
+    var dow=e.getDay();
+    var mon=new Date(e.getFullYear(),e.getMonth(),e.getDate()-(dow-1));
+    var fri=new Date(e.getFullYear(),e.getMonth(),e.getDate()+(5-dow));
+    if(t>=mon&&t<=fri){
+      return {iso:OPEX_DATES[i],quarterly:opexIsQuarterly(OPEX_DATES[i]),day:dow===5?"FRI":"THU",md:OPEX_DATES[i].slice(5,7)+"/"+OPEX_DATES[i].slice(8,10)};
+    }
+  }
+  return null;
+}
+// Home badge colors: monthly red, quarterly purple
+function opexBadgeColor(info){return info.quarterly?"#b06aff":"#ff4444";}
+
 function homeTab(){
   syncTodayNews();
   if(isMobile()) return mobileHomeTab();
@@ -2729,8 +2756,10 @@ function homeTab(){
   var ttWr=div("mt8");ttWr.style.fontSize="12px";
   ttWr.innerHTML='<span style="color:#c9a84c">Win rate: '+s.wr+'%</span>  <span style="color:#00e676;font-weight:700">Avg W: $'+Math.abs(s.avgW).toFixed(2)+'</span>  <span style="color:#ff4444;font-weight:700">Avg L: $'+Math.abs(s.avgL).toFixed(2)+'</span>';
   totalCard.appendChild(ttWr);
-  var ttRR=div("mt8");ttRR.style.cssText="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;";
-  ttRR.textContent="R:R  "+(s.avgL&&s.avgW?Math.abs(s.avgW/s.avgL).toFixed(2):"—");
+  var ttRR=div("mt8");ttRR.style.cssText="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;";
+  var ttRRtxt=span();ttRRtxt.textContent="R:R  "+(s.avgL&&s.avgW?Math.abs(s.avgW/s.avgL).toFixed(2):"—");ttRR.appendChild(ttRRtxt);
+  var _opx=opexWeekInfo();
+  if(_opx){var _opc=opexBadgeColor(_opx);var _opb=span();_opb.style.cssText="font-size:10px;font-weight:700;letter-spacing:1px;color:"+_opc+";background:"+_opc+"20;border:1px solid "+_opc+"50;border-radius:2px;padding:1px 6px;";_opb.textContent=(_opx.quarterly?"QUARTERLY OPEX":"OPEX WEEK")+" · "+_opx.day+" "+_opx.md;ttRR.appendChild(_opb);}
   totalCard.appendChild(ttRR);
   heroRow.appendChild(totalCard);
   el.appendChild(heroRow);
@@ -3483,6 +3512,37 @@ function prepTab(){
   newsOtherI.addEventListener("input",function(){State.newsOther=newsOtherI.value;ss("newsOther",State.newsOther);});newsCard.appendChild(newsOtherI);
   el.appendChild(newsCard);
 
+  // ── OPEX schedule (next 4 quarters; expired dates drop off) ──
+  var opCard=div("card mb12");
+  var opH=div("card-h");var opT=div("card-t");opT.textContent="OPEX Schedule";opH.appendChild(opT);opCard.appendChild(opH);
+  var opToday=opexLocalISO();
+  var opNext=null;OPEX_DATES.forEach(function(d){if(!opNext&&d>=opToday)opNext=d;});
+  var opQs=[];
+  OPEX_DATES.forEach(function(d){
+    if(d<opToday) return;
+    var yr=d.slice(0,4),q=Math.floor((parseInt(d.slice(5,7),10)-1)/3)+1,key=yr+"-"+q;
+    var row=opQs.length?opQs[opQs.length-1]:null;
+    if(!row||row.key!==key){row={key:key,label:"Q"+q+" "+yr,dates:[]};opQs.push(row);}
+    row.dates.push(d);
+  });
+  opQs.slice(0,4).forEach(function(q){
+    var r=div("row gap8");r.style.cssText="padding:9px 0;border-top:1px solid var(--border);align-items:center;flex-wrap:wrap;";
+    var ql=span();ql.style.cssText="width:74px;font-size:12px;color:var(--text3);letter-spacing:1px;flex-shrink:0;";ql.textContent=q.label;r.appendChild(ql);
+    var dd=span();dd.style.cssText="font-size:15px;font-weight:700;letter-spacing:1px;";
+    q.dates.forEach(function(d,i){
+      if(i){var sp=span();sp.style.cssText="color:var(--text3);font-weight:400;margin:0 6px;";sp.textContent="·";dd.appendChild(sp);}
+      var ds=span();ds.textContent=OPEX_MON[parseInt(d.slice(5,7),10)-1]+" "+parseInt(d.slice(8,10),10);
+      ds.style.color=d===opNext?"var(--accent)":(opexIsQuarterly(d)?"#b06aff":"var(--text)");
+      dd.appendChild(ds);
+    });
+    r.appendChild(dd);
+    q.dates.forEach(function(d){if(OPEX_MOVED[d]){var nt=span();nt.style.cssText="font-size:11px;color:var(--amber);margin-left:auto;";nt.textContent=OPEX_MON[parseInt(d.slice(5,7),10)-1]+" moved — "+OPEX_MOVED[d];r.appendChild(nt);}});
+    opCard.appendChild(r);
+  });
+  var opFt=div("xs");opFt.style.cssText="color:var(--text3);font-size:11px;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;";
+  opFt.innerHTML='Third Friday, shifted to Thursday on an exchange holiday. <span style="color:#b06aff">Purple</span> = quarterly. <span style="color:var(--accent)">Cyan</span> = next up.';
+  opCard.appendChild(opFt);
+  el.appendChild(opCard);
 
   return el;
 }
@@ -6228,9 +6288,11 @@ function mobileHomeTab(){
   var statRow=document.createElement("div");statRow.className="m-stat-row";
   var sc1=document.createElement("div");sc1.className="m-stat-card hero"+(tPnl<0?" neg":"");
   sc1.innerHTML='<div class="m-stat-lbl">Today P&L</div><div class="m-stat-val '+(tPnl>=0?"g":"r")+'">'+dol(tPnl)+'</div><div class="m-stat-sub">'+todayTrades.length+' trades · '+tW+'W/'+tL+'L · '+tpts.toFixed(1)+' pts</div>';
-  var sc2=document.createElement("div");sc2.className="m-stat-card";
+  var sc2=document.createElement("div");sc2.className="m-stat-card";sc2.style.position="relative";
   var _mca=(function(){if(!State.activeAccount||!State.accounts||!State.accounts.length)return null;return State.accounts.find(function(x){return x.id===State.activeAccount;})||null;})();
   sc2.innerHTML='<div class="m-stat-lbl">Win Rate</div><div class="m-stat-val ac">'+s.wr+'%</div><div class="m-stat-sub">'+_mat.length+' trades'+(_mca?' &middot; <span style="color:var(--ca);font-weight:700;">'+_mca.name.toUpperCase()+'</span>':'')+'</div>';
+  var _mopx=opexWeekInfo();
+  if(_mopx){var _mopc=opexBadgeColor(_mopx);var _mopb=document.createElement("div");_mopb.style.cssText="position:absolute;top:9px;right:9px;font-size:9px;font-weight:700;letter-spacing:.5px;color:"+_mopc+";background:"+_mopc+"20;border:1px solid "+_mopc+"50;border-radius:3px;padding:1px 4px;line-height:1.2;";_mopb.textContent=(_mopx.quarterly?"Q-OPEX ":"OPEX ")+_mopx.day;sc2.appendChild(_mopb);}
   statRow.appendChild(sc1);statRow.appendChild(sc2);
   el.appendChild(statRow);
 
