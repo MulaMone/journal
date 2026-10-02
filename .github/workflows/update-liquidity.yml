@@ -2,18 +2,15 @@ name: Update liquidity data
 
 on:
   schedule:
-    # Fires twice each Thursday — ~5:33pm EDT and ~5:33pm EST — since
-    # GitHub Actions cron is fixed UTC and doesn't shift for daylight
-    # saving. Offset to :33 rather than the exact half-hour mark: GitHub's
-    # own docs flag :00/:15/:30/:45 as high-load times since scheduled
-    # workflows across all of GitHub tend to cluster there, which can
-    # queue/delay runs. The "Check local time" guard step below verifies
-    # it's actually ~5:30pm America/New_York before doing anything, so
-    # whichever trigger doesn't match the current DST state just no-ops —
-    # self-correcting across the Nov/March changeovers with no manual
-    # cron edits ever needed.
+    # Thursday evening, right after the H.4.1 release (~4:30pm ET) — fires
+    # twice (EDT/EST) since GitHub cron is fixed UTC. Offset to :33 to avoid
+    # the :00/:15/:30/:45 high-load times.
     - cron: "33 21 * * 4"  # ~5:33pm EDT
     - cron: "33 22 * * 4"  # ~5:33pm EST
+    # Friday morning catch-up — covers the case where FRED hadn't posted the
+    # new print yet on Thursday evening, or the Thursday run was delayed/skipped.
+    - cron: "33 12 * * 5"  # ~8:33am EDT
+    - cron: "33 13 * * 5"  # ~8:33am EST
   workflow_dispatch: {}
 
 permissions:
@@ -36,10 +33,12 @@ jobs:
           from zoneinfo import ZoneInfo
           from datetime import datetime
           now = datetime.now(ZoneInfo('America/New_York'))
-          # Only proceed if it's actually ~5:00-6:00pm Eastern right now —
-          # exactly one of the two scheduled triggers will land in this
-          # window on any given Thursday, the other silently skips.
-          proceed = 17 <= now.hour < 18
+          # Thursday: any time from 5pm ET on (tolerates delayed runs).
+          # Friday: 8:00-9:00am ET. The cron that doesn't match the current
+          # DST state no-ops via this check. A run that lands twice in the
+          # window is harmless — unchanged data means no commit.
+          wd, h = now.weekday(), now.hour
+          proceed = (wd == 3 and h >= 17) or (wd == 4 and 8 <= h < 9)
           print('local time is', now.isoformat(), '— proceed:', proceed)
           import os
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
