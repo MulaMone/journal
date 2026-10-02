@@ -8072,11 +8072,14 @@ function liqCacheSet(obj){
 }
 function loadLiquidityData(force){
   var cached=_liqMemCache||liqCacheGet();
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>30*60*1000;
+  // 5-min window (was 30): the data is a cheap live call now, and a long window is what left a
+  // backgrounded phone on last week's print after desktop had already pulled the new one.
+  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>5*60*1000;
   if(cached&&!force&&!stale) return Promise.resolve(cached);
   // Live from the `liquidity` edge function (FRED direct); falls back to the
   // Action-written liquidity.json if the function errors.
   return fetch(SUPA_URL+"/functions/v1/liquidity",{
+    cache:"no-store",
     headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
   }).then(function(r){
     if(!r.ok) throw new Error("edge HTTP "+r.status);
