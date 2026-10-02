@@ -7961,6 +7961,8 @@ var _ycLoadToken=0;
 var _fedLoadToken=0;
 var _ycAutoInterval=null;
 var _analystVisHandler=null; // current visibilitychange catch-up, re-bound each Analyst-tab render
+var _analystResumeEvents=["visibilitychange","pageshow","focus"];
+var _mktPollInterval=null; // cheap poll of the shared market-data cloud row while Analyst is open
 function ycCacheGet(){
   try{var raw=localStorage.getItem("edge_yc_v2");return raw?JSON.parse(raw):null;}catch(e){return null;}
 }
@@ -10186,11 +10188,25 @@ function analystTab(){
   // window — same threshold as any normal load, no extra API calls for a
   // quick app-switch and back. Re-bound each render so a stale prior
   // handler never stacks with this one.
-  if(_analystVisHandler) document.removeEventListener("visibilitychange",_analystVisHandler);
+  // CME OI/volume + Fed curve live in their own cloud row (written by whichever
+  // device captured the bulletin). Force that pull past the 20s throttle and the
+  // 6h/12h staleness gates, then repaint OI, volume chart and Fed from the cache.
+  // onlyIfChanged=true (background poll) skips the repaint when nothing moved.
+  function refreshMktSections(onlyIfChanged){
+    if(State.tab!=="analyst"||document.hidden) return;
+    loadMktFromCloud(true).then(function(changed){
+      if(onlyIfChanged&&!changed) return;
+      loadCme(false);loadVoiChart(false);loadFed(false);
+    });
+  }
+  _analystResumeEvents.forEach(function(ev){(ev==="visibilitychange"?document:window).removeEventListener(ev,_analystVisHandler);});
   _analystVisHandler=function(){
-    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadCme(false);loadVoiChart(false);loadYc(false);loadLiq(false);loadDxy(false);loadFed(false);}
+    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadYc(false);loadLiq(false);loadDxy(false);refreshMktSections(false);}
   };
-  document.addEventListener("visibilitychange",_analystVisHandler);
+  // iOS home-screen PWAs don't reliably fire visibilitychange on resume — pageshow/focus cover that.
+  _analystResumeEvents.forEach(function(ev){(ev==="visibilitychange"?document:window).addEventListener(ev,_analystVisHandler);});
+  if(_mktPollInterval) clearInterval(_mktPollInterval);
+  _mktPollInterval=setInterval(function(){refreshMktSections(true);},60000);
 
   // ── Soft divider before More Macro ──
   var cotBottomDivider=div();
