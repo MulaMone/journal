@@ -5726,7 +5726,7 @@ function chartTab(){
   trades.forEach(function(t){
     var d=tradeTs(t);
     if(d&&t.entry!=null){
-      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate});
+      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate,d:t.d});
     }
     if(t.xdate&&t.xtime&&t.exit!=null){
       // Real exit timestamp — captured on import (Tradovate/NinjaTrader/forex
@@ -6050,7 +6050,7 @@ function chartTab(){
           applyTradeVisibility=function(){markerSeries.setMarkers(showTrades?markers:[]);if(!showTrades)tip.style.display="none";};
           markerSeries.setMarkers(showTrades?markers:[]);
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent="OANDA (each marker individually aligned to its nearest candle) • "+tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
           // ── Hover tooltip ───────────────────────────────────
           // lightweight-charts has no built-in per-marker hover event, so we
@@ -6126,7 +6126,7 @@ function chartTab(){
         // aligned regardless of container width.
         windowPoints.filter(function(p){return p.kind==="entry";}).slice().reverse().forEach(function(p){
           var row=div();
-          row.style.cssText="display:grid;grid-template-columns:auto auto 1fr;column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace;font-size:12px;cursor:pointer;";
+          row.style.cssText="display:grid;grid-template-columns:auto auto 1fr auto;column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace;font-size:12px;cursor:pointer;";
           var cb=h("input",{type:"checkbox"});
           cb.style.cssText="grid-row:1;grid-column:1;";
           cb.checked=selectedIds.indexOf(p.id)>-1;
@@ -6146,6 +6146,11 @@ function chartTab(){
           row.appendChild(when);
           var px=span();px.style.cssText="grid-row:2;grid-column:2/4;color:var(--text3);";px.textContent=p.entry+" → "+p.exit+" ("+p.ctr+")"+(p.hasExitTime?"":" · exit time unknown");
           row.appendChild(px);
+          var pnlEl=span();
+          var pv=(typeof p.d==="number"&&!isNaN(p.d))?p.d:null;
+          pnlEl.style.cssText="grid-row:1/3;grid-column:4;text-align:right;font-weight:700;color:"+(pv==null?"var(--text3)":(pv>=0?"var(--green)":"var(--red)"))+";";
+          pnlEl.textContent=pv==null?"—":(pv>=0?"+":"")+dol(pv);
+          row.appendChild(pnlEl);
           listWrap.appendChild(row);
         });
         el.appendChild(listWrap);
@@ -10294,7 +10299,7 @@ function openAnalysisTab(){
     {id:"otd",title:"Open Test Drive",col:"var(--accent)",desc:"Tests one side first. Finds no participation. Reverses and drives opposite direction.",note:"Often leads to trend days."},
     {id:"orr",title:"Open Rejection Reverse",col:"var(--amber)",desc:"Early move gets rejected. Market reverses through the open.",note:"Classic trap setup."},
     {id:"oair",title:"Open Auction In Range",col:"var(--text3)",desc:"Opens in value. Rotates around. Lowest conviction.",note:"Good for responsive trading."},
-    {id:"oaor",title:"Open Auction Out Of Range",col:"var(--ca)",desc:"Opens outside value. No immediate continuation.",note:"Wait for acceptance or rejection."}
+    {id:"oaor",title:"Open Auction Out Of Range",col:"#ff5fd2",desc:"Opens outside value. No immediate continuation.",note:"Wait for acceptance or rejection."}
   ];
 
   // SVG diagram builder for each open type
@@ -10384,7 +10389,7 @@ function openAnalysisTab(){
       svgParts.push(line(AX+42,oy-4,AX+42,oy-14*above.length-4,'#e05555'));
       svgParts.push(line(AX+54,oy+14,AX+54,oy+14+(below.length*S),'#e05555'));
       svgParts.push(line(AX+66,oy-4,AX+66,oy-14*above.length-4,'#e05555'));
-      conviction='MED-LOW';convCol='#ff8c00';
+      conviction='MED-LOW';convCol='#ff5fd2';
     } else {
       // Open Auction In Range: opens in value, rotates
       var oy=154;
