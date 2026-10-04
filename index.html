@@ -6745,7 +6745,10 @@ var NTK_IMAGES=[
   {g:"Volume Profile",src:"need-to-know-4.png",title:"Volume Profile / Market Profile"},
   {g:"Volume Profile",src:"need-to-know-6.png",title:"How High and Low Volume Nodes Behave"}
 ];
+var NTK_CACHE=[];
+function ntkPreload(){if(NTK_CACHE.length)return;NTK_IMAGES.forEach(function(it){var im=new Image();im.src=it.src;if(im.decode)im.decode().catch(function(){});NTK_CACHE.push(im);});}
 function openNtkLightbox(idx){
+  ntkPreload();
   var old=document.getElementById("ntk-lb");if(old)old.remove();
   var cur=idx,zoom=false;
   var sy=window.scrollY||document.documentElement.scrollTop||0,bs=document.body.style,hs=document.documentElement.style;
@@ -6790,6 +6793,7 @@ function openNtkLightbox(idx){
   document.body.appendChild(ov);show();
 }
 function needToKnowSection(){
+  ntkPreload();
   var card=div();
   card.style.cssText="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px";
   var hd=div();hd.style.cssText="font-size:15px;font-weight:700;color:var(--ca);margin-bottom:10px";hd.textContent="Need to Know";
