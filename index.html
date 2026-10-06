@@ -2670,10 +2670,11 @@ function opexBadgeColor(info){return info.quarterly?"#b06aff":"#ff4444";}
 
 // ─── RANGE BAR ATR CALCULATOR (home card) ────────────────────────────
 function rangeAtrCard(){
-  var INS={ES:[.25,12.5],MES:[.25,1.25],NQ:[.25,5],MNQ:[.25,.5],YM:[1,5],RTY:[.1,5],CL:[.01,10],GC:[.1,10],Custom:null};
+  var INS={ES:[.25,12.5],NQ:[.25,5]};
   var AP=[{n:"Micro-Scalping / Order Flow",lo:10,hi:20},{n:"Intraday Structure / VWAP",lo:25,hi:35},{n:"Intraday Trend / Swing",lo:50,hi:50,plus:true}];
   var mob=isMobile();
-  var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1,ts:0.25,tv:12.5});
+  var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1});
+  if(!INS[S.ins]) S.ins="ES";
   var el=div(mob?"m-eq-card":"card");
   if(!mob) el.style.marginBottom="12px";
   var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
@@ -2687,19 +2688,14 @@ function rangeAtrCard(){
       '<div><div style="'+lbl+'">ATR UNIT</div><div style="display:flex"><button class="ra-u" data-u="pts" style="'+segB+'">PTS</button><button class="ra-u" data-u="ticks" style="'+segB+'">TICKS</button></div></div>'+
       '<div><div style="'+lbl+'">CUSTOM % OF ATR</div><input class="ra-pct" type="number" min="0" step="any" placeholder="e.g. 15" value="'+S.pct+'"></div>'+
     '</div>'+
-    '<div class="ra-cust" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-      '<div><div style="'+lbl+'">TICK SIZE (PTS)</div><input class="ra-ts" type="number" step="any" value="'+S.ts+'"></div>'+
-      '<div><div style="'+lbl+'">TICK VALUE ($)</div><input class="ra-tv" type="number" step="any" value="'+S.tv+'"></div>'+
-    '</div>'+
     '<div class="ra-aps"></div>'+
     '<div class="ra-out" style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--ca);border-radius:3px;padding:12px;margin-top:10px"></div>';
   var q=function(c){return el.querySelector(c)};
   function f(n,d){return isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):"\u2014"}
   function kv(a,b){return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--text3)">'+a+'</span><span>'+b+'</span></div>'}
-  function inst(){return S.ins==="Custom"?[parseFloat(S.ts)||0,parseFloat(S.tv)||0]:INS[S.ins]}
+  function inst(){return INS[S.ins]}
   function save(){try{localStorage.setItem("edge_rbatr",JSON.stringify(S))}catch(e){}}
   function calc(){
-    q(".ra-cust").style.display=S.ins==="Custom"?"grid":"none";
     [].forEach.call(el.querySelectorAll(".ra-u"),function(b){var on=b.dataset.u===S.unit;b.style.background=on?"var(--accent)":"var(--bg)";b.style.color=on?"#04202a":"var(--text3)";b.style.fontWeight=on?"700":"400"});
     var i=inst(),ts=i[0],tv=i[1];
     var a=parseFloat(S.atr)||0, atrTk=ts>0?(S.unit==="pts"?a/ts:a):0, atrPts=atrTk*ts;
@@ -2724,8 +2720,6 @@ function rangeAtrCard(){
   q(".ra-ins").addEventListener("change",function(e){S.ins=e.target.value;save();calc()});
   q(".ra-atr").addEventListener("input",function(e){S.atr=e.target.value;save();calc()});
   q(".ra-pct").addEventListener("input",function(e){S.pct=e.target.value;save();calc()});
-  q(".ra-ts").addEventListener("input",function(e){S.ts=e.target.value;save();calc()});
-  q(".ra-tv").addEventListener("input",function(e){S.tv=e.target.value;save();calc()});
   el.addEventListener("click",function(e){
     var b=e.target.closest&&e.target.closest(".ra-u");
     if(b&&b.dataset.u!==S.unit){var t=inst()[0],v=parseFloat(S.atr)||0;S.atr=+(b.dataset.u==="ticks"?v/t:v*t).toFixed(4);S.unit=b.dataset.u;q(".ra-atr").value=S.atr;save();calc();return}
@@ -2939,7 +2933,6 @@ function homeTab(){
   }
   g2.appendChild(lvCard);
   el.appendChild(g2);
-  el.appendChild(rangeAtrCard());
 
   // Best trade + intention
   var g2b=div("g2");
@@ -3084,6 +3077,7 @@ function homeTab(){
   moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
   moCard.appendChild(moGoalBar);
   el.appendChild(moCard);
+  el.appendChild(rangeAtrCard());
 
   return el;
 }
@@ -6506,7 +6500,6 @@ function mobileHomeTab(){
   eqHdr.appendChild(eqTitle);eqHdr.appendChild(eqBadge);eqCard.appendChild(eqHdr);
   eqCard.appendChild(mobileEquitySVG(_mat));
   el.appendChild(eqCard);
-  el.appendChild(rangeAtrCard());
 
   // ── Streak dots ──
   var _matSorted=_mat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
@@ -6619,6 +6612,7 @@ function mobileHomeTab(){
     _mat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;}).slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
+  el.appendChild(rangeAtrCard());
   return el;
 }
 
