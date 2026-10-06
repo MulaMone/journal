@@ -2673,7 +2673,7 @@ function opexBadgeColor(info){return info.quarterly?"#b06aff":"#ff4444";}
 // ─── RANGE BAR ATR CALCULATOR (home card) ────────────────────────────
 function rangeAtrCard(){
   var INS={ES:[.25,12.5],NQ:[.25,5]};
-  var AP=[{lo:10,hi:20},{lo:25,hi:35},{lo:50,hi:50,plus:true}];
+  var AP=[{n:"Micro-Scalping",lo:10,hi:20},{n:"Intraday Structure",lo:25,hi:35},{n:"Intraday Trend",lo:50,hi:50,plus:true}];
   var mob=isMobile();
   var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1});
   if(!INS[S.ins]) S.ins="ES";
@@ -2712,7 +2712,7 @@ function rangeAtrCard(){
       var v=x.plus?f(l.pts,2)+"+ pts <span style=\"color:var(--text3);font-size:11px\">("+l.tk+"+ ticks)</span>"
                   :f(l.pts,2)+" \u2013 "+f(u.pts,2)+" pts <span style=\"color:var(--text3);font-size:11px\">("+l.tk+" \u2013 "+u.tk+" ticks)</span>";
       h+='<div class="ra-ap" data-k="'+k+'" style="cursor:pointer;background:'+(on?"var(--panel2)":"var(--bg)")+';border:1px solid '+(on?"var(--accent)":"var(--border)")+';border-radius:3px;padding:10px;margin-bottom:6px">'+
-         '<div style="font-size:12px;font-weight:700">'+pc+' of ATR</div>'+
+         '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700"><span>'+x.n+'</span><span style="color:var(--text3);font-weight:400">'+pc+'</span></div>'+
          '<div style="font-size:13px;margin-top:4px;color:var(--accent)">'+v+'</div></div>';
     });
     q(".ra-aps").innerHTML=h;
