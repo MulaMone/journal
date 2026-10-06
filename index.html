@@ -5892,6 +5892,23 @@ function chartTab(){
         return;
       }
 
+      // Times of the vertical grid lines the library draws (one per axis tick).
+      // Collected via tickMarkFormatter, which also reproduces the default labels,
+      // so we know when a grid line sits exactly under one of our session lines.
+      var tickTimes={};
+      function fmtTick(time,type,locale){
+        var ts=typeof time==="number"?time:(time&&time.timestamp);
+        if(ts==null) return String(time);
+        tickTimes[ts]=1;
+        var d=new Date(ts*1000);
+        var u=new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds());
+        var o={};
+        if(type===0) o.year="numeric";
+        else if(type===1) o.month="short";
+        else if(type===2) o.day="numeric";
+        else {o.hour12=false;o.hour="2-digit";o.minute="2-digit";if(type===4) o.second="2-digit";}
+        return u.toLocaleString(locale,o);
+      }
       var chart=LightweightCharts.createChart(chartDiv,{
         width:chartDiv.clientWidth,
         height:chartDiv.clientHeight,
@@ -5900,7 +5917,7 @@ function chartTab(){
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
-        timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false},
+        timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
       var series=chart.addCandlestickSeries({
@@ -5986,6 +6003,11 @@ function chartTab(){
         var obst=vis.filter(function(v){return v.m.label!=="ETH";}).map(function(v){return v.x;});
         vis.forEach(function(v){
           var m=v.m,x=v.x;
+          if(tickTimes[m.t]){ // a grid line sits right under this one — cover it so the session line wins
+            var gm=div();
+            gm.style.cssText="position:absolute;top:0;bottom:0;left:"+(x-0.5)+"px;width:2px;background:#040d1a;";
+            weekLineWrap.appendChild(gm);
+          }
           var line=div();
           line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,"+m.color+" 0,"+m.color+" 4px,transparent 4px,transparent 8px);opacity:"+(m.label==="ETH"?".3":".6")+";";
           weekLineWrap.appendChild(line);
@@ -6015,8 +6037,10 @@ function chartTab(){
           weekLineWrap.appendChild(lbl);
         });
       }
+      function redrawAfterRender(){requestAnimationFrame(function(){requestAnimationFrame(drawWeekLines);});}
       drawWeekLines();
-      chart.timeScale().subscribeVisibleLogicalRangeChange(drawWeekLines);
+      redrawAfterRender();
+      chart.timeScale().subscribeVisibleLogicalRangeChange(function(){drawWeekLines();redrawAfterRender();});
 
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
