@@ -2671,12 +2671,12 @@ function opexBadgeColor(info){return info.quarterly?"#b06aff":"#ff4444";}
 // ─── RANGE BAR ATR CALCULATOR (home card) ────────────────────────────
 function rangeAtrCard(){
   var INS={ES:[.25,12.5],NQ:[.25,5]};
-  var AP=[{n:"Micro-Scalping / Order Flow",lo:10,hi:20},{n:"Intraday Structure / VWAP",lo:25,hi:35},{n:"Intraday Trend / Swing",lo:50,hi:50,plus:true}];
+  var AP=[{lo:10,hi:20},{lo:25,hi:35},{lo:50,hi:50,plus:true}];
   var mob=isMobile();
   var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1});
   if(!INS[S.ins]) S.ins="ES";
   var el=div(mob?"m-eq-card":"card");
-  if(!mob) el.style.marginBottom="12px";
+  if(!mob) el.style.margin="12px 0";
   var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
   var lbl='font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;';
   var segB='flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text3);font-family:inherit;font-size:12px;padding:8px;cursor:pointer;border-radius:0;width:auto;';
@@ -2707,7 +2707,7 @@ function rangeAtrCard(){
       var v=x.plus?f(l.pts,2)+"+ pts <span style=\"color:var(--text3);font-size:11px\">("+l.tk+"+ ticks)</span>"
                   :f(l.pts,2)+" \u2013 "+f(u.pts,2)+" pts <span style=\"color:var(--text3);font-size:11px\">("+l.tk+" \u2013 "+u.tk+" ticks)</span>";
       h+='<div class="ra-ap" data-k="'+k+'" style="cursor:pointer;background:'+(on?"var(--panel2)":"var(--bg)")+';border:1px solid '+(on?"var(--accent)":"var(--border)")+';border-radius:3px;padding:10px;margin-bottom:6px">'+
-         '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700"><span>'+x.n+'</span><span style="color:var(--text3);font-weight:400">'+pc+'</span></div>'+
+         '<div style="font-size:12px;font-weight:700">'+pc+' of ATR</div>'+
          '<div style="font-size:13px;margin-top:4px;color:var(--accent)">'+v+'</div></div>';
     });
     q(".ra-aps").innerHTML=h;
