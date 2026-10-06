@@ -5966,7 +5966,11 @@ function chartTab(){
         // timeToCoordinate() is relative to the candle pane only — bound by the
         // pane width (container minus price scale) so nothing lands in the axis.
         var priceScaleW=chart.priceScale("right").width()||0;
-        var paneW=chartDiv.clientWidth-priceScaleW;
+        var paneW=chart.timeScale().width()||(chartDiv.clientWidth-priceScaleW);
+        // Size the overlay to the candle pane only (stop it at the price axis) so
+        // right-anchored labels measure from the pane edge and anything that
+        // runs past it is clipped instead of drawn over the price labels.
+        weekLineWrap.style.right=Math.max(0,chartDiv.clientWidth-paneW)+"px";
         weekLineWrap.innerHTML="";
         var labelRows=[]; // per row: [left,right] spans already used — a label that would overlap one drops to the next row
         sessionMarks.forEach(function(m){
