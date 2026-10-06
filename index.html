@@ -984,6 +984,7 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // stale and no-op, instead of mutating the chart/live-poll state for the
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
+var _chartGapReloadAt=0; // last time the live poll forced a full reload because the loaded candles had fallen behind
 function initAutoSync(){
   _ss_orig=ss;
   var syncTimer=null;
@@ -5991,6 +5992,7 @@ function chartTab(){
         // right-anchored labels measure from the pane edge and anything that
         // runs past it is clipped instead of drawn over the price labels.
         weekLineWrap.style.right=Math.max(0,chartDiv.clientWidth-paneW)+"px";
+        weekLineWrap.style.bottom=((chart.timeScale().height&&chart.timeScale().height())||0)+"px";
         weekLineWrap.innerHTML="";
         var labelRows=[]; // per row: [left,right] spans already used — a label that would overlap one drops to the next row
         var vis=[];
@@ -6260,6 +6262,7 @@ function chartTab(){
       // last.time is already shifted for ET display; add etOffsetSec back to
       // recover the candle's true start, then + periodSec for its true close.
       var barEndTrue=last?(last.time+etOffsetSec+periodSec):null;
+      var lastBarTime=last?last.time:0;
       var currentPrice=last?last.close:null;
       var currentIsUp=last?(last.close>=last.open):true;
       // Defensive cleanup: if a previous chart load's badge is still
@@ -6293,7 +6296,10 @@ function chartTab(){
         var y=series.priceToCoordinate(currentPrice);
         if(y==null){cdBadge.style.display="none";return;}
         cdBadge.style.display="";
-        cdBadge.style.top=y+"px";
+        // Price outside the visible scale (chart scrolled away or behind): pin the tag
+        // to the plot's top/bottom edge rather than letting it float off the chart.
+        var paneH=chartDiv.clientHeight-((chart.timeScale().height&&chart.timeScale().height())||0);
+        cdBadge.style.top=Math.max(26,Math.min(paneH-26,y))+"px";
       }
       renderCountdown();
       clearInterval(_chartCountdownTimer);
@@ -6330,6 +6336,11 @@ function chartTab(){
           // throws. Only touch the single newest candle, never anything
           // before it, so this can never violate that and silently no-op.
           var c=freshCandles[freshCandles.length-1];
+          var cShift=Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec;
+          if(cShift-lastBarTime>3*periodSec&&Date.now()-_chartGapReloadAt>60000){
+            _chartGapReloadAt=Date.now();render();return; // chart data is stale (e.g. tab left open) — fetch it fresh
+          }
+          if(cShift>lastBarTime) lastBarTime=cShift;
           series.update({time:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(c.mid.c)+'</span>';
           // Recompute from this candle's own true (unshifted) start — covers
