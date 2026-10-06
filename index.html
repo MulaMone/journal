@@ -2678,7 +2678,8 @@ function rangeAtrCard(){
   var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1});
   if(!INS[S.ins]) S.ins="ES";
   if(!(S.ap>=0&&S.ap<AP.length)) S.ap=1;
-  if(S.unit!=="ticks") S.unit="pts";
+  if(S.unit==="ticks"){S.atr=+((parseFloat(S.atr)||0)*INS[S.ins][0]).toFixed(4);}
+  S.unit="pts";
   var el=div(mob?"m-eq-card":"card");
   if(!mob) el.style.margin="12px 0";
   var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
@@ -2688,8 +2689,7 @@ function rangeAtrCard(){
     '<div class="card-h"><div class="'+(mob?"m-card-title":"card-t")+'">Range Bar Size from ATR</div></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
       '<div><div style="'+lbl+'">INSTRUMENT</div><select class="ra-ins">'+opts+'</select></div>'+
-      '<div><div style="'+lbl+'">ATR</div><input class="ra-atr" type="number" min="0" step="any" value="'+S.atr+'"></div>'+
-      '<div><div style="'+lbl+'">ATR UNIT</div><div style="display:flex"><button class="ra-u" data-u="pts" style="'+segB+'">PTS</button><button class="ra-u" data-u="ticks" style="'+segB+'">TICKS</button></div></div>'+
+      '<div><div style="'+lbl+'">ATR (PTS)</div><input class="ra-atr" type="number" min="0" step="any" value="'+S.atr+'"></div>'+
       '<div><div style="'+lbl+'">CUSTOM % OF ATR</div><input class="ra-pct" type="number" min="0" step="any" placeholder="e.g. 15" value="'+S.pct+'"></div>'+
     '</div>'+
     '<div class="ra-aps"></div>'+
@@ -2701,7 +2701,6 @@ function rangeAtrCard(){
   function inst(){return INS[S.ins]}
   function save(){ss("rbatr",S)}
   function calc(){
-    [].forEach.call(el.querySelectorAll(".ra-u"),function(b){var on=b.dataset.u===S.unit;b.style.background=on?"var(--accent)":"var(--bg)";b.style.color=on?"#04202a":"var(--text3)";b.style.fontWeight=on?"700":"400"});
     var i=inst(),ts=i[0],tv=i[1];
     var a=parseFloat(S.atr)||0, atrTk=ts>0?(S.unit==="pts"?a/ts:a):0, atrPts=atrTk*ts;
     function rg(p){var tk=Math.max(1,Math.round(atrTk*p/100));return{tk:tk,pts:tk*ts}}
@@ -2727,10 +2726,58 @@ function rangeAtrCard(){
   q(".ra-atr").addEventListener("input",function(e){S.atr=e.target.value;save();calc()});
   q(".ra-pct").addEventListener("input",function(e){S.pct=e.target.value;save();calc()});
   el.addEventListener("click",function(e){
-    var b=e.target.closest&&e.target.closest(".ra-u");
-    if(b&&b.dataset.u!==S.unit){var t=inst()[0],v=parseFloat(S.atr)||0;S.atr=+(b.dataset.u==="ticks"?v/t:v*t).toFixed(4);S.unit=b.dataset.u;q(".ra-atr").value=S.atr;save();calc();return}
     var c=e.target.closest&&e.target.closest(".ra-ap");
     if(c){S.ap=+c.dataset.k;S.pct="";q(".ra-pct").value="";save();calc()}
+  });
+  calc();
+  return el;
+}
+
+// ─── ATR STOP LOSS / TARGET CALCULATOR (desktop home card) ───────────
+function atrSlTpCard(){
+  var INS={ES:[.25,12.5],NQ:[.25,5],MES:[.25,1.25],MNQ:[.25,.5]};
+  var S=ls("atrsltp",{ins:"ES",atr:"",slm:1,tpm:2,ctr:1});
+  if(!INS[S.ins]) S.ins="ES";
+  var el=div("card");el.style.margin="12px 0";
+  var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
+  var lbl='font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;';
+  var chipB='background:var(--bg);border:1px solid var(--border);color:var(--text3);font-family:inherit;font-size:11px;padding:3px 8px;margin:5px 4px 0 0;cursor:pointer;border-radius:3px;width:auto;';
+  function chips(k,a){return '<div class="as-ch" data-k="'+k+'">'+a.map(function(v){return '<button style="'+chipB+'">'+v+'</button>'}).join("")+'</div>'}
+  el.innerHTML=
+    '<div class="card-h"><div class="card-t">ATR Stop Loss and Target</div></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px">'+
+      '<div><div style="'+lbl+'">INSTRUMENT</div><select class="as-ins">'+opts+'</select></div>'+
+      '<div><div style="'+lbl+'">ATR (PTS)</div><input class="as-atr" type="number" min="0" step="any" value="'+S.atr+'"></div>'+
+      '<div><div style="'+lbl+'">CONTRACTS</div><input class="as-ctr" type="number" min="1" step="1" value="'+S.ctr+'"></div>'+
+      '<div><div style="'+lbl+'">STOP = x ATR</div><input class="as-slm" type="number" min="0" step="any" value="'+S.slm+'">'+chips("slm",[0.5,1,1.5,2])+'</div>'+
+      '<div><div style="'+lbl+'">TARGET = x ATR</div><input class="as-tpm" type="number" min="0" step="any" value="'+S.tpm+'">'+chips("tpm",[1,2,3,4])+'</div>'+
+    '</div>'+
+    '<div class="as-out" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"></div>'+
+    '<div class="as-rr" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--ca);font-size:13px"></div>';
+  var q=function(c){return el.querySelector(c)};
+  function f(n,d){return isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):"\u2014"}
+  function kv(a,b){return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span style="color:var(--text3)">'+a+'</span><span>'+b+'</span></div>'}
+  function box(col,name,tk,ts,tv,c,tot){
+    return '<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid '+col+';padding:12px">'+
+      kv(name,'<span style="color:'+col+';font-size:22px;font-weight:700">'+tk+(tk===1?' tick':' ticks')+'</span>')+
+      kv("Points",f(tk*ts,2))+kv("$ / contract","$"+f(tk*tv,2))+kv(tot,"$"+f(tk*tv*c,2))+'</div>';
+  }
+  function save(){ss("atrsltp",S)}
+  function calc(){
+    var i=INS[S.ins],ts=i[0],tv=i[1];
+    var a=parseFloat(S.atr)||0,sm=parseFloat(S.slm)||0,tm=parseFloat(S.tpm)||0,c=Math.max(1,parseInt(S.ctr)||1);
+    var sl=(a>0&&sm>0)?Math.max(1,Math.round(a*sm/ts)):0;
+    var tp=(a>0&&tm>0)?Math.max(1,Math.round(a*tm/ts)):0;
+    q(".as-out").innerHTML=box("var(--red)","STOP",sl,ts,tv,c,"$ total risk")+box("var(--green)","TARGET",tp,ts,tv,c,"$ total reward");
+    q(".as-rr").innerHTML='<span style="color:var(--text3)">R:R</span><span style="color:var(--ca);font-size:18px;font-weight:700">'+(sl>0&&tp>0?"1 : "+f(tp/sl,2):"\u2014")+'</span>';
+  }
+  q(".as-ins").addEventListener("change",function(e){S.ins=e.target.value;save();calc()});
+  [["atr",".as-atr"],["slm",".as-slm"],["tpm",".as-tpm"],["ctr",".as-ctr"]].forEach(function(p){
+    q(p[1]).addEventListener("input",function(e){S[p[0]]=e.target.value;save();calc()});
+  });
+  el.addEventListener("click",function(e){
+    var b=e.target.closest&&e.target.closest(".as-ch button");
+    if(b){var k=b.parentNode.dataset.k;S[k]=b.textContent;q(".as-"+k).value=S[k];save();calc()}
   });
   calc();
   return el;
@@ -3084,6 +3131,7 @@ function homeTab(){
   moCard.appendChild(moGoalBar);
   el.appendChild(moCard);
   el.appendChild(rangeAtrCard());
+  el.appendChild(atrSlTpCard());
 
   return el;
 }
