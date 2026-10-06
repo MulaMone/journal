@@ -602,6 +602,7 @@ function _syncToCloudNow(){
       notes_overhead:ls("notes_overhead",[]),
       notes_pad:ls("notes_pad",""),
       playbook_custom:ls("playbook_custom",[]),
+      rbatr:ls("rbatr",null),
       sdesc_overrides:ls("sdesc_overrides",{}),
       oanda_token:ls("oanda_token",""),
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
@@ -716,6 +717,7 @@ function loadFromCloud(syncId,callback){
       if(s.notes_pad!==undefined) ss("notes_pad",s.notes_pad);
       if(s.playbook_custom&&s.playbook_custom.length) ss("playbook_custom",s.playbook_custom);
       if(s.sdesc_overrides){ss("sdesc_overrides",s.sdesc_overrides);Object.keys(s.sdesc_overrides).forEach(function(k){SDESC[k]=s.sdesc_overrides[k];});}
+      if(s.rbatr&&typeof s.rbatr==="object"){try{localStorage.setItem("edge_rbatr",JSON.stringify(s.rbatr));}catch(e){}}
       if(s.oanda_token!==undefined) ss("oanda_token",s.oanda_token);
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);if(_as.qra_spinner_month!==null&&_as.qra_spinner_month!==undefined)localStorage.setItem("edge_qra_spinner_month",_as.qra_spinner_month);if(_as.qra_spinner_day!==null&&_as.qra_spinner_day!==undefined)localStorage.setItem("edge_qra_spinner_day",_as.qra_spinner_day);}
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
@@ -2675,6 +2677,8 @@ function rangeAtrCard(){
   var mob=isMobile();
   var S=ls("rbatr",{ins:"ES",atr:50,unit:"pts",pct:"",ap:1});
   if(!INS[S.ins]) S.ins="ES";
+  if(!(S.ap>=0&&S.ap<AP.length)) S.ap=1;
+  if(S.unit!=="ticks") S.unit="pts";
   var el=div(mob?"m-eq-card":"card");
   if(!mob) el.style.margin="12px 0";
   var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
@@ -2690,11 +2694,12 @@ function rangeAtrCard(){
     '</div>'+
     '<div class="ra-aps"></div>'+
     '<div class="ra-out" style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--ca);border-radius:3px;padding:12px;margin-top:10px"></div>';
+  if(mob) [].forEach.call(el.querySelectorAll("input,select"),function(n){n.style.fontSize="16px";});
   var q=function(c){return el.querySelector(c)};
   function f(n,d){return isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):"\u2014"}
-  function kv(a,b){return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--text3)">'+a+'</span><span>'+b+'</span></div>'}
+  function kv(a,b){return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;padding:3px 0"><span style="color:var(--text3)">'+a+'</span><span>'+b+'</span></div>'}
   function inst(){return INS[S.ins]}
-  function save(){try{localStorage.setItem("edge_rbatr",JSON.stringify(S))}catch(e){}}
+  function save(){ss("rbatr",S)}
   function calc(){
     [].forEach.call(el.querySelectorAll(".ra-u"),function(b){var on=b.dataset.u===S.unit;b.style.background=on?"var(--accent)":"var(--bg)";b.style.color=on?"#04202a":"var(--text3)";b.style.fontWeight=on?"700":"400"});
     var i=inst(),ts=i[0],tv=i[1];
@@ -2712,9 +2717,10 @@ function rangeAtrCard(){
     });
     q(".ra-aps").innerHTML=h;
     var p=cp>0?cp:(AP[S.ap].plus?AP[S.ap].lo:(AP[S.ap].lo+AP[S.ap].hi)/2);
+    if(!(atrTk>0)){q(".ra-out").innerHTML=kv("RANGE BAR",'<span style="color:var(--text3)">Enter ATR</span>');return}
     var tk=Math.max(1,Math.round(atrTk*p/100));
     q(".ra-out").innerHTML=
-      kv("RANGE BAR ("+f(p,1)+"% of ATR)",'<span style="color:var(--ca);font-size:24px;font-weight:700">'+tk+' ticks</span>')+
+      kv("BAR SIZE \u00b7 "+(+p.toFixed(1))+"% of ATR",'<span style="color:var(--ca);font-size:24px;font-weight:700">'+tk+(tk===1?' tick':' ticks')+'</span>')+
       kv("Points",f(tk*ts,2))+kv("$ per bar / contract","$"+f(tk*tv,2))+kv("ATR",f(atrPts,2)+" pts \u00b7 "+f(atrTk,0)+" ticks");
   }
   q(".ra-ins").addEventListener("change",function(e){S.ins=e.target.value;save();calc()});
