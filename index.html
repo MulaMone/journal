@@ -5612,7 +5612,7 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
 
-  var TFS=["2m","5m","15m","30m","1h","4h","8h","1d"];
+  var TFS=["2m","5m","30m","1h","4h","8h","1d"];
   TFS.forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
@@ -5936,20 +5936,23 @@ function chartTab(){
           if(etod>=18*3600&&(ptod<18*3600||Math.floor(candles[ei].time/86400)!==Math.floor(candles[ei-1].time/86400))) ethBoundaries.push(candles[ei].time);
         }
       }
-      // Month boundaries — 1h and up. Shift by the session anchor so a candle
-      // opening 18:00 ET on the last day counts toward the next trading day/month.
-      var monthBoundaries=[];
-      if(periodSec>=3600){
-        var anchorShift=(24-dailyAlign)*3600;
-        for(var mi=1;mi<candles.length;mi++){
-          var dm=new Date((candles[mi].time+anchorShift)*1000),dp=new Date((candles[mi-1].time+anchorShift)*1000);
-          if(dm.getUTCMonth()!==dp.getUTCMonth()) monthBoundaries.push(candles[mi].time);
+      // Month (all timeframes) and year (daily only) boundaries. Shift by the
+      // session anchor so a candle opening 18:00 ET on the last day counts toward
+      // the next trading day/month/year.
+      var monthBoundaries=[],yearBoundaries=[];
+      var anchorShift=(24-dailyAlign)*3600;
+      for(var mi=1;mi<candles.length;mi++){
+        var dm=new Date((candles[mi].time+anchorShift)*1000),dp=new Date((candles[mi-1].time+anchorShift)*1000);
+        if(dm.getUTCMonth()!==dp.getUTCMonth()){
+          if(tf==="1d"&&dm.getUTCFullYear()!==dp.getUTCFullYear()) yearBoundaries.push(candles[mi].time);
+          else monthBoundaries.push(candles[mi].time);
         }
       }
       // One line per candle: when boundaries coincide only the superior one is
-      // kept (MONTH > WEEK > ETH). No weekly line on the daily chart.
+      // kept (YEAR > MONTH > WEEK > ETH). No weekly line on the daily chart.
       var sessionMarks=[],markAt={};
       function addMark(t,label,color){if(markAt[t])return;markAt[t]=true;sessionMarks.push({t:t,label:label,color:color});}
+      yearBoundaries.forEach(function(t){addMark(t,"YEAR","#e8f0ff");});
       monthBoundaries.forEach(function(t){addMark(t,"MONTH","#b06aff");});
       if(tf!=="1d") weekBoundaries.forEach(function(t){addMark(t,"WEEK","var(--accent)");});
       ethBoundaries.forEach(function(t){addMark(t,"ETH","#ffb020");});
