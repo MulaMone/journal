@@ -6302,7 +6302,9 @@ function chartTab(){
         // Price outside the visible scale (chart scrolled away or behind): pin the tag
         // to the plot's top/bottom edge rather than letting it float off the chart.
         var paneH=chartDiv.clientHeight-((chart.timeScale().height&&chart.timeScale().height())||0);
-        cdBadge.style.top=Math.max(26,Math.min(paneH-26,y))+"px";
+        // Only pin when the price is actually off the visible scale; while it's on screen the
+        // tag sits exactly on the price (covering the axis label) with no clamping.
+        cdBadge.style.top=((y<0||y>paneH)?Math.max(26,Math.min(paneH-26,y)):y)+"px";
       }
       renderCountdown();
       clearInterval(_chartCountdownTimer);
