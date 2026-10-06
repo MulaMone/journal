@@ -5977,72 +5977,75 @@ function chartTab(){
       // Defined unconditionally (not just when boundaries exist) so the
       // ResizeObserver below can always call it safely — it no-ops when
       // there's nothing to draw.
-      var weekLineWrap=null;
-      function drawWeekLines(){
-        if(!sessionMarks.length) return;
-        if(!weekLineWrap){
-          weekLineWrap=div();weekLineWrap.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;";
-          chartDiv.appendChild(weekLineWrap);
+      // Drawn on the chart's own canvas as a series primitive in the background
+      // pass: above the grid (so a session line wins over a grid line under it),
+      // but below the candles — so lines sit behind price action instead of
+      // cutting through it, and stay perfectly in sync while scrolling/zooming.
+      var _acc=(getComputedStyle(document.documentElement).getPropertyValue("--accent")||"").trim()||"#2ec4b6";
+      var _repaint=null;
+      function drawWeekLines(){ if(_repaint) _repaint(); } // resize hook — the chart repaints itself on its own otherwise
+      var sessionPrimitive={
+        attached:function(param){_repaint=param.requestUpdate;},
+        detached:function(){_repaint=null;},
+        paneViews:function(){
+          return [{
+            zOrder:function(){return "normal";},
+            renderer:function(){
+              return {
+                draw:function(){},
+                drawBackground:function(target){
+                  target.useMediaCoordinateSpace(function(scope){
+                    var ctx=scope.context,paneW=scope.mediaSize.width,paneH=scope.mediaSize.height;
+                    var vis=[];
+                    sessionMarks.forEach(function(m){
+                      var x=chart.timeScale().timeToCoordinate(m.t);
+                      if(x==null||x<0||x>paneW) return;
+                      vis.push({m:m,x:x,col:m.label==="WEEK"?_acc:m.color});
+                    });
+                    var obst=vis.filter(function(v){return v.m.label!=="ETH";}).map(function(v){return v.x;});
+                    ctx.save();
+                    vis.forEach(function(v){
+                      var x=v.x;
+                      if(tickTimes[v.m.t]){ctx.fillStyle="#040d1a";ctx.fillRect(x-1,0,2,paneH);} // grid line right under it — cover so the session line wins
+                      ctx.globalAlpha=v.m.label==="ETH"?0.3:0.6;
+                      ctx.fillStyle=v.col;
+                      for(var yy=0;yy<paneH;yy+=8) ctx.fillRect(x,yy,1,4);
+                    });
+                    ctx.globalAlpha=1;
+                    ctx.font="9px 'Courier New',monospace";ctx.textBaseline="top";
+                    var rows=[];
+                    vis.forEach(function(v){
+                      var m=v.m,x=v.x;
+                      if(m.label==="ETH") return; // ETH is line-only, no text label
+                      var pick=null;
+                      [m.label,m.label.charAt(0)].forEach(function(txt){
+                        var lw=txt.length*6.9;
+                        [{l0:x+4,l1:x+4+lw},{l0:x-4-lw,l1:x-4}].forEach(function(c){
+                          if(pick) return;
+                          if(c.l0<0||c.l1>paneW) return;
+                          if(obst.some(function(ox){return ox!==x&&ox>c.l0-3&&ox<c.l1+3;})) return;
+                          pick={txt:txt,l0:c.l0,l1:c.l1};
+                        });
+                      });
+                      if(!pick){
+                        var fl=x+4+7>paneW;
+                        pick={txt:m.label.charAt(0),l0:fl?x-11:x+4,l1:fl?x-4:x+11};
+                      }
+                      var n=0;
+                      while(rows[n]&&rows[n].some(function(sp){return pick.l0<sp[1]+3&&pick.l1>sp[0]-3;})) n++;
+                      (rows[n]=rows[n]||[]).push([pick.l0,pick.l1]);
+                      ctx.fillStyle=v.col;
+                      for(var ci=0;ci<pick.txt.length;ci++) ctx.fillText(pick.txt.charAt(ci),pick.l0+ci*6.9,2+n*12);
+                    });
+                    ctx.restore();
+                  });
+                }
+              };
+            }
+          }];
         }
-        // timeToCoordinate() is relative to the candle pane only — bound by the
-        // pane width (container minus price scale) so nothing lands in the axis.
-        var priceScaleW=chart.priceScale("right").width()||0;
-        var paneW=chart.timeScale().width()||(chartDiv.clientWidth-priceScaleW);
-        // Size the overlay to the candle pane only (stop it at the price axis) so
-        // right-anchored labels measure from the pane edge and anything that
-        // runs past it is clipped instead of drawn over the price labels.
-        weekLineWrap.style.right=Math.max(0,chartDiv.clientWidth-paneW)+"px";
-        weekLineWrap.style.bottom=((chart.timeScale().height&&chart.timeScale().height())||0)+"px";
-        weekLineWrap.innerHTML="";
-        var labelRows=[]; // per row: [left,right] spans already used — a label that would overlap one drops to the next row
-        var vis=[];
-        sessionMarks.forEach(function(m){
-          var x=chart.timeScale().timeToCoordinate(m.t);
-          if(x==null||x<0||x>paneW) return; // off-screen, or would sit in the price axis
-          vis.push({m:m,x:x});
-        });
-        // WEEK/MONTH line positions — a label must not run through any other line's text-height stripe.
-        var obst=vis.filter(function(v){return v.m.label!=="ETH";}).map(function(v){return v.x;});
-        vis.forEach(function(v){
-          var m=v.m,x=v.x;
-          if(tickTimes[m.t]){ // a grid line sits right under this one — cover it so the session line wins
-            var gm=div();
-            gm.style.cssText="position:absolute;top:0;bottom:0;left:"+(x-0.5)+"px;width:2px;background:#040d1a;";
-            weekLineWrap.appendChild(gm);
-          }
-          var line=div();
-          line.style.cssText="position:absolute;top:0;bottom:0;left:"+x+"px;width:1px;background:repeating-linear-gradient(to bottom,"+m.color+" 0,"+m.color+" 4px,transparent 4px,transparent 8px);opacity:"+(m.label==="ETH"?".3":".6")+";";
-          weekLineWrap.appendChild(line);
-          if(m.label==="ETH") return; // ETH is line-only, no text label
-          // Pick a side (right of the line, else left) and text (full word, else first letter)
-          // where the label stays inside the pane and doesn't cross another line.
-          var pick=null;
-          [m.label,m.label.charAt(0)].forEach(function(txt){
-            var lw=txt.length*6.9;
-            [{flip:false,l0:x+4,l1:x+4+lw},{flip:true,l0:x-4-lw,l1:x-4}].forEach(function(c){
-              if(pick) return;
-              if(c.l0<0||c.l1>paneW) return;
-              var crosses=obst.some(function(ox){return ox!==x&&ox>c.l0-3&&ox<c.l1+3;});
-              if(!crosses) pick={txt:txt,flip:c.flip,l0:c.l0,l1:c.l1};
-            });
-          });
-          if(!pick){ // nowhere clean — shortest text on whichever side has room
-            var fl=x+4+7>paneW;
-            pick={txt:m.label.charAt(0),flip:fl,l0:fl?x-11:x+4,l1:fl?x-4:x+11};
-          }
-          var n=0;
-          while(labelRows[n]&&labelRows[n].some(function(sp){return pick.l0<sp[1]+3&&pick.l1>sp[0]-3;})) n++;
-          (labelRows[n]=labelRows[n]||[]).push([pick.l0,pick.l1]);
-          var lbl=div();
-          lbl.style.cssText="position:absolute;top:"+(2+n*12)+"px;"+(pick.flip?"right:"+(paneW-x+4)+"px;":"left:"+(x+4)+"px;")+"font-size:9px;letter-spacing:1.5px;color:"+m.color+";font-family:'Courier New',monospace;white-space:nowrap;";
-          lbl.textContent=pick.txt;
-          weekLineWrap.appendChild(lbl);
-        });
-      }
-      function redrawAfterRender(){requestAnimationFrame(function(){requestAnimationFrame(drawWeekLines);});}
-      drawWeekLines();
-      redrawAfterRender();
-      chart.timeScale().subscribeVisibleLogicalRangeChange(function(){drawWeekLines();redrawAfterRender();});
+      };
+      series.attachPrimitive(sessionPrimitive);
 
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
