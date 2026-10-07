@@ -5737,6 +5737,7 @@ function chartTab(){
 
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
   SYMS.forEach(function(s){
+    if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
     b.textContent=s.l; b.title=s.n;
@@ -7427,6 +7428,7 @@ function notesTab(){
     el.appendChild(botG);
   }
 
+  var ntkLine=div();ntkLine.style.cssText="height:1px;background:var(--border);opacity:.7;margin:4px 0 18px";el.appendChild(ntkLine);
   el.appendChild(needToKnowSection());
   return el;
 }
