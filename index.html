@@ -2766,7 +2766,7 @@ function atrSlTpCard(){
   function box(col,name,tk,ts,tv,c,tot,px){
     return '<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid '+col+';padding:12px">'+
       kv(name,'<span style="color:'+col+';font-size:22px;font-weight:700">'+tk+(tk===1?' tick':' ticks')+'</span>')+
-      kv("Points",f(tk*ts,2))+kv("$ / contract","$"+f(tk*tv,2))+kv(tot,"$"+f(tk*tv*c,2))+kv("Price",px)+'</div>';
+      kv("Points",f(tk*ts,2))+kv("$ / contract",'<span style="color:var(--green)">$</span><span style="color:#fff">'+f(tk*tv,2)+'</span>')+kv(tot,'<span style="color:'+(name==="STOP"?"var(--red)":"var(--green)")+'">$'+f(tk*tv*c,2)+'</span>')+kv("Price",'<span style="color:#ffee00;font-weight:700;font-size:15px;text-shadow:0 0 8px rgba(255,238,0,.55)">'+px+'</span>')+'</div>';
   }
   function save(){ss("atrsltp",S)}
   function calc(){
