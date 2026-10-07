@@ -3142,7 +3142,11 @@ function homeTab(){
   moBarBg.appendChild(moBarFill);moGoalBar.appendChild(moBarBg);
   moCard.appendChild(moGoalBar);
   el.appendChild(moCard);
+  var sepA=div();sepA.style.cssText="height:1px;background:var(--ca);margin:12px 0;";
+  el.appendChild(sepA);
   el.appendChild(rangeAtrCard());
+  var sepB=div();sepB.style.cssText="height:1px;background:var(--border);opacity:.4;margin:12px 0;";
+  el.appendChild(sepB);
   el.appendChild(atrSlTpCard());
 
   return el;
@@ -6678,6 +6682,8 @@ function mobileHomeTab(){
     _mat.slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;}).slice(0,5).forEach(function(t){el.appendChild(mobileTradeCard(t));});
   }
 
+  var sepM=div();sepM.style.cssText="height:1px;background:var(--ca);margin:12px 0;";
+  el.appendChild(sepM);
   el.appendChild(rangeAtrCard());
   return el;
 }
