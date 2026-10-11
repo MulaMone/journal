@@ -10026,7 +10026,7 @@ function analystTab(){
       // (DXY, yield curve, Fed funds, liquidity too), and since those load
       // asynchronously at different speeds, the page height would keep
       // changing as each one popped in — the "jumps up and down" bug.
-      loadLegacy(true);load(true);loadCme(true);loadVoiChart(true);
+      loadLegacy(false);load(false);loadCme(false);loadVoiChart(false);
     });
     ctrlRow.appendChild(b);
   });
