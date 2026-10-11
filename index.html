@@ -7939,14 +7939,17 @@ function fetchCmeDailyOI(sym,statusCb){
     report("pdf.js ready. Fetching today's CME bulletin…");
     // Direct fetch depends on CME sending CORS headers, which it does not do
     // reliably — fall back to CORS proxies if the direct request fails.
-    var tries=[CME_BULLETIN_URL,
+    var tries=[SUPA_URL+"/functions/v1/cme-bulletin",
+      CME_BULLETIN_URL,
       "https://corsproxy.io/?url="+encodeURIComponent(CME_BULLETIN_URL),
       "https://api.allorigins.win/raw?url="+encodeURIComponent(CME_BULLETIN_URL)];
     var lastErr=null;
     function attempt(i){
       if(i>=tries.length) return Promise.reject(lastErr||new Error("Failed to fetch"));
       var ctrl=new AbortController(),t=setTimeout(function(){ctrl.abort();},25000);
-      return fetch(tries[i],{signal:ctrl.signal,cache:"no-store"}).then(function(r){
+      var fopts={signal:ctrl.signal,cache:"no-store"};
+      if(i===0) fopts.headers={"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
+      return fetch(tries[i],fopts).then(function(r){
         clearTimeout(t);
         if(!r.ok) throw new Error("HTTP "+r.status);
         return r;
@@ -8076,6 +8079,11 @@ function loadCmeDailyOI2(sym,force,statusCb){
   var verified=cached&&((cached.final&&cached.final.v)||(cached.prelim&&cached.prelim.v));
   var missingFinal=cached&&(!verified||(!cached.final&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000)));
   if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
+  // Don't hammer CME: at most one automatic attempt per 10 min (success or fail).
+  var tryKey="edge_cme_try_"+sym,lastTry=0;
+  try{lastTry=+localStorage.getItem(tryKey)||0;}catch(e){}
+  if(cached&&!force&&(Date.now()-lastTry)<10*60*1000) return Promise.resolve(cached);
+  try{localStorage.setItem(tryKey,String(Date.now()));}catch(e){}
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
     var folded=cmeOiFold(cached,data);
     cmeOiCacheSet(sym,folded);
