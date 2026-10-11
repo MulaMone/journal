@@ -10145,8 +10145,6 @@ function analystTab(){
       if(myToken!==_cmeLoadToken) return;
       renderCmeResult(data,false);
       if(data._err){var w2=document.createElement("div");w2.style.cssText="color:#ff4444;font-size:11px;margin-top:4px;";w2.textContent="⚠ CME refresh failed: "+data._err;cmeResult.appendChild(w2);}
-      var _eff=data.final||data.prelim;
-      if(_eff&&_eff.fetchedAt){var ck=document.createElement("div");ck.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";ck.textContent="checked "+new Date(_eff.fetchedAt).toLocaleTimeString();cmeResult.appendChild(ck);}
       cmeResult.style.opacity="1";
       loadVoiChart(false); // today's row just landed in the voi history log — refresh the chart
     }).catch(function(err){
