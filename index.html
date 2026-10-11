@@ -10125,9 +10125,14 @@ function analystTab(){
     }).catch(function(err){
       if(myToken!==_cmeLoadToken) return;
       cmeResult.style.opacity="1";
-      if(force){
+      if(force||!cmeOiCacheGet(sym)){
         cmeResult.textContent="✗ Failed — "+(err&&err.message?err.message:"unknown error");
         cmeResult.style.color="#ff4444";
+      } else {
+        var warn=document.createElement("div");
+        warn.style.cssText="color:#ff4444;font-size:10px;margin-top:4px;";
+        warn.textContent="⚠ CME refresh failed — showing saved data: "+(err&&err.message?err.message:"unknown error");
+        cmeResult.appendChild(warn);
       }
       // Silent background auto-check: if we already have a cached value
       // showing, leave it up rather than clobbering it with an error.
