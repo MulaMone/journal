@@ -8072,7 +8072,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
     syncMktToCloud();
     return folded;
   }).catch(function(err){
-    if(cached) return cached;
+    if(cached){var c2=JSON.parse(JSON.stringify(cached));c2._err=(err&&err.message)?err.message:String(err);return c2;}
     throw err;
   });
 }
@@ -10121,6 +10121,7 @@ function analystTab(){
     loadCmeDailyOI(sym,force,null).then(function(data){
       if(myToken!==_cmeLoadToken) return;
       renderCmeResult(data,false);
+      if(data._err){var w2=document.createElement("div");w2.style.cssText="color:#ff4444;font-size:11px;margin-top:4px;";w2.textContent="⚠ CME refresh failed: "+data._err;cmeResult.appendChild(w2);}
       var _eff=data.final||data.prelim;
       if(_eff&&_eff.fetchedAt){var ck=document.createElement("div");ck.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";ck.textContent="checked "+new Date(_eff.fetchedAt).toLocaleTimeString();cmeResult.appendChild(ck);}
       cmeResult.style.opacity="1";
