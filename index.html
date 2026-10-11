@@ -7951,7 +7951,7 @@ function fetchCmeDailyOI(sym,statusCb){
       if(i===0) fopts.headers={"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
       return fetch(tries[i],fopts).then(function(r){
         clearTimeout(t);
-        if(!r.ok) throw new Error("HTTP "+r.status);
+        if(!r.ok) return r.text().then(function(tx){throw new Error("HTTP "+r.status+(tx?" "+tx.slice(0,80):""));},function(){throw new Error("HTTP "+r.status);});
         return r;
       }).catch(function(e){clearTimeout(t);lastErr=e;errs.push(names[i]+": "+(e&&e.message?e.message:e));return attempt(i+1);});
     }
