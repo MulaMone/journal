@@ -7951,7 +7951,8 @@ function fetchCmeDailyOI(sym,statusCb){
     var fullText=pageTexts.join("\n");
     var result=extractFrontMonthOI(fullText,sym);
     var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
-    return {oi:result.oi,change:result.change,volume:result.volume,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,fetchedAt:Date.now()};
+    var sm=fullText.match(/^\s*(PRELIMINARY|FINAL)\s*$/m);
+    return {oi:result.oi,change:result.change,volume:result.volume,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,isFinal:sm?(sm[1]==="FINAL"):null,fetchedAt:Date.now()};
   });
 }
 
@@ -8006,6 +8007,8 @@ function isPastCmeFinalTime(){
 // 10am CT is the final bulletin.
 function cmeOiFold(cached,fresh){
   var snap={oi:fresh.oi,change:fresh.change,volume:fresh.volume,fetchedAt:fresh.fetchedAt};
+  // Trust the PDF's own PRELIMINARY/FINAL header; fall back to the clock only if absent.
+  var isFin=(typeof fresh.isFinal==="boolean")?fresh.isFinal:isPastCmeFinalTime();
   if(!cached||cached.date!==fresh.dateStr){
     // New trade date. Before dropping the old record, carry forward its
     // best-known snapshot (Final if we captured one, else whatever Prelim
@@ -8025,12 +8028,12 @@ function cmeOiFold(cached,fresh){
     // Final — don't mislabel it as prelim (that would later look identical
     // to "final" and falsely say "unchanged" even though we never actually
     // saw the real prelim).
-    return isPastCmeFinalTime()
+    return isFin
       ? {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:null,final:snap,prevDayFinal:prevDay}
       : {date:fresh.dateStr,contractMonth:fresh.contractMonth,prelim:snap,final:null,prevDayFinal:prevDay};
   }
   var next={date:cached.date,contractMonth:fresh.contractMonth,prelim:cached.prelim,final:cached.final,prevDayFinal:cached.prevDayFinal};
-  if(isPastCmeFinalTime()) next.final=snap; else next.prelim=snap;
+  if(isFin) next.final=snap; else {next.prelim=snap; next.final=null;}
   return next;
 }
 // A 6h cache avoids re-fetching+re-parsing a multi-page PDF every time the
@@ -8044,7 +8047,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
   var cached=cmeOiCacheGet(sym);
   var lastFetchedAt=cached?((cached.final||cached.prelim||{}).fetchedAt):null;
   var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000||lastFetchedAt<cmeLastBoundaryMs();
-  var missingFinal=cached&&!cached.final&&isPastCmeFinalTime();
+  var missingFinal=cached&&!cached.final&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000);
   if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
     var folded=cmeOiFold(cached,data);
