@@ -7943,9 +7943,9 @@ function fetchCmeDailyOI(sym,statusCb){
       CME_BULLETIN_URL,
       "https://corsproxy.io/?url="+encodeURIComponent(CME_BULLETIN_URL),
       "https://api.allorigins.win/raw?url="+encodeURIComponent(CME_BULLETIN_URL)];
-    var lastErr=null;
+    var lastErr=null,errs=[],names=["supabase fn","direct","corsproxy","allorigins"];
     function attempt(i){
-      if(i>=tries.length) return Promise.reject(lastErr||new Error("Failed to fetch"));
+      if(i>=tries.length) return Promise.reject(new Error(errs.join(" | ")));
       var ctrl=new AbortController(),t=setTimeout(function(){ctrl.abort();},25000);
       var fopts={signal:ctrl.signal,cache:"no-store"};
       if(i===0) fopts.headers={"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
@@ -7953,7 +7953,7 @@ function fetchCmeDailyOI(sym,statusCb){
         clearTimeout(t);
         if(!r.ok) throw new Error("HTTP "+r.status);
         return r;
-      }).catch(function(e){clearTimeout(t);lastErr=e;return attempt(i+1);});
+      }).catch(function(e){clearTimeout(t);lastErr=e;errs.push(names[i]+": "+(e&&e.message?e.message:e));return attempt(i+1);});
     }
     return attempt(0);
   }).then(function(r){
