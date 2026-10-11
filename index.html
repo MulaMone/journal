@@ -8019,6 +8019,7 @@ function cmeOiFold(cached,fresh){
   var snap={oi:fresh.oi,change:fresh.change,volume:fresh.volume,fetchedAt:fresh.fetchedAt};
   // Trust the PDF's own PRELIMINARY/FINAL header; fall back to the clock only if absent.
   var isFin=(typeof fresh.isFinal==="boolean")?fresh.isFinal:isPastCmeFinalTime();
+  if(typeof fresh.isFinal==="boolean") snap.v=1; // status verified from the PDF header
   if(!cached||cached.date!==fresh.dateStr){
     // New trade date. Before dropping the old record, carry forward its
     // best-known snapshot (Final if we captured one, else whatever Prelim
@@ -8057,7 +8058,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
   var cached=cmeOiCacheGet(sym);
   var lastFetchedAt=cached?((cached.final||cached.prelim||{}).fetchedAt):null;
   var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000||lastFetchedAt<cmeLastBoundaryMs();
-  var missingFinal=cached&&!cached.final&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000);
+  var missingFinal=cached&&(!cached.final||!cached.final.v)&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000);
   if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
     var folded=cmeOiFold(cached,data);
