@@ -7937,25 +7937,11 @@ function fetchCmeDailyOI(sym,statusCb){
   function report(s){ if(statusCb) statusCb(s); }
   return loadPdfJs(statusCb).then(function(){
     report("pdf.js ready. Fetching today's CME bulletin…");
-    // Direct fetch depends on CME sending CORS headers, which it does not do
-    // reliably — fall back to CORS proxies if the direct request fails.
-    var tries=[SUPA_URL+"/functions/v1/cme-bulletin",
-      CME_BULLETIN_URL,
-      "https://corsproxy.io/?url="+encodeURIComponent(CME_BULLETIN_URL),
-      "https://api.allorigins.win/raw?url="+encodeURIComponent(CME_BULLETIN_URL)];
-    var lastErr=null,errs=[],names=["supabase fn","direct","corsproxy","allorigins"];
-    function attempt(i){
-      if(i>=tries.length) return Promise.reject(new Error(errs.join(" | ")));
-      var ctrl=new AbortController(),t=setTimeout(function(){ctrl.abort();},25000);
-      var fopts={signal:ctrl.signal,cache:"no-store"};
-      if(i===0) fopts.headers={"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
-      return fetch(tries[i],fopts).then(function(r){
-        clearTimeout(t);
-        if(!r.ok) return r.text().then(function(tx){throw new Error("HTTP "+r.status+(tx?" "+tx.slice(0,80):""));},function(){throw new Error("HTTP "+r.status);});
-        return r;
-      }).catch(function(e){clearTimeout(t);lastErr=e;errs.push(names[i]+": "+(e&&e.message?e.message:e));return attempt(i+1);});
-    }
-    return attempt(0);
+    // CME PDF is fetched only through the Supabase cme-bulletin function.
+    return fetch(SUPA_URL+"/functions/v1/cme-bulletin",{cache:"no-store",headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}}).then(function(r){
+      if(!r.ok) return r.text().then(function(tx){throw new Error("cme-bulletin HTTP "+r.status+(tx?" "+tx.slice(0,120):""));});
+      return r;
+    });
   }).then(function(r){
     if(!r.ok) throw new Error("bulletin fetch failed: HTTP "+r.status);
     report("Bulletin fetched ("+(r.headers.get("content-length")||"?")+" bytes). Reading into memory…");
