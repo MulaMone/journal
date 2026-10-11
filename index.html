@@ -8058,7 +8058,8 @@ function loadCmeDailyOI2(sym,force,statusCb){
   var cached=cmeOiCacheGet(sym);
   var lastFetchedAt=cached?((cached.final||cached.prelim||{}).fetchedAt):null;
   var stale=!cached||!lastFetchedAt||(Date.now()-lastFetchedAt)>6*60*60*1000||lastFetchedAt<cmeLastBoundaryMs();
-  var missingFinal=cached&&(!cached.final||!cached.final.v)&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000);
+  var verified=cached&&((cached.final&&cached.final.v)||(cached.prelim&&cached.prelim.v));
+  var missingFinal=cached&&(!verified||(!cached.final&&isPastCmeFinalTime()&&(!lastFetchedAt||(Date.now()-lastFetchedAt)>30*60*1000)));
   if(cached&&!force&&!stale&&!missingFinal) return Promise.resolve(cached);
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
     var folded=cmeOiFold(cached,data);
@@ -10120,6 +10121,8 @@ function analystTab(){
     loadCmeDailyOI(sym,force,null).then(function(data){
       if(myToken!==_cmeLoadToken) return;
       renderCmeResult(data,false);
+      var _eff=data.final||data.prelim;
+      if(_eff&&_eff.fetchedAt){var ck=document.createElement("div");ck.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";ck.textContent="checked "+new Date(_eff.fetchedAt).toLocaleTimeString();cmeResult.appendChild(ck);}
       cmeResult.style.opacity="1";
       loadVoiChart(false); // today's row just landed in the voi history log — refresh the chart
     }).catch(function(err){
