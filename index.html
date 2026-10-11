@@ -7886,7 +7886,7 @@ function extractFrontMonthOI(fullText,sym){
   var MONTH_ROW_RE=/^[A-Z]{3}\d{2}\s/;
   var rows=[];
   var errors=[];
-  candidateLines.forEach(function(line){
+  candidateLines.forEach(function(line,li){
     line=line.trim();
     if(!MONTH_ROW_RE.test(line)) return; // stops matching once we've run past the contract rows (TOTAL line, next header, etc.)
     var tokens=line.split(/\s+/);
@@ -7912,6 +7912,16 @@ function extractFrontMonthOI(fullText,sym){
     // of which earlier columns collapsed. "----" (no PNT volume that day)
     // parses to 0 rather than dropping the row.
     var globexVolTok=tokens[idx-1],pntVolTok=tokens[idx-2];
+    // Wrapped rows (e.g. NQ): the price's last digit and the Globex volume
+    // spill onto the next 2 lines, so the row itself ends [pnt vol][OI].
+    // Detect via numeric-only continuation lines; Globex is the last one.
+    var cont=[];
+    for(var lj=li+1;lj<candidateLines.length;lj++){
+      var cl=candidateLines[lj].trim();
+      if(MONTH_ROW_RE.test(cl)||/^TOTAL/.test(cl)||!/^([\d,]+|-+)$/.test(cl)) break;
+      cont.push(cl);
+    }
+    if(cont.length>=2){ globexVolTok=cont[cont.length-1]; pntVolTok=tokens[idx-1]; }
     var globexVol=globexVolTok&&globexVolTok!=="----"?parseInt(globexVolTok.replace(/,/g,""),10):0;
     var pntVol=pntVolTok&&pntVolTok!=="----"?parseInt(pntVolTok.replace(/,/g,""),10):0;
     var volume=(isNaN(globexVol)?0:globexVol)+(isNaN(pntVol)?0:pntVol);
