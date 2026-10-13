@@ -5933,10 +5933,17 @@ function chartTab(){
   }
 
   if(fromSec!=null){
-    url+="&from="+encodeURIComponent(new Date(fromSec*1000).toISOString());
-    // Window ending at/near "now": omit `to` so OANDA uses its own clock
-    // (a device clock ahead of OANDA's gets "Time is in the future" 400s).
-    if(toSec<Math.floor(Date.now()/1000)-300) url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
+    var nowS=Math.floor(Date.now()/1000);
+    if(toSec>=nowS-300){
+      // Window ends at "now": ask for the latest N candles (no from/to) so
+      // OANDA anchors on ITS clock — no future-time 400s, and no stale gap
+      // (from without to would return candles going FORWARD from `from`).
+      var nCandles=Math.min(5000,Math.max(50,Math.ceil((nowS-fromSec)/periodSec)+5));
+      url+="&count="+nCandles;
+    } else {
+      url+="&from="+encodeURIComponent(new Date(fromSec*1000).toISOString());
+      url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
+    }
   } else {
     url+="&count=500";
   }
