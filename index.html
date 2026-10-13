@@ -5903,7 +5903,8 @@ function chartTab(){
     // two years ago — no dependence on how much history exists overall.
     var padCandles=150;
     fromSec=focusTs-periodSec*padCandles;
-    toSec=Math.min(focusTs+periodSec*padCandles,Math.floor(Date.now()/1000));
+    toSec=Math.min(focusTs+periodSec*padCandles,Math.floor(Date.now()/1000)-120);
+    if(fromSec>=toSec) fromSec=toSec-periodSec;
   } else if(tradePoints.length){
     var padSec=periodSec*20;
     var nowSec=Math.floor(Date.now()/1000);
@@ -5919,7 +5920,7 @@ function chartTab(){
     // Never request past "now" — OANDA has no future candles and rejects the
     // request outright. The window's end is simply the present moment; if the
     // last trade is recent, "now" already covers it without any padding.
-    toSec=nowSec;
+    toSec=nowSec-120; // margin: device clock can run ahead of OANDA's
     // OANDA caps a single request at ~5000 candles — a wide date range at a
     // fine granularity (e.g. weeks of history on 5m) blows past that and
     // returns HTTP 400. Keep the most recent window that fits; older trades
@@ -5933,7 +5934,9 @@ function chartTab(){
 
   if(fromSec!=null){
     url+="&from="+encodeURIComponent(new Date(fromSec*1000).toISOString());
-    url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
+    // Window ending at/near "now": omit `to` so OANDA uses its own clock
+    // (a device clock ahead of OANDA's gets "Time is in the future" 400s).
+    if(toSec<Math.floor(Date.now()/1000)-300) url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
   } else {
     url+="&count=500";
   }
