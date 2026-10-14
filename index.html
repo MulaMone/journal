@@ -9154,7 +9154,7 @@ function fetchFedFundsData(){
   }
   var supaHdr={"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
   var bulletinP=loadPdfJs(null).then(function(){
-    return fetch(SUPA_URL+"/functions/v1/cme-bulletin?section=10&url="+encodeURIComponent(FED_BULLETIN_URL),{cache:"no-store",headers:supaHdr}).then(parseBulletin);
+    return fetch(SUPA_URL+"/functions/v1/cme-fed-bulletin",{cache:"no-store",headers:supaHdr}).then(parseBulletin);
   }).catch(function(e1){
     // edge function returned the OI section (no ZQ block) or failed -> try direct CME (works only if CORS allows)
     return fetch(FED_BULLETIN_URL,{cache:"no-store"}).then(parseBulletin).catch(function(e2){
