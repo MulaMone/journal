@@ -9609,7 +9609,7 @@ function buildFedFundsView(data,isM){
         while(card.firstChild) fomcLeft.appendChild(card.firstChild);
         card.style.display="flex";card.style.gap="28px";card.style.alignItems="stretch";card.style.flexWrap="wrap";
         var fomcDivider=div();fomcDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;";
-        histRow.style.cssText="display:flex;gap:28px;align-items:center;flex:1;";
+        histRow.style.cssText="display:flex;gap:28px;align-items:flex-start;flex:1;";
         card.appendChild(fomcLeft);card.appendChild(fomcDivider);card.appendChild(histRow);
         var cdDivider=div();cdDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;margin-left:auto;";
         histRow.appendChild(cdDivider);histRow.appendChild(buildFomcCountdown(meetingIso));
@@ -10416,8 +10416,7 @@ function analystTab(){
   function loadFed(force){
     var myToken=++_fedLoadToken;
     var fedHistP=loadFedProbFromCloud(); // must finish before the card reads history, or mobile renders off stale local rows
-    if(fedBody.firstChild) fedBody.style.opacity="0.45";
-    else showFedLoading();
+    if(!fedBody.firstChild) showFedLoading(); // no dimming on refresh — keep the card as-is until new data lands
     var liveMeetingIso=nextFomcMeetingISO();
     var liveMeetingCode=liveMeetingIso?contractMonthCodeFromISO(liveMeetingIso):null;
     var livePrevCode=liveMeetingCode?prevContractMonthCode(liveMeetingCode):null;
