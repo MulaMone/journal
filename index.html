@@ -7983,10 +7983,20 @@ function fetchCmeDailyOI(sym,statusCb){
   }).then(function(pageTexts){
     report("Text extracted. Searching for "+sym+" front-month row…");
     var fullText=pageTexts.join("\n");
-    var result=extractFrontMonthOI(fullText,sym);
     var dm=fullText.match(/[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{2}, \d{4}/);
     var sm=fullText.match(/^\s*(PRELIMINARY|FINAL)\s*$/m);
-    return {oi:result.oi,change:result.change,volume:result.volume,contractMonth:result.contractMonth,dateStr:dm?dm[0]:null,isFinal:sm?(sm[1]==="FINAL"):null,fetchedAt:Date.now()};
+    // One PDF holds every symbol — parse them ALL so ES and NQ always update together.
+    var all={},errs={};
+    Object.keys(CME_ROW_PATTERNS).forEach(function(k){
+      try{
+        var r=extractFrontMonthOI(fullText,k);
+        all[k]={oi:r.oi,change:r.change,volume:r.volume,contractMonth:r.contractMonth,dateStr:dm?dm[0]:null,isFinal:sm?(sm[1]==="FINAL"):null,fetchedAt:Date.now()};
+      }catch(e){errs[k]=(e&&e.message)?e.message:String(e);}
+    });
+    if(!all[sym]) throw new Error(errs[sym]||("no "+sym+" data in bulletin"));
+    var out=all[sym];
+    out._all=all;
+    return out;
   });
 }
 
@@ -8091,10 +8101,22 @@ function loadCmeDailyOI2(sym,force,statusCb){
   if(cached&&!force&&(Date.now()-lastTry)<10*60*1000) return Promise.resolve(cached);
   try{localStorage.setItem(tryKey,String(Date.now()));}catch(e){}
   return fetchCmeDailyOI(sym,statusCb).then(function(data){
+    var all=data._all||{};delete data._all;
     var folded=cmeOiFold(cached,data);
     cmeOiCacheSet(sym,folded);
     var eff=folded.final||folded.prelim;
     if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi,folded.contractMonth);
+    // Same bulletin also updates the other symbol(s), selected or not.
+    Object.keys(all).forEach(function(k){
+      if(k===sym) return;
+      try{
+        var f2=cmeOiFold(cmeOiCacheGet(k),all[k]);
+        cmeOiCacheSet(k,f2);
+        var e2=f2.final||f2.prelim;
+        if(e2) logDailyVoi(k,f2.date,e2.volume,e2.oi,f2.contractMonth);
+        try{localStorage.setItem("edge_cme_try_"+k,String(Date.now()));}catch(e){}
+      }catch(e){}
+    });
     // Push the freshly-fetched bulletin data up right away, so another
     // device (e.g. mobile) picks it up on its next poll instead of having
     // to fetch/parse the bulletin itself.
