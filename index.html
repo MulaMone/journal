@@ -1613,18 +1613,19 @@ function voiComboSVG(data,w,h2,sym){
     svg+='<rect x="'+(bx(i)-bw/2)+'" y="'+yv+'" width="'+bw+'" height="'+hbar+'" fill="#2f5fc4" rx="1"/>';
     svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-slotW/2)+'" y="'+padT+'" width="'+slotW+'" height="'+H+'" fill="transparent"><title>'+ttl+'</title></rect>';
   });
-  // OI line — only draw between consecutive points that both have OI, so
-  // a gap in the (still-growing) daily capture doesn't draw a misleading
-  // straight line across it. No per-point dots (matches CME's own chart,
+  // OI line — joins every bar that has OI; bars with no captured OI are
+  // bridged with a dashed segment so the latest point never floats alone. No per-point dots (matches CME's own chart,
   // which is a plain line) — just one dot marking the current/latest day.
   if(hasOi){
-    var segs=[],cur=[],lastOiIdx=-1;
+    var lastOiIdx=-1,prevIdx=-1;
     data.forEach(function(d,i){
-      if(typeof d.oi==="number"){cur.push(bx(i)+","+oiY(d.oi));lastOiIdx=i;}
-      else if(cur.length){segs.push(cur);cur=[];}
+      if(typeof d.oi!=="number") return;
+      if(prevIdx>=0){
+        var gap=(i-prevIdx>1);
+        svg+='<line x1="'+bx(prevIdx)+'" y1="'+oiY(data[prevIdx].oi)+'" x2="'+bx(i)+'" y2="'+oiY(d.oi)+'" stroke="#00e676" stroke-width="2"'+(gap?' stroke-dasharray="4 3" opacity="0.7"':'')+'/>';
+      }
+      prevIdx=i;lastOiIdx=i;
     });
-    if(cur.length) segs.push(cur);
-    segs.forEach(function(pts){svg+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#00e676" stroke-width="2"/>';});
     if(lastOiIdx>=0){
       var ld=data[lastOiIdx];
       svg+='<circle cx="'+bx(lastOiIdx)+'" cy="'+oiY(ld.oi)+'" r="3" fill="#00e676"><title>'+ld.d+': '+ld.oi.toLocaleString()+' OI</title></circle>';
