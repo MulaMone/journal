@@ -1614,15 +1614,14 @@ function voiComboSVG(data,w,h2,sym){
     svg+='<rect class="voi-bar" data-tip="'+ttlAttr+'" x="'+(bx(i)-slotW/2)+'" y="'+padT+'" width="'+slotW+'" height="'+H+'" fill="transparent"><title>'+ttl+'</title></rect>';
   });
   // OI line — joins every bar that has OI; bars with no captured OI are
-  // bridged with a dashed segment so the latest point never floats alone. No per-point dots (matches CME's own chart,
+  // bridged by a straight solid segment so the line is never broken. No per-point dots (matches CME's own chart,
   // which is a plain line) — just one dot marking the current/latest day.
   if(hasOi){
     var lastOiIdx=-1,prevIdx=-1;
     data.forEach(function(d,i){
       if(typeof d.oi!=="number") return;
       if(prevIdx>=0){
-        var gap=(i-prevIdx>1);
-        svg+='<line x1="'+bx(prevIdx)+'" y1="'+oiY(data[prevIdx].oi)+'" x2="'+bx(i)+'" y2="'+oiY(d.oi)+'" stroke="#00e676" stroke-width="2"'+(gap?' stroke-dasharray="4 3" opacity="0.7"':'')+'/>';
+        svg+='<line x1="'+bx(prevIdx)+'" y1="'+oiY(data[prevIdx].oi)+'" x2="'+bx(i)+'" y2="'+oiY(d.oi)+'" stroke="#00e676" stroke-width="2"'+'/>';
       }
       prevIdx=i;lastOiIdx=i;
     });
@@ -7666,13 +7665,14 @@ function voiHistCacheSet(sym,arr){
 // YYYY-MM-DD so it sorts and matches Yahoo's date format) — a later call
 // for the same trade date (e.g. Prelim → Final) overwrites rather than
 // duplicates. Keeps a generous 180-day cap so this never grows unbounded.
-function logDailyVoi(sym,dateStr,vol,oi,contractMonth){
+function logDailyVoi(sym,dateStr,vol,oi,contractMonth,chg){
   if(!dateStr||typeof vol!=="number"||typeof oi!=="number"||isNaN(vol)||isNaN(oi)) return;
   var iso=cmeDateStrToISO(dateStr);
   if(!iso) return;
   var hist=voiHistCacheGet(sym);
   var idx=hist.findIndex(function(r){return r.d===iso;});
   var row={d:iso,vol:vol,oi:oi,cm:contractMonth||null};
+  if(typeof chg==="number"&&!isNaN(chg)) row.chg=chg;
   if(idx>=0) hist[idx]=row; else hist.push(row);
   hist.sort(function(a,b){return a.d<b.d?-1:1;});
   if(hist.length>180) hist=hist.slice(hist.length-180);
@@ -7765,10 +7765,13 @@ function loadYahooVolumeHistory(sym,force){
 // than what the card itself displays — the two can't drift apart.
 function confirmedCmeDateISO(sym){
   var c=cmeOiCacheGet(sym);
-  if(!c||!c.date) return null;
-  return cmeDateStrToISO(c.date);
+  var iso=(c&&c.date)?cmeDateStrToISO(c.date):null;
+  // Also trust days the server-side capture (cme-voi-capture) logged while the app was closed.
+  var h=voiHistCacheGet(sym);
+  if(h.length){var last=h[h.length-1].d;if(!iso||last>iso) iso=last;}
+  return iso;
 }
-function mergeVoiHistory(yahooRows,ownRows,cutoffDate){
+function mergeVoiHistory(yahooRows,ownRows,cutoffDate,sym){
   var byDate={};
   if(!cutoffDate) return []; // nothing confirmed yet — show nothing rather than guess
   yahooRows.forEach(function(r){
@@ -7777,9 +7780,19 @@ function mergeVoiHistory(yahooRows,ownRows,cutoffDate){
   });
   ownRows.forEach(function(r){
     if(r.d>cutoffDate) return; // same gate applies to our own capture too
-    byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi,cm:r.cm||null};
+    byDate[r.d]={d:r.d,vol:r.vol,oi:r.oi,cm:r.cm||null,chg:(typeof r.chg==="number")?r.chg:null};
   });
-  return Object.keys(byDate).sort().map(function(d){return byDate[d];});
+  var out=Object.keys(byDate).sort().map(function(d){return byDate[d];});
+  // A day we never captured has no OI, but the next day's CME bulletin
+  // reports its net change vs that day — so prior OI = OI - change. Fills
+  // the gap with the real number instead of a break in the line.
+  var cc=sym?cmeOiCacheGet(sym):null,ce=cc&&(cc.final||cc.prelim);
+  for(var i=out.length-1;i>0;i--){
+    var cur=out[i],prev=out[i-1],chg=cur.chg;
+    if(chg==null&&ce&&cc.date&&cmeDateStrToISO(cc.date)===cur.d&&typeof ce.change==="number") chg=ce.change;
+    if(typeof cur.oi==="number"&&typeof chg==="number"&&typeof prev.oi!=="number") prev.oi=cur.oi-chg;
+  }
+  return out;
 }
 var PDFJS_CDNS=[
   {js:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",worker:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"},
@@ -8108,7 +8121,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
     var folded=cmeOiFold(cached,data);
     cmeOiCacheSet(sym,folded);
     var eff=folded.final||folded.prelim;
-    if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi,folded.contractMonth);
+    if(eff) logDailyVoi(sym,folded.date,eff.volume,eff.oi,folded.contractMonth,eff.change);
     // Same bulletin also updates the other symbol(s), selected or not.
     Object.keys(all).forEach(function(k){
       if(k===sym) return;
@@ -8116,7 +8129,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
         var f2=cmeOiFold(cmeOiCacheGet(k),all[k]);
         cmeOiCacheSet(k,f2);
         var e2=f2.final||f2.prelim;
-        if(e2) logDailyVoi(k,f2.date,e2.volume,e2.oi,f2.contractMonth);
+        if(e2) logDailyVoi(k,f2.date,e2.volume,e2.oi,f2.contractMonth,e2.change);
         try{localStorage.setItem("edge_cme_try_"+k,String(Date.now()));}catch(e){}
       }catch(e){}
     });
@@ -10262,9 +10275,9 @@ function analystTab(){
   function loadVoiChart(force){
     var myToken=++_voiLoadToken;
     voiBody.style.opacity="0.45";
-    Promise.all([loadYahooVolumeHistory(sym,force),Promise.resolve(voiHistCacheGet(sym))]).then(function(res){
+    Promise.all([loadYahooVolumeHistory(sym,force),loadMktFromCloud(false).then(function(){return voiHistCacheGet(sym);})]).then(function(res){
       if(myToken!==_voiLoadToken) return;
-      var merged=mergeVoiHistory(res[0],res[1],confirmedCmeDateISO(sym));
+      var merged=mergeVoiHistory(res[0],res[1],confirmedCmeDateISO(sym),sym);
       renderVoiChart(sym,merged);
       voiBody.style.opacity="1";
     }).catch(function(){
@@ -10273,7 +10286,7 @@ function analystTab(){
     });
   }
   // Show whatever's cached immediately, no blank flash, then refresh.
-  renderVoiChart(sym,mergeVoiHistory((voiYahooCacheGet(sym)||{rows:[]}).rows,voiHistCacheGet(sym),confirmedCmeDateISO(sym)));
+  renderVoiChart(sym,mergeVoiHistory((voiYahooCacheGet(sym)||{rows:[]}).rows,voiHistCacheGet(sym),confirmedCmeDateISO(sym),sym));
   loadVoiChart(false);
 
   var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
