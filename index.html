@@ -10274,15 +10274,12 @@ function analystTab(){
   }
   function loadVoiChart(force){
     var myToken=++_voiLoadToken;
-    voiBody.style.opacity="0.45";
     Promise.all([loadYahooVolumeHistory(sym,force),loadMktFromCloud(false).then(function(){return voiHistCacheGet(sym);})]).then(function(res){
       if(myToken!==_voiLoadToken) return;
       var merged=mergeVoiHistory(res[0],res[1],confirmedCmeDateISO(sym),sym);
       renderVoiChart(sym,merged);
-      voiBody.style.opacity="1";
     }).catch(function(){
       if(myToken!==_voiLoadToken) return;
-      voiBody.style.opacity="1";
     });
   }
   // Show whatever's cached immediately, no blank flash, then refresh.
