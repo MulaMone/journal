@@ -9394,7 +9394,7 @@ function computeFedProbability(meetingIso,curve,effr){
 function fedProbHistGet(){try{var raw=localStorage.getItem("edge_fedprob_hist_v1");return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function fedProbHistSet(arr){try{localStorage.setItem("edge_fedprob_hist_v1",JSON.stringify(arr));}catch(e){}}
 // Union of two history lists, one row per (meeting, trading date). Every device records, so on a
-// collision the earliest-recorded row wins — deterministic, so all devices converge on identical rows.
+// collision the latest-recorded row wins — deterministic, so all devices converge on identical rows.
 // Same 60-day / 300-row trim as recording.
 function fedProbHistMerge(primary,secondary){
   var map={};
@@ -9402,7 +9402,7 @@ function fedProbHistMerge(primary,secondary){
     list.forEach(function(r){
       if(!r||!r.meetingCode) return;
       var k=r.meetingCode+"|"+(r.dateISO||("ts"+r.ts));
-      if(!map[k]||(r.ts||0)<(map[k].ts||0)) map[k]=r;
+      if(!map[k]||(r.ts||0)>(map[k].ts||0)) map[k]=r;
     });
   });
   var out=Object.keys(map).map(function(k){return map[k];}).sort(function(x,y){return (x.ts||0)-(y.ts||0);});
@@ -9428,9 +9428,8 @@ function bulletinDateISO(dateStr){
 function recordFedProbSnapshot(prob,dateISO){
   if(!prob) return;
   var all=fedProbHistGet();
-  var lastForMeeting=null;
-  for(var i=all.length-1;i>=0;i--){ if(all[i].meetingCode===prob.meetingCode){ lastForMeeting=all[i]; break; } }
-  if(lastForMeeting&&dateISO&&lastForMeeting.dateISO===dateISO) return;
+  // Same date already logged -> replace with the latest read (day's close, not a stale first print).
+  if(dateISO) all=all.filter(function(r){return !(r.meetingCode===prob.meetingCode&&r.dateISO===dateISO);});
   all.push({meetingCode:prob.meetingCode,hold:prob.holdProb,move:prob.stepProb,deltaBp:prob.deltaBp,ts:Date.now(),dateISO:dateISO});
   var cutoff=Date.now()-120*24*60*60*1000; // keep ~120 days of history
   all=all.filter(function(r){return r.ts>=cutoff;});
@@ -9456,6 +9455,8 @@ function fedProbSnapshotDaysAgo(hist,anchorISO,days){
   // 1w: 4; 1m: 7) so a missed day doesn't blank the chip. Never uses a row newer than the target.
   var tol=(days<=1?3:days<=7?4:7)*DAY;
   var best=null,bestT=-Infinity;
+  // 1-day: previous recorded trading day (strictly before anchor), regardless of weekend/holiday gap.
+  if(days<=1){target=anchor-DAY;tol=5*DAY;}
   hist.forEach(function(r){
     if(!r.dateISO) return;
     var t=new Date(r.dateISO+"T00:00:00Z").getTime();
@@ -10582,8 +10583,13 @@ function analystTab(){
   }
   _analystResumeEvents.forEach(function(ev){(ev==="visibilitychange"?document:window).removeEventListener(ev,_analystVisHandler);});
   _analystVisHandler=function(){
-    if(!document.hidden && State.tab==="analyst"){loadLegacy(false);load(false);loadYc(false);loadLiq(false);loadDxy(false);refreshMktSections(false);}
+    if(document.hidden) return;
+    if(!window._lastSeenTs) window._lastSeenTs=Date.now();
+    var away=Date.now()-window._lastSeenTs>45000; // backgrounded a while (phone) -> force-refresh, don't trust cache
+    window._lastSeenTs=Date.now();
+    if(State.tab==="analyst"){var f=away;loadLegacy(f);load(f);loadYc(f);loadLiq(f);loadDxy(f);refreshMktSections(f);}
   };
+  document.addEventListener("visibilitychange",function(){ if(document.hidden) window._lastSeenTs=Date.now(); });
   // iOS home-screen PWAs don't reliably fire visibilitychange on resume — pageshow/focus cover that.
   _analystResumeEvents.forEach(function(ev){(ev==="visibilitychange"?document:window).addEventListener(ev,_analystVisHandler);});
   if(_mktPollInterval) clearInterval(_mktPollInterval);
@@ -11450,9 +11456,10 @@ function pollCloud(){
 }
 setInterval(pollCloud,10000);
 // Catch up immediately when the tab becomes visible again, instead of waiting up to 10s
-document.addEventListener("visibilitychange",function(){
-  if(!document.hidden){ pollActiveAccount(); pollCloud(); }
-});
+function _resumeCatchUp(){ if(!document.hidden){ pollActiveAccount(); pollCloud(); } }
+document.addEventListener("visibilitychange",_resumeCatchUp);
+window.addEventListener("pageshow",_resumeCatchUp); // iOS home-screen PWAs often skip visibilitychange
+window.addEventListener("focus",_resumeCatchUp);
 setInterval(pollActiveAccount,8000);
 
 // Images change far less often than trades/notes, so this polls on a much
