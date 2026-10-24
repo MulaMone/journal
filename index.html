@@ -1188,6 +1188,8 @@ var State={
   newsChecks:ls("newsChecks",{}),
   newsChecksDate:ls("newsChecksDate",""),
   newsOther:ls("newsOther",""),
+  newsOtherDate:ls("newsOtherDate",""),
+  newsAutoChecked:ls("newsAutoChecked",[]),
   newsSelected:ls("newsSelected",[]),
   newsSelectedDate:ls("newsSelectedDate",""),
   newsTimes:ls("newsTimes",{}),
@@ -2649,7 +2651,7 @@ function syncTodayNews(){
   var etToday=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
   if(_newsSyncDay===etToday) return;
   _newsSyncDay=etToday;
-  var changed=autoSelectNewsLabels(computeTodayMacroEvents(etToday));
+  var changed=false;
   loadLocalCalendar(false).then(function(data){
     var todays=data.rows.filter(function(ev){return ev.date&&ev.date.slice(0,10)===etToday&&ev.country==="USD"&&ev.impact==="High";}).map(function(ev){return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};});
     if(autoSelectNewsLabels(todays)&&State.tab==="home") render();
@@ -3211,6 +3213,12 @@ var FOMC_DECISION_DATES_2027=["2027-01-27","2027-03-17","2027-04-28","2027-06-09
 // next year's full schedule each September — append it here when it's out.
 var FOMC_DECISION_DATES_2028=["2028-01-26"];
 var FOMC_DECISION_DATES_ALL=FOMC_DECISION_DATES_2026.concat(FOMC_DECISION_DATES_2027,FOMC_DECISION_DATES_2028);
+// Sunday (ET) that starts the current trading week, as YYYY-MM-DD.
+function etWeekStartISO(){
+  var p=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}).split("-");
+  var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));d.setUTCDate(d.getUTCDate()-d.getUTCDay());
+  return d.toISOString().slice(0,10);
+}
 function computeTodayMacroEvents(etTodayStr){
   var events=[];
   if(FOMC_DECISION_DATES_ALL.indexOf(etTodayStr)>-1){
@@ -3393,13 +3401,8 @@ function prepTab(){
     }
   }
 
-  function renderFromLocalCompute(){
-    var todaysComputed=computeTodayMacroEvents(etTodayStr);
-    autoSelectNewsLabels(todaysComputed);
-    renderCalendarRows(todaysComputed);
-  }
-
-  renderFromLocalCompute(); // show something immediately, then upgrade if the live file loads
+  liveNewsBody.innerHTML="";
+  var ldMsg=div("xs m");ldMsg.textContent="Loading calendar…";liveNewsBody.appendChild(ldMsg);
   loadLocalCalendar(false).then(function(data){
     var todays=data.rows.filter(function(ev){
       return ev.date&&ev.date.slice(0,10)===etTodayStr&&ev.country==="USD"&&ev.impact==="High";
@@ -3407,10 +3410,22 @@ function prepTab(){
       return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
     });
     var changed=autoSelectNewsLabels(todays);
+    // Whole week (Sun–Sat ET): tick the checklist box for every High-impact USD event on the main calendar, once per week
+    var wkStart=etWeekStartISO();var wkEndD=new Date(wkStart+"T00:00:00Z");wkEndD.setUTCDate(wkEndD.getUTCDate()+6);var wkEnd=wkEndD.toISOString().slice(0,10);
+    var weekEvs=data.rows.filter(function(ev){var d=ev.date&&ev.date.slice(0,10);return d&&ev.country==="USD"&&ev.impact==="High"&&d>=wkStart&&d<=wkEnd;}).map(function(ev){return {title:ev.title};});
+    var wkChanged=false;
+    matchNewsLabels(weekEvs).matched.forEach(function(l){
+      var key=null;
+      NEWS_EVENTS.forEach(function(e,i){if(e.l===l)key="news_"+i;});
+      MACRO_EVENTS.forEach(function(e,i){if(e.l===l)key="macro_"+i;});
+      if(key&&State.newsAutoChecked.indexOf(key)===-1){State.newsAutoChecked.push(key);State.newsChecks[key]=true;wkChanged=true;}
+    });
+    if(wkChanged){ss("newsChecks",State.newsChecks);ss("newsAutoChecked",State.newsAutoChecked);changed=true;}
     renderCalendarRows(todays);
     if(changed) render(); // refresh the checklist below with the newly auto-flagged items
   }).catch(function(){
-    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — the local-compute render above already stands.
+    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — nothing is auto-flagged from the fallback.
+    liveNewsBody.innerHTML="";var er=div("xs m");er.textContent="Main calendar not available yet.";liveNewsBody.appendChild(er);
   });
 
   el.appendChild(liveNewsCard);
@@ -3591,7 +3606,9 @@ function prepTab(){
   ];
 
   var newsToday=today();
-  if(State.newsChecksDate!==newsToday){State.newsChecks={};State.newsChecksDate=newsToday;State.newsOther="";ss("newsChecks",{});ss("newsChecksDate",newsToday);ss("newsOther","");}
+  var newsWeek=etWeekStartISO();
+  if(State.newsChecksDate!==newsWeek){State.newsChecks={};State.newsChecksDate=newsWeek;State.newsAutoChecked=[];ss("newsChecks",{});ss("newsChecksDate",newsWeek);ss("newsAutoChecked",[]);}
+  if(State.newsOtherDate!==newsToday){if(State.newsOtherDate){State.newsOther="";ss("newsOther","");}State.newsOtherDate=newsToday;ss("newsOtherDate",newsToday);}
   if(State.newsSelectedDate!==newsToday){State.newsSelected=[];State.newsSelectedDate=newsToday;ss("newsSelected",[]);ss("newsSelectedDate",newsToday);}
 
   var newsCard=div("card mt12");
