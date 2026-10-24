@@ -11248,7 +11248,7 @@ function _nfLsSet(k,v){try{localStorage.setItem("edge_nf_"+k,JSON.stringify(v));
 var _NF_STOP=new Set("the and for with that this from into over after before about amid says say said will would could has have had are was were its his her their than then them they you your out new now how why what who not but can may more less per via vs just some several days day".split(" "));
 function _nfStems(t){
   var o=new Set();
-  String(t||"").toLowerCase().replace(/[^a-z0-9% ]/g," ").split(/\s+/).forEach(function(w){
+  String(t||"").toLowerCase().replace(/^\s*world in brief\s*:/,"").replace(/\s[-\u2013\u2014]\s[^-\u2013\u2014]{3,60}$/,"").replace(/[^a-z0-9% ]/g," ").split(/\s+/).forEach(function(w){
     if(w.length<3||_NF_STOP.has(w)) return;
     o.add(w.length>5?w.slice(0,5):w);
   });
@@ -11267,7 +11267,7 @@ function _nfDedupe(items){
       if(Math.abs(c.it.ts-it.ts)>18*3600*1000) continue;
       var inter=0;tk.forEach(function(w){if(c.tk.has(w)) inter++;});
       var ov=inter/Math.max(1,Math.min(tk.size,c.tk.size));
-      if((inter>=3&&ov>=0.5)||(inter>=4&&ov>=0.4)||(inter>=2&&ov>=0.8)) hit=c;
+      if((inter>=3&&ov>=0.4)||(inter>=2&&ov>=0.8)) hit=c;
     }
     if(hit){
       var also=(hit.it.also=(hit.it.also||[]).slice());
