@@ -11371,7 +11371,7 @@ function newsFeedTab(){
   var chips=div();chips.style.cssText="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none;";
   function chip(label,active,fn,color){
     var c=h("button",{className:"btn"},[label]);
-    c.style.cssText="flex-shrink:0;min-height:36px;padding:0 12px;font-family:monospace;font-size:10px;letter-spacing:1px;cursor:pointer;white-space:nowrap;"+(active?"color:"+(color||"var(--accent)")+";border-color:"+(color||"var(--accent)")+";":"color:#2ecc71;border-color:#2ecc71;");
+    c.style.cssText="flex-shrink:0;min-height:36px;padding:0 12px;font-family:monospace;font-size:10px;letter-spacing:1px;cursor:pointer;white-space:nowrap;"+(active?"color:"+(color||"var(--accent)")+";border-color:"+(color||"var(--accent)")+";":(isMobile()?"color:#2ecc71;border-color:#2ecc71;":""));
     c.addEventListener("click",fn);return c;
   }
   function paintChips(){
