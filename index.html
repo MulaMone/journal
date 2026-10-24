@@ -11397,7 +11397,7 @@ function _nfPaintCal(){
     var cc=span("",e.ccy);cc.style.cssText="color:var(--text3);display:block;";
     var cd=span("",past?"released":_nfIn(e.ts-now));cd.style.cssText="display:block;color:"+(past?"var(--text3)":(firstUp?"var(--accent)":"var(--text3)"))+";font-weight:"+(firstUp&&!past?"700":"400")+";";
     if(!past) firstUp=false;
-    rt.appendChild(cc);rt.appendChild(cd);
+    rt.appendChild(cd);
     r.appendChild(tm);r.appendChild(mid);r.appendChild(rt);box.appendChild(r);
   });
 }
