@@ -11248,7 +11248,7 @@ function _nfInit(){
   var c=_nfLsGet("cache");
   if(c&&c.items){_nf.cal=c.cal||[];_nf.items=c.items;_nf.fetchedAt=c.fetchedAt||0;_nf.errs=c.errs||[];}
   _nf.seenTs=_nfLsGet("seen")||0;
-  var resume=function(){ if(State.tab==="news"&&!document.hidden) newsFeedFetch(); };
+  var resume=function(){ if(State.tab==="news"&&!document.hidden) newsFeedFetch(false,true); };
   document.addEventListener("visibilitychange",resume);
   window.addEventListener("pageshow",resume);
   window.addEventListener("focus",resume);
@@ -11257,7 +11257,7 @@ function _nfAgo(ts){
   var m=Math.max(0,Math.round((Date.now()-ts)/60000));
   if(m<1) return "now"; if(m<60) return m+"m"; var hh=Math.floor(m/60); if(hh<24) return hh+"h"; return Math.floor(hh/24)+"d";
 }
-function newsFeedFetch(force){
+function newsFeedFetch(force,onOpen){
   if(_nf.loading) return Promise.resolve();
   _nf.loading=true; _nfPaintMeta();
   var id=encodeURIComponent(getSyncId()+"__news");
@@ -11276,6 +11276,10 @@ function newsFeedFetch(force){
   }).catch(function(){ _nf.failed=true; }).then(function(){
     _nf.loading=false;
     if(State.tab==="news"){ _nfPaintCal(); _nfPaintList(); _nfPaintMeta(); }
+    // On opening the tab / returning to the page: if the saved copy is >2 min old, have the function pull fresh feeds (at most once a minute)
+    if(onOpen&&!force&&Date.now()-(_nf.fetchedAt||0)>2*60000&&Date.now()-(_nf.trigAt||0)>60000){
+      _nf.trigAt=Date.now(); return newsFeedFetch(true);
+    }
   });
 }
 function _nfEt(ts,opts){try{return new Date(ts).toLocaleString("en-US",Object.assign({timeZone:"America/New_York"},opts));}catch(e){return "";}}
@@ -11411,7 +11415,7 @@ function newsFeedTab(){
   foot.textContent="Free sources: Fed, BLS, BEA, Treasury, EIA, CNBC, Yahoo, MarketWatch, Reuters/Bloomberg/AP headlines via Google News. ★ = official. Headlines can lag paid squawks by a few minutes.";
   wrap.appendChild(foot);
   _nfPaintCal();_nfPaintList();_nfPaintMeta();
-  newsFeedFetch();
+  newsFeedFetch(false,true);
   _nf.timer=setInterval(function(){
     if(State.tab!=="news"){clearInterval(_nf.timer);_nf.timer=null;return;}
     if(!document.hidden) newsFeedFetch();
