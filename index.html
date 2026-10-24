@@ -11426,12 +11426,12 @@ function _nfPaintList(){
   list.forEach(function(it){
     var isNew=it.ts>_nf.seenTs;
     var row=h("a",{href:it.url,target:"_blank",rel:"noopener noreferrer"});
-    row.style.cssText="display:block;text-decoration:none;color:inherit;padding:10px 12px;margin-bottom:6px;background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(it.tier===1?"#ff4444":(isNew?"var(--accent)":"var(--border2)"))+";border-radius:4px;min-height:44px;-webkit-tap-highlight-color:transparent;";
+    row.style.cssText="display:block;text-decoration:none;color:inherit;padding:10px 12px;margin-bottom:6px;border-radius:4px;min-height:44px;-webkit-tap-highlight-color:transparent;"+(it.tier===1?"background:linear-gradient(90deg,#3a0f18,#240b14);border:1px solid #ff4444aa;border-left:3px solid #ff4444;box-shadow:0 0 14px #ff444430;":"background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(isNew?"var(--accent)":"var(--border2)")+";");
     var top=div();top.style.cssText="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-family:monospace;font-size:10px;letter-spacing:1px;";
     var tm=span("",_nfAgo(it.ts));tm.style.cssText="color:var(--text3);min-width:26px;";
     var tg=span("",it.tag||"MACRO");tg.style.cssText="color:"+(TAGC[it.tag]||"#ffcc44")+";border:1px solid currentColor;border-radius:3px;padding:1px 5px;font-size:9px;";
     top.appendChild(tm);top.appendChild(tg);
-    if(it.tier===1){var b=span("imp-high","HIGH");b.style.cssText="padding:1px 5px;border-radius:3px;font-size:9px;";top.appendChild(b);}
+    if(it.tier===1){var b=span("","HIGH");b.style.cssText="padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:#ff4444;color:#fff;";top.appendChild(b);}
     if(isNew){var nw=span("","NEW");nw.style.cssText="color:var(--accent);font-size:9px;font-weight:700;";top.appendChild(nw);}
     var src=span("",(it.official?"★ ":"")+(it.src||"")+(it.also&&it.also.length?" +"+it.also.length:""));if(it.also&&it.also.length)src.title="Also: "+it.also.join(", ");src.style.cssText="margin-left:auto;color:var(--text3);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     top.appendChild(src);
