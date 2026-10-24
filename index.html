@@ -11261,7 +11261,9 @@ function newsFeedFetch(force){
   if(_nf.loading) return Promise.resolve();
   _nf.loading=true; _nfPaintMeta();
   var id=encodeURIComponent(getSyncId()+"__news");
-  return supaFetch("GET","edge_data?user_id=eq."+id+"&select=settings").then(function(r){
+  // REFRESH button: ask the market-news Edge Function to re-pull the feeds first, then read the row it saves
+  var pre=force?fetch(SUPA_URL+"/functions/v1/market-news",{cache:"no-store",headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}}).catch(function(){}):Promise.resolve();
+  return pre.then(function(){return supaFetch("GET","edge_data?user_id=eq."+id+"&select=settings");}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(rows){
