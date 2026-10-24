@@ -7103,7 +7103,7 @@ function notesTab(){
     var mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]+" "+d.getDate();
     if(days<0) return {t:" · renewed "+mn+" (overdue)",c:"#ff4444",b:true};
     if(days<=14) return {t:" · renews "+mn+" ("+days+"d)",c:"#ffab00",b:true};
-    return {t:" · renews "+mn,c:"#ffffff",b:false};
+    return {t:" · renews "+mn,c:"#00d4d4",b:false};
   }
   function ohRenewAppend(sub,o){
     var r=ohRenewInfo(o);if(!r) return;
