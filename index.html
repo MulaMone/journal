@@ -11243,10 +11243,43 @@ function settingsTab(){
 var _nf={items:[],cal:[],calAll:false,fetchedAt:0,errs:[],tier:"all",tag:"ALL",loading:false,failed:false,timer:null,seenTs:0,inited:false};
 function _nfLsGet(k){try{var v=localStorage.getItem("edge_nf_"+k);return v?JSON.parse(v):null;}catch(e){return null;}}
 function _nfLsSet(k,v){try{localStorage.setItem("edge_nf_"+k,JSON.stringify(v));}catch(e){}}
+// Collapse headlines about the same story (different wording / different times) into one row.
+// Compares stemmed keywords; the best-ranked headline stays (official > tier 1 > wire), the others become "+N".
+var _NF_STOP=new Set("the and for with that this from into over after before about amid says say said will would could has have had are was were its his her their than then them they you your out new now how why what who not but can may more less per via vs just some several days day".split(" "));
+function _nfStems(t){
+  var o=new Set();
+  String(t||"").toLowerCase().replace(/[^a-z0-9% ]/g," ").split(/\s+/).forEach(function(w){
+    if(w.length<3||_NF_STOP.has(w)) return;
+    o.add(w.length>5?w.slice(0,5):w);
+  });
+  return o;
+}
+function _nfDedupe(items){
+  var RANK={Reuters:1,Bloomberg:2,AP:3,FinancialJuice:4,investingLive:4,CNBC:5,MarketWatch:6};
+  var rank=function(i){return (i.official?0:10)+(i.tier===1?0:5)+(RANK[i.src]!==undefined?RANK[i.src]:9)/10;};
+  var pri=(items||[]).slice().sort(function(a,b){return rank(a)-rank(b)||b.ts-a.ts;});
+  var kept=[];
+  pri.forEach(function(it){
+    var tk=_nfStems(it.title);
+    var hit=null;
+    for(var k=0;k<kept.length&&!hit;k++){
+      var c=kept[k];
+      if(Math.abs(c.it.ts-it.ts)>18*3600*1000) continue;
+      var inter=0;tk.forEach(function(w){if(c.tk.has(w)) inter++;});
+      var ov=inter/Math.max(1,Math.min(tk.size,c.tk.size));
+      if((inter>=3&&ov>=0.5)||(inter>=4&&ov>=0.4)||(inter>=2&&ov>=0.8)) hit=c;
+    }
+    if(hit){
+      var also=(hit.it.also=(hit.it.also||[]).slice());
+      if(it.src!==hit.it.src&&also.indexOf(it.src)===-1) also.push(it.src);
+    } else kept.push({it:Object.assign({},it),tk:tk});
+  });
+  return kept.map(function(k){return k.it;}).sort(function(a,b){return b.ts-a.ts;});
+}
 function _nfInit(){
   if(_nf.inited) return; _nf.inited=true;
   var c=_nfLsGet("cache");
-  if(c&&c.items){_nf.cal=c.cal||[];_nf.items=c.items;_nf.fetchedAt=c.fetchedAt||0;_nf.errs=c.errs||[];}
+  if(c&&c.items){_nf.cal=c.cal||[];_nf.items=_nfDedupe(c.items);_nf.fetchedAt=c.fetchedAt||0;_nf.errs=c.errs||[];}
   _nf.seenTs=_nfLsGet("seen")||0;
   var resume=function(){ if(State.tab==="news"&&!document.hidden) newsFeedFetch(false,true); };
   document.addEventListener("visibilitychange",resume);
@@ -11269,7 +11302,7 @@ function newsFeedFetch(force,onOpen){
   }).then(function(rows){
     var st=rows&&rows[0]&&rows[0].settings;
     if(st&&st.news){
-      _nf.items=st.news;_nf.cal=st.calendar||[];_nf.fetchedAt=st.fetchedAt||0;_nf.errs=st.feedErrors||[];
+      _nf.items=_nfDedupe(st.news);_nf.cal=st.calendar||[];_nf.fetchedAt=st.fetchedAt||0;_nf.errs=st.feedErrors||[];
       _nfLsSet("cache",{items:_nf.items,cal:_nf.cal,fetchedAt:_nf.fetchedAt,errs:_nf.errs});
     }
     _nf.failed=false;
