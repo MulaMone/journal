@@ -377,7 +377,7 @@ svg text{font-family:'Courier New',monospace}
   <div id="content"></div>
   <nav id="m-bnav" role="navigation" aria-label="Main navigation">
     <div class="bn-items">
-      <button class="bn-item" data-tab="openanalysis" aria-label="Open Analysis"><span class="bn-icon">◉</span>Open</button>
+      <button class="bn-item" data-tab="news" aria-label="News"><span class="bn-icon">◔</span>News</button>
       <button class="bn-item" data-tab="log" aria-label="Trade Log"><span class="bn-icon">≡</span>Log</button>
       <div class="bn-fab-wrap" id="m-fab" aria-label="Analyst" role="button" tabindex="0">
         <div class="bn-fab">Ξ</div>
@@ -1900,9 +1900,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["news","prep","playbook","import","notes","chart","settings"];
-var MORE_TABS_LABELS={news:"News",home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
-var MORE_TABS_ICONS={news:"◔",home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
+var MORE_TABS=["openanalysis","prep","playbook","import","notes","chart","settings"];
+var MORE_TABS_LABELS={openanalysis:"Open",news:"News",home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
+var MORE_TABS_ICONS={openanalysis:"◉",news:"◔",home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
