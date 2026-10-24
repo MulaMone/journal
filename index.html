@@ -9426,6 +9426,7 @@ function fedProbHistMerge(primary,secondary){
   [secondary||[],primary||[]].forEach(function(list){
     list.forEach(function(r){
       if(!r||!r.meetingCode) return;
+      if(r.dateISO){var w=new Date(r.dateISO+"T00:00:00Z").getUTCDay(); if(w===0||w===6) return;} // no weekend rows
       var k=r.meetingCode+"|"+(r.dateISO||("ts"+r.ts));
       if(!map[k]||(r.ts||0)>(map[k].ts||0)) map[k]=r;
     });
@@ -9474,6 +9475,11 @@ function fedProbSnapshotDaysAgo(hist,anchorISO,days){
   var DAY=24*60*60*1000;
   var anchor=new Date(anchorISO+"T00:00:00Z").getTime();
   var target=anchor-days*DAY;
+  if(days>=28){ // 1-month = same calendar date one month back (CME), clamped to month end
+    var ad=new Date(anchor),y=ad.getUTCFullYear(),m=ad.getUTCMonth()-1,dd=ad.getUTCDate();
+    if(m<0){m=11;y--;}
+    target=Date.UTC(y,m,Math.min(dd,new Date(Date.UTC(y,m+1,0)).getUTCDate()));
+  }
   var wd=new Date(target).getUTCDay();
   if(wd===6) target-=DAY; else if(wd===0) target-=2*DAY; // Sat/Sun -> Fri
   // Nearest recorded day on/before the target, within a tolerance (1d: 3 days to span weekends/holidays;
@@ -9481,13 +9487,34 @@ function fedProbSnapshotDaysAgo(hist,anchorISO,days){
   var tol=(days<=1?3:days<=7?4:7)*DAY;
   var best=null,bestT=-Infinity;
   // 1-day: previous recorded trading day (strictly before anchor), regardless of weekend/holiday gap.
-  if(days<=1){target=anchor-DAY;tol=5*DAY;}
+  if(days<=1){
+    // previous recorded trading day strictly before the anchor, no matter how far back (weekend/holiday/missed day)
+    hist.forEach(function(r){
+      if(!r.dateISO) return;
+      var t=new Date(r.dateISO+"T00:00:00Z").getTime(),w=new Date(t).getUTCDay();
+      if(w===0||w===6) return;
+      if(t<anchor&&t>bestT){best=r;bestT=t;}
+    });
+    return best;
+  }
   hist.forEach(function(r){
     if(!r.dateISO) return;
     var t=new Date(r.dateISO+"T00:00:00Z").getTime();
     if(t<=target&&t>=target-tol&&t>bestT){best=r;bestT=t;}
   });
   return best;
+}
+// Last trading day (Mon-Fri) as of the live quote time; weekends roll back to Friday, matching CME's "latest settle".
+function fedLastTradingISO(live){
+  var iso=null;
+  if(live&&live.asOf){
+    var d=typeof live.asOf==="number"?new Date(live.asOf<1e12?live.asOf*1000:live.asOf):new Date(live.asOf);
+    if(!isNaN(d.getTime())){try{iso=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}catch(e){}}
+  }
+  if(!iso) iso=etDateISO();
+  var dt=new Date(iso+"T00:00:00Z"),wd=dt.getUTCDay();
+  if(wd===6) dt.setUTCDate(dt.getUTCDate()-1); else if(wd===0) dt.setUTCDate(dt.getUTCDate()-2);
+  return dt.toISOString().slice(0,10);
 }
 function etDateISO(){ // today's date in New York, not UTC (UTC flips to "tomorrow" after 8pm ET)
   try{ return new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); }
@@ -9635,8 +9662,8 @@ function buildFedFundsView(data,isM){
     el.appendChild(card);
     if(isM&&card.children[1]) card.children[1].appendChild(buildFomcCountdownMini(meetingIso));
 
-    recordFedProbSnapshot(prob,liveApplied?etDateISO():bulletinDateISO(data.dateStr));
-    var todayISO=liveApplied?etDateISO():bulletinDateISO(data.dateStr);
+    recordFedProbSnapshot(prob,liveApplied?fedLastTradingISO(data.live):bulletinDateISO(data.dateStr));
+    var todayISO=liveApplied?fedLastTradingISO(data.live):bulletinDateISO(data.dateStr);
     var deltas=fedProbDeltas(prob,todayISO);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
