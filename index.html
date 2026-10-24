@@ -11257,7 +11257,7 @@ function _nfStems(t){
 function _nfDedupe(items){
   var RANK={Reuters:1,Bloomberg:2,AP:3,FinancialJuice:4,investingLive:4,CNBC:5,MarketWatch:6};
   var rank=function(i){return (i.official?0:10)+(i.tier===1?0:5)+(RANK[i.src]!==undefined?RANK[i.src]:9)/10;};
-  var pri=(items||[]).slice().sort(function(a,b){return rank(a)-rank(b)||b.ts-a.ts;});
+  var pri=(items||[]).map(function(i){return Object.assign({},i,{title:String(i.title||"").replace(/^\s*FinancialJuice\s*:\s*/i,"")});}).sort(function(a,b){return rank(a)-rank(b)||b.ts-a.ts;});
   var kept=[];
   pri.forEach(function(it){
     var tk=_nfStems(it.title);
