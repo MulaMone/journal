@@ -3213,10 +3213,15 @@ var FOMC_DECISION_DATES_2027=["2027-01-27","2027-03-17","2027-04-28","2027-06-09
 // next year's full schedule each September — append it here when it's out.
 var FOMC_DECISION_DATES_2028=["2028-01-26"];
 var FOMC_DECISION_DATES_ALL=FOMC_DECISION_DATES_2026.concat(FOMC_DECISION_DATES_2027,FOMC_DECISION_DATES_2028);
-// Sunday (ET) that starts the current trading week, as YYYY-MM-DD.
+// Sunday (ET) that starts the current trading week, as YYYY-MM-DD. The week rolls over
+// at Friday's market close (16:15 ET, same as the header clock), so from then through
+// Saturday this returns the UPCOMING Sunday.
 function etWeekStartISO(){
-  var p=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}).split("-");
-  var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));d.setUTCDate(d.getUTCDate()-d.getUTCDay());
+  var et=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+  var dow=et.getDay(),mins=et.getHours()*60+et.getMinutes();
+  var d=new Date(Date.UTC(et.getFullYear(),et.getMonth(),et.getDate()));
+  if(dow===6||(dow===5&&mins>=16*60+15)) d.setUTCDate(d.getUTCDate()+(7-dow));
+  else d.setUTCDate(d.getUTCDate()-dow);
   return d.toISOString().slice(0,10);
 }
 function computeTodayMacroEvents(etTodayStr){
