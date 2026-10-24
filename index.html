@@ -1840,6 +1840,7 @@ var TABS=[
   {id:"notes",icon:"✎",label:"NOTES"},
   {id:"openanalysis",icon:"◉",label:"OPEN"},
   {id:"chart",icon:"▤",label:"CHART"},
+  {id:"news",icon:"◔",label:"NEWS"},
   {id:"analyst",icon:"Ξ",label:"ANALYST"}
 ];
 // "import" (importTab) is intentionally NOT in TABS — it's reached only via
@@ -1899,9 +1900,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["prep","playbook","import","notes","chart","settings"];
-var MORE_TABS_LABELS={home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
-var MORE_TABS_ICONS={home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
+var MORE_TABS=["news","prep","playbook","import","notes","chart","settings"];
+var MORE_TABS_LABELS={news:"News",home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
+var MORE_TABS_ICONS={news:"◔",home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -11314,7 +11315,131 @@ function settingsTab(){
   return el;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,settings:settingsTab};
+
+// ─── NEWS FEED TAB ────────────────────────────────────────────────
+// Reads the "<sync>__news" row written by the Supabase edge function `news-feed`
+// (free RSS → scored → deduped). Client never touches RSS directly (CORS).
+var _nf={items:[],fetchedAt:0,errs:[],tier:"all",tag:"ALL",loading:false,failed:false,timer:null,seenTs:0,inited:false};
+function _nfLsGet(k){try{var v=localStorage.getItem("edge_nf_"+k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function _nfLsSet(k,v){try{localStorage.setItem("edge_nf_"+k,JSON.stringify(v));}catch(e){}}
+function _nfInit(){
+  if(_nf.inited) return; _nf.inited=true;
+  var c=_nfLsGet("cache");
+  if(c&&c.items){_nf.items=c.items;_nf.fetchedAt=c.fetchedAt||0;_nf.errs=c.errs||[];}
+  _nf.seenTs=_nfLsGet("seen")||0;
+  var resume=function(){ if(State.tab==="news"&&!document.hidden) newsFeedFetch(); };
+  document.addEventListener("visibilitychange",resume);
+  window.addEventListener("pageshow",resume);
+  window.addEventListener("focus",resume);
+}
+function _nfAgo(ts){
+  var m=Math.max(0,Math.round((Date.now()-ts)/60000));
+  if(m<1) return "now"; if(m<60) return m+"m"; var hh=Math.floor(m/60); if(hh<24) return hh+"h"; return Math.floor(hh/24)+"d";
+}
+function newsFeedFetch(force){
+  if(_nf.loading) return Promise.resolve();
+  _nf.loading=true; _nfPaintMeta();
+  var id=encodeURIComponent(getSyncId()+"__news");
+  return supaFetch("GET","edge_data?user_id=eq."+id+"&select=settings").then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(rows){
+    var st=rows&&rows[0]&&rows[0].settings;
+    if(st&&st.news){
+      _nf.items=st.news;_nf.fetchedAt=st.fetchedAt||0;_nf.errs=st.feedErrors||[];
+      _nfLsSet("cache",{items:_nf.items,fetchedAt:_nf.fetchedAt,errs:_nf.errs});
+    }
+    _nf.failed=false;
+  }).catch(function(){ _nf.failed=true; }).then(function(){
+    _nf.loading=false;
+    if(State.tab==="news"){ _nfPaintList(); _nfPaintMeta(); }
+  });
+}
+function _nfPaintMeta(){
+  var e=document.getElementById("nf-meta"); if(!e) return;
+  var t=_nf.fetchedAt?("Updated "+_nfAgo(_nf.fetchedAt)+" ago"):"No data yet";
+  if(_nf.loading) t="Refreshing…";
+  else if(_nf.failed) t+=" · offline";
+  else if(_nf.fetchedAt&&Date.now()-_nf.fetchedAt>20*60000) t+=" · stale";
+  e.textContent=t;
+}
+function _nfPaintList(){
+  var box=document.getElementById("nf-list"); if(!box) return;
+  box.innerHTML="";
+  var list=_nf.items.filter(function(i){
+    if(_nf.tier==="1"&&i.tier!==1) return false;
+    if(_nf.tag!=="ALL"&&i.tag!==_nf.tag) return false;
+    return true;
+  });
+  if(!list.length){
+    var empty=div();empty.style.cssText="padding:28px 12px;text-align:center;color:var(--text3);font-family:monospace;font-size:12px;line-height:1.6;";
+    empty.textContent=_nf.items.length?"Nothing matches this filter.":(_nf.failed?"Couldn't reach the news feed. Pull to retry with REFRESH.":"No news yet. Deploy the news-feed function and run supabase/news-setup.sql.");
+    box.appendChild(empty); return;
+  }
+  var TAGC={FED:"#00d4d4",MACRO:"#ffcc44",GEOPOL:"#ff6b6b",OIL:"#ff8c00",EARNINGS:"#7ddc7d"};
+  list.forEach(function(it){
+    var isNew=it.ts>_nf.seenTs;
+    var row=h("a",{href:it.url,target:"_blank",rel:"noopener noreferrer"});
+    row.style.cssText="display:block;text-decoration:none;color:inherit;padding:10px 12px;margin-bottom:6px;background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(it.tier===1?"#ff4444":(isNew?"var(--accent)":"var(--border2)"))+";border-radius:4px;min-height:44px;-webkit-tap-highlight-color:transparent;";
+    var top=div();top.style.cssText="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;font-family:monospace;font-size:10px;letter-spacing:1px;";
+    var tm=span("",_nfAgo(it.ts));tm.style.cssText="color:var(--text3);min-width:26px;";
+    var tg=span("",it.tag||"MACRO");tg.style.cssText="color:"+(TAGC[it.tag]||"#ffcc44")+";border:1px solid currentColor;border-radius:3px;padding:1px 5px;font-size:9px;";
+    top.appendChild(tm);top.appendChild(tg);
+    if(it.tier===1){var b=span("imp-high","HIGH");b.style.cssText="padding:1px 5px;border-radius:3px;font-size:9px;";top.appendChild(b);}
+    if(isNew){var nw=span("","NEW");nw.style.cssText="color:var(--accent);font-size:9px;font-weight:700;";top.appendChild(nw);}
+    var src=span("",(it.official?"★ ":"")+(it.src||""));src.style.cssText="margin-left:auto;color:var(--text3);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    top.appendChild(src);
+    var ttl=div();ttl.style.cssText="font-size:14px;line-height:1.4;color:var(--text);overflow-wrap:anywhere;word-break:break-word;";
+    ttl.textContent=it.title;
+    row.appendChild(top);row.appendChild(ttl);box.appendChild(row);
+  });
+  var mx=_nf.items.reduce(function(m,i){return i.ts>m?i.ts:m;},0);
+  // Mark as seen when the user leaves the tab (new-badges persist while they're reading)
+  _nf.pendingSeen=mx;
+}
+function newsFeedTab(){
+  _nfInit();
+  if(_nf.timer){clearInterval(_nf.timer);_nf.timer=null;}
+  if(_nf.pendingSeen){_nf.seenTs=_nf.pendingSeen;_nfLsSet("seen",_nf.seenTs);}
+  var wrap=div();wrap.style.cssText="max-width:900px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:hidden;";
+  var hd=div();hd.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;";
+  var l=div();
+  var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Market News";
+  var meta=div();meta.id="nf-meta";meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";
+  l.appendChild(t);l.appendChild(meta);
+  var rb=h("button",{className:"btn"},["↻ REFRESH"]);
+  rb.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;flex-shrink:0;";
+  rb.addEventListener("click",function(){newsFeedFetch(true);});
+  hd.appendChild(l);hd.appendChild(rb);wrap.appendChild(hd);
+  var chips=div();chips.style.cssText="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none;";
+  function chip(label,active,fn,color){
+    var c=h("button",{className:"btn"},[label]);
+    c.style.cssText="flex-shrink:0;min-height:36px;padding:0 12px;font-family:monospace;font-size:10px;letter-spacing:1px;cursor:pointer;white-space:nowrap;"+(active?"color:"+(color||"var(--accent)")+";border-color:"+(color||"var(--accent)")+";":"");
+    c.addEventListener("click",fn);return c;
+  }
+  function paintChips(){
+    chips.innerHTML="";
+    chips.appendChild(chip("HIGH IMPACT",_nf.tier==="1",function(){_nf.tier=_nf.tier==="1"?"all":"1";paintChips();_nfPaintList();},"#ff6b6b"));
+    ["ALL","FED","MACRO","GEOPOL","OIL","EARNINGS"].forEach(function(tg){
+      chips.appendChild(chip(tg,_nf.tag===tg,function(){_nf.tag=tg;paintChips();_nfPaintList();}));
+    });
+  }
+  paintChips();wrap.appendChild(chips);
+  var list=div();list.id="nf-list";wrap.appendChild(list);
+  var foot=div();foot.style.cssText="font-family:monospace;font-size:9px;color:var(--text3);text-align:center;padding:10px 0 4px;line-height:1.5;";
+  foot.textContent="Free sources: Fed, BLS, BEA, Treasury, EIA, CNBC, Yahoo, MarketWatch, Reuters/Bloomberg/AP headlines via Google News. ★ = official. Headlines can lag paid squawks by a few minutes.";
+  wrap.appendChild(foot);
+  _nfPaintList();_nfPaintMeta();
+  newsFeedFetch();
+  _nf.timer=setInterval(function(){
+    if(State.tab!=="news"){clearInterval(_nf.timer);_nf.timer=null;return;}
+    if(!document.hidden) newsFeedFetch();
+    _nfPaintMeta();
+  },90000);
+  return wrap;
+}
+
+var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,news:newsFeedTab,settings:settingsTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
