@@ -11317,7 +11317,7 @@ function settingsTab(){
 
 
 // ─── NEWS FEED TAB ────────────────────────────────────────────────
-// Reads the "<sync>__news" row written by the Supabase edge function `news-feed`
+// Reads the "<sync>__news" row written by the Supabase edge function `market-news`
 // (free RSS → scored → deduped). Client never touches RSS directly (CORS).
 var _nf={items:[],fetchedAt:0,errs:[],tier:"all",tag:"ALL",loading:false,failed:false,timer:null,seenTs:0,inited:false};
 function _nfLsGet(k){try{var v=localStorage.getItem("edge_nf_"+k);return v?JSON.parse(v):null;}catch(e){return null;}}
