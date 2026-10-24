@@ -9942,7 +9942,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
     liveBadge.innerHTML="<div style='display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;letter-spacing:1px;color:var(--accent);text-transform:uppercase;'><span style='width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:livePulse 1.6s ease-in-out infinite;'></span>Live</div><div class='live-val' style='font-size:16px;font-weight:700;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'>—</div><div class='live-chg' style='font-size:10px;font-family:Courier New,monospace;color:var(--text3);margin-top:2px;'></div>";
     if(chartSym) goToChartOnTap(liveBadge,chartSym);
     card.appendChild(liveBadge);
-    if(label==="WTI Crude Oil"&&!isMobile()){
+    if(label==="WTI Crude Oil"){
       var eia=h("a",{href:"https://www.eia.gov/petroleum/supply/weekly/",target:"_blank",rel:"noopener"});
       eia.textContent="EIA";eia.title="EIA Weekly Petroleum Status Report";
       eia.style.cssText="position:absolute;top:14px;right:122px;font-size:11px;letter-spacing:1.5px;color:var(--accent);text-decoration:underline;font-weight:700;";
