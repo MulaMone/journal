@@ -2751,15 +2751,17 @@ function atrSlTpCard(){
   if(!INS[S.ins]) S.ins="ES";
   if(S.dir!=="S") S.dir="L";
   if(S.ent==null) S.ent="";
-  var el=div("card");el.style.margin="12px 0";
+  var mob=isMobile();
+  var el=div(mob?"m-eq-card":"card");el.style.margin="12px 0";
   var opts="";Object.keys(INS).forEach(function(k){opts+='<option value="'+k+'"'+(S.ins===k?" selected":"")+'>'+k+'</option>'});
   var lbl='font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;';
   var segB='flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text3);font-family:inherit;font-size:12px;padding:8px;cursor:pointer;border-radius:0;width:auto;';
   var chipB='background:var(--bg);border:1px solid var(--border);color:var(--text3);font-family:inherit;font-size:11px;padding:3px 8px;margin:5px 4px 0 0;cursor:pointer;border-radius:3px;width:auto;';
   function chips(k,a){return '<div class="as-ch" data-k="'+k+'">'+a.map(function(v){return '<button style="'+chipB+'">'+v+'</button>'}).join("")+'</div>'}
   el.innerHTML=
-    '<div class="card-h"><div class="card-t">ATR Stop Loss and Target</div></div>'+
-    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px">'+
+    (mob?'<div class="m-card-hdr"><div class="m-card-title">ATR Stop Loss and Target</div></div>':'<div class="card-h"><div class="card-t">ATR Stop Loss and Target</div></div>')+
+    (mob?'<style>.as-in input,.as-in select{font-size:16px}</style>':'')+
+    '<div class="as-in" style="display:grid;grid-template-columns:repeat('+(mob?2:3)+',minmax(0,1fr));gap:10px;margin-bottom:10px">'+
       '<div><div style="'+lbl+'">INSTRUMENT</div><select class="as-ins">'+opts+'</select></div>'+
       '<div><div style="'+lbl+'">DIRECTION</div><div style="display:flex"><button class="as-d" data-d="L" style="'+segB+'">LONG</button><button class="as-d" data-d="S" style="'+segB+'">SHORT</button></div></div>'+
       '<div><div style="'+lbl+'">CONTRACTS</div><input class="as-ctr" type="number" min="1" step="1" value="'+S.ctr+'"></div>'+
@@ -2769,7 +2771,7 @@ function atrSlTpCard(){
       '<div><div style="'+lbl+'">STOP = x ATR</div><input class="as-slm" type="number" min="0" step="any" value="'+S.slm+'">'+chips("slm",[0.5,1,1.5,2])+'</div>'+
       '<div><div style="'+lbl+'">TARGET = x ATR</div><input class="as-tpm" type="number" min="0" step="any" value="'+S.tpm+'">'+chips("tpm",[1,2,3,4])+'</div>'+
     '</div>'+
-    '<div class="as-out" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"></div>'+
+    '<div class="as-out" style="display:grid;grid-template-columns:'+(mob?'1fr':'1fr 1fr')+';gap:10px;margin-top:12px"></div>'+
     '<div class="as-rr" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--ca);font-size:13px"></div>';
   var q=function(c){return el.querySelector(c)};
   function f(n,d){return isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):"\u2014"}
@@ -3155,10 +3157,10 @@ function homeTab(){
   el.appendChild(moCard);
   var sepA=div();sepA.style.cssText="height:1px;background:var(--ca);margin:12px 0;";
   el.appendChild(sepA);
-  el.appendChild(rangeAtrCard());
+  el.appendChild(atrSlTpCard());
   var sepB=div();sepB.style.cssText="height:1px;background:var(--border);opacity:.4;margin:12px 0;";
   el.appendChild(sepB);
-  el.appendChild(atrSlTpCard());
+  el.appendChild(rangeAtrCard());
 
   return el;
 }
@@ -6706,7 +6708,7 @@ function mobileHomeTab(){
 
   var sepM=div();sepM.style.cssText="height:1px;background:var(--ca);margin:12px 0;";
   el.appendChild(sepM);
-  el.appendChild(rangeAtrCard());
+  el.appendChild(atrSlTpCard());
   return el;
 }
 
