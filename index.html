@@ -11387,7 +11387,7 @@ function _nfPaintList(){
     top.appendChild(tm);top.appendChild(tg);
     if(it.tier===1){var b=span("imp-high","HIGH");b.style.cssText="padding:1px 5px;border-radius:3px;font-size:9px;";top.appendChild(b);}
     if(isNew){var nw=span("","NEW");nw.style.cssText="color:var(--accent);font-size:9px;font-weight:700;";top.appendChild(nw);}
-    var src=span("",(it.official?"★ ":"")+(it.src||""));src.style.cssText="margin-left:auto;color:var(--text3);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    var src=span("",(it.official?"★ ":"")+(it.src||"")+(it.also&&it.also.length?" +"+it.also.length:""));if(it.also&&it.also.length)src.title="Also: "+it.also.join(", ");src.style.cssText="margin-left:auto;color:var(--text3);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     top.appendChild(src);
     var ttl=div();ttl.style.cssText="font-size:14px;line-height:1.4;color:var(--text);overflow-wrap:anywhere;word-break:break-word;";
     ttl.textContent=it.title;
