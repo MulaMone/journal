@@ -3401,8 +3401,7 @@ function prepTab(){
     }
   }
 
-  liveNewsBody.innerHTML="";
-  var ldMsg=div("xs m");ldMsg.textContent="Loading calendar…";liveNewsBody.appendChild(ldMsg);
+  renderCalendarRows(computeTodayMacroEvents(etTodayStr)); // display-only fallback until the main calendar loads — never ticks or flags anything
   loadLocalCalendar(false).then(function(data){
     var todays=data.rows.filter(function(ev){
       return ev.date&&ev.date.slice(0,10)===etTodayStr&&ev.country==="USD"&&ev.impact==="High";
@@ -3424,8 +3423,8 @@ function prepTab(){
     renderCalendarRows(todays);
     if(changed) render(); // refresh the checklist below with the newly auto-flagged items
   }).catch(function(){
-    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — nothing is auto-flagged from the fallback.
-    liveNewsBody.innerHTML="";var er=div("xs m");er.textContent="Main calendar not available yet.";liveNewsBody.appendChild(er);
+    // calendar.json not deployed yet / unreachable (e.g. file:// testing) — 
+    // the display-only fallback above stays up.
   });
 
   el.appendChild(liveNewsCard);
