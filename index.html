@@ -3982,7 +3982,7 @@ function logTab(){
   var _baseTrades=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
   var _allTrades=_baseTrades.filter(function(t){
     if(_f.dir&&t.dir!==_f.dir) return false;
-    if(_f.setup&&t.setup!==_f.setup) return false;
+    if(_f.setup&&!tradeHasSetup(t,_f.setup)) return false;
     if(_f.sess&&t.sess!==_f.sess) return false;
     if(_f.inst&&t.inst!==_f.inst) return false;
     return true;
@@ -4015,7 +4015,7 @@ function logTab(){
     var allInsts=[],allSetups=[],allSess=[];
     _baseTrades.forEach(function(t){
       if(t.inst&&allInsts.indexOf(t.inst)===-1) allInsts.push(t.inst);
-      if(t.setup&&allSetups.indexOf(t.setup)===-1) allSetups.push(t.setup);
+      getSetups(t).forEach(function(n){if(allSetups.indexOf(n)===-1) allSetups.push(n);});
       if(t.sess&&allSess.indexOf(t.sess)===-1) allSess.push(t.sess);
     });
     allInsts.sort();allSetups.sort();allSess.sort();
@@ -6724,7 +6724,7 @@ function mobileLogTab(){
   var _baseAt=activeTrades().slice().sort(function(a,b){var da=a.date+" "+(a.time||""),db=b.date+" "+(b.time||"");return db>da?1:db<da?-1:0;});
   var _allLogAt=_baseAt.filter(function(t){
     if(_f.dir&&t.dir!==_f.dir) return false;
-    if(_f.setup&&t.setup!==_f.setup) return false;
+    if(_f.setup&&!tradeHasSetup(t,_f.setup)) return false;
     if(_f.sess&&t.sess!==_f.sess) return false;
     if(_f.inst&&t.inst!==_f.inst) return false;
     return true;
@@ -6755,7 +6755,7 @@ function mobileLogTab(){
     var allInsts=[],allSetups=[],allSess=[];
     _baseAt.forEach(function(t){
       if(t.inst&&allInsts.indexOf(t.inst)===-1) allInsts.push(t.inst);
-      if(t.setup&&allSetups.indexOf(t.setup)===-1) allSetups.push(t.setup);
+      getSetups(t).forEach(function(n){if(allSetups.indexOf(n)===-1) allSetups.push(n);});
       if(t.sess&&allSess.indexOf(t.sess)===-1) allSess.push(t.sess);
     });
     allInsts.sort();allSetups.sort();allSess.sort();
