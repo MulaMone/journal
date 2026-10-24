@@ -11367,8 +11367,12 @@ function _nfPaintCal(){
   box.innerHTML="";
   var now=Date.now();
   var evs=(_nf.cal||[]).filter(function(e){return e.ts>=now-30*60000;});
-  if(!evs.length){box.style.display="none";return;}
   box.style.display="block";
+  if(!evs.length){
+    var em=div();em.style.cssText="padding:9px 12px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:10px;letter-spacing:1px;color:var(--text3);line-height:1.5;";
+    em.textContent="UPCOMING EVENTS: none loaded. The next calendar usually posts over the weekend.";
+    box.appendChild(em);return;
+  }
   var hd=div();hd.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-family:monospace;font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;";
   hd.appendChild(span("","Upcoming events · ET"));
   var tg=span("",_nf.calAll?"SHOW LESS":"SHOW MORE");tg.style.cssText="color:var(--accent);cursor:pointer;padding:8px 0 8px 12px;";
