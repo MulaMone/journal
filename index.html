@@ -9923,6 +9923,20 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
       oilLinks.appendChild(eia);oilLinks.appendChild(opec);
       card.appendChild(oilLinks);
     }
+    if(label==="Gold"){
+      var goldLinks=div();
+      goldLinks.style.cssText="position:absolute;top:6px;right:96px;display:flex;align-items:center;gap:"+(isMobile()?"2px":"10px")+";white-space:nowrap;";
+      var gCss="font-size:10px;letter-spacing:"+(isMobile()?"0.5px":"1px")+";color:var(--accent);text-decoration:underline;font-weight:700;padding:8px "+(isMobile()?"4px":"5px")+";";
+      [["COMEX","https://metalcharts.org/comex/inventory","COMEX gold inventory"],
+       ["LBMA","https://watchgold.org/en","LBMA / Watch Gold"],
+       ["WGC","https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-us-focus-q2-2026","World Gold Council demand trends"]
+      ].forEach(function(l){
+        var a=h("a",{href:l[1],target:"_blank",rel:"noopener"});
+        a.textContent=l[0];a.title=l[2];a.style.cssText=gCss;
+        goldLinks.appendChild(a);
+      });
+      card.appendChild(goldLinks);
+    }
   }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
   chartWrap.appendChild(areaSVG(series.slice(-260),isMobile()?300:640,80,accentColor,function(v){return v.toFixed(decimals);}));
