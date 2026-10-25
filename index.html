@@ -9902,7 +9902,7 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
   var chg=latest.v-prev.v,pctChg=prev.v?chg/prev.v*100:0;
   var up=chg>=0;
   card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>"+assetLabelHTML(label)+"</div>"
-    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(decimals)+assetEmojiHTML(label)+"</div>"
+    +"<div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+(label==="WTI Crude Oil"?"<a href='https://worldoilmonitor.com/' target='_blank' rel='noopener' title='World Oil Monitor' style='color:inherit;text-decoration:none;cursor:pointer;'>"+latest.v.toFixed(decimals)+"</a>":latest.v.toFixed(decimals))+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(up?"#00e676":"#ff4444")+";margin-top:2px;'>"+(up?"+":"")+chg.toFixed(decimals)+" ("+(up?"+":"")+pctChg.toFixed(2)+"%) vs prior close</div>";
     if(liveId){
     var liveBadge=div();liveBadge.id="live-"+liveId;
