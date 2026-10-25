@@ -3418,8 +3418,8 @@ function prepTab(){
     var wkStart=etWeekStartISO();var wkEndD=new Date(wkStart+"T00:00:00Z");wkEndD.setUTCDate(wkEndD.getUTCDate()+6);var wkEnd=wkEndD.toISOString().slice(0,10);
     var byKey={};
     data.rows.forEach(function(ev){
-      var d=ev.date&&ev.date.slice(0,10);
-      if(!d||ev.country!=="USD"||ev.impact!=="High"||d<wkStart||d>wkEnd) return;
+      var d=null;if(ev.date){var dt=new Date(ev.date);d=isNaN(dt)?String(ev.date).slice(0,10):dt.toLocaleDateString("en-CA",{timeZone:"America/New_York"});}
+      if(!d||String(ev.country||ev.currency||"").toUpperCase()!=="USD"||String(ev.impact||"").toLowerCase()!=="high"||d<wkStart||d>wkEnd) return;
       var l=matchNewsLabels([{title:ev.title}]).matched[0];if(!l) return;
       var key=null;
       NEWS_EVENTS.forEach(function(e,i){if(e.l===l)key="news_"+i;});
@@ -3429,18 +3429,21 @@ function prepTab(){
     var wkChanged=false;
     Object.keys(byKey).forEach(function(key){
       var ds=byKey[key].sort();
-      var up=ds.filter(function(d){return d>=etTodayStr;})[0];
+      var etN=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+      var closed=etN.getHours()*60+etN.getMinutes()>=16*60+15; // market close (matches header clock)
+      var up=ds.filter(function(d){return d>etTodayStr||(d===etTodayStr&&!closed);})[0];
       if(up){ // event today or later this week: tick once per event date
         var m=key+"@"+up;
         if(State.newsAutoChecked.indexOf(m)===-1){State.newsAutoChecked.push(m);State.newsChecks[key]=true;wkChanged=true;}
-      }else{ // all of its events are past: untick what we auto-ticked (end of event day)
+      }else{ // all of its events are past: untick what we auto-ticked (after market close on event day)
         if(State.newsChecks[key]&&State.newsAutoChecked.indexOf(key+"@"+ds[ds.length-1])>-1){State.newsChecks[key]=false;wkChanged=true;}
       }
     });
     if(wkChanged){ss("newsChecks",State.newsChecks);ss("newsAutoChecked",State.newsAutoChecked);changed=true;}
     renderCalendarRows(todays);
     if(changed) render(); // refresh the checklist below with the newly auto-flagged items
-  }).catch(function(){
+  }).catch(function(err){
+    console.error("[prep calendar]",err);
     // calendar.json not deployed yet / unreachable (e.g. file:// testing) — 
     // the display-only fallback above stays up.
   });
