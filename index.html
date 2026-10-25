@@ -9911,10 +9911,17 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
     if(chartSym) goToChartOnTap(liveBadge,chartSym);
     card.appendChild(liveBadge);
     if(label==="WTI Crude Oil"){
+      var oilLinks=div();
+      oilLinks.style.cssText="position:absolute;top:14px;right:122px;display:flex;align-items:center;gap:10px;white-space:nowrap;";
+      var lnkCss="font-size:11px;letter-spacing:1.5px;color:var(--accent);text-decoration:underline;font-weight:700;";
       var eia=h("a",{href:"https://www.eia.gov/petroleum/supply/weekly/",target:"_blank",rel:"noopener"});
       eia.textContent="EIA";eia.title="EIA Weekly Petroleum Status Report";
-      eia.style.cssText="position:absolute;top:14px;right:122px;font-size:11px;letter-spacing:1.5px;color:var(--accent);text-decoration:underline;font-weight:700;";
-      card.appendChild(eia);
+      eia.style.cssText=lnkCss;
+      var opec=h("a",{href:"https://worldoilmonitor.com/opec-meeting-schedule#:~:text=Separately%2C%20the%2069th%20JMMC%20is%20scheduled%20for,OPEC%20explainer%20for%20how%20decisions%20get%20made",target:"_blank",rel:"noopener"});
+      opec.textContent="OPEC";opec.title="OPEC meeting schedule";
+      opec.style.cssText=lnkCss;
+      oilLinks.appendChild(eia);oilLinks.appendChild(opec);
+      card.appendChild(oilLinks);
     }
   }
   var chartWrap=div();chartWrap.style.cssText="margin-top:10px;height:80px;";
