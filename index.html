@@ -9912,8 +9912,8 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
     card.appendChild(liveBadge);
     if(label==="WTI Crude Oil"){
       var oilLinks=div();
-      oilLinks.style.cssText="position:absolute;top:6px;right:114px;display:flex;align-items:center;gap:22px;white-space:nowrap;";
-      var lnkCss="font-size:11px;letter-spacing:1.5px;color:var(--accent);text-decoration:underline;font-weight:700;padding:8px 4px;";
+      oilLinks.style.cssText="position:absolute;top:6px;right:96px;display:flex;align-items:center;gap:14px;white-space:nowrap;";
+      var lnkCss="font-size:10px;letter-spacing:1px;color:var(--accent);text-decoration:underline;font-weight:700;padding:8px 5px;";
       var eia=h("a",{href:"https://www.eia.gov/petroleum/supply/weekly/",target:"_blank",rel:"noopener"});
       eia.textContent="EIA";eia.title="EIA Weekly Petroleum Status Report";
       eia.style.cssText=lnkCss;
