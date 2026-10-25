@@ -9925,10 +9925,8 @@ function buildSimplePriceCard(label,rows,accentColor,decimals,note,liveId,chartS
     }
     if(label==="Gold"){
       var goldLinks=div();
-      goldLinks.style.cssText=isMobile()
-        ?"display:flex;align-items:center;justify-content:space-around;gap:8px;white-space:nowrap;margin-top:8px;"
-        :"position:absolute;top:6px;right:96px;display:flex;align-items:center;gap:10px;white-space:nowrap;";
-      var gCss="font-size:10px;letter-spacing:1px;color:var(--accent);text-decoration:underline;font-weight:700;padding:"+(isMobile()?"8px 10px":"8px 5px")+";";
+      goldLinks.style.cssText="position:absolute;top:6px;right:96px;display:flex;align-items:center;gap:"+(isMobile()?"8px":"10px")+";white-space:nowrap;";
+      var gCss="font-size:10px;letter-spacing:"+(isMobile()?"0.5px":"1px")+";color:var(--accent);text-decoration:underline;font-weight:700;padding:8px "+(isMobile()?"6px":"5px")+";";
       [["COMEX","https://metalcharts.org/comex/gold","COMEX gold inventory"],
        ["LBMA","https://watchgold.org/en","LBMA / Watch Gold"],
        ["WGC","https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-us-focus-q2-2026","World Gold Council demand trends"]
