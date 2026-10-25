@@ -3417,7 +3417,10 @@ function prepTab(){
     // Whole week (Sun–Sat ET): tick the checklist box for every High-impact USD event on the main calendar, once per week
     var wkStart=etWeekStartISO();var wkEndD=new Date(wkStart+"T00:00:00Z");wkEndD.setUTCDate(wkEndD.getUTCDate()+6);var wkEnd=wkEndD.toISOString().slice(0,10);
     var byKey={};
-    data.rows.forEach(function(ev){
+    // calendar.json can lag a week (feed rolls over Sunday) — also use the News tab's calendar, which already has this week
+    var nfCal=(_nf.cal&&_nf.cal.length)?_nf.cal:((_nfLsGet("cache")||{}).cal||[]);
+    var wkRows=data.rows.concat(nfCal.filter(function(e){return e&&e.ts;}).map(function(e){return {date:new Date(e.ts).toISOString(),country:e.ccy,impact:e.impact,title:e.title};}));
+    wkRows.forEach(function(ev){
       var d=null;if(ev.date){var dt=new Date(ev.date);d=isNaN(dt)?String(ev.date).slice(0,10):dt.toLocaleDateString("en-CA",{timeZone:"America/New_York"});}
       if(!d||String(ev.country||ev.currency||"").toUpperCase()!=="USD"||String(ev.impact||"").toLowerCase()!=="high"||d<wkStart||d>wkEnd) return;
       var l=matchNewsLabels([{title:ev.title}]).matched[0];if(!l) return;
