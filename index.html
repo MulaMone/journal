@@ -3416,13 +3416,26 @@ function prepTab(){
     var changed=autoSelectNewsLabels(todays);
     // Whole week (Sun–Sat ET): tick the checklist box for every High-impact USD event on the main calendar, once per week
     var wkStart=etWeekStartISO();var wkEndD=new Date(wkStart+"T00:00:00Z");wkEndD.setUTCDate(wkEndD.getUTCDate()+6);var wkEnd=wkEndD.toISOString().slice(0,10);
-    var weekEvs=data.rows.filter(function(ev){var d=ev.date&&ev.date.slice(0,10);return d&&ev.country==="USD"&&ev.impact==="High"&&d>=wkStart&&d<=wkEnd;}).map(function(ev){return {title:ev.title};});
-    var wkChanged=false;
-    matchNewsLabels(weekEvs).matched.forEach(function(l){
+    var byKey={};
+    data.rows.forEach(function(ev){
+      var d=ev.date&&ev.date.slice(0,10);
+      if(!d||ev.country!=="USD"||ev.impact!=="High"||d<wkStart||d>wkEnd) return;
+      var l=matchNewsLabels([{title:ev.title}]).matched[0];if(!l) return;
       var key=null;
       NEWS_EVENTS.forEach(function(e,i){if(e.l===l)key="news_"+i;});
       MACRO_EVENTS.forEach(function(e,i){if(e.l===l)key="macro_"+i;});
-      if(key&&State.newsAutoChecked.indexOf(key)===-1){State.newsAutoChecked.push(key);State.newsChecks[key]=true;wkChanged=true;}
+      if(key)(byKey[key]=byKey[key]||[]).push(d);
+    });
+    var wkChanged=false;
+    Object.keys(byKey).forEach(function(key){
+      var ds=byKey[key].sort();
+      var up=ds.filter(function(d){return d>=etTodayStr;})[0];
+      if(up){ // event today or later this week: tick once per event date
+        var m=key+"@"+up;
+        if(State.newsAutoChecked.indexOf(m)===-1){State.newsAutoChecked.push(m);State.newsChecks[key]=true;wkChanged=true;}
+      }else{ // all of its events are past: untick what we auto-ticked (end of event day)
+        if(State.newsChecks[key]&&State.newsAutoChecked.indexOf(key+"@"+ds[ds.length-1])>-1){State.newsChecks[key]=false;wkChanged=true;}
+      }
     });
     if(wkChanged){ss("newsChecks",State.newsChecks);ss("newsAutoChecked",State.newsAutoChecked);changed=true;}
     renderCalendarRows(todays);
