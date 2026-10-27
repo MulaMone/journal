@@ -11404,9 +11404,10 @@ function _nfPaintCal(){
   var firstUp=true;
   var _wkS=etWeekStartISO(),_wkE=new Date(_wkS+"T00:00:00Z");_wkE.setUTCDate(_wkE.getUTCDate()+6);_wkE=_wkE.toISOString().slice(0,10);
   var _desk=!isMobile();
+  var _lastDt="";
   list.forEach(function(e){
     var past=e.ts<now, hi=e.impact==="High";
-    var _ed=_etD(e.ts),_showDt=_desk&&(_ed<_wkS||_ed>_wkE);
+    var _ed=_etD(e.ts),_showDt=_desk&&(_ed<_wkS||_ed>_wkE)&&_ed!==_lastDt;if(_desk)_lastDt=_ed;
     var r=div();r.style.cssText="position:relative;display:flex;align-items:flex-start;gap:8px;padding:8px 10px;margin-bottom:4px;background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(hi?"#ff4444":"#ffab00")+";border-radius:4px;font-family:monospace;"+(past?"opacity:.55;":"");
     var tm=div();tm.style.cssText="flex-shrink:0;width:74px;font-size:11px;color:var(--text);line-height:1.35;";
     var d=_nfEt(e.ts,{weekday:"short"}),t=_nfEt(e.ts,{hour:"numeric",minute:"2-digit"});
