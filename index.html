@@ -11417,7 +11417,7 @@ function _nfPaintCal(){
     var fp=div();fp.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";
     fp.textContent=(e.actual?"A "+e.actual+"  ·  ":"")+(e.forecast?"F "+e.forecast:"")+(e.forecast&&e.previous?"  ·  ":"")+(e.previous?"P "+e.previous:"");
     mid.appendChild(tt);if(fp.textContent)mid.appendChild(fp);
-    var rt=div();rt.style.cssText="flex-shrink:0;text-align:right;font-size:9px;letter-spacing:1px;line-height:1.5;";
+    var rt=div();rt.style.cssText="flex-shrink:0;margin-left:auto;text-align:right;font-size:9px;letter-spacing:1px;line-height:1.5;";
     var cc=span("",e.ccy);cc.style.cssText="color:var(--text3);display:block;";
     var cd=span("",past?"released":_nfIn(e.ts-now));cd.style.cssText="display:block;color:"+(past?"var(--text3)":(firstUp?"var(--accent)":"var(--text3)"))+";font-weight:"+(firstUp&&!past?"700":"400")+";";
     if(!past) firstUp=false;
