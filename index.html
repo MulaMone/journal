@@ -9648,9 +9648,9 @@ function buildFedFundsView(data,isM){
         }
         return wrap;
       }
-      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,prob.stepProb,1));
-      histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,prob.stepProb,7));
-      histRow.appendChild(histChip("1-MONTH Δ (MOVE)",deltas.d30,prob.stepProb,30));
+      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,(settleProb?settleProb.stepProb:prob.stepProb),1));
+      histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,(settleProb?settleProb.stepProb:prob.stepProb),7));
+      histRow.appendChild(histChip("1-MONTH Δ (MOVE)",deltas.d30,(settleProb?settleProb.stepProb:prob.stepProb),30));
       if(!isM){
         // Desktop only: fold the 1D/1W/1M deltas into the FOMC card (right side). Mobile keeps the separate box.
         var fomcLeft=div();fomcLeft.style.cssText="flex:0 0 auto;";
