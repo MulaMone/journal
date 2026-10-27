@@ -2016,6 +2016,7 @@ function startClock(){
     var nowSecs=etH*3600+etM*60+etS;
     var closeSecs=closeH*3600+closeM*60+closeS;
     var openSecs=9*3600+30*60; // 9:30 AM ET open
+    if(nowSecs>=closeSecs&&nowSecs<closeSecs+2&&State.tab==="home"&&State.newsSelected&&State.newsSelected.length) setTimeout(render,0);
     var day=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",weekday:"short"});
 
     var etNow=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
@@ -2648,6 +2649,7 @@ function mobileStreakDots(trades,n){
 }
 
 // ─── HOME TAB ─────────────────────────────────────────────────────────
+function marketClosedET(){var p=new Date().toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour12:false,hour:"2-digit",minute:"2-digit"}).split(":");return (+p[0])*60+(+p[1])>=16*60+15;}
 var _newsSyncDay=null;
 function syncTodayNews(){
   var etToday=new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"});
@@ -2828,7 +2830,7 @@ function homeTab(){
 
   // Hero P&L row — 3-col if news selected, else 2-col
   var tdNews=today();
-  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
+  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0&&!marketClosedET();
   var heroRow=div((hasNews?"":"g2 ")+"mb12");
   if(hasNews) heroRow.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:12px;";
   // Today P&L — big
@@ -6610,7 +6612,7 @@ function mobileHomeTab(){
 
   // ── Today's news warning (2nd row, colors match desktop key/macro split) ──
   var tdNews=today();
-  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0;
+  var hasNews=(State.newsSelectedDate===tdNews)&&State.newsSelected&&State.newsSelected.length>0&&!marketClosedET();
   if(hasNews){
     var mKeyEvents=State.newsSelected.filter(function(n){return !isMacroNews(n);});
     var mMacroEvents=State.newsSelected.filter(function(n){return isMacroNews(n);});
