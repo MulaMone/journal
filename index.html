@@ -9607,8 +9607,10 @@ function buildFedFundsView(data,isM){
     el.appendChild(card);
     if(isM&&card.children[1]) card.children[1].appendChild(buildFomcCountdownMini(meetingIso));
 
-    recordFedProbSnapshot(prob,liveApplied?fedLastTradingISO(data.live):bulletinDateISO(data.dateStr));
-    var todayISO=liveApplied?fedLastTradingISO(data.live):bulletinDateISO(data.dateStr);
+    var bulletinISO=bulletinDateISO(data.dateStr);
+    var settleProb=computeFedProbability(meetingIso,data.curve,data.effr); // settle-only (no live quote) so history matches CME
+    if(bulletinISO&&settleProb) recordFedProbSnapshot(settleProb,bulletinISO);
+    var todayISO=bulletinISO||(liveApplied?fedLastTradingISO(data.live):null);
     var deltas=fedProbDeltas(prob,todayISO);
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
