@@ -11402,13 +11402,16 @@ function _nfPaintCal(){
   box.appendChild(hd);
   var list=_nf.calAll?evs:evs.slice(0,5);
   var firstUp=true;
+  var _wkS=etWeekStartISO(),_wkE=new Date(_wkS+"T00:00:00Z");_wkE.setUTCDate(_wkE.getUTCDate()+6);_wkE=_wkE.toISOString().slice(0,10);
+  var _desk=!isMobile();
   list.forEach(function(e){
     var past=e.ts<now, hi=e.impact==="High";
-    var r=div();r.style.cssText="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;margin-bottom:4px;background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(hi?"#ff4444":"#ffab00")+";border-radius:4px;font-family:monospace;"+(past?"opacity:.55;":"");
+    var _ed=_etD(e.ts),_showDt=_desk&&(_ed<_wkS||_ed>_wkE);
+    var r=div();r.style.cssText="position:relative;display:flex;align-items:flex-start;gap:8px;padding:8px 10px;margin-bottom:4px;background:var(--panel);border:1px solid var(--border);border-left:3px solid "+(hi?"#ff4444":"#ffab00")+";border-radius:4px;font-family:monospace;"+(past?"opacity:.55;":"");
     var tm=div();tm.style.cssText="flex-shrink:0;width:74px;font-size:11px;color:var(--text);line-height:1.35;";
     var d=_nfEt(e.ts,{weekday:"short"}),t=_nfEt(e.ts,{hour:"numeric",minute:"2-digit"});
     tm.innerHTML="<div style='color:var(--text3);font-size:9px;'>"+d.toUpperCase()+"</div><div>"+t+"</div>";
-    var mid=div();mid.style.cssText="flex:1;min-width:0;";
+    var mid=div();mid.style.cssText="flex:1;min-width:0;"+(_showDt?"max-width:calc(58% - 137px);":"");
     var tt=div();tt.style.cssText="font-size:12px;line-height:1.35;color:#ff5c5c;overflow-wrap:anywhere;";
     tt.textContent=e.title;
     var fp=div();fp.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";
@@ -11419,7 +11422,9 @@ function _nfPaintCal(){
     var cd=span("",past?"released":_nfIn(e.ts-now));cd.style.cssText="display:block;color:"+(past?"var(--text3)":(firstUp?"var(--accent)":"var(--text3)"))+";font-weight:"+(firstUp&&!past?"700":"400")+";";
     if(!past) firstUp=false;
     rt.appendChild(cd);
-    r.appendChild(tm);r.appendChild(mid);r.appendChild(rt);box.appendChild(r);
+    r.appendChild(tm);r.appendChild(mid);
+    if(_showDt){var dt=span("",_nfEt(e.ts,{month:"short",day:"numeric"}));dt.style.cssText="position:absolute;left:58%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:13px;font-weight:700;letter-spacing:1px;white-space:nowrap;pointer-events:none;";r.appendChild(dt);}
+    r.appendChild(rt);box.appendChild(r);
   });
 }
 function _nfPaintMeta(){
