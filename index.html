@@ -11370,7 +11370,12 @@ function _nfPaintCal(){
   var box=document.getElementById("nf-cal"); if(!box) return;
   box.innerHTML="";
   var now=Date.now();
-  var evs=(_nf.cal||[]).filter(function(e){return e.ts>=now-30*60000;});
+  var _etD=function(t){return new Date(t).toLocaleDateString("en-CA",{timeZone:"America/New_York"});};
+  var _etToday=_etD(now);
+  var _cp=new Date(now).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour12:false,hour:"2-digit",minute:"2-digit"}).split(":");
+  var _closed=(+_cp[0])*60+(+_cp[1])>=16*60+15;
+  // keep upcoming events; today's released events stay until 4:15 PM ET close, then drop
+  var evs=(_nf.cal||[]).filter(function(e){var d=_etD(e.ts);return d>_etToday||(d===_etToday&&!_closed)||(e.ts>=now);});
   box.style.display="block";
   if(!evs.length){
     var em=div();em.style.cssText="padding:9px 12px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:10px;letter-spacing:1px;color:var(--text3);line-height:1.5;";
@@ -11395,7 +11400,7 @@ function _nfPaintCal(){
     var tt=div();tt.style.cssText="font-size:12px;line-height:1.35;color:#ff5c5c;overflow-wrap:anywhere;";
     tt.textContent=e.title;
     var fp=div();fp.style.cssText="font-size:10px;color:var(--text3);margin-top:2px;";
-    fp.textContent=(e.forecast?"F "+e.forecast:"")+(e.forecast&&e.previous?"  ·  ":"")+(e.previous?"P "+e.previous:"");
+    fp.textContent=(e.actual?"A "+e.actual+"  ·  ":"")+(e.forecast?"F "+e.forecast:"")+(e.forecast&&e.previous?"  ·  ":"")+(e.previous?"P "+e.previous:"");
     mid.appendChild(tt);if(fp.textContent)mid.appendChild(fp);
     var rt=div();rt.style.cssText="flex-shrink:0;text-align:right;font-size:9px;letter-spacing:1px;line-height:1.5;";
     var cc=span("",e.ccy);cc.style.cssText="color:var(--text3);display:block;";
