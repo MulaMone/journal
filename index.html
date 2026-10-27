@@ -892,6 +892,16 @@ function loadFedProbFromCloud(callback){
   .then(function(data){
     var cloud=(Array.isArray(data)&&data.length&&data[0].settings&&Array.isArray(data[0].settings.fedprob_hist))?data[0].settings.fedprob_hist:null;
     var merged=fedProbHistMerge(fedProbHistGet(),cloud);
+    // One-shot cleanup: rows dated 2026-10-26 or later were written with live-blended reads under settle dates.
+    // Purge locally AND overwrite the cloud copy directly (the normal merge is union-only and would restore them).
+    var purgeDone=false;try{purgeDone=!!localStorage.getItem("edge_fedprob_purge_1027");}catch(e){}
+    if(!purgeDone&&cloud!==null){
+      merged=merged.filter(function(r){return !(r.dateISO&&r.dateISO>="2026-10-26");});
+      fedProbHistSet(merged);
+      _fedCloudOk=true;
+      return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
+      .then(function(){try{localStorage.setItem("edge_fedprob_purge_1027","1");}catch(e){} if(callback) callback(true); return true;});
+    }
     fedProbHistSet(merged);
     _fedCloudOk=true;
     if(JSON.stringify(merged)!==JSON.stringify(cloud||[])) syncFedProbToCloud();
