@@ -9478,13 +9478,13 @@ function etDateISO(){ // today's date in New York, not UTC (UTC flips to "tomorr
 // Pulls together everything the card needs to show 1-day / 1-week /
 // 1-month change for the CURRENT meeting only — mixing in a stale prior
 // meeting's numbers would misread as a change that never happened.
-function fedProbDeltas(prob,todayISO){
+function fedProbDeltas(prob,todayISO,nowISO){
   if(!prob) return null;
   var hist=fedProbHistGet().filter(function(r){return r.meetingCode===prob.meetingCode;});
   if(hist.length<2) return null; // need at least one prior trading day's bulletin to diff against
   var d1=fedProbSnapshotDaysAgo(hist,todayISO,1);
-  var d7=fedProbSnapshotDaysAgo(hist,todayISO,7);
-  var d30=fedProbSnapshotDaysAgo(hist,todayISO,30);
+  var d7=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,7);
+  var d30=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,30);
   return {d1:d1,d7:d7,d30:d30};
 }
 // After an FOMC rolls over, the new "next meeting" has no recorded rows, so the 1d/1w/1m chips
@@ -9669,7 +9669,7 @@ function buildFedFundsView(data,isM){
     var settleProb=computeFedProbability(meetingIso,data.curve,data.effr); // settle-only (no live quote) so history matches CME
     if(bulletinISO&&settleProb) recordFedProbSnapshot(settleProb,bulletinISO);
     var todayISO=bulletinISO||(liveApplied?fedLastTradingISO(data.live):null);
-    var deltas=fedProbDeltas(prob,todayISO);
+    var deltas=fedProbDeltas(prob,todayISO,fedLastTradingISO(liveApplied?data.live:null));
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
       function fedChipDate(iso){
@@ -9696,9 +9696,9 @@ function buildFedFundsView(data,isM){
         }
         return wrap;
       }
-      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,(settleProb?settleProb.stepProb:prob.stepProb),1));
-      histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,(settleProb?settleProb.stepProb:prob.stepProb),7));
-      histRow.appendChild(histChip("1-MONTH Δ (MOVE)",deltas.d30,(settleProb?settleProb.stepProb:prob.stepProb),30));
+      histRow.appendChild(histChip("1-DAY Δ (MOVE)",deltas.d1,prob.stepProb,1));
+      histRow.appendChild(histChip("1-WEEK Δ (MOVE)",deltas.d7,prob.stepProb,7));
+      histRow.appendChild(histChip("1-MONTH Δ (MOVE)",deltas.d30,prob.stepProb,30));
       if(!isM){
         // Desktop only: fold the 1D/1W/1M deltas into the FOMC card (right side). Mobile keeps the separate box.
         var fomcLeft=div();fomcLeft.style.cssText="flex:0 0 auto;";
