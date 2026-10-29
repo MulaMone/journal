@@ -9507,8 +9507,8 @@ function fetchZQSettleHistory(code){
 function backfillFedProbHistory(meetingIso,effr){
   try{
     if(!meetingIso) return Promise.resolve(false);
-    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v1_"+code;
-    var have=fedProbHistGet().filter(function(r){return r.meetingCode===code;}).length;
+    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v2_"+code;
+    var have=fedProbHistGet().filter(function(r){return r.meetingCode===code&&!r.backfill;}).length;
     if(have>=30) return Promise.resolve(false);
     var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
     if(Date.now()-last<6*3600*1000) return Promise.resolve(false);
@@ -9516,13 +9516,14 @@ function backfillFedProbHistory(meetingIso,effr){
     var prev=prevContractMonthCode(code),next=nextContractMonthCode(code);
     return Promise.all([fetchZQSettleHistory(code),fetchZQSettleHistory(prev),fetchZQSettleHistory(next)]).then(function(res){
       var mR=res[0],pR=res[1],nR=res[2],today=etDateISO(),added=0;
-      var all=fedProbHistGet(),seen={};
+      var all=fedProbHistGet().filter(function(r){return !(r.meetingCode===code&&r.backfill);}),seen={};
+      var priorIso=null;FOMC_DECISION_DATES_ALL.forEach(function(x){if(x<meetingIso) priorIso=x;});
       all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
       Object.keys(mR).forEach(function(d){
         if(d>=today||seen[d]) return;
         var wd=new Date(d+"T00:00:00Z").getUTCDay(); if(wd===0||wd===6) return;
         var curve=[{code:code,rate:mR[d]}];
-        if(pR[d]!=null) curve.push({code:prev,rate:pR[d]});
+        if(pR[d]!=null&&!(priorIso&&d<priorIso)) curve.push({code:prev,rate:pR[d]});
         if(nR[d]!=null) curve.push({code:next,rate:nR[d]});
         var p=computeFedProbability(meetingIso,curve,effr);
         if(!p) return;
