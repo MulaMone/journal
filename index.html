@@ -9507,7 +9507,7 @@ function fetchZQSettleHistory(code){
 function backfillFedProbHistory(meetingIso,effr){
   try{
     if(!meetingIso) return Promise.resolve(false);
-    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v2_"+code;
+    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v3_"+code;
     var have=fedProbHistGet().filter(function(r){return r.meetingCode===code&&!r.backfill;}).length;
     if(have>=30) return Promise.resolve(false);
     var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
@@ -9527,7 +9527,7 @@ function backfillFedProbHistory(meetingIso,effr){
         if(nR[d]!=null) curve.push({code:next,rate:nR[d]});
         var p=computeFedProbability(meetingIso,curve,effr);
         if(!p) return;
-        all.push({meetingCode:code,hold:p.holdProb,move:p.stepProb,deltaBp:p.deltaBp,ts:new Date(d+"T12:00:00Z").getTime(),dateISO:d,backfill:1});
+        all.push({meetingCode:code,hold:p.holdProb,move:p.stepProb,deltaBp:p.deltaBp,ts:Date.now(),dateISO:d,backfill:1});
         added++;
       });
       if(added){fedProbHistSet(fedProbHistMerge(all,[]));syncFedProbToCloud();}
