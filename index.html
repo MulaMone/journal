@@ -9487,6 +9487,53 @@ function fedProbDeltas(prob,todayISO){
   var d30=fedProbSnapshotDaysAgo(hist,todayISO,30);
   return {d1:d1,d7:d7,d30:d30};
 }
+// After an FOMC rolls over, the new "next meeting" has no recorded rows, so the 1d/1w/1m chips
+// went blank. Rebuild its history from past ZQ settles (meeting + prior month contracts), same
+// math as the live card. Never overwrites a real recorded row; resolves quietly on any failure.
+function fetchZQSettleHistory(code){
+  var t=cbotYahooTicker(code);
+  if(!t) return Promise.resolve({});
+  return fetch(SUPA_URL+"/functions/v1/fed-history?symbol="+encodeURIComponent(t)+"&range=3mo",{
+    headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
+  }).then(function(r){return r.ok?r.json():null;}).then(function(j){
+    var m={};
+    ((j&&j.rows)||[]).forEach(function(r){
+      var p=r&&(r.close!=null?r.close:r.c!=null?r.c:r.settle!=null?r.settle:r.price);
+      if(r&&r.d&&typeof p==="number"&&isFinite(p)&&p>50) m[r.d]=100-p;
+    });
+    return m;
+  }).catch(function(){return {};});
+}
+function backfillFedProbHistory(meetingIso,effr){
+  try{
+    if(!meetingIso) return Promise.resolve(false);
+    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v1_"+code;
+    var have=fedProbHistGet().filter(function(r){return r.meetingCode===code;}).length;
+    if(have>=30) return Promise.resolve(false);
+    var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
+    if(Date.now()-last<6*3600*1000) return Promise.resolve(false);
+    try{localStorage.setItem(key,String(Date.now()));}catch(e){}
+    var prev=prevContractMonthCode(code),next=nextContractMonthCode(code);
+    return Promise.all([fetchZQSettleHistory(code),fetchZQSettleHistory(prev),fetchZQSettleHistory(next)]).then(function(res){
+      var mR=res[0],pR=res[1],nR=res[2],today=etDateISO(),added=0;
+      var all=fedProbHistGet(),seen={};
+      all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
+      Object.keys(mR).forEach(function(d){
+        if(d>=today||seen[d]) return;
+        var wd=new Date(d+"T00:00:00Z").getUTCDay(); if(wd===0||wd===6) return;
+        var curve=[{code:code,rate:mR[d]}];
+        if(pR[d]!=null) curve.push({code:prev,rate:pR[d]});
+        if(nR[d]!=null) curve.push({code:next,rate:nR[d]});
+        var p=computeFedProbability(meetingIso,curve,effr);
+        if(!p) return;
+        all.push({meetingCode:code,hold:p.holdProb,move:p.stepProb,deltaBp:p.deltaBp,ts:new Date(d+"T12:00:00Z").getTime(),dateISO:d,backfill:1});
+        added++;
+      });
+      if(added){fedProbHistSet(fedProbHistMerge(all,[]));syncFedProbToCloud();}
+      return added>0;
+    }).catch(function(){return false;});
+  }catch(e){return Promise.resolve(false);}
+}
 function fmtFedDelta(fromMove,toMove){
   var d=toMove-fromMove;
   if(Math.abs(d)<0.05) return {txt:"unch",col:"var(--text3)"};
@@ -10504,6 +10551,8 @@ function analystTab(){
     var liveMeetingP=liveMeetingCode?fetchLiveZQQuote(liveMeetingCode):Promise.resolve(null);
     var livePrevP=livePrevCode?fetchLiveZQQuote(livePrevCode):Promise.resolve(null);
     Promise.all([loadFedFundsData(force),liveMeetingP,livePrevP,fedHistP]).then(function(results){
+      return backfillFedProbHistory(liveMeetingIso,results[0]&&results[0].effr).then(function(){return results;});
+    }).then(function(results){
       if(myToken!==_fedLoadToken||State.tab!=="analyst") return;
       var data=results[0];
       data.live=results[1];
