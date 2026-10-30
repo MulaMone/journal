@@ -9947,11 +9947,11 @@ function assetLabelHTML(label){
     +"<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='"+a.c+"' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"+a.p+"</svg>"
     +"<span>"+label+"</span></span>";
 }
-// Emoji shown next to the price. On mobile, gold gets an inline coins SVG instead (iOS renders its coin emoji silver).
+// Emoji shown next to the price. Gold gets an inline stacked-bars SVG instead (iOS renders its coin emoji silver).
 function assetEmojiHTML(label){
   var a=ASSET_ICONS[label];
   if(!a) return "";
-  if(label==="Gold"&&isMobile()) return " <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#ffab00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-4px;margin-left:4px;' aria-hidden='true'><path d='M9 14c0 1.657 2.686 3 6 3s6-1.343 6-3s-2.686-3-6-3s-6 1.343-6 3z'/><path d='M9 14v4c0 1.656 2.686 3 6 3s6-1.344 6-3v-4'/><path d='M3 6c0 1.072 1.144 2.062 3 2.598s4.144.536 6 0c1.856-.536 3-1.526 3-2.598c0-1.072-1.144-2.062-3-2.598s-4.144-.536-6 0c-1.856.536-3 1.526-3 2.598z'/><path d='M3 6v10c0 .888.772 1.45 2 2'/><path d='M3 11c0 .888.772 1.45 2 2'/></svg>";
+  if(label==="Gold") return " <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#ffab00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-4px;margin-left:4px;' aria-hidden='true'><path d='M9.5 3h5l1.5 5H8z'/><path d='M4 11h5l1.5 5h-8z'/><path d='M14.5 11h5l1.5 5h-8z'/></svg>";
   if(label==="WTI Crude Oil") return " <a href='https://tankermap.com/' target='_blank' rel='noopener' title='Tanker map' style='font-size:.75em;letter-spacing:0;text-decoration:none;display:inline-block;cursor:pointer;'>"+a.e+"</a>";
   return " <span style='font-size:.75em;letter-spacing:0;'>"+a.e+"</span>";
 }
