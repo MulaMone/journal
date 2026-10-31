@@ -10675,7 +10675,7 @@ function analystTab(){
       return "<div style='"+G+"'><span style='color:"+col+"'>"+label+"</span>"
         +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
         +"<span style='"+R+"color:"+oiCol+";font-weight:700'>"+pv+"</span>"
-        +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(oiV)+(arrow(oiKey,11,3)||"<span style='display:inline-block;width:14px'></span>")+"</span></div>";
+        +"<span style='"+R+"color:#fff;font-weight:700'>"+arrow(oiKey,11,0).replace("margin-left:0px;","margin-right:5px;")+gexFmt(oiV)+"</span></div>";
     }
     if(isM){
       html+="<div style='"+G+"'><span style='color:#ffab00;grid-column:1/3;'>Zero Gamma</span><span></span><span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
