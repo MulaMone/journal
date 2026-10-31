@@ -10655,11 +10655,21 @@ function analystTab(){
   function gexFmt(v){return typeof v==="number"?v.toFixed(2):"—";}
   function buildGexCard(sym,d){
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;box-sizing:border-box;";
-    var rows=[["Zero Gamma",d.zero_gamma,"#ffab00"],["Call Wall (Vol)",d.mpos_vol,"#00e676"],["Put Wall (Vol)",d.mneg_vol,"#ff4444"],["Call Wall (OI)",d.mpos_oi,"#4da3ff"],["Put Wall (OI)",d.mneg_oi,"#b06aff"]];
     var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+" · Net GEX Vol <span style='color:"+(d.net_gex_vol>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_vol.toFixed(1)+"</span> · OI <span style='color:"+(d.net_gex_oi>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_oi.toFixed(1)+"</span></div>";
-    rows.forEach(function(r){
-      html+="<div style='display:flex;justify-content:space-between;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:"+r[2]+"'>"+r[0]+"</span><span style='color:#fff;font-weight:700'>"+gexFmt(r[1])+"</span></div>";
-    });
+    var ROW="display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;";
+    function arrow(f){
+      var a=d._arr&&d._arr[f]?d._arr[f].dir:0;
+      return a?"<span style='color:"+(a>0?"#00e676":"#ff4444")+";font-size:12px;margin-left:4px;'>"+(a>0?"▲":"▼")+"</span>":"";
+    }
+    function wall(label,col,volV,oiV,oiCol,oiKey){
+      return "<div style='"+ROW+"'><span style='color:"+col+"'>"+label+"</span><span><span style='color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
+        +"<span style='display:inline-block;min-width:96px;text-align:right;color:"+oiCol+";font-weight:700'>"+(d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"")+"</span>"
+        +"<span style='display:inline-block;min-width:118px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey)+"</span></span></div>";
+    }
+    html+="<div style='"+ROW+"'><span style='color:#ffab00'>Zero Gamma</span><span style='color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
+    html+="<div style='display:flex;justify-content:flex-end;font-size:10px;letter-spacing:2px;color:var(--text3);'><span style='min-width:80px;text-align:right'>VOL</span><span style='min-width:96px;text-align:right'>OI PREV</span><span style='min-width:118px;text-align:right'>OI LIVE</span></div>";
+    html+=wall("Call Wall","#00e676",d.mpos_vol,d.mpos_oi,"#4da3ff","mpos_oi");
+    html+=wall("Put Wall","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
     var when=new Date(d.ts*1000).toLocaleString("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"});
     html+="<div style='font-size:11px;color:var(--text3);margin-top:8px;'>as of "+when+" ET · basis "+(d.basis>=0?"+":"")+d.basis.toFixed(2)+"</div>";
     card.innerHTML=html;
@@ -10667,7 +10677,7 @@ function analystTab(){
   }
   var _gexToken=0;
   var _gexAutoInterval=null;
-  // After the 4:00 PM ET close until the 9:30 AM ET open (and all weekend) the
+  // After the 4:00 PM ET close until 8:30 AM ET (and all weekend) the
   // current day's levels are spent — show the next expiry (gex_one); otherwise
   // the current day's (gex_zero).
   function gexCat(){
@@ -10675,7 +10685,7 @@ function analystTab(){
     new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short",hour:"numeric",minute:"numeric",hour12:false}).formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
     var mins=(parseInt(p.hour,10)%24)*60+parseInt(p.minute,10);
     var wk=(p.weekday==="Sat"||p.weekday==="Sun");
-    return (wk||mins>=960||mins<570)?"gex_one":"gex_zero";
+    return (wk||mins>=960||mins<510)?"gex_one":"gex_zero";
   }
   function loadGex(force){
     var myToken=++_gexToken;
@@ -10698,7 +10708,26 @@ function analystTab(){
   }
   if(_gexAutoInterval) clearInterval(_gexAutoInterval);
   _gexAutoInterval=setInterval(function(){if(State.tab==="analyst") loadGex(false);},5*60*1000);
+  // Direction of the last change of each OI level (per symbol + category), kept in
+  // localStorage: arrow shows whether the level moved up or down vs its previous value.
+  function gexTrack(d){
+    var st={};
+    try{st=JSON.parse(localStorage.getItem("edge_gex_prev")||"{}")||{};}catch(e){}
+    ["ES","NQ"].forEach(function(s){
+      if(!d[s]) return;
+      d[s]._arr={};
+      ["mpos_oi","mneg_oi"].forEach(function(f){
+        var k=s+"|"+(d[s]._cat||"")+"|"+f,e=st[k],v=d[s][f];
+        if(typeof v!=="number") return;
+        if(!e) e={v:v,dir:0};
+        else if(e.v!==v) e={v:v,prev:e.v,dir:v>e.v?1:-1};
+        st[k]=e;d[s]._arr[f]={dir:e.dir,prev:e.prev};
+      });
+    });
+    try{localStorage.setItem("edge_gex_prev",JSON.stringify(st));}catch(e){}
+  }
   function renderGex(d){
+    gexTrack(d);
     gexBody.innerHTML="";
     var row=div();row.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:11px;margin-bottom:12px;";
     ["ES","NQ"].forEach(function(s){if(d[s]) row.appendChild(buildGexCard(s,d[s]));});
