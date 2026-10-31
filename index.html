@@ -10169,6 +10169,12 @@ function analystTab(){
   var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
   liqBody.style.transition="opacity .15s";
 
+  // ── GEXBot gamma levels (ES / NQ) ──
+  var gexHead=div();gexHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
+  gexHead.textContent="GEXBot Gamma Levels";
+  el.appendChild(gexHead);
+  var gexBody=div();gexBody.id="gex-body";el.appendChild(gexBody);
+
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
@@ -10645,7 +10651,47 @@ function analystTab(){
     });
   }
 
-  function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadVoiChart(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);}
+  // ── GEXBot gamma levels ──
+  function gexFmt(v){return typeof v==="number"?v.toFixed(2):"—";}
+  function buildGexCard(sym,d){
+    var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;box-sizing:border-box;";
+    var rows=[["Zero Gamma",d.zero_gamma,"#ffab00"],["Call Wall (Vol)",d.mpos_vol,"#00e676"],["Put Wall (Vol)",d.mneg_vol,"#ff4444"],["Call Wall (OI)",d.mpos_oi,"#00e676"],["Put Wall (OI)",d.mneg_oi,"#ff4444"]];
+    var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · Net GEX Vol <span style='color:"+(d.net_gex_vol>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_vol.toFixed(1)+"</span> · OI <span style='color:"+(d.net_gex_oi>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_oi.toFixed(1)+"</span></div>";
+    rows.forEach(function(r){
+      html+="<div style='display:flex;justify-content:space-between;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:"+r[2]+"'>"+r[0]+"</span><span style='color:#fff;font-weight:700'>"+gexFmt(r[1])+"</span></div>";
+    });
+    var when=new Date(d.ts*1000).toLocaleString("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"});
+    html+="<div style='font-size:11px;color:var(--text3);margin-top:8px;'>as of "+when+" ET · basis "+(d.basis>=0?"+":"")+d.basis.toFixed(2)+"</div>";
+    card.innerHTML=html;
+    return card;
+  }
+  var _gexToken=0;
+  function loadGex(force){
+    var myToken=++_gexToken;
+    var cached=null;
+    try{cached=JSON.parse(localStorage.getItem("edge_gex_cache")||"null");}catch(e){}
+    if(!force&&cached&&Date.now()-cached.t<5*60*1000){renderGex(cached.d);return;}
+    if(!gexBody.firstChild) gexBody.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">LOADING GAMMA LEVELS…</div>';
+    fetch(SUPA_URL+"/functions/v1/gexbot",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
+      .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
+      .then(function(d){
+        if(myToken!==_gexToken||State.tab!=="analyst") return;
+        if(d.error) throw new Error(d.error);
+        try{localStorage.setItem("edge_gex_cache",JSON.stringify({t:Date.now(),d:d}));}catch(e){}
+        renderGex(d);
+      }).catch(function(err){
+        if(myToken!==_gexToken) return;
+        gexBody.innerHTML='<div style="padding:20px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD GAMMA LEVELS — '+(err&&err.message?err.message:"network error")+'</div>';
+      });
+  }
+  function renderGex(d){
+    gexBody.innerHTML="";
+    var row=div();row.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:11px;margin-bottom:12px;";
+    ["ES","NQ"].forEach(function(s){if(d[s]) row.appendChild(buildGexCard(s,d[s]));});
+    gexBody.appendChild(row);
+  }
+
+  function refreshAnalystData(force){loadLegacy(force);load(force);loadCme(force);loadVoiChart(force);loadYc(force);loadLiq(force);loadFed(force);loadDxy(force);loadGex(force);}
   // Trigger All calls this to repaint just the sections its workflows feed
   // (COT, yields/10Y, liquidity) in place — no full render(), no page jump.
   window._analystRefreshTriggered=function(){loadLegacy(true);load(true);loadYc(true);loadLiq(true);};
@@ -10656,6 +10702,7 @@ function analystTab(){
   loadLiq(false);
   loadFed(false);
   loadDxy(false);
+  loadGex(false);
 
   // Catch up the moment the app regains focus (e.g. coming back from the
   // mobile background) — each section's staleness window only gets
