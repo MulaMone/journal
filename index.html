@@ -10665,8 +10665,8 @@ function analystTab(){
     function wallD(label,col,volV,oiV,oiCol,oiKey){
       var pv=d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"";
       return "<div style='display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:"+col+"'>"+label+"</span><span><span style='color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
-        +"<span style='display:inline-block;min-width:96px;text-align:right;color:"+oiCol+";font-weight:700'>"+pv+"</span>"
-        +"<span style='display:inline-block;min-width:118px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey).replace("font-size:11px;margin-left:3px","font-size:12px;margin-left:4px")+"</span></span></div>";
+        +"<span style='display:inline-block;min-width:120px;text-align:right;color:"+oiCol+";font-weight:700'>"+pv+"</span>"
+        +"<span style='display:inline-block;min-width:140px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey).replace("font-size:11px;margin-left:3px","font-size:12px;margin-left:4px")+"</span></span></div>";
     }
     function wall(label,col,volV,oiV,oiCol,oiKey){
       var pv=d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"";
@@ -10676,13 +10676,13 @@ function analystTab(){
         +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey)+"</span></div>";
     }
     if(isM){
+      html+="<div style='"+G+"'><span style='color:#ffab00;grid-column:1/3;'>Zero Gamma</span><span></span><span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
       html+="<div style='"+G+"font-size:9px;letter-spacing:1px;color:var(--text3);padding:0;'><span></span><span style='"+R+"'>VOL</span><span style='"+R+"'>OI PREV</span><span style='"+R+"'>OI LIVE</span></div>";
-      html+="<div style='"+G+"'><span style='color:#ffab00'>Zero Gamma</span><span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span><span></span><span></span></div>";
-      html+=wall("Call Wall","#00e676",d.mpos_vol,d.mpos_oi,"#4da3ff","mpos_oi");
-      html+=wall("Put Wall","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
+      html+=wall("Call","#00e676",d.mpos_vol,d.mpos_oi,"#4da3ff","mpos_oi");
+      html+=wall("Put","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
     } else {
       html+="<div style='display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:#ffab00'>Zero Gamma</span><span style='color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
-      html+="<div style='display:flex;justify-content:flex-end;font-size:10px;letter-spacing:2px;color:var(--text3);'><span style='min-width:80px;text-align:right'>VOL</span><span style='min-width:96px;text-align:right'>OI PREV</span><span style='min-width:118px;text-align:right'>OI LIVE</span></div>";
+      html+="<div style='display:flex;justify-content:flex-end;font-size:10px;letter-spacing:2px;color:var(--text3);'><span style='min-width:100px;text-align:right'>VOL</span><span style='min-width:120px;text-align:right'>OI PREV</span><span style='min-width:140px;text-align:right'>OI LIVE</span></div>";
       html+=wallD("Call Wall","#00e676",d.mpos_vol,d.mpos_oi,"#4da3ff","mpos_oi");
       html+=wallD("Put Wall","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
     }
