@@ -10155,6 +10155,12 @@ function analystTab(){
   var ycBody=div();ycBody.id="yc-body";el.appendChild(ycBody);
   ycBody.style.transition="opacity .15s";
 
+  // ── GEXBot gamma levels (ES / NQ) ──
+  var gexHead=div();gexHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
+  gexHead.textContent="Gamma Levels";
+  el.appendChild(gexHead);
+  var gexBody=div();gexBody.id="gex-body";el.appendChild(gexBody);
+
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   fedHead.innerHTML=assetLabelHTML("Fed Rate Probabilities").replace(/<\/span><\/span>$/,"</span><span style='font-size:16px;letter-spacing:0;line-height:1;'>"+ASSET_ICONS["Fed Rate Probabilities"].e+"</span></span>");
@@ -10169,11 +10175,6 @@ function analystTab(){
   var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
   liqBody.style.transition="opacity .15s";
 
-  // ── GEXBot gamma levels (ES / NQ) ──
-  var gexHead=div();gexHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  gexHead.textContent="GEXBot Gamma Levels";
-  el.appendChild(gexHead);
-  var gexBody=div();gexBody.id="gex-body";el.appendChild(gexBody);
 
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
