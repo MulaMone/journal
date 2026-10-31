@@ -10659,22 +10659,23 @@ function analystTab(){
     var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+"</div>";
     var G="display:grid;grid-template-columns:38px 1fr 1fr 1fr;column-gap:8px;align-items:baseline;font-family:Courier New,monospace;font-size:"+(isM?"14":"15")+"px;padding:3px 0;white-space:nowrap;";
     var R="text-align:right;";
-    function arrow(f){
+    function arrow(f,fs,ml){
       var a=d._arr&&d._arr[f]?d._arr[f].dir:0;
-      return a?"<span style='color:"+(a>0?"#00e676":"#ff4444")+";font-size:11px;margin-left:3px;'>"+(a>0?"▲":"▼")+"</span>":"";
+      return a?"<span style='color:"+(a>0?"#00e676":"#ff4444")+";font-size:"+fs+"px;margin-left:"+ml+"px;'>"+(a>0?"▲":"▼")+"</span>":"";
     }
+    function prevOf(f){return d._arr&&d._arr[f]&&typeof d._arr[f].prev==="number"?gexFmt(d._arr[f].prev):"";}
     function wallD(label,col,volV,oiV,oiCol,oiKey){
-      var pv=d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"";
+      var pv=prevOf(oiKey);
       return "<div style='display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:"+col+"'>"+label+"</span><span><span style='color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
         +"<span style='display:inline-block;min-width:120px;text-align:right;color:"+oiCol+";font-weight:700'>"+pv+"</span>"
-        +"<span style='display:inline-block;min-width:140px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey).replace("font-size:11px;margin-left:3px","font-size:12px;margin-left:4px")+"</span></span></div>";
+        +"<span style='display:inline-block;min-width:140px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey,12,4)+"</span></span></div>";
     }
     function wall(label,col,volV,oiV,oiCol,oiKey){
-      var pv=d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"";
+      var pv=prevOf(oiKey);
       return "<div style='"+G+"'><span style='color:"+col+"'>"+label+"</span>"
         +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
         +"<span style='"+R+"color:"+oiCol+";font-weight:700'>"+pv+"</span>"
-        +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(oiV)+(arrow(oiKey)||"<span style='display:inline-block;width:14px'></span>")+"</span></div>";
+        +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(oiV)+(arrow(oiKey,11,3)||"<span style='display:inline-block;width:14px'></span>")+"</span></div>";
     }
     if(isM){
       html+="<div style='"+G+"'><span style='color:#ffab00;grid-column:1/3;'>Zero Gamma</span><span></span><span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
