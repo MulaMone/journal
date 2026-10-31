@@ -902,6 +902,15 @@ function loadFedProbFromCloud(callback){
       return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
       .then(function(){try{localStorage.setItem("edge_fedprob_purge_1027","1");}catch(e){} if(callback) callback(true); return true;});
     }
+    // One-shot cleanup (1031): drop old backfill rows dated before the prior FOMC (Oct 28) - they clipped to 100%.
+    var purge2=false;try{purge2=!!localStorage.getItem("edge_fedprob_purge_1031");}catch(e){}
+    if(!purge2&&cloud!==null){
+      merged=merged.filter(function(r){return !(r.backfill&&r.dateISO&&r.dateISO<"2026-10-28");});
+      fedProbHistSet(merged);
+      _fedCloudOk=true;
+      return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
+      .then(function(){try{localStorage.setItem("edge_fedprob_purge_1031","1");}catch(e){} if(callback) callback(true); return true;});
+    }
     fedProbHistSet(merged);
     _fedCloudOk=true;
     if(JSON.stringify(merged)!==JSON.stringify(cloud||[])) syncFedProbToCloud();
@@ -9507,7 +9516,7 @@ function fetchZQSettleHistory(code){
 function backfillFedProbHistory(meetingIso,effr){
   try{
     if(!meetingIso) return Promise.resolve(false);
-    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v3_"+code;
+    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v4_"+code;
     var have=fedProbHistGet().filter(function(r){return r.meetingCode===code&&!r.backfill;}).length;
     if(have>=30) return Promise.resolve(false);
     var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
@@ -9521,6 +9530,7 @@ function backfillFedProbHistory(meetingIso,effr){
       all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
       Object.keys(mR).forEach(function(d){
         if(d>=today||seen[d]) return;
+        if(priorIso&&d<priorIso) return; // before the prior FOMC there is no clean anchor (today's EFFR is post-decision) -> would clip to 100%
         var wd=new Date(d+"T00:00:00Z").getUTCDay(); if(wd===0||wd===6) return;
         var curve=[{code:code,rate:mR[d]}];
         if(pR[d]!=null&&!(priorIso&&d<priorIso)) curve.push({code:prev,rate:pR[d]});
