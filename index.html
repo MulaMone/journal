@@ -10655,7 +10655,7 @@ function analystTab(){
   function gexFmt(v){return typeof v==="number"?v.toFixed(2):"—";}
   function buildGexCard(sym,d){
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;box-sizing:border-box;";
-    var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+" · Net GEX Vol <span style='color:"+(d.net_gex_vol>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_vol.toFixed(1)+"</span> · OI <span style='color:"+(d.net_gex_oi>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_oi.toFixed(1)+"</span></div>";
+    var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+"</div>";
     var ROW="display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;";
     function arrow(f){
       var a=d._arr&&d._arr[f]?d._arr[f].dir:0;
