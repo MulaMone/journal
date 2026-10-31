@@ -10656,18 +10656,21 @@ function analystTab(){
   function buildGexCard(sym,d){
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;box-sizing:border-box;";
     var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+"</div>";
-    var ROW="display:flex;justify-content:space-between;align-items:baseline;font-family:Courier New,monospace;font-size:15px;padding:3px 0;";
+    var G="display:grid;grid-template-columns:auto 1fr 1fr 1fr;column-gap:8px;align-items:baseline;font-family:Courier New,monospace;font-size:"+(isM?"14":"15")+"px;padding:3px 0;white-space:nowrap;";
+    var R="text-align:right;";
     function arrow(f){
       var a=d._arr&&d._arr[f]?d._arr[f].dir:0;
-      return a?"<span style='color:"+(a>0?"#00e676":"#ff4444")+";font-size:12px;margin-left:4px;'>"+(a>0?"▲":"▼")+"</span>":"";
+      return a?"<span style='color:"+(a>0?"#00e676":"#ff4444")+";font-size:11px;margin-left:3px;'>"+(a>0?"▲":"▼")+"</span>":"";
     }
     function wall(label,col,volV,oiV,oiCol,oiKey){
-      return "<div style='"+ROW+"'><span style='color:"+col+"'>"+label+"</span><span><span style='color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
-        +"<span style='display:inline-block;min-width:96px;text-align:right;color:"+oiCol+";font-weight:700'>"+(d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"")+"</span>"
-        +"<span style='display:inline-block;min-width:118px;text-align:right;color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey)+"</span></span></div>";
+      var pv=d._arr&&d._arr[oiKey]&&typeof d._arr[oiKey].prev==="number"?gexFmt(d._arr[oiKey].prev):"";
+      return "<div style='"+G+"'><span style='color:"+col+"'>"+label+"</span>"
+        +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(volV)+"</span>"
+        +"<span style='"+R+"color:"+oiCol+";font-weight:700'>"+pv+"</span>"
+        +"<span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(oiV)+arrow(oiKey)+"</span></div>";
     }
-    html+="<div style='"+ROW+"'><span style='color:#ffab00'>Zero Gamma</span><span style='color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span></div>";
-    html+="<div style='display:flex;justify-content:flex-end;font-size:10px;letter-spacing:2px;color:var(--text3);'><span style='min-width:80px;text-align:right'>VOL</span><span style='min-width:96px;text-align:right'>OI PREV</span><span style='min-width:118px;text-align:right'>OI LIVE</span></div>";
+    html+="<div style='"+G+"font-size:9px;letter-spacing:1px;color:var(--text3);padding:0;'><span></span><span style='"+R+"'>VOL</span><span style='"+R+"'>OI PREV</span><span style='"+R+"'>OI LIVE</span></div>";
+    html+="<div style='"+G+"'><span style='color:#ffab00'>Zero Gamma</span><span style='"+R+"color:#fff;font-weight:700'>"+gexFmt(d.zero_gamma)+"</span><span></span><span></span></div>";
     html+=wall("Call Wall","#00e676",d.mpos_vol,d.mpos_oi,"#4da3ff","mpos_oi");
     html+=wall("Put Wall","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
     var when=new Date(d.ts*1000).toLocaleString("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"});
