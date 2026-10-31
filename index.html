@@ -10687,7 +10687,7 @@ function analystTab(){
       html+=wallD("Put Wall","#ff4444",d.mneg_vol,d.mneg_oi,"#b06aff","mneg_oi");
     }
     var when=new Date(d.ts*1000).toLocaleString("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"});
-    html+="<div style='font-size:11px;color:var(--text3);margin-top:8px;'>as of "+when+" ET · basis "+(d.basis>=0?"+":"")+d.basis.toFixed(2)+"</div>";
+    html+="<div style='font-size:11px;color:var(--text3);margin-top:8px;'>as of "+when+" ET</div>";
     card.innerHTML=html;
     return card;
   }
