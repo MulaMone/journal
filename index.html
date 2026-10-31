@@ -10655,8 +10655,8 @@ function analystTab(){
   function gexFmt(v){return typeof v==="number"?v.toFixed(2):"—";}
   function buildGexCard(sym,d){
     var card=div();card.style.cssText="background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:16px 18px;box-sizing:border-box;";
-    var rows=[["Zero Gamma",d.zero_gamma,"#ffab00"],["Call Wall (Vol)",d.mpos_vol,"#00e676"],["Put Wall (Vol)",d.mneg_vol,"#ff4444"],["Call Wall (OI)",d.mpos_oi,"#00e676"],["Put Wall (OI)",d.mneg_oi,"#ff4444"]];
-    var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · Net GEX Vol <span style='color:"+(d.net_gex_vol>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_vol.toFixed(1)+"</span> · OI <span style='color:"+(d.net_gex_oi>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_oi.toFixed(1)+"</span></div>";
+    var rows=[["Zero Gamma",d.zero_gamma,"#ffab00"],["Call Wall (Vol)",d.mpos_vol,"#00e676"],["Put Wall (Vol)",d.mneg_vol,"#ff4444"],["Call Wall (OI)",d.mpos_oi,"#4da3ff"],["Put Wall (OI)",d.mneg_oi,"#b06aff"]];
+    var html="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;'>"+sym+" · "+(d._cat==="gex_one"?"Next":"Latest")+" · Net GEX Vol <span style='color:"+(d.net_gex_vol>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_vol.toFixed(1)+"</span> · OI <span style='color:"+(d.net_gex_oi>=0?"#00e676":"#ff4444")+"'>"+d.net_gex_oi.toFixed(1)+"</span></div>";
     rows.forEach(function(r){
       html+="<div style='display:flex;justify-content:space-between;font-family:Courier New,monospace;font-size:15px;padding:3px 0;'><span style='color:"+r[2]+"'>"+r[0]+"</span><span style='color:#fff;font-weight:700'>"+gexFmt(r[1])+"</span></div>";
     });
@@ -10666,24 +10666,38 @@ function analystTab(){
     return card;
   }
   var _gexToken=0;
+  var _gexAutoInterval=null;
+  // After the 4:00 PM ET close until the 9:30 AM ET open (and all weekend) the
+  // current day's levels are spent — show the next expiry (gex_one); otherwise
+  // the current day's (gex_zero).
+  function gexCat(){
+    var p={};
+    new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short",hour:"numeric",minute:"numeric",hour12:false}).formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;});
+    var mins=(parseInt(p.hour,10)%24)*60+parseInt(p.minute,10);
+    var wk=(p.weekday==="Sat"||p.weekday==="Sun");
+    return (wk||mins>=960||mins<570)?"gex_one":"gex_zero";
+  }
   function loadGex(force){
     var myToken=++_gexToken;
     var cached=null;
+    var cat=gexCat();
     try{cached=JSON.parse(localStorage.getItem("edge_gex_cache")||"null");}catch(e){}
-    if(!force&&cached&&Date.now()-cached.t<5*60*1000){renderGex(cached.d);return;}
+    if(!force&&cached&&cached.c===cat&&Date.now()-cached.t<5*60*1000){renderGex(cached.d);return;}
     if(!gexBody.firstChild) gexBody.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-family:Courier New,monospace;font-size:12px;">LOADING GAMMA LEVELS…</div>';
-    fetch(SUPA_URL+"/functions/v1/gexbot",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
+    fetch(SUPA_URL+"/functions/v1/gexbot?cat="+cat,{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
       .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.json();})
       .then(function(d){
         if(myToken!==_gexToken||State.tab!=="analyst") return;
         if(d.error) throw new Error(d.error);
-        try{localStorage.setItem("edge_gex_cache",JSON.stringify({t:Date.now(),d:d}));}catch(e){}
+        try{d.ES&&(d.ES._cat=cat);d.NQ&&(d.NQ._cat=cat);localStorage.setItem("edge_gex_cache",JSON.stringify({t:Date.now(),c:cat,d:d}));}catch(e){}
         renderGex(d);
       }).catch(function(err){
         if(myToken!==_gexToken) return;
         gexBody.innerHTML='<div style="padding:20px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD GAMMA LEVELS — '+(err&&err.message?err.message:"network error")+'</div>';
       });
   }
+  if(_gexAutoInterval) clearInterval(_gexAutoInterval);
+  _gexAutoInterval=setInterval(function(){if(State.tab==="analyst") loadGex(false);},5*60*1000);
   function renderGex(d){
     gexBody.innerHTML="";
     var row=div();row.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:11px;margin-bottom:12px;";
