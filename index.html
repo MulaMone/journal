@@ -902,6 +902,15 @@ function loadFedProbFromCloud(callback){
       return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
       .then(function(){try{localStorage.setItem("edge_fedprob_purge_1027","1");}catch(e){} if(callback) callback(true); return true;});
     }
+    // One-shot (1101): drop ALL rows dated before 2026-10-28 (old single-meeting reads) so the CME-style backfill replaces them.
+    var purge3=false;try{purge3=!!localStorage.getItem("edge_fedprob_purge_1101");}catch(e){}
+    if(!purge3&&cloud!==null){
+      merged=merged.filter(function(r){return !(r.dateISO&&r.dateISO<"2026-10-28");});
+      fedProbHistSet(merged);
+      _fedCloudOk=true;
+      return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
+      .then(function(){try{localStorage.setItem("edge_fedprob_purge_1101","1");localStorage.removeItem("edge_fedprob_backfill_v6_DEC26");}catch(e){} if(callback) callback(true); return true;});
+    }
     // One-shot cleanup (1031): drop old backfill rows dated before the prior FOMC (Oct 28) - they clipped to 100%.
     var purge2=false;try{purge2=!!localStorage.getItem("edge_fedprob_purge_1031");}catch(e){}
     if(!purge2&&cloud!==null){
@@ -9513,18 +9522,46 @@ function fetchZQSettleHistory(code){
     return m;
   }).catch(function(){return {};});
 }
+// CME-style two-meeting tree for dates BEFORE the prior FOMC has decided. Rate grid is anchored on today's
+// rate c0 in 25bp steps. Prior meeting (e.g. Oct) -> expected post rate = clean month between (e.g. Nov);
+// this meeting (e.g. Dec) -> signed step prob from the existing single-meeting solve; convolve the two.
+// hold = P(final bucket == today's bucket), which is what CME's "hold" bucket is. Returns null if inputs missing.
+function computeFedTreeHold(meetingIso,priorIso,curve,c0){
+  try{
+    if(!priorIso||c0==null||!isFinite(c0)) return null;
+    var meetingCode=contractMonthCodeFromISO(meetingIso),priorCode=contractMonthCodeFromISO(priorIso);
+    var midCode=prevContractMonthCode(meetingCode);
+    if(nextContractMonthCode(priorCode)!==midCode||monthHasAnyFomcMeeting(midCode)) return null;
+    var by={};curve.forEach(function(c){by[c.code]=c;});
+    if(!by[priorCode]||!by[midCode]||!by[meetingCode]) return null;
+    var p=computeFedProbability(meetingIso,curve.filter(function(c){return c.code!==priorCode;}),null);
+    if(!p||p.anchor!=="contract") return null;
+    var E1=by[midCode].rate,STEP=0.25;
+    var s0=Math.round((by[priorCode].rate-c0)/STEP); // grid index of the rate going into the prior meeting
+    var x=(E1-c0)/STEP-s0,m=Math.floor(x),f=x-m;       // prior-meeting outcome: steps m / m+1 from s0
+    var q=Math.max(-1,Math.min(1,p.deltaBp/25));        // this meeting: signed step prob
+    var dist={};
+    function add(i,w){dist[i]=(dist[i]||0)+w;}
+    var a=[[m,1-f],[m+1,f]],b=q>=0?[[0,1-q],[1,q]]:[[0,1+q],[-1,-q]];
+    a.forEach(function(u){b.forEach(function(v){add(s0+u[0]+v[0],u[1]*v[1]);});});
+    var hold=(dist[0]||0)*100;
+    return {holdProb:hold,stepProb:100-hold,deltaBp:(p.Rnext-c0)*100};
+  }catch(e){return null;}
+}
 function backfillFedProbHistory(meetingIso,effr){
   try{
     if(!meetingIso) return Promise.resolve(false);
-    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v5_"+code;
+    var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v6_"+code;
     var have=fedProbHistGet().filter(function(r){return r.meetingCode===code&&!r.backfill;}).length;
     if(have>=30) return Promise.resolve(false);
     var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
     if(Date.now()-last<6*3600*1000) return Promise.resolve(false);
     try{localStorage.setItem(key,String(Date.now()));}catch(e){}
     var prev=prevContractMonthCode(code),next=nextContractMonthCode(code);
-    return Promise.all([fetchZQSettleHistory(code),fetchZQSettleHistory(prev),fetchZQSettleHistory(next)]).then(function(res){
-      var mR=res[0],pR=res[1],nR=res[2],today=etDateISO(),added=0;
+    var pIso=null;FOMC_DECISION_DATES_ALL.forEach(function(x){if(x<meetingIso) pIso=x;});
+    var pCode=pIso?contractMonthCodeFromISO(pIso):null;
+    return Promise.all([fetchZQSettleHistory(code),fetchZQSettleHistory(prev),fetchZQSettleHistory(next),pCode?fetchZQSettleHistory(pCode):Promise.resolve({})]).then(function(res){
+      var mR=res[0],pR=res[1],nR=res[2],oR=res[3],today=etDateISO(),added=0;
       var all=fedProbHistGet().filter(function(r){return !(r.meetingCode===code&&r.backfill);}),seen={};
       var priorIso=null;FOMC_DECISION_DATES_ALL.forEach(function(x){if(x<meetingIso) priorIso=x;});
       all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
@@ -9534,7 +9571,12 @@ function backfillFedProbHistory(meetingIso,effr){
         var curve=[{code:code,rate:mR[d]}];
         if(pR[d]!=null&&!(priorIso&&d<priorIso&&contractMonthCodeFromISO(priorIso)===prev)) curve.push({code:prev,rate:pR[d]});
         if(nR[d]!=null) curve.push({code:next,rate:nR[d]});
-        var p=computeFedProbability(meetingIso,curve,effr);
+        var p=null;
+        if(priorIso&&d<priorIso&&oR[d]!=null&&effr&&isFinite(effr.rate)){ // prior meeting still undecided that day -> CME-style tree
+          var cv=curve.slice();cv.push({code:pCode,rate:oR[d]});
+          p=computeFedTreeHold(meetingIso,priorIso,cv,effr.rate);
+        }
+        if(!p) p=computeFedProbability(meetingIso,curve,effr);
         if(!p) return;
         all.push({meetingCode:code,hold:p.holdProb,move:p.stepProb,deltaBp:p.deltaBp,ts:Date.now(),dateISO:d,backfill:1});
         added++;
