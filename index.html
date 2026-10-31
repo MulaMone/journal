@@ -9530,10 +9530,9 @@ function backfillFedProbHistory(meetingIso,effr){
       all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
       Object.keys(mR).forEach(function(d){
         if(d>=today||seen[d]) return;
-        if(priorIso&&d<priorIso) return; // before the prior FOMC there is no clean anchor (today's EFFR is post-decision) -> would clip to 100%
         var wd=new Date(d+"T00:00:00Z").getUTCDay(); if(wd===0||wd===6) return;
         var curve=[{code:code,rate:mR[d]}];
-        if(pR[d]!=null&&!(priorIso&&d<priorIso)) curve.push({code:prev,rate:pR[d]});
+        if(pR[d]!=null&&!(priorIso&&d<priorIso&&contractMonthCodeFromISO(priorIso)===prev)) curve.push({code:prev,rate:pR[d]});
         if(nR[d]!=null) curve.push({code:next,rate:nR[d]});
         var p=computeFedProbability(meetingIso,curve,effr);
         if(!p) return;
