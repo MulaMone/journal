@@ -11922,8 +11922,10 @@ function enRefresh(say,repaint){
       });
     }
     return tick();
-  }).then(function(){say("Deploying data…");return sleep(25000);}).then(pull).then(function(g){
-    if(g&&g===prev){say("Deploy slow — retrying…");return sleep(30000).then(pull);}return g;
+  }).then(function(){
+    say("Deploying data…");var n=0;
+    function poll(){return pull().then(function(g){if((g&&g!==prev)||++n>=24) return g;return sleep(5000).then(poll);});}
+    return poll();
   }).then(function(g){say("Refreshed "+hm()+(g&&g!==prev?" ✓":" · data unchanged"),g&&g!==prev?"var(--green)":"var(--amber)");}).catch(function(e){say(e.message||String(e),"var(--red)");});
 }
 function energyTab(){
