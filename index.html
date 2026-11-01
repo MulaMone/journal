@@ -32,7 +32,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 /* TABS */
 #tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:fixed;top:calc(54px + env(safe-area-inset-top));left:0;right:0;z-index:200}
-.tab{padding:0 14px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
+.tab{flex-shrink:0;padding:0 11px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 /* CONTENT */
@@ -1889,7 +1889,7 @@ function renderTabs(){
   el.style.display="";
   el.innerHTML="";
   el.style.cssText="display:flex;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden;position:fixed;top:52px;left:0;right:0;z-index:200;";
-  var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 14px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;";
+  var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 6px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;";
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
     tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
@@ -11937,6 +11937,7 @@ function enSecFlow(wrap){
   wrap.appendChild(enCard("Workflow",
     box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"])+arrow+
     box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"])));
+  wrap.appendChild(enCard("Grid Event → Proxy To Trade","<a href='energy-proxy.png' target='_blank' rel='noopener'><img src='energy-proxy.png' alt='Grid event location to best proxy to trade' style='width:100%;max-width:760px;display:block;margin:0 auto;border-radius:4px'></a><div style='font-size:10px;color:var(--text3);margin-top:6px;text-align:center'>Tap the image to enlarge.</div>"));
 }
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
