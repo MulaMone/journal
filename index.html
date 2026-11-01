@@ -11928,6 +11928,16 @@ function enRefresh(say,repaint){
     return poll();
   }).then(function(g){say("Refreshed "+hm()+(g&&g!==prev?" ✓":" · data unchanged"),g&&g!==prev?"var(--green)":"var(--amber)");}).catch(function(e){say(e.message||String(e),"var(--red)");});
 }
+function enSecFlow(wrap){
+  wrap.appendChild(enHead("How To Use This"));
+  function box(title,col,items){
+    return "<div style='border:1px solid "+col+";border-radius:4px;padding:14px 16px;background:var(--panel2)'><div style='font-size:11px;letter-spacing:2px;color:"+col+";margin-bottom:8px'>"+title+"</div>"+items.map(function(i){return "<div style='font-size:12px;color:var(--text);padding:2px 0'>• "+i+"</div>";}).join("")+"</div>";
+  }
+  var arrow="<div style='text-align:center;padding:8px 0;color:var(--text3);font-size:11px;letter-spacing:1px'>│<br>(Catalyst / Setup Signal)<br>▼</div>";
+  wrap.appendChild(enCard("Workflow",
+    box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"])+arrow+
+    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"])));
+}
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
   var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:hidden;";
@@ -11946,7 +11956,7 @@ function energyTab(){
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
     var rb=h("button",{className:"btn"},[_en.busy?"…":"↻ REFRESH"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
-    enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);
+    enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecFlow(body);
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
   }
