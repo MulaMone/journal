@@ -178,9 +178,8 @@ def ercot_prices():
 @guard("pjm")
 def pjm():
     key = os.environ.get("PJM_API_KEY")
-    if not key:
-        out["errors"]["pjm"] = "PJM_API_KEY not set - skipped"
-        return
+    if not key:  # fall back to the public key PJM's own Data Miner web app uses
+        key = requests.get("https://dataminer2.pjm.com/config/settings.json", timeout=20).json()["subscriptionKey"]
     import gridstatus
     from gridstatus import Markets
     p = gridstatus.PJM(api_key=key)
