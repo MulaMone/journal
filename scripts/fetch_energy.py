@@ -81,10 +81,11 @@ def ercot_load():
         rows.append({"t": iso(t), "actual": num(v), "forecast": fv})
     # include remaining forecast hours of today
     if fser is not None:
+        end = a.index.max() + pd.Timedelta(hours=18)
         for t, v in fser.items():
-            if t > a.index.max():
+            if a.index.max() < t <= end:
                 rows.append({"t": iso(t), "actual": None, "forecast": num(v)})
-    out.setdefault("ercot", {})["load"] = rows[-48:] if len(rows) > 48 else rows
+    out.setdefault("ercot", {})["load"] = rows
 
 
 @guard("ercot_fuel")
@@ -185,11 +186,12 @@ def pjm():
     p = gridstatus.PJM(api_key=key)
     rt = p.get_lmp("today", market=Markets.REAL_TIME_5_MIN, locations="hubs")
     da = p.get_lmp("today", market=Markets.DAY_AHEAD_HOURLY, locations="hubs")
+    LC = "Location Name" if "Location Name" in rt.columns else "Location"
     res = []
-    for loc, g in rt.groupby("Location"):
+    for loc, g in rt.groupby(LC):
         g = g.sort_values("Interval Start")
         last = g.iloc[-1]
-        dsub = da[da.Location == loc].set_index("Interval Start")["LMP"]
+        dsub = da[da[LC] == loc].set_index("Interval Start")["LMP"]
         dav = num(dsub.get(pd.Timestamp(last["Interval Start"]).floor("1h"), dsub.iloc[-1] if len(dsub) else None))
         rtv = num(last["LMP"])
         res.append({
