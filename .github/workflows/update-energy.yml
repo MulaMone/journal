@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 concurrency:
   group: update-energy
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
