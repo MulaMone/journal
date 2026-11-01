@@ -92,7 +92,7 @@ def ercot_load():
 def ercot_fuel():
     d = ercot.get_fuel_mix("today")
     d = d.set_index("Time") if "Time" in d.columns else d.set_index(d.columns[0])
-    d = d.resample("1h").mean()
+    d = d.resample("1h").mean(numeric_only=True).dropna(how="all")
     rows = []
     for t, r in d.iterrows():
         g = {"gasCC": 0.0, "gasPeaker": 0.0, "gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0}
@@ -209,11 +209,19 @@ def pjm():
         fc = col(F, "load") or F.columns[-1]
         a = L.set_index("Interval Start")[lc].resample("1h").mean()
         f = F.set_index("Interval Start")[fc].resample("1h").mean()
-        out.setdefault("pjm", {})["load"] = [{"t": iso(t), "actual": num(a.get(t)), "forecast": num(f.get(t))} for t in sorted(set(a.index) | set(f.index))][-48:]
+        a = a.dropna()
+        if len(a):
+            lo, hi = a.index.min(), a.index.max() + pd.Timedelta(hours=18)
+            ts = sorted(t for t in set(a.index) | set(f.index) if lo <= t <= hi)
+        else:
+            ts = sorted(f.index)[:24]
+        out.setdefault("pjm", {})["load"] = [{"t": iso(t), "actual": num(a.get(t)), "forecast": num(f.get(t))} for t in ts]
+        if not len(a):
+            out["errors"]["pjm_load"] = "no PJM actual load returned"
     except Exception as e:
         out["errors"]["pjm_load"] = str(e)[:200]
     try:
-        m = p.get_fuel_mix("today").set_index("Interval Start").resample("1h").mean(numeric_only=True)
+        m = p.get_fuel_mix("today").set_index("Interval Start").resample("1h").mean(numeric_only=True).dropna(how="all")
         rows = []
         for t, r in m.iterrows():
             g = {"gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0}
@@ -368,6 +376,7 @@ if __name__ == "__main__":
         {"label": "ERCOT transmission outages (MIS)", "url": "https://www.ercot.com/mp/data-products/data-product-details?id=NP3-233-CD"},
         {"label": "PJM transmission outages", "url": "https://www.pjm.com/markets-and-operations/transmission-service/transmission-outages"},
         {"label": "PJM Data Miner", "url": "https://dataminer2.pjm.com"},
+        {"label": "GridStatus.io", "url": "https://www.gridstatus.io/"},
     ]
     if not any(k in out for k in ("ercot", "hubs", "gas", "weather")):
         print("no data at all - not overwriting", file=sys.stderr)
