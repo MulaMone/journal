@@ -298,21 +298,26 @@ def spark():
 
 
 # ───────────────────────── Weather ─────────────────────────
-CITIES = {"Dallas": (32.78, -96.80), "Houston": (29.76, -95.37), "Chicago": (41.88, -87.63), "Philadelphia": (39.95, -75.17)}
+CITIES = {"Dallas": (32.78, -96.80), "Houston": (29.76, -95.37), "Chicago": (41.88, -87.63), "Philadelphia": (39.95, -75.17),
+          "New York City": (40.71, -74.01), "Atlanta": (33.75, -84.39)}
 WIND_PTS = {"West TX (Midland)": (31.99, -102.08), "TX Panhandle": (35.22, -101.83), "Coastal Bend TX": (27.8, -97.4),
             "Iowa": (41.6, -93.6), "Kansas": (37.75, -100.0), "Illinois": (40.48, -88.99)}
 
 
 def norms():
+    n = {"v": 1, "cities": {}}
     try:
         with open(NORMS) as f:
-            n = json.load(f)
-        if n.get("v") == 1:
-            return n
+            c = json.load(f)
+        if c.get("v") == 1:
+            n = c
     except Exception:
         pass
-    n = {"v": 1, "cities": {}}
+    changed = False
     for name, (la, lo) in CITIES.items():
+        if name in n["cities"]:
+            continue
+        changed = True
         r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
             "latitude": la, "longitude": lo, "start_date": "1991-01-01", "end_date": "2020-12-31",
             "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit", "timezone": "auto"}, timeout=120)
@@ -324,8 +329,9 @@ def norms():
                 continue
             buck.setdefault(d[5:], []).append(t)
         n["cities"][name] = {k: round(sum(v) / len(v), 1) for k, v in buck.items()}
-    with open(NORMS, "w") as f:
-        json.dump(n, f)
+    if changed:
+        with open(NORMS, "w") as f:
+            json.dump(n, f)
     return n
 
 
