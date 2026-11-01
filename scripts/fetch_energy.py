@@ -376,7 +376,6 @@ if __name__ == "__main__":
         {"label": "ERCOT transmission outages (MIS)", "url": "https://www.ercot.com/mp/data-products/data-product-details?id=NP3-233-CD"},
         {"label": "PJM transmission outages", "url": "https://www.pjm.com/markets-and-operations/transmission-service/transmission-outages"},
         {"label": "PJM Data Miner", "url": "https://dataminer2.pjm.com"},
-        {"label": "GridStatus.io", "url": "https://www.gridstatus.io/"},
     ]
     if not any(k in out for k in ("ercot", "hubs", "gas", "weather")):
         print("no data at all - not overwriting", file=sys.stderr)
