@@ -32,7 +32,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 /* TABS */
 #tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:fixed;top:calc(54px + env(safe-area-inset-top));left:0;right:0;z-index:200}
-.tab{padding:0 14px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
+.tab{padding:0 9px;height:46px;display:flex;align-items:center;gap:5px;font-size:13px;letter-spacing:.5px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 /* CONTENT */
@@ -11795,6 +11795,7 @@ function enSecLoad(D,wrap){
   wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase()));
   var rows=I.load||[];
   var a=rows.filter(function(r){return r.actual!=null;}),last=a[a.length-1];
+  if(a.length){var w0=enTs(a[0].t),w1=enTs(last.t)+12*36e5;rows=rows.filter(function(r){var t=enTs(r.t);return t>=w0&&t<=w1;});}
   var sig="",pct=null;
   if(last&&last.forecast){
     pct=(last.actual-last.forecast)/last.forecast*100;
@@ -11893,12 +11894,44 @@ function enSecMacro(D,wrap){
     L.map(function(l){return "<div><a href='"+l.url+"' target='_blank' rel='noopener' style='color:var(--accent);font-size:11px'>"+l.label+" ↗</a></div>";}).join("");
   wrap.appendChild(enCard("Outages & Transmission",oh));
 }
+// Refresh: re-dispatch the update-energy workflow (needs the same gh_token Settings uses for
+// "Trigger all data"), wait for it, give Pages time to redeploy, then reload energy.json.
+function enRefresh(say,repaint){
+  var tok=ls("gh_token",""),t0=Date.now(),prev=_en.data&&_en.data.generatedAt;
+  function hm(){return new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});}
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  function pull(){return enLoad(true).then(function(){repaint();return _en.data&&_en.data.generatedAt;});}
+  if(!tok){
+    say("Checking…");
+    return pull().then(function(g){say("Checked "+hm()+(g&&g===prev?" · no newer data yet (auto-updates every ~5 min). Add a GitHub token in Settings to force a fresh run.":" ✓ new data"),g&&g===prev?"var(--amber)":"var(--green)");});
+  }
+  var base="https://api.github.com/repos/"+GH_OWNER+"/"+GH_REPO+"/actions/workflows/update-energy.yml/";
+  var hdr={"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json"};
+  say("Triggering workflow…");
+  return fetch(base+"dispatches",{method:"POST",headers:{"Authorization":hdr.Authorization,"Accept":hdr.Accept,"Content-Type":"application/json"},body:JSON.stringify({ref:GH_BRANCH})}).then(function(r){
+    if(!r.ok) throw new Error("trigger failed (HTTP "+r.status+")");
+    var tries=0;
+    function tick(){
+      return sleep(5000).then(function(){
+        return fetch(base+"runs?event=workflow_dispatch&per_page=5",{headers:hdr,cache:"no-store"}).then(function(x){return x.ok?x.json():{workflow_runs:[]};}).catch(function(){return {workflow_runs:[]};});
+      }).then(function(j){
+        var run=(j.workflow_runs||[]).filter(function(x){return Date.parse(x.created_at)>=t0-30000;})[0];
+        if(run&&run.status==="completed"){if(run.conclusion!=="success") throw new Error("workflow "+run.conclusion);return;}
+        if(++tries>36) return;
+        say(run?"Workflow running…":"Waiting for workflow to start…");return tick();
+      });
+    }
+    return tick();
+  }).then(function(){say("Deploying data…");return sleep(25000);}).then(pull).then(function(g){
+    if(g&&g===prev){say("Deploy slow — retrying…");return sleep(30000).then(pull);}return g;
+  }).then(function(g){say("Refreshed "+hm()+(g&&g!==prev?" ✓":" · data unchanged"),g&&g!==prev?"var(--green)":"var(--amber)");}).catch(function(e){say(e.message||String(e),"var(--red)");});
+}
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
   var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:hidden;";
   var hd=div();hd.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
   var l=div();var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Energy";
-  var meta=div();meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";l.appendChild(t);l.appendChild(meta);
+  var meta=div();meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";var st=div();st.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:2px;";l.appendChild(t);l.appendChild(meta);l.appendChild(st);
   var btns=div();btns.style.cssText="display:flex;gap:6px;";
   var body=div();
   function paint(){
@@ -11910,7 +11943,7 @@ function energyTab(){
     var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
-    var rb=h("button",{className:"btn"},["↻"]);rb.style.cssText="min-height:36px;padding:0 12px;";rb.addEventListener("click",function(){enLoad(true).then(paint);});btns.appendChild(rb);
+    var rb=h("button",{className:"btn"},[_en.busy?"…":"↻ REFRESH"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
     enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
