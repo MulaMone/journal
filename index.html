@@ -32,7 +32,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 /* TABS */
 #tabs{display:flex;gap:1px;padding:0 14px;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;position:fixed;top:calc(54px + env(safe-area-inset-top));left:0;right:0;z-index:200}
-.tab{padding:0 9px;height:46px;display:flex;align-items:center;gap:5px;font-size:13px;letter-spacing:.5px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
+.tab{padding:0 14px;height:46px;display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:1px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;user-select:none}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 /* CONTENT */
@@ -1889,7 +1889,7 @@ function renderTabs(){
   el.style.display="";
   el.innerHTML="";
   el.style.cssText="display:flex;height:46px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden;position:fixed;top:52px;left:0;right:0;z-index:200;";
-  var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 14px;flex:1;min-width:0;overflow:hidden;";
+  var tabsWrap=div("row");tabsWrap.style.cssText="gap:1px;padding:0 14px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;";
   TABS.forEach(function(t){
     var tab=div("tab"+(State.tab===t.id?" active":""));
     tab.innerHTML="<span>"+t.icon+"</span> "+t.label;
