@@ -1866,7 +1866,8 @@ var TABS=[
   {id:"openanalysis",icon:"◉",label:"OPEN"},
   {id:"chart",icon:"▤",label:"CHART"},
   {id:"news",icon:"<svg width='1em' height='1em' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-0.125em'><circle cx='12' cy='12' r='1.6' fill='currentColor'/><path d='M8 8a5.6 5.6 0 0 0 0 8M16 8a5.6 5.6 0 0 1 0 8M5 5a9.8 9.8 0 0 0 0 14M19 5a9.8 9.8 0 0 1 0 14'/></svg>",label:"NEWS"},
-  {id:"analyst",icon:"Ξ",label:"ANALYST"}
+  {id:"analyst",icon:"Ξ",label:"ANALYST"},
+  {id:"energy",icon:"⚡",label:"ENERGY"}
 ];
 // "import" (importTab) is intentionally NOT in TABS — it's reached only via
 // the "⬆ IMPORT CSV" button on the Trade Log page (State.tab="import"),
@@ -1925,9 +1926,9 @@ function switchTab(id){
 }
 
 // More tabs (not in bottom nav)
-var MORE_TABS=["openanalysis","prep","playbook","import","notes","chart","settings"];
-var MORE_TABS_LABELS={openanalysis:"Open",news:"News",home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
-var MORE_TABS_ICONS={openanalysis:"◉",news:"<svg width='1em' height='1em' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-0.125em'><circle cx='12' cy='12' r='1.6' fill='currentColor'/><path d='M8 8a5.6 5.6 0 0 0 0 8M16 8a5.6 5.6 0 0 1 0 8M5 5a9.8 9.8 0 0 0 0 14M19 5a9.8 9.8 0 0 1 0 14'/></svg>",home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
+var MORE_TABS=["energy","openanalysis","prep","playbook","import","notes","chart","settings"];
+var MORE_TABS_LABELS={energy:"Energy",openanalysis:"Open",news:"News",home:"Home",playbook:"Plays",import:"Import",notes:"Notes",chart:"Chart",prep:"Prep",settings:"Settings"};
+var MORE_TABS_ICONS={energy:"⚡",openanalysis:"◉",news:"<svg width='1em' height='1em' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-0.125em'><circle cx='12' cy='12' r='1.6' fill='currentColor'/><path d='M8 8a5.6 5.6 0 0 0 0 8M16 8a5.6 5.6 0 0 1 0 8M5 5a9.8 9.8 0 0 0 0 14M19 5a9.8 9.8 0 0 1 0 14'/></svg>",home:"⌂",playbook:"◈",import:"⬆",notes:"✎",chart:"▤",prep:"▣",settings:"⚙"};
 
 function updateMobileNav(){
   var bnav=document.getElementById("m-bnav");
@@ -11697,7 +11698,234 @@ function newsFeedTab(){
   return wrap;
 }
 
-var VIEWS={home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,news:newsFeedTab,settings:settingsTab};
+// ─── ENERGY TAB ──────────────────────────────────────────────────────
+// Data: energy.json written by .github/workflows/update-energy.yml (scripts/fetch_energy.py,
+// gridstatus -> ERCOT/PJM + Henry Hub + Open-Meteo). Same same-origin-file pattern as yields.json.
+var _en={data:null,iso:"ercot",timer:null,err:null,loading:false};
+var EN_COL={gasCC:"#ff8c00",gasPeaker:"#ff5252",gas:"#ff8c00",solar:"#ffd600",wind:"#00d4d4",nuclear:"#b06aff",coal:"#8899aa",other:"#4a5a78"};
+var EN_LBL={gasCC:"Gas CC",gasPeaker:"Gas Peakers",gas:"Natural Gas",solar:"Solar",wind:"Wind",nuclear:"Nuclear",coal:"Coal",other:"Other"};
+function enCacheGet(){try{var r=localStorage.getItem("edge_energy_v1");return r?JSON.parse(r):null;}catch(e){return null;}}
+function enCacheSet(o){try{localStorage.setItem("edge_energy_v1",JSON.stringify(o));}catch(e){}}
+function enLoad(force){
+  if(_en.loading) return Promise.resolve(_en.data);
+  _en.loading=true;
+  return fetch("energy.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("energy.json HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    _en.data=j;_en.err=null;enCacheSet(j);_en.loading=false;return j;
+  }).catch(function(e){
+    _en.loading=false;_en.err=e.message||String(e);
+    if(!_en.data) _en.data=enCacheGet();
+    return _en.data;
+  });
+}
+function enFmt(n,d){return n==null||isNaN(n)?"—":Number(n).toLocaleString(undefined,{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+function enPx(n){return n==null?"—":(n<0?"-":"")+"$"+Math.abs(n).toFixed(2);}
+function enTs(t){return new Date(t).getTime();}
+function enHM(ms){var d=new Date(ms);return d.toLocaleTimeString([],{hour:"numeric"}).replace(" ","").toLowerCase();}
+function enSvg(w,hh,inner){return "<svg viewBox='0 0 "+w+" "+hh+"' style='width:100%;height:auto;display:block;font-family:monospace' preserveAspectRatio='xMidYMid meet'>"+inner+"</svg>";}
+// lines: [{pts:[[ms,val]],color,dash,label}]; areas: [{pts:[[ms,val]],color}] stacked bottom-up
+function enChart(lines,areas,opt){
+  opt=opt||{};var W=720,H=opt.h||220,L=48,R=10,T=10,B=24;
+  var xs=[],ymax=-Infinity,ymin=Infinity;
+  (lines||[]).forEach(function(s){s.pts.forEach(function(p){if(p[1]==null)return;xs.push(p[0]);ymax=Math.max(ymax,p[1]);ymin=Math.min(ymin,p[1]);});});
+  var stk=null;
+  if(areas&&areas.length){
+    var tmap={};areas.forEach(function(a){a.pts.forEach(function(p){tmap[p[0]]=1;xs.push(p[0]);});});
+    var ts=Object.keys(tmap).map(Number).sort(function(a,b){return a-b;});
+    var cum=ts.map(function(){return 0;});stk=[];
+    areas.forEach(function(a){
+      var m={};a.pts.forEach(function(p){m[p[0]]=p[1]||0;});
+      var lo=cum.slice();ts.forEach(function(t,i){cum[i]+=(m[t]||0);});
+      stk.push({color:a.color,lo:lo,hi:cum.slice()});
+    });
+    cum.forEach(function(v){ymax=Math.max(ymax,v);});ymin=Math.min(ymin,0);
+  }
+  if(!xs.length) return "<div style='color:var(--text3);font-size:11px;padding:20px 0'>no data</div>";
+  var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs);if(x1===x0)x1=x0+1;
+  if(opt.zero!==false&&ymin>0&&areas&&areas.length) ymin=0;
+  var pad=(ymax-ymin)*0.06||1;ymax+=pad;if(!(areas&&areas.length))ymin-=pad;
+  var nt=niceTicks(ymin,ymax,4),tk=nt.ticks;
+  function X(t){return L+(t-x0)/(x1-x0)*(W-L-R);}
+  function Y(v){return T+(1-(v-tk[0])/((tk[tk.length-1]-tk[0])||1))*(H-T-B);}
+  var s="";
+  tk.forEach(function(v){s+="<line x1='"+L+"' x2='"+(W-R)+"' y1='"+Y(v)+"' y2='"+Y(v)+"' stroke='var(--border)' stroke-width='1'/><text x='"+(L-5)+"' y='"+(Y(v)+3)+"' text-anchor='end' fill='var(--text3)' font-size='10'>"+(opt.yfmt?opt.yfmt(v):enFmt(v))+"</text>";});
+  var nx=Math.min(6,Math.max(2,Math.round((x1-x0)/36e5/4)));
+  for(var i=0;i<=nx;i++){var t=x0+(x1-x0)*i/nx;s+="<text x='"+X(t)+"' y='"+(H-6)+"' text-anchor='middle' fill='var(--text3)' font-size='10'>"+enHM(t)+"</text>";}
+  if(stk){
+    stk.forEach(function(a){
+      var top=ts.map(function(t,i){return X(t)+","+Y(a.hi[i]);});
+      var bot=ts.map(function(t,i){return X(t)+","+Y(a.lo[i]);}).reverse();
+      s+="<polygon points='"+top.concat(bot).join(" ")+"' fill='"+a.color+"' fill-opacity='0.85' stroke='"+a.color+"' stroke-width='0.5'/>";
+    });
+  }
+  if(opt.nowMs&&opt.nowMs>x0&&opt.nowMs<x1) s+="<line x1='"+X(opt.nowMs)+"' x2='"+X(opt.nowMs)+"' y1='"+T+"' y2='"+(H-B)+"' stroke='var(--text3)' stroke-dasharray='2 3'/>";
+  if(opt.zeroLine&&tk[0]<0&&tk[tk.length-1]>0) s+="<line x1='"+L+"' x2='"+(W-R)+"' y1='"+Y(0)+"' y2='"+Y(0)+"' stroke='var(--text3)'/>";
+  (lines||[]).forEach(function(l){
+    var segs=[],cur=[];
+    l.pts.forEach(function(p){if(p[1]==null){if(cur.length)segs.push(cur);cur=[];}else cur.push(X(p[0])+","+Y(p[1]));});
+    if(cur.length)segs.push(cur);
+    segs.forEach(function(sg){s+="<polyline points='"+sg.join(" ")+"' fill='none' stroke='"+l.color+"' stroke-width='2' "+(l.dash?"stroke-dasharray='5 4'":"")+"/>";});
+  });
+  return enSvg(W,H,s);
+}
+function enSpark(vals,color,w,hh){
+  vals=(vals||[]).filter(function(v){return v!=null;});if(vals.length<2) return "";
+  w=w||120;hh=hh||28;var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);if(mx===mn)mx=mn+1;
+  var pts=vals.map(function(v,i){return (i/(vals.length-1)*(w-2)+1).toFixed(1)+","+(hh-2-(v-mn)/(mx-mn)*(hh-4)).toFixed(1);}).join(" ");
+  return "<svg viewBox='0 0 "+w+" "+hh+"' style='width:100%;max-width:"+w+"px;height:"+hh+"px'><polyline points='"+pts+"' fill='none' stroke='"+color+"' stroke-width='1.6'/></svg>";
+}
+function enHead(txt,sub){
+  var d=div();d.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--ca);margin:22px 0 12px;";
+  d.textContent=txt;if(sub){var s=span();s.style.cssText="font-size:10px;letter-spacing:1px;color:var(--text3);margin-left:10px;text-transform:none;";s.textContent=sub;d.appendChild(s);}
+  return d;
+}
+function enCard(title,bodyHtml,extra){
+  var c=div("card");c.style.marginBottom="12px";
+  var t=div("card-t");t.textContent=title;if(extra)t.appendChild(extra);
+  c.appendChild(t);var b=div();b.style.marginTop="8px";b.innerHTML=bodyHtml;c.appendChild(b);return c;
+}
+function enLegend(keys){
+  return "<div style='display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:10px;color:var(--text3)'>"+keys.map(function(k){return "<span><span style='display:inline-block;width:10px;height:10px;background:"+k[1]+";margin-right:5px;vertical-align:-1px'></span>"+k[0]+"</span>";}).join("")+"</div>";
+}
+function enBadge(txt,col){return "<span style='display:inline-block;padding:3px 9px;border:1px solid "+col+";color:"+col+";border-radius:2px;font-size:10px;font-weight:700;letter-spacing:1px'>"+txt+"</span>";}
+function enSecLoad(D,wrap){
+  var key=_en.iso,I=D[key]||{};
+  wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase()));
+  var rows=I.load||[];
+  var a=rows.filter(function(r){return r.actual!=null;}),last=a[a.length-1];
+  var sig="",pct=null;
+  if(last&&last.forecast){
+    pct=(last.actual-last.forecast)/last.forecast*100;
+    sig=pct>5?enBadge("RT > DA +"+pct.toFixed(1)+"% · UPWARD RT PRICE PRESSURE","var(--red)"):pct>3?enBadge("RT > DA +"+pct.toFixed(1)+"% · WATCH","var(--amber)"):pct<-3?enBadge("RT < DA "+pct.toFixed(1)+"% · SOFT","var(--green)"):enBadge("ON FORECAST "+(pct>=0?"+":"")+pct.toFixed(1)+"%","var(--text3)");
+  }
+  var loadSvg=enChart([
+    {pts:rows.map(function(r){return [enTs(r.t),r.forecast];}),color:"#ff8c00",dash:true},
+    {pts:rows.map(function(r){return [enTs(r.t),r.actual];}),color:"#00d4d4"}
+  ],null,{nowMs:last?enTs(last.t):null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
+  wrap.appendChild(enCard("Load · Real-Time vs Day-Ahead Forecast (MW)",
+    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+" MW</span>":"")+"</div>"+loadSvg+
+    enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]])+
+    "<div style='font-size:10px;color:var(--text3);margin-top:6px'>Signal: actual above forecast by &gt;3–5% → upward pressure on RT prices.</div>"));
+  var fm=I.fuel||[];
+  var order=["nuclear","coal","gasCC","gasPeaker","gas","wind","solar","other"];
+  var keys=order.filter(function(k){return fm.some(function(r){return r[k]>0;});});
+  wrap.appendChild(enCard("Fuel Mix (MW)",
+    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
+    enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}))+
+    (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")));
+  if(key==="ercot"){
+    var R=I.renew||{},html="<div class='g2' style='margin-bottom:0'>";
+    var anyRamp=false;
+    ["wind","solar"].forEach(function(k){
+      var r=(R[k]||[]);var l=r[r.length-1];
+      if(!l){html+="<div class='chip'><div class='cl'>"+k.toUpperCase()+" FORECAST ERROR</div><div class='cv'>—</div></div>";return;}
+      var p=l.forecast?l.err/l.forecast*100:0,c=l.err<0?"var(--red)":"var(--green)";
+      var hr=new Date(l.t).toLocaleString("en-US",{hour:"numeric",hour12:false,timeZone:"America/Chicago"})*1;
+      var ramp=k==="wind"&&l.err<0&&p<-10&&hr>=16&&hr<=21;if(ramp)anyRamp=true;
+      html+="<div class='chip'><div class='cl'>"+k.toUpperCase()+" ACTUAL − FORECAST</div><div class='cv' style='color:"+c+"'>"+(l.err>0?"+":"")+enFmt(l.err)+" MW <span style='font-size:12px'>("+(p>0?"+":"")+p.toFixed(1)+"%)</span></div><div class='cs'>Actual "+enFmt(l.actual)+" · Fcst "+enFmt(l.forecast)+(ramp?" · "+enBadge("EVENING RAMP STRESS","var(--red)"):"")+"</div></div>";
+    });
+    html+="</div><div style='font-size:10px;color:var(--text3);margin-top:8px'>Sudden wind shortfall into the evening peak forces gas peakers to cover the ramp.</div>";
+    wrap.appendChild(enCard("Renewable Forecast Error",html));
+  }
+}
+function enSecLmp(D,wrap){
+  wrap.appendChild(enHead("Nodal LMP & Congestion","hub settlement · 5–15 min"));
+  var hubs=D.hubs||[];
+  if(!hubs.length){wrap.appendChild(enCard("Hubs","<div style='color:var(--text3);font-size:11px'>No hub data yet.</div>"));return;}
+  var h="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;min-width:560px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>HUB</th><th>RT LMP</th><th>DA LMP</th><th>DA−RT</th><th>ENERGY</th><th>MCC</th><th></th></tr>";
+  hubs.forEach(function(x){
+    var base=Math.abs(x.energy||0),big=x.mcc!=null&&(Math.abs(x.mcc)>=20||(base>0&&Math.abs(x.mcc)>=0.5*base));
+    var sc=x.spread==null?"var(--text)":x.spread>0?"var(--green)":x.spread<0?"var(--red)":"var(--text)";
+    h+="<tr style='border-top:1px solid var(--border);text-align:right"+(big?";background:rgba(255,68,68,.08)":"")+"'><td style='text-align:left;padding:8px 4px;color:var(--accent)'>"+x.iso+" · "+x.name+"</td><td>"+enPx(x.rt)+"</td><td>"+enPx(x.da)+"</td><td style='color:"+sc+"'>"+(x.spread==null?"—":(x.spread>0?"+":"")+x.spread.toFixed(2))+"</td><td>"+enPx(x.energy)+"</td><td style='color:"+(big?"var(--red)":"var(--text)")+"'>"+(x.mcc==null?"—":(x.mcc>0?"+":"")+x.mcc.toFixed(2))+(x.mccProxy?"~":"")+"</td><td style='padding-left:6px'>"+(big?enBadge("MCC","var(--red)"):"")+"</td></tr>";
+  });
+  h+="</table></div><div style='font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5'>LMP = Energy + Congestion (MCC) + Losses. MCC alert: |MCC| ≥ $20 or ≥ 50% of the energy component. DA−RT = DA LMP − RT LMP (positive = RT cleared below DA). <b>~</b> = ERCOT proxy: hub RT price − HB_BUSAVG (ERCOT does not publish an MCC split at hubs); PJM shows true MCC.</div>";
+  wrap.appendChild(enCard("Hub Settlement",h));
+}
+function enSecSpark(D,wrap){
+  wrap.appendChild(enHead("Spark Spreads & Fuel Margins"));
+  var g=D.gas,S=D.spark;
+  var gh=g?"<div class='cv' style='font-size:26px;color:var(--ca)'>$"+g.price.toFixed(3)+" <span style='font-size:11px;color:var(--text3)'>/MMBtu</span></div><div class='cs'>"+g.source+" · "+g.asOf+"</div><div style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
+  var top=div("chip");top.innerHTML="<div class='cl'>HENRY HUB</div>"+gh;top.style.marginBottom="12px";wrap.appendChild(top);
+  if(!S||!S.hubs||!S.hubs.length){wrap.appendChild(enCard("Spark Spreads","<div style='color:var(--text3);font-size:11px'>Needs gas price and hub LMPs.</div>"));return;}
+  var grid=div("g2");
+  S.hubs.forEach(function(x){
+    var html="";
+    [["7","7.0 HR · standard CCGT"],["10","10.0 HR · peaker"]].forEach(function(hr){
+      var v=x["s"+hr[0]],tr=x["s"+hr[0]+"Trend"],c=v>0?"var(--green)":"var(--red)";
+      var tc=tr==="expanding"?"var(--green)":tr==="contracting"?"var(--red)":"var(--text3)";
+      var pos=Math.max(0,Math.min(100,50+v/Math.max(Math.abs(x.power),20)*50));
+      html+="<div style='margin-bottom:12px'><div style='display:flex;justify-content:space-between;font-size:10px;color:var(--text3);letter-spacing:1px'><span>"+hr[1]+"</span>"+enBadge(tr.toUpperCase(),tc)+"</div>"+
+        "<div style='font-size:22px;font-weight:700;color:"+c+";font-family:monospace'>"+(v<0?"-":"")+"$"+Math.abs(v).toFixed(2)+"</div>"+
+        "<div style='position:relative;height:6px;background:var(--panel2);border-radius:3px;margin:4px 0'><div style='position:absolute;left:50%;top:-2px;width:1px;height:10px;background:var(--text3)'></div><div style='position:absolute;left:"+pos+"%;top:-3px;width:4px;height:12px;background:"+c+";transform:translateX(-2px)'></div></div>"+
+        enSpark(x["s"+hr[0]+"Series"],c,160,26)+"</div>";
+    });
+    grid.appendChild(enCard(x.iso+" · "+x.name+" · power $"+x.power.toFixed(2),html));
+  });
+  wrap.appendChild(grid);
+  wrap.appendChild(enCard("How to read","<div style='font-size:10px;color:var(--text3);line-height:1.6'>Spark spread = power LMP − gas × heat rate. Expanding (spread rising vs prior 5 hrs) = power outrunning gas, bullish power / generator margins; contracting = gas catching up or power sagging. Trend uses a ±5% / $1 band vs the prior 5-hour average.</div>"));
+}
+function enSecMacro(D,wrap){
+  wrap.appendChild(enHead("Macro & Weather","7-day forecast vs 1991–2020 norms"));
+  var W=D.weather||[];
+  if(W.length){
+    var h="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;min-width:420px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>CITY</th><th>CDD Δ (7d)</th><th>HDD Δ (7d)</th><th>DAILY TEMP °F</th></tr>";
+    W.forEach(function(c){
+      var cc=c.cddA7>0?"var(--red)":c.cddA7<0?"var(--accent)":"var(--text)",hc=c.hddA7>0?"var(--accent)":c.hddA7<0?"var(--red)":"var(--text)";
+      h+="<tr style='border-top:1px solid var(--border);text-align:right'><td style='text-align:left;padding:8px 4px;color:var(--accent)'>"+c.city+"</td><td style='color:"+cc+"'>"+(c.cddA7>0?"+":"")+c.cddA7+"</td><td style='color:"+hc+"'>"+(c.hddA7>0?"+":"")+c.hddA7+"</td><td style='text-align:right;color:var(--text3)'>"+c.days.map(function(d){return Math.round(d.t);}).join(" · ")+"</td></tr>";
+    });
+    h+="</table></div><div style='font-size:10px;color:var(--text3);margin-top:8px'>Base 65°F. Positive CDD Δ = hotter than normal (power demand up in summer); positive HDD Δ = colder than normal.</div>";
+    wrap.appendChild(enCard("CDD / HDD Anomalies",h));
+  }
+  var WC=D.windCorridors||[];
+  if(WC.length){
+    var g=div("g3");
+    WC.forEach(function(w){
+      var pk=Math.max.apply(null,w.v100.filter(function(v){return v!=null;}));
+      g.appendChild(enCard(w.name,"<div style='font-size:11px;color:var(--text3)'>100 m peak <b style='color:var(--accent)'>"+Math.round(pk)+" mph</b> · now "+Math.round(w.v100[0])+" (80 m "+Math.round(w.v80[0])+")</div>"+enSpark(w.v100,"#00d4d4",200,40)+"<div style='font-size:9px;color:var(--text3)'>next 48h</div>"));
+    });
+    wrap.appendChild(g);
+  }
+  var O=D.outages&&D.outages.ercot,L=D.links||[];
+  var oh=(O?"<div class='cv'>"+enFmt(O.totalMW)+" <span style='font-size:11px;color:var(--text3)'>MW ERCOT resource outages (hourly report)</span></div>":"<div style='font-size:11px;color:var(--text3)'>Resource outage feed unavailable.</div>")+
+    "<div style='font-size:10px;color:var(--text3);margin:8px 0'>Flowgate / transmission outages have no free machine-readable feed through gridstatus — use the ISO pages:</div>"+
+    L.map(function(l){return "<div><a href='"+l.url+"' target='_blank' rel='noopener' style='color:var(--accent);font-size:11px'>"+l.label+" ↗</a></div>";}).join("");
+  wrap.appendChild(enCard("Outages & Transmission",oh));
+}
+function energyTab(){
+  if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
+  var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:hidden;";
+  var hd=div();hd.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
+  var l=div();var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Energy";
+  var meta=div();meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";l.appendChild(t);l.appendChild(meta);
+  var btns=div();btns.style.cssText="display:flex;gap:6px;";
+  var body=div();
+  function paint(){
+    var D=_en.data;body.innerHTML="";
+    if(!D){body.appendChild(enCard("Energy",_en.loading?"Loading…":"<div style='color:var(--text3);font-size:12px'>No energy.json yet"+(_en.err?" ("+_en.err+")":"")+". Run the <b>update-energy</b> workflow once from the GitHub Actions tab.</div>"));meta.textContent="";return;}
+    var age=Math.round((Date.now()-new Date(D.generatedAt).getTime())/60000);
+    meta.innerHTML="Updated "+age+" min ago"+(age>15?" <span style='color:var(--red)'>· STALE</span>":"");
+    btns.innerHTML="";
+    var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
+    if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
+    if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
+    var rb=h("button",{className:"btn"},["↻"]);rb.style.cssText="min-height:36px;padding:0 12px;";rb.addEventListener("click",function(){enLoad(true).then(paint);});btns.appendChild(rb);
+    enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);
+    var errs=Object.keys(D.errors||{});
+    if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
+  }
+  hd.appendChild(l);hd.appendChild(btns);wrap.appendChild(hd);wrap.appendChild(body);
+  _en.data=_en.data||enCacheGet();paint();
+  enLoad(false).then(function(){if(State.tab==="energy")paint();});
+  _en.timer=setInterval(function(){
+    if(State.tab!=="energy"){clearInterval(_en.timer);_en.timer=null;return;}
+    if(!document.hidden) enLoad(true).then(function(){if(State.tab==="energy")paint();});
+  },60000);
+  return wrap;
+}
+
+var VIEWS={energy:energyTab,home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,news:newsFeedTab,settings:settingsTab};
 
 // Prevent browser restoring scroll position on refresh
 if('scrollRestoration' in history) history.scrollRestoration='manual';
