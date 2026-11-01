@@ -7496,10 +7496,18 @@ function cotLegacyCacheGet(sym){
 function cotLegacyCacheSet(sym,obj){
   try{localStorage.setItem("edge_cot_legacy_v1_"+sym,JSON.stringify(obj));}catch(e){}
 }
+// Weekly data: fresh as long as the cache already holds the newest expected
+// report. Only re-check (at most hourly) while a new week is due but missing.
+function cotIsStale(c){
+  if(!c||!c.fetchedAt||!c.rows||!c.rows.length) return true;
+  var last=(c.rows[c.rows.length-1].report_date_as_yyyy_mm_dd||"").slice(0,10);
+  if(last>=cotExpectedReportDate()) return false;
+  return (Date.now()-c.fetchedAt)>60*60*1000;
+}
 // Weekly data, published Fridays — refetch if our cache is stale or forced.
 function loadCOTData(sym,force){
   var cached=_cotMemCache[sym]||cotCacheGet(sym);
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>12*60*60*1000;
+  var stale=cotIsStale(cached);
   if(cached&&!force&&!stale) return Promise.resolve(cached);
   var market=COT_SYMS[sym].market;
   var where="market_and_exchange_names='"+market+"'";
@@ -7526,7 +7534,7 @@ function loadCOTData(sym,force){
 // into the other.
 function loadCOTLegacyData(sym,force){
   var cached=_cotLegacyMemCache[sym]||cotLegacyCacheGet(sym);
-  var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>12*60*60*1000;
+  var stale=cotIsStale(cached);
   if(cached&&!force&&!stale) return Promise.resolve(cached);
   var market=COT_SYMS[sym].market;
   var where="market_and_exchange_names='"+market+"'";
@@ -10404,7 +10412,7 @@ function analystTab(){
     // placeholder. Only show the placeholder when there's nothing on
     // screen yet (first render of the tab).
     if(force&&legacyBody.firstChild) legacyBody.style.opacity="0.45";
-    else showLegacyLoading();
+    else if(!(_cotLegacyMemCache[sym]||cotLegacyCacheGet(sym))) showLegacyLoading();
     loadCOTLegacyData(sym,force).then(function(data){
       if(myToken!==_cotLegacyLoadToken||State.tab!=="analyst") return;
       legacyBody.innerHTML="";
@@ -10431,7 +10439,7 @@ function analystTab(){
   function load(force){
     var myToken=++_cotLoadToken;
     if(force&&body.firstChild) body.style.opacity="0.45";
-    else showLoading();
+    else if(!(_cotMemCache[sym]||cotCacheGet(sym))) showLoading();
     loadCOTData(sym,force).then(function(data){
       if(myToken!==_cotLoadToken||State.tab!=="analyst") return;
       body.innerHTML="";
