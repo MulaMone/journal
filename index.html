@@ -11928,6 +11928,22 @@ function enRefresh(say,repaint){
     return poll();
   }).then(function(g){say("Refreshed "+hm()+(g&&g!==prev?" ✓":" · data unchanged"),g&&g!==prev?"var(--green)":"var(--amber)");}).catch(function(e){say(e.message||String(e),"var(--red)");});
 }
+function enShowPic(){
+  if(document.getElementById("en-pic-modal")) return;
+  var m=document.createElement("div");m.id="en-pic-modal";
+  m.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
+  var img=document.createElement("img");img.src="energy-proxy.png";img.alt="Grid event to proxy to trade";
+  img.style.cssText="max-width:100%;max-height:100%;border-radius:6px;object-fit:contain;";
+  var x=document.createElement("button");x.textContent="✕ CLOSE";
+  x.style.cssText="position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;min-height:44px;padding:0 16px;background:#000c;color:#fff;border:1px solid #fff8;border-radius:4px;font-family:monospace;font-size:13px;letter-spacing:1px;cursor:pointer;";
+  function close(){document.removeEventListener("keydown",onKey);window.removeEventListener("popstate",onPop);m.remove();if(history.state&&history.state.enPic)history.back();}
+  function onKey(e){if(e.key==="Escape")close();}
+  function onPop(){document.removeEventListener("keydown",onKey);window.removeEventListener("popstate",onPop);m.remove();}
+  m.addEventListener("click",close);x.addEventListener("click",function(e){e.stopPropagation();close();});
+  m.appendChild(img);m.appendChild(x);document.body.appendChild(m);
+  document.addEventListener("keydown",onKey);
+  try{history.pushState({enPic:1},"");window.addEventListener("popstate",onPop);}catch(e){}
+}
 function enSecFlow(wrap){
   wrap.appendChild(enHead("How To Use This"));
   function box(title,col,items){
@@ -11936,8 +11952,8 @@ function enSecFlow(wrap){
   var arrow="<div style='text-align:center;padding:8px 0;color:var(--text3);font-size:11px;letter-spacing:1px'>│<br>(Catalyst / Setup Signal)<br>▼</div>";
   wrap.appendChild(enCard("Workflow",
     box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"])+arrow+
-    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"])));
-  wrap.appendChild(enCard("Grid Event → Proxy To Trade","<a href='energy-proxy.png' target='_blank' rel='noopener'><img src='energy-proxy.png' alt='Grid event location to best proxy to trade' style='width:100%;max-width:760px;display:block;margin:0 auto;border-radius:4px'></a><div style='font-size:10px;color:var(--text3);margin-top:6px;text-align:center'>Tap the image to enlarge.</div>"));
+    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>","<a href='#' class='en-pic-link' style='color:var(--accent);text-decoration:underline'>Grid event → proxy to trade (picture) ↗</a>"])));
+  var pl=wrap.querySelector(".en-pic-link");if(pl)pl.addEventListener("click",function(e){e.preventDefault();enShowPic();});
 }
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
