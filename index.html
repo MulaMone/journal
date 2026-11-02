@@ -11670,7 +11670,10 @@ function newsFeedTab(){
   var rb=h("button",{className:"btn"},["↻ REFRESH"]);
   rb.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;flex-shrink:0;";
   rb.addEventListener("click",function(){newsFeedFetch(true);});
-  hd.appendChild(l);hd.appendChild(rb);wrap.appendChild(hd);
+  var wm=h("a",{className:"btn",href:"https://www.worldmonitor.app/dashboard?zoom=1.00&view=global&timeRange=7d&layers=iranAttacks%2Chotspots%2Cconflicts%2Cbases%2Cnuclear%2Cmilitary%2Cweather%2CcanadaAlerts%2Coutages%2Cnatural%2Cwaterways%2Ceconomic%2Csanctions",target:"_blank",rel:"noopener"},["🌐 WORLD"]);
+  wm.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;flex-shrink:0;";
+  var rt=div();rt.style.cssText="display:flex;gap:6px;align-items:center;flex-shrink:0;";rt.appendChild(wm);rt.appendChild(rb);
+  hd.appendChild(l);hd.appendChild(rt);wrap.appendChild(hd);
   var chips=div();chips.style.cssText="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none;";
   function chip(label,active,fn,color){
     var c=h("button",{className:"btn"},[label]);
@@ -11928,11 +11931,11 @@ function enRefresh(say,repaint){
     return poll();
   }).then(function(g){say("Refreshed "+hm()+(g&&g!==prev?" ✓":" · data unchanged"),g&&g!==prev?"var(--green)":"var(--amber)");}).catch(function(e){say(e.message||String(e),"var(--red)");});
 }
-function enShowPic(){
+function enShowPic(src){
   if(document.getElementById("en-pic-modal")) return;
   var m=document.createElement("div");m.id="en-pic-modal";
   m.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
-  var img=document.createElement("img");img.src="energy-proxy.png";img.alt="Grid event to proxy to trade";
+  var img=document.createElement("img");img.src=src||"energy-proxy.png";img.alt="Grid event to proxy to trade";
   img.style.cssText="max-width:100%;max-height:100%;border-radius:6px;object-fit:contain;";
   function close(){document.removeEventListener("keydown",onKey);window.removeEventListener("popstate",onPop);m.remove();if(history.state&&history.state.enPic)history.back();}
   function onKey(e){if(e.key==="Escape")close();}
@@ -11949,9 +11952,9 @@ function enSecFlow(wrap){
   }
   var arrow="<div style='text-align:center;padding:8px 0;color:var(--text3);font-size:11px;letter-spacing:1px'>│<br>(Catalyst / Setup Signal)<br>▼</div>";
   wrap.appendChild(enCard("Workflow",
-    box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"])+arrow+
-    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"],"<a href='#' class='en-pic-link' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Proxy table ↗</a>")));
-  var pl=wrap.querySelector(".en-pic-link");if(pl)pl.addEventListener("click",function(e){e.preventDefault();enShowPic();});
+    box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"],"<a href='#' class='en-pic-link' data-src='energy-checklist.jpg' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Checklist ↗</a>")+arrow+
+    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"],"<a href='#' class='en-pic-link' data-src='energy-proxy.png' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Proxy table ↗</a>")));
+  wrap.querySelectorAll(".en-pic-link").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic(a.getAttribute("data-src"));});});
 }
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
@@ -11971,6 +11974,7 @@ function energyTab(){
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
     var rb=h("button",{className:"btn"},[_en.busy?"…":"↻ REFRESH"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
+    var eia=h("a",{className:"btn",href:"https://www.eia.gov/naturalgas/weekly/supplement/",target:"_blank",rel:"noopener"},["EIA ↗"]);eia.style.cssText="min-height:36px;padding:0 12px;font-size:11px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;";btns.appendChild(eia);
     enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecFlow(body);
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
