@@ -11822,6 +11822,11 @@ function enLegend(keys){
   return "<div style='display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:10px;color:var(--text3)'>"+keys.map(function(k){return "<span><span style='display:inline-block;width:10px;height:10px;background:"+k[1]+";margin-right:5px;vertical-align:-1px'></span>"+k[0]+"</span>";}).join("")+"</div>";
 }
 function enBadge(txt,col){return "<span style='display:inline-block;padding:3px 9px;border:1px solid "+col+";color:"+col+";border-radius:2px;font-size:10px;font-weight:700;letter-spacing:1px'>"+txt+"</span>";}
+// Cushion colour: green = wide, amber = tightening, red = scarcity (PJM wide > 15,000 MW, ERCOT wide > 10,000 MW; red < 3,000 MW)
+function enCushion(cu,iso){
+  var wide=iso==="pjm"?15000:10000,c=cu>wide?"var(--green)":cu<3000?"var(--red)":"var(--amber)";
+  return "<span style='color:"+c+"'>Cushion "+(cu>=0?"+":"")+enFmt(cu)+" MW</span>";
+}
 function enSecLoad(D,wrap){
   var key=_en.iso,I=D[key]||{};
   wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase(),"en-sec-load"));
@@ -11841,11 +11846,11 @@ function enSecLoad(D,wrap){
     {pts:rows.map(function(r){return [enTs(r.t),r.actual];}),color:"#00d4d4"}
   ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]),null,{nowMs:last?enTs(last.t):null,tickCount:6,ymax:hasCom?Math.max.apply(null,rows.map(function(r){return r.committed||0;}))*1.1:null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
   wrap.appendChild(enCard("Load · Real-Time vs Day-Ahead Forecast (MW)",
-    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed):"")+(econMax!=null&&last&&last.actual!=null?(function(){
+    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed)+(last.actual!=null?" · "+enCushion(last.committed-last.actual,"ercot"):""):"")+(econMax!=null&&last&&last.actual!=null?(function(){
       var cu=econMax-last.actual,pv=I.capacity.prev,etH=+new Date().toLocaleString("en-US",{hour:"numeric",hour12:false,timeZone:"America/New_York"});
       // day-over-day shift only highlighted in the first hour after the ~5 AM ET daily post
       var dl=(etH===5&&pv!=null&&econMax!==pv)?" <span style='color:"+(econMax>pv?"var(--green)":"var(--red)")+"'>("+(econMax>pv?"▲ +":"▼ ")+enFmt(econMax-pv)+" vs Yday)</span>":"";
-      return " · Econ Max "+enFmt(econMax)+" MW (daily)"+dl+" · Cushion "+(cu>=0?"+":"")+enFmt(cu)+" MW";})():"")+(primRes!=null?" · Primary Reserve "+enFmt(primRes)+(I.reserves.requirement!=null?" (req "+enFmt(I.reserves.requirement)+")":""):"")+" MW</span>":"")+"</div>"+loadSvg+
+      return " · Econ Max "+enFmt(econMax)+" MW (daily)"+dl+" · "+enCushion(cu,"pjm");})():"")+(primRes!=null?" · Primary Reserve "+enFmt(primRes)+(I.reserves.requirement!=null?" (req "+enFmt(I.reserves.requirement)+")":""):"")+" MW</span>":"")+"</div>"+loadSvg+
     enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]].concat(hasCom?[["Committed Capacity","#a78bfa"]]:[]))+
     "<div style='font-size:10px;color:var(--text3);margin-top:6px'>Signal: actual above forecast by &gt;3–5% → upward pressure on RT prices.</div>"));
   var fm=I.fuel||[];
@@ -11864,7 +11869,7 @@ function enSecLoad(D,wrap){
     ["wind","solar"].forEach(function(k){
       var r=(R[k]||[]);var l=r[r.length-1];
       if(!l){html+="<div class='chip'><div class='cl'>"+k.toUpperCase()+" FORECAST ERROR</div><div class='cv'>—</div></div>";return;}
-      var p=l.forecast?l.err/l.forecast*100:0,c=l.err<0?"var(--red)":"var(--green)";
+      var p=l.forecast?l.err/l.forecast*100:0,c=p<-5?"var(--red)":p<0?"var(--text)":"var(--green)"; // red only when wind/solar is >5% under forecast
       var hr=new Date(l.t).toLocaleString("en-US",{hour:"numeric",hour12:false,timeZone:"America/Chicago"})*1;
       var ramp=k==="wind"&&l.err<0&&p<-10&&hr>=16&&hr<=21;if(ramp)anyRamp=true;
       html+="<div class='chip'><div class='cl'>"+k.toUpperCase()+" ACTUAL − FORECAST</div><div class='cv' style='color:"+c+"'>"+(l.err>0?"+":"")+enFmt(l.err)+" MW <span style='font-size:12px'>("+(p>0?"+":"")+p.toFixed(1)+"%)</span></div><div class='cs'>Actual "+enFmt(l.actual)+" · Fcst "+enFmt(l.forecast)+(ramp?" · "+enBadge("EVENING RAMP STRESS","var(--red)"):"")+"</div></div>";
