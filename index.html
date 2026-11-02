@@ -11846,7 +11846,7 @@ function enSecLoad(D,wrap){
     {pts:rows.map(function(r){return [enTs(r.t),r.actual];}),color:"#00d4d4"}
   ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]),null,{nowMs:last?enTs(last.t):null,tickCount:6,ymax:hasCom?Math.max.apply(null,rows.map(function(r){return r.committed||0;}))*1.1:null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
   wrap.appendChild(enCard("Load · Real-Time vs Day-Ahead Forecast (MW)",
-    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed)+(last.actual!=null?" · "+enCushion(last.committed-last.actual,"ercot"):""):"")+(econMax!=null&&last&&last.actual!=null?(function(){
+    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'><span style='color:#00d4d4'>Actual "+enFmt(last.actual)+"</span> · <span style='color:#ff8c00'>Fcst "+enFmt(last.forecast)+"</span>"+(last.committed!=null?" · <span style='color:#a78bfa'>Committed "+enFmt(last.committed)+"</span>"+(last.actual!=null?" · "+enCushion(last.committed-last.actual,"ercot"):""):"")+(econMax!=null&&last&&last.actual!=null?(function(){
       var cu=econMax-last.actual,pv=I.capacity.prev,etH=+new Date().toLocaleString("en-US",{hour:"numeric",hour12:false,timeZone:"America/New_York"});
       // day-over-day shift only highlighted in the first hour after the ~5 AM ET daily post
       var dl=(etH===5&&pv!=null&&econMax!==pv)?" <span style='color:"+(econMax>pv?"var(--green)":"var(--red)")+"'>("+(econMax>pv?"▲ +":"▼ ")+enFmt(econMax-pv)+" vs Yday)</span>":"";
