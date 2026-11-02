@@ -12014,7 +12014,9 @@ function enMonthCode(m){return "FGHJKMNQUVXZ".charAt(m);}
 function enStatusCol(s){return s==="ACTIVE"?"var(--green)":s==="WATCH"?"var(--amber)":"var(--text3)";}
 function enSecGas(D,wrap){
   var gw=div();wrap.appendChild(gw);
-  function px(){var m=ls("en_hubpx",{}),o={},auto=D.gas&&D.gas.price!=null?D.gas.price:null;EN_HUBS.forEach(function(x){o[x[0]]=m[x[0]]!=null?m[x[0]]:(x[0]==="HH"?auto:null);});return o;}
+  function px(){var m=ls("en_hubpx",{}),b=ls("en_hubbasis",{}),md=ls("en_hubmode",{}),o={},auto=D.gas&&D.gas.price!=null?D.gas.price:null;
+    o.HH=m.HH!=null?m.HH:auto;
+    EN_HUBS.forEach(function(x){if(x[0]==="HH")return;o[x[0]]=md[x[0]]==="b"?(o.HH!=null&&b[x[0]]!=null?o.HH+b[x[0]]:null):(m[x[0]]!=null?m[x[0]]:null);});return o;}
   function spreads(){
     var P=px(),C=ls("en_corr",{});
     return EN_CORR.map(function(c){
@@ -12031,9 +12033,11 @@ function enSecGas(D,wrap){
       "<div class='card'><div class='cl'>Best net spread</div><div class='cv' style='color:"+(best&&best.net>0?"var(--green)":"var(--text3)")+"'>"+(best?enPx(best.net):"—")+"</div><div class='cs'>"+(best?enHubName(best.from)+" → "+enHubName(best.to):"enter hub prices")+"</div></div>"+
       "<div class='card'><div class='cl'>Profitable corridors</div><div class='cv'>"+live.filter(function(s){return s.net>0;}).length+" / "+live.length+"</div><div class='cs'>net of tariff + fuel</div></div>"+
       "<div class='card'><div class='cl'>Henry Hub</div><div class='cv'>"+enPx(P.HH)+"</div><div class='cs'>"+(hubs.HH!=null?"manual override":(D.gas?D.gas.source:"enter price"))+"</div></div></div>";
+    var bs=ls("en_hubbasis",{}),md=ls("en_hubmode",{});
     var pin="<div style='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end'>"+EN_HUBS.map(function(x){
-      return "<div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>"+x[1]+(x[2]?" · "+x[2]:"")+"</div>"+enInp("px:"+x[0],hubs[x[0]]!=null?hubs[x[0]]:"",x[0]==="HH"&&P.HH!=null?P.HH.toFixed(2)+" auto":"$/MMBtu",92)+"</div>";}).join("")+"</div>"+
-      "<div style='font-size:10px;color:var(--text3);margin-top:6px'>No free feed exists for ICE hub spot prices — type them in (saved on this device). Henry Hub auto-fills from the data feed unless overridden.</div>";
+      var isB=x[0]!=="HH"&&md[x[0]]==="b",tg=x[0]==="HH"?"":" <a href='#' data-mode='"+x[0]+"' style='color:var(--accent);text-decoration:none;font-size:10px;border:1px solid var(--border);border-radius:3px;padding:0 5px;margin-left:4px'>"+(isB?"basis":"$ outright")+"</a>";
+      return "<div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>"+x[1]+(x[2]?" · "+x[2]:"")+tg+"</div>"+(isB?enInp("bs:"+x[0],bs[x[0]]!=null?bs[x[0]]:"","± vs HH",92)+"<div style='font-size:10px;color:var(--text3);margin-top:2px'>= "+enPx(P[x[0]])+"</div>":enInp("px:"+x[0],hubs[x[0]]!=null?hubs[x[0]]:"",x[0]==="HH"&&P.HH!=null?P.HH.toFixed(2)+" auto":"$/MMBtu",92))+"</div>";}).join("")+"</div>"+
+      "<div style='font-size:10px;color:var(--text3);margin-top:6px'>No free feed exists for these hub prices. Type each as an outright price, or tap the tag to switch to basis (± vs Henry Hub) and the tab adds it to live Henry Hub. Saved on this device.</div>";
     gw.appendChild(cards.length?(function(){var d=div();d.innerHTML=cards;return d;})():div());
     gw.appendChild(enCard("Hub Spot Prices (manual)",pin));
     var tb="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;min-width:640px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>HUB PAIR</th><th>GROSS</th><th>TARIFF $</th><th>FUEL %</th><th>COST</th><th>NET</th><th style='text-align:center'>FLAG</th></tr>"+
@@ -12128,6 +12132,7 @@ function enSecGas(D,wrap){
     var t=e.target,id=t.getAttribute&&t.getAttribute("data-id");if(!id)return;
     var parts=id.split(":"),a=parts[0],k=parts.slice(1).join(":"),v=enNum(t.value);
     if(a==="px"){var m=ls("en_hubpx",{});if(v==null)delete m[k];else m[k]=v;ss("en_hubpx",m);}
+    else if(a==="bs"){var bb=ls("en_hubbasis",{});if(v==null)delete bb[k];else bb[k]=v;ss("en_hubbasis",bb);}
     else if(a==="tar"||a==="fuel"){var C=ls("en_corr",{});C[k]=C[k]||{};C[k][a==="tar"?"t":"f"]=v;ss("en_corr",C);}
     else if(a==="hr"){ss("en_hr",v==null?10.5:v);}
     else if(a==="thr"){ss("en_thr",v==null?1500:v);}
@@ -12138,7 +12143,8 @@ function enSecGas(D,wrap){
   });
   gw.addEventListener("click",function(e){
     var t=e.target;
-    if(t.getAttribute&&t.getAttribute("data-del")!=null){e.preventDefault();var N=ls("en_notices",[]);N.splice(+t.getAttribute("data-del"),1);ss("en_notices",N);draw();}
+    if(t.getAttribute&&t.getAttribute("data-mode")){e.preventDefault();var k2=t.getAttribute("data-mode"),M=ls("en_hubmode",{});M[k2]=M[k2]==="b"?"p":"b";ss("en_hubmode",M);draw();}
+    else if(t.getAttribute&&t.getAttribute("data-del")!=null){e.preventDefault();var N=ls("en_notices",[]);N.splice(+t.getAttribute("data-del"),1);ss("en_notices",N);draw();}
     else if(t.getAttribute&&t.getAttribute("data-add")){var g=function(i){return gw.querySelector("[data-id='"+i+"']").value;};var N2=ls("en_notices",[]);N2.unshift({pipe:g("n:pipe"),type:g("n:type"),text:g("n:text").trim(),ts:Date.now()});ss("en_notices",N2.slice(0,40));draw();}
   });
   draw();
