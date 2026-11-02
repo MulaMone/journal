@@ -1047,7 +1047,7 @@ var QUOTES=[
 ];
 var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
-var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","MA Pullback","RTH VWAP","Matrix Level","Bizz Level","GEX Gamma Wall","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"];
+var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","MA Pullback","RTH VWAP","Matrix Level","Bizz Level","GEX Gamma Wall","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run","Pivot Level — 30m","Pivot Level — 1h","Pivot Level — Daily","Pivot Level — Weekly","Pivot Level — Monthly","Pivot Level — Quarterly"];
 var SDESC={
   "VAH/VAL":"React to key volume profile levels (VAH, VAL). Look for acceptance or rejection as price interacts with high-volume nodes.",
   "POC":"POC acts as a magnet. Trade reactions after a deviation — look for price to return and auction through or reject.",
@@ -1064,7 +1064,13 @@ var SDESC={
 "Live Read — Trend Exhaustion":"Extended trend with multiple pushes and shrinking range on each push. Volume drying up, delta flipping, price making new highs/lows but not holding. Fade the final push when exhaustion confirmed on tape.",
 "Tape Read — Failed Auction":"Price tests a key level but fails to find acceptance and reverses. Market profile context — goes above/below a reference area but can't sustain. No buyers above, no sellers below. Read it live as the failure prints.",
 "Tape Read — Momentum Shift":"Pure order flow read — clear shift in tape aggression from sellers to buyers or vice versa. Delta flips, pace changes, no level required. Act on the shift as it happens, not after it's obvious.",
-"Tape Read — Stop Run":"Quick sweep of obvious stops above/below a key level followed by immediate sharp reversal. Fast spike, heavy volume, clean rejection. Enter on reversal confirmation — not the spike itself."
+"Tape Read — Stop Run":"Quick sweep of obvious stops above/below a key level followed by immediate sharp reversal. Fast spike, heavy volume, clean rejection. Enter on reversal confirmation — not the spike itself.",
+"Pivot Level — 30m":"Pivots built from the prior 30-minute bar (H/L/C). Fastest intraday map — P, R1/S1, R2/S2 as scalp reaction levels. Best when it lines up with a Bizz level, VWAP, or the 30m 20MA.",
+"Pivot Level — 1h":"Pivots built from the prior 1-hour bar. Short-term intraday swing levels — reaction at P/R1/S1 for fades or continuation. Strongest with confluence at the 1hr MA / 100MA pullback.",
+"Pivot Level — Daily":"Pivots built from the prior day's H/L/C. Core intraday map — price above P = bullish bias, below = bearish. R1/S1 are first targets, R2/S2 the extension. Watch for stacking with PDH/PDL and the prior RTH VWAP.",
+"Pivot Level — Weekly":"Pivots built from the prior week's H/L/C. Swing context — acts as a magnet and reversal zone across several sessions. Strongest when it stacks with daily pivots or the weekly VAH/VAL/POC.",
+"Pivot Level — Monthly":"Pivots built from the prior month's H/L/C. Major support/resistance, hit rarely but with big reactions. Use for position context and where trend moves are likely to stall or accelerate.",
+"Pivot Level — Quarterly":"Pivots built from the prior quarter's H/L/C. Macro level — marks the big-picture range and long-term bias. Reaction here is rare and significant; treat as a high-importance HTF level."
 };
 // Setup category groups for playbook UI
 var SETUP_GROUPS=[
@@ -1072,7 +1078,8 @@ var SETUP_GROUPS=[
   {label:"Mean Reversion",setups:["VWAP Fade","Extension Fade","RTH VWAP"]},
   {label:"Trend",setups:["Trend Continuation","MA Pullback"]},
   {label:"Live Reads",setups:["Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion"]},
-  {label:"Tape Reads",setups:["Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"]}
+  {label:"Tape Reads",setups:["Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"]},
+  {label:"Pivot Levels",setups:["Pivot Level — 30m","Pivot Level — 1h","Pivot Level — Daily","Pivot Level — Weekly","Pivot Level — Monthly","Pivot Level — Quarterly"]}
 ];
 var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,
 // Forex majors/minors — standard lot pip value in USD
@@ -4375,7 +4382,8 @@ function playbookTab(){
   // Group Tape Read sub-types into one parent card
   var TAPE_SUBS=SETUPS.filter(function(s){return s.indexOf("Tape Read — ")===0;});
   var LIVE_SUBS=SETUPS.filter(function(s){return s.indexOf("Live Read — ")===0;});
-  var BASE_SETUPS=SETUPS.filter(function(s){return s.indexOf("Tape Read — ")!==0&&s.indexOf("Live Read — ")!==0;});
+  var PIVOT_SUBS=SETUPS.filter(function(s){return s.indexOf("Pivot Level — ")===0;});
+  var BASE_SETUPS=SETUPS.filter(function(s){return s.indexOf("Tape Read — ")!==0&&s.indexOf("Live Read — ")!==0&&s.indexOf("Pivot Level — ")!==0;});
   var allEntries=BASE_SETUPS.map(function(s){return{name:s,desc:SDESC[s]||"",builtin:true,subs:null};});
   if(LIVE_SUBS.length){
     allEntries.push({name:"Live Read",desc:"Unplanned reads based on live market context — spotted in real time from structure, profile, or price action and acted on immediately.",builtin:true,
@@ -4384,6 +4392,10 @@ function playbookTab(){
   if(TAPE_SUBS.length){
     allEntries.push({name:"Tape Read",desc:"Reactive reads taken live — no pre-planned setup. Spotted and acted on in real time using tape, order flow, or market structure.",builtin:true,
       subs:TAPE_SUBS.map(function(s){return{name:s,shortName:s.replace("Tape Read — ",""),desc:SDESC[s]||""};})});
+  }
+  if(PIVOT_SUBS.length){
+    allEntries.push({name:"Pivot Level",desc:"Classic pivot points from the prior period's High/Low/Close — P=(H+L+C)/3, R1=2P−L, S1=2P−H, R2=P+(H−L), S2=P−(H−L). Pick the timeframe that matches the trade; higher timeframes carry more weight, and stacked pivots across timeframes are the strongest levels.",builtin:true,
+      subs:PIVOT_SUBS.map(function(s){return{name:s,shortName:s.replace("Pivot Level — ",""),desc:SDESC[s]||""};})});
   }
   allEntries=allEntries.concat(customEntries.map(function(e){return{name:e.name,desc:e.desc,builtin:false,subs:null};}));
   allEntries.sort(function(a,b){var as=State.starredSetups.indexOf(a.name)>-1,bs=State.starredSetups.indexOf(b.name)>-1;return as===bs?0:as?-1:1;});
