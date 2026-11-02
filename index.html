@@ -3449,7 +3449,11 @@ function prepTab(){
     var todays=data.rows.filter(function(ev){
       return ev.date&&ev.date.slice(0,10)===etTodayStr&&ev.country==="USD"&&ev.impact==="High";
     }).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(ev){
-      return {title:ev.title,impact:ev.impact,time:new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
+      // Same all-day flag the News tab uses: events with no real release time show "ALL DAY", not a placeholder clock time
+      var _ncal=(_nf.cal&&_nf.cal.length)?_nf.cal:((_nfLsGet("cache")||{}).cal||[]);
+      var _tl=String(ev.title||"").toLowerCase().trim();
+      var _ad=_ncal.some(function(e){return e&&e.allDay&&new Date(e.ts).toLocaleDateString("en-CA",{timeZone:"America/New_York"})===etTodayStr&&String(e.title||"").toLowerCase().trim()===_tl;});
+      return {title:ev.title,impact:ev.impact,time:_ad?"ALL DAY":new Date(ev.date).toLocaleTimeString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"})};
     });
     var changed=autoSelectNewsLabels(todays);
     // Whole week (Sun–Sat ET): tick the checklist box for every High-impact USD event on the main calendar, once per week
