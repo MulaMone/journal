@@ -11776,8 +11776,8 @@ function enSpark(vals,color,w,hh){
   var pts=vals.map(function(v,i){return (i/(vals.length-1)*(w-2)+1).toFixed(1)+","+(hh-2-(v-mn)/(mx-mn)*(hh-4)).toFixed(1);}).join(" ");
   return "<svg viewBox='0 0 "+w+" "+hh+"' style='width:100%;max-width:"+w+"px;height:"+hh+"px'><polyline points='"+pts+"' fill='none' stroke='"+color+"' stroke-width='1.6'/></svg>";
 }
-function enHead(txt,sub){
-  var d=div();d.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--ca);margin:22px 0 12px;";
+function enHead(txt,sub,id){
+  var d=div();d.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--ca);margin:22px 0 12px;";if(id){d.id=id;d.style.scrollMarginTop=isMobile()?"120px":"162px";}
   d.textContent=txt;if(sub){var s=span();s.style.cssText="font-size:10px;letter-spacing:1px;color:var(--text3);margin-left:10px;text-transform:none;";s.textContent=sub;d.appendChild(s);}
   return d;
 }
@@ -11792,7 +11792,7 @@ function enLegend(keys){
 function enBadge(txt,col){return "<span style='display:inline-block;padding:3px 9px;border:1px solid "+col+";color:"+col+";border-radius:2px;font-size:10px;font-weight:700;letter-spacing:1px'>"+txt+"</span>";}
 function enSecLoad(D,wrap){
   var key=_en.iso,I=D[key]||{};
-  wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase()));
+  wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase(),"en-sec-load"));
   var rows=I.load||[];
   var a=rows.filter(function(r){return r.actual!=null;}),last=a[a.length-1];
   if(a.length){var w0=enTs(a[0].t),w1=enTs(last.t)+12*36e5;rows=rows.filter(function(r){var t=enTs(r.t);return t>=w0&&t<=w1;});}
@@ -11832,7 +11832,7 @@ function enSecLoad(D,wrap){
   }
 }
 function enSecLmp(D,wrap){
-  wrap.appendChild(enHead("Nodal LMP & Congestion","hub settlement · 5–15 min"));
+  wrap.appendChild(enHead("Nodal LMP & Congestion","hub settlement · 5–15 min","en-sec-lmp"));
   var hubs=D.hubs||[];
   if(!hubs.length){wrap.appendChild(enCard("Hubs","<div style='color:var(--text3);font-size:11px'>No hub data yet.</div>"));return;}
   var h="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;min-width:560px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>HUB</th><th>RT LMP</th><th>DA LMP</th><th>DA−RT</th><th>ENERGY</th><th>MCC</th><th></th></tr>";
@@ -11845,7 +11845,7 @@ function enSecLmp(D,wrap){
   wrap.appendChild(enCard("Hub Settlement",h));
 }
 function enSecSpark(D,wrap){
-  wrap.appendChild(enHead("Spark Spreads & Fuel Margins"));
+  wrap.appendChild(enHead("Spark Spreads & Fuel Margins",null,"en-sec-spark"));
   var g=D.gas,S=D.spark;
   var gh=g?"<div class='cv' style='font-size:26px;color:var(--ca)'>$"+g.price.toFixed(3)+" <span style='font-size:11px;color:var(--text3)'>/MMBtu</span></div><div class='cs'>"+g.source+" · "+g.asOf+"</div><div style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
   var top=div("chip");top.innerHTML="<div class='cl'>HENRY HUB</div>"+gh;top.style.marginBottom="12px";wrap.appendChild(top);
@@ -11868,7 +11868,7 @@ function enSecSpark(D,wrap){
   wrap.appendChild(enCard("How to read","<div style='font-size:10px;color:var(--text3);line-height:1.6'>Spark spread = power LMP − gas × heat rate. Expanding (spread rising vs prior 5 hrs) = power outrunning gas, bullish power / generator margins; contracting = gas catching up or power sagging. Trend uses a ±5% / $1 band vs the prior 5-hour average.</div>"));
 }
 function enSecMacro(D,wrap){
-  wrap.appendChild(enHead("Macro & Weather","7-day forecast vs 1991–2020 norms"));
+  wrap.appendChild(enHead("Macro & Weather","7-day forecast vs 1991–2020 norms","en-sec-macro"));
   var W=D.weather||[];
   if(W.length){
     var h="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;min-width:420px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>CITY</th><th>CDD Δ (7d)</th><th>HDD Δ (7d)</th><th>DAILY TEMP °F</th></tr>";
@@ -11943,7 +11943,7 @@ function enShowPic(){
   try{history.pushState({enPic:1},"");window.addEventListener("popstate",onPop);}catch(e){}
 }
 function enSecFlow(wrap){
-  wrap.appendChild(enHead("How To Use This"));
+  wrap.appendChild(enHead("How To Use This",null,"en-sec-flow"));
   function box(title,col,items,corner){
     return "<div style='border:1px solid "+col+";border-radius:4px;padding:14px 16px;background:var(--panel2)'><div style='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px'><div style='font-size:11px;letter-spacing:2px;color:"+col+"'>"+title+"</div>"+(corner||"")+"</div>"+items.map(function(i){return "<div style='font-size:12px;color:var(--text);padding:2px 0'>• "+i+"</div>";}).join("")+"</div>";
   }
@@ -11955,7 +11955,7 @@ function enSecFlow(wrap){
 }
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
-  var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:hidden;";
+  var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:clip;";
   var hd=div();hd.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
   var l=div();var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Energy";
   var meta=div();meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";var st=div();st.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:2px;";l.appendChild(t);l.appendChild(meta);l.appendChild(st);
@@ -11975,7 +11975,25 @@ function energyTab(){
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
   }
-  hd.appendChild(l);hd.appendChild(btns);wrap.appendChild(hd);wrap.appendChild(body);
+  var navHold=div();navHold.style.cssText="margin-top:10px;";
+  var nav=div();nav.style.cssText="z-index:150;background:var(--bg);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;border-bottom:1px solid var(--border);box-sizing:border-box;";
+  [["LOAD & FUEL","en-sec-load"],["PRICES","en-sec-lmp"],["SPARK","en-sec-spark"],["WEATHER","en-sec-macro"],["WORKFLOW","en-sec-flow"]].forEach(function(j){
+    var b=h("button",{className:"btn"},[j[0]]);b.style.cssText="flex-shrink:0;min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap;";
+    b.addEventListener("click",function(){var t=document.getElementById(j[1]);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
+    nav.appendChild(b);
+  });
+  navHold.appendChild(nav);
+  // Pin the jump-nav under the fixed header bars. position:sticky can't work here (ancestors clip/scroll), so toggle fixed on scroll.
+  function pinNav(){
+    if(State.tab!=="energy"||!navHold.isConnected){window.removeEventListener("scroll",pinNav);window.removeEventListener("resize",pinNav);return;}
+    var topPx=(isMobile()?52:100)+(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sat"))||0);
+    var r=navHold.getBoundingClientRect(),wr=wrap.getBoundingClientRect();
+    if(!navHold.style.height||nav.style.position!=="fixed") navHold.style.height=nav.offsetHeight+"px";
+    if(r.top<=topPx){nav.style.position="fixed";nav.style.top=topPx+"px";nav.style.left=wr.left+"px";nav.style.width=wr.width+"px";}
+    else{nav.style.position="";nav.style.top="";nav.style.left="";nav.style.width="";}
+  }
+  window.addEventListener("scroll",pinNav,{passive:true});window.addEventListener("resize",pinNav);
+  hd.appendChild(l);hd.appendChild(btns);wrap.appendChild(hd);wrap.appendChild(navHold);wrap.appendChild(body);
   _en.data=_en.data||enCacheGet();paint();
   enLoad(false).then(function(){if(State.tab==="energy")paint();});
   _en.timer=setInterval(function(){
@@ -12033,7 +12051,7 @@ function render(){
     content.style.transition="none";
     content.style.opacity="1";
     content.innerHTML="";
-    content.style.padding="16px";content.style.overflow="auto";content.style.display="block";
+    content.style.padding="16px";content.style.overflow=State.tab==="energy"?"visible":"auto";content.style.display="block"; // energy: sticky jump-nav needs a visible-overflow parent
     content.appendChild(VIEWS[State.tab]());
   }
   if(_firstRender){ window.scrollTo(0,0); _firstRender=false; }
