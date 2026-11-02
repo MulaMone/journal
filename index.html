@@ -912,6 +912,7 @@ function loadFedProbFromCloud(callback){
     var purge2=false;try{purge2=!!localStorage.getItem("edge_fedprob_purge_1102");}catch(e){}
     if(!purge2&&cloud!==null){
       merged=merged.filter(function(r){return !(r.backfill&&r.dateISO&&r.dateISO<"2026-10-28");});
+      try{Object.keys(localStorage).filter(function(k){return k.indexOf("edge_fedprob_backfill_v7_")===0;}).forEach(function(k){localStorage.removeItem(k);});}catch(e){} // let the rebuild run right after the purge
       fedProbHistSet(merged);
       _fedCloudOk=true;
       return supaFetch("POST","edge_data",{user_id:getFedProbSyncId(),trades:[],levels:[],week_levels:[],settings:{fedprob_hist:merged},updated_at:new Date().toISOString()})
