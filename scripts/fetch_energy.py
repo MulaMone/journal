@@ -2,7 +2,7 @@
 """Fetch ERCOT (+ optional PJM) grid data, Henry Hub, weather -> energy.json.
 Every section is independent: a failure is logged in out["errors"] and the rest still ships.
 Env: FRED_API_KEY (Henry Hub; falls back to Yahoo NG=F), PJM_API_KEY (optional, enables PJM)."""
-import os, json, sys, datetime as dt, traceback
+import os, json, sys, time, datetime as dt, traceback
 import requests
 import pandas as pd
 
@@ -10,6 +10,23 @@ OUT = os.environ.get("ENERGY_OUT", "energy.json")
 NORMS = os.environ.get("ENERGY_NORMS", "energy_norms.json")
 out = {"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "errors": {}}
 CT = "America/Chicago"
+
+
+def rget(*a, tries=3, **k):
+    """requests.get with retries on timeouts, connection errors, 429 and 5xx"""
+    last = None
+    for i in range(tries):
+        try:
+            r = requests.get(*a, **k)
+            if r.status_code == 429 or r.status_code >= 500:
+                last = requests.HTTPError(f"HTTP {r.status_code}")
+            else:
+                return r
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = e
+        if i < tries - 1:
+            time.sleep(2 * (i + 1))
+    raise last
 
 
 def guard(name):
@@ -180,7 +197,7 @@ def ercot_prices():
 def pjm():
     key = os.environ.get("PJM_API_KEY")
     if not key:  # fall back to the public key PJM's own Data Miner web app uses
-        key = requests.get("https://dataminer2.pjm.com/config/settings.json", timeout=20).json()["subscriptionKey"]
+        key = rget("https://dataminer2.pjm.com/config/settings.json", timeout=20).json()["subscriptionKey"]
     import gridstatus
     from gridstatus import Markets
     p = gridstatus.PJM(api_key=key)
@@ -254,14 +271,14 @@ def outages():
 def gas():
     key = os.environ.get("FRED_API_KEY")
     if key:
-        r = requests.get("https://api.stlouisfed.org/fred/series/observations",
+        r = rget("https://api.stlouisfed.org/fred/series/observations",
                          params={"series_id": "DHHNGSP", "api_key": key, "file_type": "json", "sort_order": "desc", "limit": 30}, timeout=30)
         r.raise_for_status()
         obs = [(o["date"], float(o["value"])) for o in r.json()["observations"] if o["value"] not in (".", "")]
         if obs:
             out["gas"] = {"source": "FRED DHHNGSP (spot)", "price": obs[0][1], "asOf": obs[0][0], "series": [v for _, v in reversed(obs)][-20:]}
             return
-    r = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/NG%3DF", params={"range": "1mo", "interval": "1d"},
+    r = rget("https://query1.finance.yahoo.com/v8/finance/chart/NG%3DF", params={"range": "1mo", "interval": "1d"},
                      headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
     r.raise_for_status()
     res = r.json()["chart"]["result"][0]
@@ -318,7 +335,7 @@ def norms():
         if name in n["cities"]:
             continue
         changed = True
-        r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
+        r = rget("https://archive-api.open-meteo.com/v1/archive", params={
             "latitude": la, "longitude": lo, "start_date": "1991-01-01", "end_date": "2020-12-31",
             "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit", "timezone": "auto"}, timeout=120)
         r.raise_for_status()
@@ -340,7 +357,7 @@ def weather():
     nm = norms()
     res = []
     for name, (la, lo) in CITIES.items():
-        r = requests.get("https://api.open-meteo.com/v1/forecast", params={
+        r = rget("https://api.open-meteo.com/v1/forecast", params={
             "latitude": la, "longitude": lo, "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit",
             "forecast_days": 7, "timezone": "auto"}, timeout=30)
         r.raise_for_status()
@@ -363,7 +380,7 @@ def weather():
 def wind():
     res = []
     for name, (la, lo) in WIND_PTS.items():
-        r = requests.get("https://api.open-meteo.com/v1/forecast", params={
+        r = rget("https://api.open-meteo.com/v1/forecast", params={
             "latitude": la, "longitude": lo, "hourly": "wind_speed_80m,wind_speed_100m", "wind_speed_unit": "mph",
             "forecast_days": 2, "timezone": "UTC"}, timeout=30)
         r.raise_for_status()
