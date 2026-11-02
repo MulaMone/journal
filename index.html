@@ -11788,9 +11788,7 @@ function enChart(lines,areas,opt){
     var segs=[],cur=[];
     l.pts.forEach(function(p){if(p[1]==null){if(cur.length)segs.push(cur);cur=[];}else cur.push(X(p[0])+","+Y(p[1]));});
     if(cur.length)segs.push(cur);
-    segs.forEach(function(sg){
-      if(sg.length===1){var xy=sg[0].split(",");s+="<circle cx='"+xy[0]+"' cy='"+xy[1]+"' r='3.5' fill='"+l.color+"'/>";return;} // lone point (e.g. just after midnight) — a 1-point polyline is invisible
-      s+="<polyline points='"+sg.join(" ")+"' fill='none' stroke='"+l.color+"' stroke-width='2' "+(l.dash?"stroke-dasharray='5 4'":"")+"/>";});
+    segs.forEach(function(sg){s+="<polyline points='"+sg.join(" ")+"' fill='none' stroke='"+l.color+"' stroke-width='2' "+(l.dash?"stroke-dasharray='5 4'":"")+"/>";});
   });
   return enSvg(W,H,s);
 }
