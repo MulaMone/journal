@@ -11750,6 +11750,7 @@ function enLoad(force){
 function enFmt(n,d){return n==null||isNaN(n)?"—":Number(n).toLocaleString(undefined,{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
 function enPx(n){return n==null?"—":(n<0?"-":"")+"$"+Math.abs(n).toFixed(2);}
 function enTs(t){return new Date(t).getTime();}
+function enDayStart(ms,tz){var p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',minute:'numeric',second:'numeric',hourCycle:'h23'}).formatToParts(new Date(ms));var g=function(n){return +p.find(function(x){return x.type===n;}).value;};return ms-((g('hour')*60+g('minute'))*60+g('second'))*1000;}
 function enHM(ms){var d=new Date(ms);return d.toLocaleTimeString([],{hour:"numeric"}).replace(" ","").toLowerCase();}
 function enSvg(w,hh,inner){return "<svg viewBox='0 0 "+w+" "+hh+"' style='width:100%;height:auto;display:block;font-family:monospace' preserveAspectRatio='xMidYMid meet'>"+inner+"</svg>";}
 // lines: [{pts:[[ms,val]],color,dash,label}]; areas: [{pts:[[ms,val]],color}] stacked bottom-up
@@ -11771,6 +11772,7 @@ function enChart(lines,areas,opt){
   }
   if(!xs.length) return "<div style='color:var(--text3);font-size:11px;padding:20px 0'>no data</div>";
   var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs);if(x1===x0)x1=x0+1;
+  if(opt.x0!=null&&opt.x1!=null){x0=opt.x0;x1=opt.x1;} // caller-fixed time window (e.g. the full operating day)
   if(opt.zero!==false&&ymin>0&&areas&&areas.length) ymin=0;
   var pad=(ymax-ymin)*0.06||1;ymax+=pad;if(!(areas&&areas.length))ymin-=pad;
   if(opt.ymax) ymax=opt.ymax; // caller-set ceiling (e.g. highest committed capacity + 10%)
@@ -11842,10 +11844,13 @@ function enSecLoad(D,wrap){
     enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]].concat(hasCom?[["Committed Capacity","#a78bfa"]]:[]))+
     "<div style='font-size:10px;color:var(--text3);margin-top:6px'>Signal: actual above forecast by &gt;3–5% → upward pressure on RT prices.</div>"));
   var fm=I.fuel||[];
+  // plot the full operating day (12am–12am in the ISO's own timezone), data fills in left to right
+  var fx0=null,fx1=null;
+  if(fm.length){fx0=enDayStart(enTs(fm[fm.length-1].t),key==='ercot'?'America/Chicago':'America/New_York');fx1=fx0+24*36e5;fm=fm.filter(function(r){return enTs(r.t)>=fx0;});}
   var order=["nuclear","coal","gasCC","gasPeaker","gas","wind","solar","other"];
   var keys=order.filter(function(k){return fm.some(function(r){return r[k]>0;});});
   wrap.appendChild(enCard("Fuel Mix (MW)",
-    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{tickCount:6,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
+    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{tickCount:6,x0:fx0,x1:fx1,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
     enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}))+
     (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")));
   if(key==="ercot"){
