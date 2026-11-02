@@ -111,6 +111,20 @@ def ercot_load():
         for t, v in fser.items():
             if a.index.max() < t <= end:
                 rows.append({"t": iso(t), "actual": None, "forecast": num(v)})
+    # committed capacity (ERCOT Supply & Demand dashboard feed): hourly mean, per row
+    try:
+        sd = rget("https://www.ercot.com/api/1/services/read/dashboards/supply-demand.json", timeout=30).json().get("data", [])
+        cap = {}
+        for x in sd:
+            if x.get("capacity") is not None and x.get("epoch") is not None:
+                h = int(x["epoch"]) // 3600000
+                cap.setdefault(h, []).append(float(x["capacity"]))
+        for r in rows:
+            h = int(pd.Timestamp(r["t"]).timestamp() // 3600)
+            if h in cap:
+                r["committed"] = round(sum(cap[h]) / len(cap[h]), 1)
+    except Exception as e:
+        out["errors"]["ercot_committed"] = f"{type(e).__name__}: {e}"[:200]
     out.setdefault("ercot", {})["load"] = rows
 
 
