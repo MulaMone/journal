@@ -11778,8 +11778,10 @@ function enChart(lines,areas,opt){
   function Y(v){return T+(1-(v-tk[0])/((tk[tk.length-1]-tk[0])||1))*(H-T-B);}
   var s="";
   tk.forEach(function(v){s+="<line x1='"+L+"' x2='"+(W-R)+"' y1='"+Y(v)+"' y2='"+Y(v)+"' stroke='var(--border)' stroke-width='1'/><text x='"+(L-5)+"' y='"+(Y(v)+3)+"' text-anchor='end' fill='var(--text3)' font-size='10'>"+(opt.yfmt?opt.yfmt(v):enFmt(v))+"</text>";});
-  var nx=Math.min(6,Math.max(2,Math.round((x1-x0)/36e5/4)));
-  for(var i=0;i<=nx;i++){var t=x0+(x1-x0)*i/nx;s+="<text x='"+X(t)+"' y='"+(H-6)+"' text-anchor='middle' fill='var(--text3)' font-size='10'>"+enHM(t)+"</text>";}
+  // X ticks on whole local hours (1h/2h/3h/4h/6h/12h/24h steps, <=6 labels) so short windows never repeat the same hour label
+  var spanH=(x1-x0)/36e5,stepH=[1,2,3,4,6,12,24].filter(function(k){return spanH/k<=6;})[0]||24;
+  var tzOff=-new Date(x0).getTimezoneOffset()*60000,stepMs=stepH*36e5;
+  for(var t=Math.ceil((x0+tzOff)/stepMs)*stepMs-tzOff;t<=x1+1;t+=stepMs){s+="<text x='"+X(t)+"' y='"+(H-6)+"' text-anchor='middle' fill='var(--text3)' font-size='10'>"+enHM(t)+"</text>";}
   if(stk){
     stk.forEach(function(a){
       var top=ts.map(function(t,i){return X(t)+","+Y(a.hi[i]);});
