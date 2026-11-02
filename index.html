@@ -12179,7 +12179,6 @@ function energyTab(){
     var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
-    var eia=h("a",{className:"btn",href:"https://www.eia.gov/naturalgas/weekly/supplement/",target:"_blank",rel:"noopener"},["EIA ↗"]);eia.style.cssText="min-height:36px;padding:0 12px;font-size:11px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;";btns.appendChild(eia);
     var rb=h("button",{className:"btn",title:"Refresh","aria-label":"Refresh"},[_en.busy?"…":"↻"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
     enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecGas(D,body);enSecFlow(body);
     var errs=Object.keys(D.errors||{});
