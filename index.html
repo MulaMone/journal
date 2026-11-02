@@ -11884,7 +11884,7 @@ function enSecLmp(D,wrap){
 function enSecSpark(D,wrap){
   wrap.appendChild(enHead("Spark Spreads & Fuel Margins",null,"en-sec-spark"));
   var g=D.gas,S=D.spark;
-  var gh=g?"<div class='cv' style='font-size:26px;color:var(--ca)'>$"+g.price.toFixed(3)+" <span style='font-size:11px;color:var(--text3)'>/MMBtu</span></div><div class='cs'>"+g.source+" · "+g.asOf+"</div><div style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
+  var gh=g?"<div class='cv' style='font-size:26px;color:var(--ca)'>$"+g.price.toFixed(3)+" <span style='font-size:11px;color:var(--text3)'>/MMBtu</span></div><div class='cs'>"+g.source+" · "+g.asOf+" · Daily Settlement (prev close)</div><div style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
   var top=div("chip");top.innerHTML="<div class='cl'>HENRY HUB</div>"+gh;top.style.marginBottom="12px";wrap.appendChild(top);
   if(!S||!S.hubs||!S.hubs.length){wrap.appendChild(enCard("Spark Spreads","<div style='color:var(--text3);font-size:11px'>Needs gas price and hub LMPs.</div>"));return;}
   var grid=div("g2");
@@ -11894,7 +11894,7 @@ function enSecSpark(D,wrap){
       var v=x["s"+hr[0]],tr=x["s"+hr[0]+"Trend"],c=v>0?"var(--green)":"var(--red)";
       var tc=tr==="expanding"?"var(--green)":tr==="contracting"?"var(--red)":"var(--text3)";
       var pos=Math.max(0,Math.min(100,50+v/Math.max(Math.abs(x.power),20)*50));
-      html+="<div style='margin-bottom:12px'><div style='display:flex;justify-content:space-between;font-size:10px;color:var(--text3);letter-spacing:1px'><span>"+hr[1]+"</span>"+enBadge(tr.toUpperCase(),tc)+"</div>"+
+      html+="<div style='margin-bottom:12px'><div style='display:flex;justify-content:space-between;font-size:10px;color:var(--text3);letter-spacing:1px'><span>"+hr[1]+(tr&&tr!=="n/a"?" <span style='color:"+tc+"'>· "+tr+"</span>":"")+"</span>"+(v>0?enBadge("DISPATCH","var(--green)"):enBadge("OFF-LINE","var(--red)"))+"</div>"+
         "<div style='font-size:22px;font-weight:700;color:"+c+";font-family:monospace'>"+(v<0?"-":"")+"$"+Math.abs(v).toFixed(2)+"</div>"+
         "<div style='position:relative;height:6px;background:var(--panel2);border-radius:3px;margin:4px 0'><div style='position:absolute;left:50%;top:-2px;width:1px;height:10px;background:var(--text3)'></div><div style='position:absolute;left:"+pos+"%;top:-3px;width:4px;height:12px;background:"+c+";transform:translateX(-2px)'></div></div>"+
         enSpark(x["s"+hr[0]+"Series"],c,160,26)+"</div>";
