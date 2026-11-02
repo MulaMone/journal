@@ -610,6 +610,7 @@ function _syncToCloudNow(){
       sdesc_overrides:ls("sdesc_overrides",{}),
       oanda_token:ls("oanda_token",""),
       gh_token:ls("gh_token",""),
+      energy:{hubpx:ls("en_hubpx",{}),hubbasis:ls("en_hubbasis",{}),hubmode:ls("en_hubmode",{}),corr:ls("en_corr",{}),hr:ls("en_hr",10.5),thr:ls("en_thr",1500),rules:ls("en_rules",{}),notices:ls("en_notices",[])},
       app_settings:{max_loss:localStorage.getItem("edge_max_loss")||null,lk_timeout:localStorage.getItem("edge_lk_timeout")||"24",compact_cards:localStorage.getItem("edge_compact_cards")||null,show_session:localStorage.getItem("edge_show_session")||null,show_overnight:localStorage.getItem("edge_show_overnight")||null,logPageSize:localStorage.getItem("edge_logPageSize")||"50",qra_spinner_month:localStorage.getItem("edge_qra_spinner_month")||null,qra_spinner_day:localStorage.getItem("edge_qra_spinner_day")||null},
       accounts:State.accounts,
       lk_pin:localStorage.getItem("edge_lk_pin")||null
@@ -729,6 +730,7 @@ function loadFromCloud(syncId,callback){
       if(s.atrsltp&&typeof s.atrsltp==="object"){try{localStorage.setItem("edge_atrsltp",JSON.stringify(s.atrsltp));}catch(e){}}
       if(s.oanda_token) ss("oanda_token",s.oanda_token);
       if(s.gh_token) ss("gh_token",s.gh_token);
+      if(s.energy&&typeof s.energy==="object"){var _en2=s.energy;[["hubpx","en_hubpx"],["hubbasis","en_hubbasis"],["hubmode","en_hubmode"],["corr","en_corr"],["hr","en_hr"],["thr","en_thr"],["rules","en_rules"],["notices","en_notices"]].forEach(function(m){if(_en2[m[0]]!==undefined&&_en2[m[0]]!==null)try{localStorage.setItem("edge_"+m[1],JSON.stringify(_en2[m[0]]));}catch(e){}});}
       if(s.app_settings){var _as=s.app_settings;if(_as.max_loss)localStorage.setItem("edge_max_loss",_as.max_loss);if(_as.lk_timeout)localStorage.setItem("edge_lk_timeout",_as.lk_timeout);if(_as.compact_cards!==null&&_as.compact_cards!==undefined)localStorage.setItem("edge_compact_cards",_as.compact_cards);if(_as.show_session!==null&&_as.show_session!==undefined)localStorage.setItem("edge_show_session",_as.show_session);if(_as.show_overnight!==null&&_as.show_overnight!==undefined)localStorage.setItem("edge_show_overnight",_as.show_overnight);if(_as.logPageSize)localStorage.setItem("edge_logPageSize",_as.logPageSize);if(_as.qra_spinner_month!==null&&_as.qra_spinner_month!==undefined)localStorage.setItem("edge_qra_spinner_month",_as.qra_spinner_month);if(_as.qra_spinner_day!==null&&_as.qra_spinner_day!==undefined)localStorage.setItem("edge_qra_spinner_day",_as.qra_spinner_day);}
       if(s.accounts&&s.accounts.length){var _localAccts=State.accounts||[];var _merged=s.accounts.map(function(ca){var la=_localAccts.find(function(x){return x.id===ca.id;})||null;var comms=ca.commissions!==undefined?ca.commissions:(la&&la.commissions!==undefined?la.commissions:undefined);var comm=ca.commission!==undefined?ca.commission:(la&&la.commission!==undefined?la.commission:undefined);var out=Object.assign({},ca);if(comms!==undefined)out.commissions=comms;if(comm!==undefined)out.commission=comm;return out;});State.accounts=_merged;ss("accounts",_merged);}
       // Legacy: active account used to ride in this blob. Only use it as a one-time seed when this device has none valid
@@ -12185,7 +12187,7 @@ function energyTab(){
   }
   var navHold=div();navHold.style.cssText="margin-top:10px;";
   var nav=div();nav.style.cssText="z-index:150;background:var(--bg);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;border-bottom:1px solid var(--border);box-sizing:border-box;";
-  [["LOAD & FUEL","en-sec-load","#00d4d4"],["PRICES","en-sec-lmp","#00e676"],["SPARK","en-sec-spark","#ffab00"],["WEATHER","en-sec-macro","#b06aff"],["SPREADS","en-sec-spr","#00e676"],["NODAL","en-sec-nod","#00d4d4"],["SIGNALS","en-sec-sig","#ffab00"],["PHYSICAL","en-sec-phy","#ff6b6b"],["WORKFLOW","en-sec-flow","#ff6b6b"]].forEach(function(j){
+  [["LOAD & FUEL","en-sec-load","#00d4d4"],["PRICES","en-sec-lmp","#00e676"],["SPARK","en-sec-spark","#ffab00"],["WEATHER","en-sec-macro","#b06aff"],["SPREADS","en-sec-spr","#4fc3f7"],["NODAL","en-sec-nod","#f06292"],["SIGNALS","en-sec-sig","#aeea00"],["PHYSICAL","en-sec-phy","#1de9b6"],["WORKFLOW","en-sec-flow","#ff6b6b"]].forEach(function(j){
     var b=h("button",{className:"btn"},[j[0]]);b.style.cssText="flex-shrink:0;min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap;color:"+j[2]+";border-color:"+j[2]+";background:"+j[2]+"1a;";
     b.addEventListener("click",function(){var t=document.getElementById(j[1]);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
     nav.appendChild(b);
