@@ -238,7 +238,12 @@ def pjm():
     except Exception as e:
         out["errors"]["pjm_load"] = str(e)[:200]
     try:
-        m = p.get_fuel_mix("today").set_index("Interval Start").resample("1h").mean(numeric_only=True).dropna(how="all")
+        try:
+            fm = p.get_fuel_mix("today")
+        except Exception:  # PJM posts gen_by_fuel late; empty right after midnight ET
+            now = pd.Timestamp.now(tz="US/Eastern")
+            fm = p.get_fuel_mix(now.normalize() - pd.Timedelta(days=1), end=now)
+        m = fm.set_index("Interval Start").resample("1h").mean(numeric_only=True).dropna(how="all")
         rows = []
         for t, r in m.iterrows():
             g = {"gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0}
