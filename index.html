@@ -11828,15 +11828,15 @@ function enSecLoad(D,wrap){
     pct=(last.actual-last.forecast)/last.forecast*100;
     sig=pct>5?enBadge("RT > DA +"+pct.toFixed(1)+"% · UPWARD RT PRICE PRESSURE","var(--red)"):pct>3?enBadge("RT > DA +"+pct.toFixed(1)+"% · WATCH","var(--amber)"):pct<-3?enBadge("RT < DA "+pct.toFixed(1)+"% · SOFT","var(--green)"):enBadge("ON FORECAST "+(pct>=0?"+":"")+pct.toFixed(1)+"%","var(--text3)");
   }
-  var econMax=key==="pjm"&&I.capacity&&I.capacity.economicMax?I.capacity.economicMax:null;
+  var primRes=key==="pjm"&&I.reserves&&I.reserves.primary!=null?I.reserves.primary:null;
   var hasCom=rows.some(function(r){return r.committed!=null;});
   var loadSvg=enChart([
     {pts:rows.map(function(r){return [enTs(r.t),r.forecast];}),color:"#ff8c00",dash:true},
     {pts:rows.map(function(r){return [enTs(r.t),r.actual];}),color:"#00d4d4"}
-  ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]).concat(econMax?[{pts:rows.map(function(r){return [enTs(r.t),econMax];}),color:"#ef4444",dash:true}]:[]),null,{nowMs:last?enTs(last.t):null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
+  ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]),null,{nowMs:last?enTs(last.t):null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
   wrap.appendChild(enCard("Load · Real-Time vs Day-Ahead Forecast (MW)",
-    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed):"")+(econMax?" · Econ Max "+enFmt(econMax):"")+" MW</span>":"")+"</div>"+loadSvg+
-    enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]].concat(hasCom?[["Committed Capacity","#a78bfa"]]:[]).concat(econMax?[["Economic Max","#ef4444"]]:[]))+
+    "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed):"")+(primRes!=null?" · Primary Reserve "+enFmt(primRes)+(I.reserves.requirement!=null?" (req "+enFmt(I.reserves.requirement)+")":""):"")+" MW</span>":"")+"</div>"+loadSvg+
+    enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]].concat(hasCom?[["Committed Capacity","#a78bfa"]]:[]))+
     "<div style='font-size:10px;color:var(--text3);margin-top:6px'>Signal: actual above forecast by &gt;3–5% → upward pressure on RT prices.</div>"));
   var fm=I.fuel||[];
   var order=["nuclear","coal","gasCC","gasPeaker","gas","wind","solar","other"];
