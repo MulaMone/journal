@@ -11977,8 +11977,8 @@ function energyTab(){
   }
   var navHold=div();navHold.style.cssText="margin-top:10px;";
   var nav=div();nav.style.cssText="z-index:150;background:var(--bg);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;border-bottom:1px solid var(--border);box-sizing:border-box;";
-  [["LOAD & FUEL","en-sec-load"],["PRICES","en-sec-lmp"],["SPARK","en-sec-spark"],["WEATHER","en-sec-macro"],["WORKFLOW","en-sec-flow"]].forEach(function(j){
-    var b=h("button",{className:"btn"},[j[0]]);b.style.cssText="flex-shrink:0;min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap;";
+  [["LOAD & FUEL","en-sec-load","#00d4d4"],["PRICES","en-sec-lmp","#00e676"],["SPARK","en-sec-spark","#ffab00"],["WEATHER","en-sec-macro","#b06aff"],["WORKFLOW","en-sec-flow","#ff6b6b"]].forEach(function(j){
+    var b=h("button",{className:"btn"},[j[0]]);b.style.cssText="flex-shrink:0;min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap;color:"+j[2]+";border-color:"+j[2]+";background:"+j[2]+"1a;";
     b.addEventListener("click",function(){var t=document.getElementById(j[1]);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
     nav.appendChild(b);
   });
