@@ -12001,6 +12001,148 @@ function enShowPic(src){
   document.addEventListener("keydown",onKey);
   try{history.pushState({enPic:1},"");window.addEventListener("popstate",onPop);}catch(e){}
 }
+// ─────────── GAS BASIS · NODAL MAPPER · SIGNALS · PHYSICAL (retail derivative desk) ───────────
+var EN_HUBS=[["HH","Henry Hub","NYMEX NG"],["WAHA","Waha","ICE WAH"],["ALQ","Algonquin Citygates","ICE ALQ"],["DOMS","Dominion South",""],["HSC","Houston Ship Channel",""]];
+var EN_CORR=[["WAHA","HSC",0.15,2],["WAHA","HH",0.25,3],["HH","ALQ",0.35,4],["DOMS","ALQ",0.30,3],["DOMS","HH",0.20,2]];
+var EN_PIPES=["Transco","Texas Eastern (TETCO)","El Paso (EPNG)","Algonquin","Tennessee","Columbia","NGPL","Other"];
+var EN_EBB=[["Transco 1Line","https://www.1line.williams.com/Transco/index.html"],["Enbridge InfoPost (TETCO / Algonquin)","https://infopost.enbridge.com/infopost/"],["Kinder Morgan (El Paso / TGP)","https://pipeline2.kindermorgan.com/"],["EIA weekly storage report","https://ir.eia.gov/ngs/ngs.html"]];
+var EN_NTYPE={"OFO":"var(--red)","Force Majeure":"var(--red)","Pressure":"var(--amber)","Maintenance":"var(--accent)"};
+function enHubName(c){for(var i=0;i<EN_HUBS.length;i++)if(EN_HUBS[i][0]===c)return EN_HUBS[i][1];return c;}
+function enNum(v){var n=parseFloat(v);return isNaN(n)?null:n;}
+function enInp(id,val,ph,w,step){return "<input data-id='"+id+"' type='number' inputmode='decimal' step='"+(step||"0.01")+"' value='"+(val==null?"":val)+"' placeholder='"+(ph||"")+"' style='width:"+(w||66)+"px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:monospace;font-size:12px;padding:5px 6px;border-radius:3px;box-sizing:border-box'>";}
+function enMonthCode(m){return "FGHJKMNQUVXZ".charAt(m);}
+function enStatusCol(s){return s==="ACTIVE"?"var(--green)":s==="WATCH"?"var(--amber)":"var(--text3)";}
+function enSecGas(D,wrap){
+  var gw=div();wrap.appendChild(gw);
+  function px(){var m=ls("en_hubpx",{}),o={},auto=D.gas&&D.gas.price!=null?D.gas.price:null;EN_HUBS.forEach(function(x){o[x[0]]=m[x[0]]!=null?m[x[0]]:(x[0]==="HH"?auto:null);});return o;}
+  function spreads(){
+    var P=px(),C=ls("en_corr",{});
+    return EN_CORR.map(function(c){
+      var k=c[0]+">"+c[1],u=C[k]||{},tar=u.t!=null?u.t:c[2],fu=u.f!=null?u.f:c[3],r=P[c[0]],d=P[c[1]];
+      var ok=r!=null&&d!=null,gross=ok?d-r:null,cost=ok?tar+r*fu/100:null,net=ok?gross-cost:null;
+      return {k:k,from:c[0],to:c[1],tar:tar,fuel:fu,rec:r,dst:d,gross:gross,cost:cost,net:net};
+    });
+  }
+  function m1(){
+    var P=px(),S=spreads(),hubs=ls("en_hubpx",{});
+    gw.appendChild(enHead("Net Basis Spreads","pipeline arbitrage · $/MMBtu","en-sec-spr"));
+    var live=S.filter(function(s){return s.net!=null;}),best=live.slice().sort(function(a,b){return b.net-a.net;})[0];
+    var cards="<div class='g3' style='margin-bottom:12px'>"+
+      "<div class='card'><div class='cl'>Best net spread</div><div class='cv' style='color:"+(best&&best.net>0?"var(--green)":"var(--text3)")+"'>"+(best?enPx(best.net):"—")+"</div><div class='cs'>"+(best?enHubName(best.from)+" → "+enHubName(best.to):"enter hub prices")+"</div></div>"+
+      "<div class='card'><div class='cl'>Profitable corridors</div><div class='cv'>"+live.filter(function(s){return s.net>0;}).length+" / "+live.length+"</div><div class='cs'>net of tariff + fuel</div></div>"+
+      "<div class='card'><div class='cl'>Henry Hub</div><div class='cv'>"+enPx(P.HH)+"</div><div class='cs'>"+(hubs.HH!=null?"manual override":(D.gas?D.gas.source:"enter price"))+"</div></div></div>";
+    var pin="<div style='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end'>"+EN_HUBS.map(function(x){
+      return "<div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>"+x[1]+(x[2]?" · "+x[2]:"")+"</div>"+enInp("px:"+x[0],hubs[x[0]]!=null?hubs[x[0]]:"",x[0]==="HH"&&P.HH!=null?P.HH.toFixed(2)+" auto":"$/MMBtu",92)+"</div>";}).join("")+"</div>"+
+      "<div style='font-size:10px;color:var(--text3);margin-top:6px'>No free feed exists for ICE hub spot prices — type them in (saved on this device). Henry Hub auto-fills from the data feed unless overridden.</div>";
+    gw.appendChild(cards.length?(function(){var d=div();d.innerHTML=cards;return d;})():div());
+    gw.appendChild(enCard("Hub Spot Prices (manual)",pin));
+    var tb="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;min-width:640px'><tr style='color:var(--text3);font-size:10px;letter-spacing:1px;text-align:right'><th style='text-align:left;padding:6px 4px'>HUB PAIR</th><th>GROSS</th><th>TARIFF $</th><th>FUEL %</th><th>COST</th><th>NET</th><th style='text-align:center'>FLAG</th></tr>"+
+      S.map(function(s){
+        var fl=s.net==null?"<span style='color:var(--text3)'>—</span>":s.net>0?enBadge("PROFITABLE","var(--green)"):enBadge("UNPROFITABLE","var(--red)");
+        return "<tr style='border-top:1px solid var(--border);text-align:right'><td style='text-align:left;padding:7px 4px'>"+enHubName(s.from)+" → "+enHubName(s.to)+"</td><td>"+enPx(s.gross)+"</td><td>"+enInp("tar:"+s.k,s.tar,"",58)+"</td><td>"+enInp("fuel:"+s.k,s.fuel,"",50,"0.1")+"</td><td>"+enPx(s.cost)+"</td><td style='font-weight:700;color:"+(s.net==null?"var(--text3)":s.net>0?"var(--green)":"var(--red)")+"'>"+enPx(s.net)+"</td><td style='text-align:center'>"+fl+"</td></tr>";}).join("")+"</table></div>"+
+      "<div style='font-size:10px;color:var(--text3);margin-top:8px'>Net = (Dest − Receipt) − Tariff − (Receipt × Fuel%). Defaults: tariff $0.15–0.35, fuel 2–4% — replace with your actual pipeline rates.</div>";
+    var bars=live.length?"<div style='margin-top:10px'>"+(function(){var mx=Math.max.apply(null,live.map(function(s){return Math.abs(s.net);}).concat([0.01]));return live.map(function(s){var w=Math.abs(s.net)/mx*50;return "<div style='display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text3);margin:3px 0'><div style='width:150px;text-align:right'>"+enHubName(s.from).split(" ")[0]+"→"+enHubName(s.to).split(" ")[0]+"</div><div style='flex:1;position:relative;height:10px'><div style='position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--text3)'></div><div style='position:absolute;top:1px;height:8px;background:"+(s.net>0?"var(--green)":"var(--red)")+";"+(s.net>0?"left:50%":"right:50%")+";width:"+w+"%'></div></div><div style='width:54px'>"+enPx(s.net)+"</div></div>";}).join("");})()+"</div>":"";
+    gw.appendChild(enCard("Net Realized Spread by Corridor",tb+bars));
+  }
+  function isoInfo(key){
+    var HR=ls("en_hr",10.5),thr=ls("en_thr",1500),o={key:key};
+    if(key==="ercot"){
+      var R=(D.ercot&&D.ercot.renew)||{},m={};
+      ["wind","solar"].forEach(function(f){(R[f]||[]).forEach(function(r){var e=m[r.t]||(m[r.t]={a:0,f:0,ha:false});if(r.actual!=null){e.a+=r.actual;e.ha=true;}if(r.forecast!=null)e.f+=r.forecast;});});
+      var ts=Object.keys(m).sort().filter(function(t){return m[t].ha&&m[t].f>0;});
+      o.series=ts.map(function(t){return {t:t,a:m[t].a,f:m[t].f};});
+      o.label="Wind + Solar vs forecast";
+    }else{
+      var L=(D.pjm&&D.pjm.load)||[];
+      o.series=L.filter(function(r){return r.actual!=null&&r.forecast!=null;}).map(function(r){return {t:r.t,a:r.forecast,f:r.actual};}); // "shortfall" = load above forecast
+      o.label="Load above forecast";
+    }
+    var last=o.series[o.series.length-1];
+    o.mw=last?Math.max(last.f-last.a,0):null;o.burn=o.mw!=null?o.mw*HR:null;o.HR=HR;o.thr=thr;o.surge=o.mw!=null&&o.mw>=thr;
+    var hub=(D.hubs||[]).filter(function(x){return x.iso===key&&new RegExp(key==="ercot"?"houston":"dominion","i").test((x.name||"")+(x.id||""));})[0];
+    o.hub=hub||null;
+    return o;
+  }
+  function m2(){
+    gw.appendChild(enHead("Pipeline → Power Nodal Map","gas burn at the ISO hubs","en-sec-nod"));
+    var I=[isoInfo("ercot"),isoInfo("pjm")].filter(function(x){return x.series.length;});
+    var surge=I.filter(function(x){return x.surge;});
+    if(surge.length){var bn=div();bn.style.cssText="border:1px solid var(--red);background:rgba(255,82,82,.12);color:var(--red);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:13px;font-weight:700;letter-spacing:1px";
+      bn.innerHTML="⚠ LOCAL GAS DEMAND SURGE<div style='font-size:11px;font-weight:400;letter-spacing:0;margin-top:4px;color:var(--text)'>"+surge.map(function(x){return x.key.toUpperCase()+": "+enFmt(x.mw)+" MW "+(x.key==="ercot"?"renewable shortfall":"load over forecast")+" → fast-start gas ≈ "+enFmt(x.burn)+" MMBtu/hr";}).join(" · ")+"</div>";gw.appendChild(bn);}
+    var MAP={ercot:{hub:"Houston Hub",pipes:["Transco (Z1/Z2)","Texas Eastern (ETX)","El Paso (Permian supply)"]},pjm:{hub:"Dominion Hub",pipes:["Transco (Z5)","Texas Eastern (M2/M3)","Columbia / Dominion Transmission"]}};
+    var cards=I.map(function(x){
+      var last=x.series[x.series.length-1],mp=MAP[x.key];
+      var sp=x.hub?(x.hub.rt!=null?"RT "+enPx(x.hub.rt):"")+(x.hub.da!=null?" · DA "+enPx(x.hub.da):""):"hub price n/a";
+      var ch=enChart([{pts:x.series.map(function(r){return [enTs(r.t),x.key==="ercot"?r.f:r.a];}),color:"#ff8c00",dash:true},{pts:x.series.map(function(r){return [enTs(r.t),x.key==="ercot"?r.a:r.f];}),color:"#00d4d4"}],null,{h:150,tickCount:4,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
+      return "<div class='card' style='margin-bottom:12px'><div class='card-t'>"+x.key.toUpperCase()+" · "+mp.hub+"</div>"+
+        "<div style='font-size:11px;color:var(--text3);margin:6px 0'>Feeds: "+mp.pipes.join(" · ")+"<br>"+sp+"</div>"+
+        "<div style='display:flex;gap:18px;flex-wrap:wrap;margin:8px 0'><div><div class='cl'>"+(x.key==="ercot"?"Shortfall":"Over forecast")+"</div><div class='cv' style='color:"+(x.surge?"var(--red)":"var(--text)")+"'>"+enFmt(x.mw)+" MW</div></div><div><div class='cl'>Peaker burn</div><div class='cv'>"+enFmt(x.burn)+"</div><div class='cs'>MMBtu/hr @ "+x.HR+"</div></div><div><div class='cl'>4h sustained</div><div class='cv'>"+enFmt(x.burn*4/1000,0)+"k</div><div class='cs'>MMBtu</div></div></div>"+
+        ch+enLegend([[x.key==="ercot"?"Actual wind+solar":"DA load forecast",x.key==="ercot"?"#00d4d4":"#ff8c00"],[x.key==="ercot"?"Forecast":"Actual load",x.key==="ercot"?"#ff8c00":"#00d4d4"]])+"</div>";
+    }).join("");
+    var cfg="<div style='display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end'><div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>Peaker heat rate (MMBtu/MWh)</div>"+enInp("hr",ls("en_hr",10.5),"",80,"0.1")+"</div><div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>Surge alert threshold (MW)</div>"+enInp("thr",ls("en_thr",1500),"",80,"50")+"</div></div><div style='font-size:10px;color:var(--text3);margin-top:6px'>Burn = MW shortfall × heat rate. ERCOT shortfall = forecast − actual wind+solar; PJM has no renewable feed here, so it uses load above day-ahead forecast. Pipeline mapping is indicative.</div>";
+    var d=div();d.innerHTML=cards;gw.appendChild(d);
+    if(!I.length)gw.appendChild(enCard("Nodal Mapper","<div style='color:var(--text3);font-size:12px'>No renewable/load series in energy.json yet.</div>"));
+    gw.appendChild(enCard("Burn Assumptions",cfg));
+  }
+  function m3(){
+    gw.appendChild(enHead("Trade Signals","rule engine → derivative structures","en-sec-sig"));
+    var P=px(),S=spreads(),R=ls("en_rules",{}),W=D.weather||[],ST=(D.storage||[]).filter(function(x){return x.code==="R48";})[0];
+    var tW=R.waha!=null?R.waha:-0.50,tA=R.alq!=null?R.alq:1.00,tH=R.hdd!=null?R.hdd:10,tS=R.stor!=null?R.stor:-2;
+    var now=new Date(),yr=now.getFullYear()+(now.getMonth()>=0?1:0),jan="NGF"+String(yr).slice(2),apr="NGJ"+String(yr).slice(2);
+    var wh=(P.WAHA!=null&&P.HH!=null)?P.WAHA-P.HH:null,al=(P.ALQ!=null&&P.HH!=null)?P.ALQ-P.HH:null;
+    var ne=W.filter(function(w){return w.city==="New York City"||w.city==="Philadelphia";}),hdd=ne.length?Math.max.apply(null,ne.map(function(w){return w.hddA7;})):null;
+    var cards=[];
+    cards.push({t:"Permian Bottleneck",s:wh==null?"NO DATA":wh<=tW?"ACTIVE":wh<=tW/2?"WATCH":"IDLE",legs:[["LONG","NYMEX NG (NG)"],["SHORT","ICE WAH basis (Waha)"]],struct:"Long NG / Short WAH basis",why:wh==null?"Enter Waha and Henry Hub prices.":"Waha − HH = "+enPx(wh)+" (trigger ≤ "+enPx(tW)+"). Takeaway pipe is full when Waha trades at a deep discount."});
+    var aS=al==null?"NO DATA":(al>=tA&&hdd!=null&&hdd>=tH)?"ACTIVE":(al>=tA||(hdd!=null&&hdd>=tH))?"WATCH":"IDLE";
+    cards.push({t:"New England Cold Snap",s:aS,legs:[["LONG","ICE ALQ basis (Algonquin)"],["SHORT","NYMEX NG (NG)"]],struct:"Long ALQ basis / Short NG",why:(al==null?"Enter Algonquin and Henry Hub prices. ":"ALQ − HH = "+enPx(al)+" (trigger ≥ "+enPx(tA)+"). ")+(hdd==null?"No NYC/PHL weather.":"7-day HDD vs normal (NYC/PHL, max) = "+(hdd>=0?"+":"")+hdd.toFixed(1)+" (trigger ≥ +"+tH+").")});
+    var sS=ST&&ST.devPct!=null?(ST.devPct<=tS?"ACTIVE":ST.devPct<=0?"WATCH":"IDLE"):"NO DATA";
+    cards.push({t:"Storage Calendar Spread",s:sS,legs:[["LONG",jan+" (Jan NG)"],["SHORT",apr+" (Apr NG)"]],struct:"NG Jan/Apr winter spread",why:ST&&ST.devPct!=null?"Lower 48 storage "+enFmt(ST.bcf)+" Bcf, "+(ST.devPct>=0?"+":"")+ST.devPct+"% vs 5-yr avg (trigger ≤ "+tS+"%). Deficit widens the winter premium.":"Needs EIA storage — add the EIA_API_KEY secret (see Physical Indicators)."});
+    var html=cards.map(function(c){var col=enStatusCol(c.s);
+      return "<div class='card' style='margin-bottom:12px;border-left:3px solid "+col+"'><div style='display:flex;justify-content:space-between;align-items:center;gap:8px'><div class='card-t' style='margin:0'>"+c.t+"</div>"+enBadge(c.s,col)+"</div>"+
+        "<div style='display:flex;gap:8px;flex-wrap:wrap;margin:10px 0'>"+c.legs.map(function(l){var lc=l[0]==="LONG"?"var(--green)":"var(--red)";return "<div style='border:1px solid "+lc+";border-radius:3px;padding:6px 10px;font-size:12px'><b style='color:"+lc+";letter-spacing:1px'>"+l[0]+"</b> "+l[1]+"</div>";}).join("")+"</div>"+
+        "<div style='font-size:11px;color:var(--text)'><b>Structure:</b> "+c.struct+"</div><div style='font-size:11px;color:var(--text3);margin-top:4px'>"+c.why+"</div></div>";}).join("");
+    var th="<div style='display:flex;gap:14px;flex-wrap:wrap'>"+[["Waha−HH ≤","rule:waha",tW],["ALQ−HH ≥","rule:alq",tA],["NE HDD anom ≥","rule:hdd",tH],["Storage dev % ≤","rule:stor",tS]].map(function(x){return "<div><div style='font-size:10px;color:var(--text3);margin-bottom:3px'>"+x[0]+"</div>"+enInp(x[1],x[2],"",74)+"</div>";}).join("")+"</div><div style='font-size:10px;color:var(--text3);margin-top:6px'>Signals are screens, not advice. Contract months roll automatically to the next Jan/Apr.</div>";
+    var d=div();d.innerHTML=html;gw.appendChild(d);gw.appendChild(enCard("Rule Thresholds",th));
+  }
+  function m4(){
+    gw.appendChild(enHead("Physical Grid Indicators","pipeline notices · EIA storage","en-sec-phy"));
+    var N=ls("en_notices",[]);
+    var tick=N.length?"<div style='display:flex;flex-wrap:wrap;gap:8px'>"+N.map(function(n,i){var c=EN_NTYPE[n.type]||"var(--text3)";return "<span style='border:1px solid "+c+";color:"+c+";border-radius:3px;padding:5px 9px;font-size:11px'><span style='display:inline-block;width:7px;height:7px;border-radius:50%;background:"+c+";margin-right:6px'></span><b>"+n.pipe+"</b> · "+n.type+(n.text?" · "+n.text:"")+" <a href='#' data-del='"+i+"' style='color:var(--text3);margin-left:6px;text-decoration:none'>×</a></span>";}).join("")+"</div>":"<div style='color:var(--text3);font-size:12px'>No active notices logged.</div>";
+    var sel=function(id,opts){return "<select data-id='"+id+"' style='background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:12px;padding:5px;border-radius:3px'>"+opts.map(function(o){return "<option>"+o+"</option>";}).join("")+"</select>";};
+    var form="<div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px'>"+sel("n:pipe",EN_PIPES)+sel("n:type",Object.keys(EN_NTYPE))+"<input data-id='n:text' placeholder='e.g. Z6 NY strict OFO, 3% tolerance' style='flex:1;min-width:160px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:12px;padding:6px;border-radius:3px'><button class='btn' data-add='1' style='min-height:32px;padding:0 12px;font-size:11px'>ADD</button></div>"+
+      "<div style='font-size:10px;color:var(--text3);margin-top:8px'>Pipeline EBBs have no public API — log notices here as you see them. Open the EBBs: "+EN_EBB.map(function(l){return "<a href='"+l[1]+"' target='_blank' rel='noopener' style='color:var(--accent)'>"+l[0]+" ↗</a>";}).join(" · ")+"</div>";
+    gw.appendChild(enCard("Pipeline Notice Ticker (OFO · Force Majeure · Pressure)",tick+form));
+    var ST=D.storage||[];
+    if(ST.length){
+      var g=ST.map(function(s){var dv=s.devPct,c=dv==null?"var(--text3)":dv<-2?"var(--red)":dv>2?"var(--green)":"var(--amber)";
+        var pos=s.avg5?Math.max(0,Math.min(100,s.bcf/(s.avg5*1.4)*100)):50,ap=s.avg5?Math.min(100,100/1.4):0;
+        return "<div style='border:1px solid var(--border);border-radius:4px;padding:10px 12px;background:var(--panel2)'><div style='display:flex;justify-content:space-between;font-size:11px'><b>"+s.name+"</b><span style='color:"+c+"'>"+(dv==null?"—":(dv>=0?"+":"")+dv+"% vs 5y")+"</span></div>"+
+          "<div style='font-size:20px;margin:4px 0'>"+enFmt(s.bcf)+" <span style='font-size:10px;color:var(--text3)'>Bcf</span></div>"+
+          "<div style='position:relative;height:8px;background:var(--border);border-radius:4px'><div style='height:8px;width:"+pos+"%;background:"+c+";border-radius:4px'></div><div style='position:absolute;top:-3px;bottom:-3px;left:"+ap+"%;border-left:2px solid var(--text)'></div></div>"+
+          "<div style='font-size:10px;color:var(--text3);margin-top:5px'>"+(s.chg==null?"":(s.chg>=0?"Injection +":"Withdrawal ")+enFmt(s.chg,0)+" Bcf wk")+" · 5y avg "+enFmt(s.avg5)+" · wk "+s.period+"</div><div style='margin-top:4px'>"+enSpark(s.series,c,110,22)+"</div></div>";}).join("");
+      var d=div("g3");d.style.marginBottom="12px";d.innerHTML=g;gw.appendChild(enCard("EIA Weekly Working Gas — Regional Storage",""));gw.lastChild.lastChild.appendChild(d);
+    }else gw.appendChild(enCard("EIA Weekly Working Gas — Regional Storage","<div style='color:var(--text3);font-size:12px'>Storage feed not enabled. Add a free <b>EIA_API_KEY</b> (eia.gov/opendata) as a GitHub repo secret and pass it as an env var in update-energy.yml. "+((D.errors&&D.errors.storage)?"<br><span style='font-family:monospace'>"+D.errors.storage+"</span>":"")+"</div>"));
+  }
+  function draw(){gw.innerHTML="";m1();m2();m3();m4();}
+  gw.addEventListener("change",function(e){
+    var t=e.target,id=t.getAttribute&&t.getAttribute("data-id");if(!id)return;
+    var parts=id.split(":"),a=parts[0],k=parts.slice(1).join(":"),v=enNum(t.value);
+    if(a==="px"){var m=ls("en_hubpx",{});if(v==null)delete m[k];else m[k]=v;ss("en_hubpx",m);}
+    else if(a==="tar"||a==="fuel"){var C=ls("en_corr",{});C[k]=C[k]||{};C[k][a==="tar"?"t":"f"]=v;ss("en_corr",C);}
+    else if(a==="hr"){ss("en_hr",v==null?10.5:v);}
+    else if(a==="thr"){ss("en_thr",v==null?1500:v);}
+    else if(a==="rule"){var R=ls("en_rules",{});if(v==null)delete R[k];else R[k]=v;ss("en_rules",R);}
+    else return;
+    var keep=document.activeElement&&document.activeElement.getAttribute?document.activeElement.getAttribute("data-id"):null;
+    setTimeout(function(){var ae=document.activeElement&&document.activeElement.getAttribute?document.activeElement.getAttribute("data-id"):keep;draw();if(ae){var n=gw.querySelector("[data-id='"+ae+"']");if(n)n.focus();}},0);
+  });
+  gw.addEventListener("click",function(e){
+    var t=e.target;
+    if(t.getAttribute&&t.getAttribute("data-del")!=null){e.preventDefault();var N=ls("en_notices",[]);N.splice(+t.getAttribute("data-del"),1);ss("en_notices",N);draw();}
+    else if(t.getAttribute&&t.getAttribute("data-add")){var g=function(i){return gw.querySelector("[data-id='"+i+"']").value;};var N2=ls("en_notices",[]);N2.unshift({pipe:g("n:pipe"),type:g("n:type"),text:g("n:text").trim(),ts:Date.now()});ss("en_notices",N2.slice(0,40));draw();}
+  });
+  draw();
+}
 function enSecFlow(wrap){
   wrap.appendChild(enHead("How To Use This",null,"en-sec-flow"));
   function box(title,col,items,corner){
@@ -12031,13 +12173,13 @@ function energyTab(){
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
     var eia=h("a",{className:"btn",href:"https://www.eia.gov/naturalgas/weekly/supplement/",target:"_blank",rel:"noopener"},["EIA ↗"]);eia.style.cssText="min-height:36px;padding:0 12px;font-size:11px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;";btns.appendChild(eia);
     var rb=h("button",{className:"btn",title:"Refresh","aria-label":"Refresh"},[_en.busy?"…":"↻"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
-    enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecFlow(body);
+    enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecGas(D,body);enSecFlow(body);
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
   }
   var navHold=div();navHold.style.cssText="margin-top:10px;";
   var nav=div();nav.style.cssText="z-index:150;background:var(--bg);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 0;border-bottom:1px solid var(--border);box-sizing:border-box;";
-  [["LOAD & FUEL","en-sec-load","#00d4d4"],["PRICES","en-sec-lmp","#00e676"],["SPARK","en-sec-spark","#ffab00"],["WEATHER","en-sec-macro","#b06aff"],["WORKFLOW","en-sec-flow","#ff6b6b"]].forEach(function(j){
+  [["LOAD & FUEL","en-sec-load","#00d4d4"],["PRICES","en-sec-lmp","#00e676"],["SPARK","en-sec-spark","#ffab00"],["WEATHER","en-sec-macro","#b06aff"],["SPREADS","en-sec-spr","#00e676"],["NODAL","en-sec-nod","#00d4d4"],["SIGNALS","en-sec-sig","#ffab00"],["PHYSICAL","en-sec-phy","#ff6b6b"],["WORKFLOW","en-sec-flow","#ff6b6b"]].forEach(function(j){
     var b=h("button",{className:"btn"},[j[0]]);b.style.cssText="flex-shrink:0;min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap;color:"+j[2]+";border-color:"+j[2]+";background:"+j[2]+"1a;";
     b.addEventListener("click",function(){var t=document.getElementById(j[1]);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
     nav.appendChild(b);
