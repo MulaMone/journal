@@ -278,6 +278,21 @@ def pjm():
         out.setdefault("pjm", {})["fuel"] = rows[-48:]
     except Exception as e:
         out["errors"]["pjm_fuel"] = str(e)[:200]
+    try:  # Economic Max (daily total MW offered, posted ~5 AM ET) — latest row
+        j = rget("https://api.pjm.com/api/v1/day_gen_capacity", params={"rowCount": 3, "startRow": 1, "sort": "bid_datetime_beginning_ept", "order": "Desc"},
+                 headers={"Ocp-Apim-Subscription-Key": key}, timeout=30).json()
+        items = j.get("items") if isinstance(j, dict) else j
+        r0 = (items or [None])[0]
+        if not r0:
+            raise ValueError("no day_gen_capacity rows")
+        low = {str(k).lower(): v for k, v in r0.items()}
+        ek = next((k for k in low if "econom" in k), None)
+        if ek is None:
+            raise ValueError("no economic max field: " + ",".join(low)[:120])
+        out.setdefault("pjm", {})["capacity"] = {"economicMax": num(low[ek]),
+            "date": next((str(v) for k, v in low.items() if "datetime_beginning_ept" in k), None)}
+    except Exception as e:
+        out["errors"]["pjm_econmax"] = f"{type(e).__name__}: {e}"[:200]
 
 
 # ───────────────────────── Outages ─────────────────────────
