@@ -286,7 +286,7 @@ def pjm():
         if not r0:
             raise ValueError("no day_gen_capacity rows")
         low = {str(k).lower(): v for k, v in r0.items()}
-        ek = next((k for k in low if "econom" in k), None)
+        ek = next((k for k in low if "econom" in k or k.startswith("eco_max")), None)
         if ek is None:
             raise ValueError("no economic max field: " + ",".join(low)[:120])
         out.setdefault("pjm", {})["capacity"] = {"economicMax": num(low[ek]),
