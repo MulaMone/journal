@@ -8665,9 +8665,7 @@ function buildRrpShiftAlert(data,isM){
 // one can't be embedded directly.
 var MACRO_EXTERNAL_LINKS=[
   {label:"Atlanta Fed SOFR Skew →",url:"https://www.atlantafed.org/research-and-data/data/market-probability-tracker",note:"Market Probability Tracker — full options-implied SOFR distribution"},
-  {label:"Citi Surprise Index (CESI) →",url:"https://yardeni.com/charts/us-economy/us-economic-indicators/citigroup-economic-surprise",note:"Economic data vs. consensus"},
-  {label:"Baker Hughes Rig Count →",url:"https://rigcount.bakerhughes.com/na-rig-count",note:"Weekly, Fridays — US/Canada oil & gas rigs"},
-  {label:"Fed Beige Book →",url:"https://www.federalreserve.gov/monetarypolicy/beigebook.htm",note:"Regional economic conditions, 8x/yr ahead of FOMC"}
+  {label:"Citi Surprise Index (CESI) →",url:"https://yardeni.com/charts/us-economy/us-economic-indicators/citigroup-economic-surprise",note:"Economic data vs. consensus"}
 ];
 // Treasury's Quarterly Refunding process lands in two parts, a few days
 // apart — the Monday "how much" release and the Wednesday "which bucket"
@@ -8767,17 +8765,24 @@ function buildMacroExternalLinks(){
   card.appendChild(head);
   card.appendChild(buildQraScheduleBlock());
   var linksRow=div();linksRow.style.cssText="display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 28px;margin-top:8px;padding-top:10px;border-top:1px solid var(--border);";
-  MACRO_EXTERNAL_LINKS.forEach(function(L){
-    var g=div();g.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
-    var a=h("a",{href:L.url,target:"_blank",rel:"noopener"});
-    a.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
-    a.textContent=L.label;
-    g.appendChild(a);
-    var n=div();n.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
-    n.textContent=L.note;
-    g.appendChild(n);
-    linksRow.appendChild(g);
-  });
+  var atlantaGroup=div();atlantaGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
+  var atlantaA=h("a",{href:MACRO_EXTERNAL_LINKS[0].url,target:"_blank",rel:"noopener"});
+  atlantaA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  atlantaA.textContent=MACRO_EXTERNAL_LINKS[0].label;
+  atlantaGroup.appendChild(atlantaA);
+  var atlantaNote=div();atlantaNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
+  atlantaNote.textContent=MACRO_EXTERNAL_LINKS[0].note;
+  atlantaGroup.appendChild(atlantaNote);
+  linksRow.appendChild(atlantaGroup);
+  var cesiGroup=div();cesiGroup.style.cssText="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;";
+  var cesiA=h("a",{href:MACRO_EXTERNAL_LINKS[1].url,target:"_blank",rel:"noopener"});
+  cesiA.style.cssText="color:var(--accent);text-decoration:underline;font-size:13px;flex-shrink:0;";
+  cesiA.textContent=MACRO_EXTERNAL_LINKS[1].label;
+  cesiGroup.appendChild(cesiA);
+  var cesiNote=div();cesiNote.style.cssText="font-size:11px;color:var(--text3);line-height:1.4;";
+  cesiNote.textContent=MACRO_EXTERNAL_LINKS[1].note;
+  cesiGroup.appendChild(cesiNote);
+  linksRow.appendChild(cesiGroup);
   card.appendChild(linksRow);
   return card;
 }
@@ -11944,6 +11949,18 @@ function enSecMacro(D,wrap){
     });
     wrap.appendChild(g);
   }
+  var RG=D.rigs||[];
+  var rh="";
+  if(RG.length){
+    rh=RG.map(function(r){
+      var c=r.chg>0?"var(--green)":r.chg<0?"var(--red)":"var(--text3)";
+      return "<div style='margin-bottom:10px'><div style='font-size:10px;color:var(--text3)'>"+r.name+" · "+r.period+"</div>"+
+        "<div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(r.value)+" <span style='font-size:12px;color:"+c+"'>"+(r.chg>0?"+":"")+enFmt(r.chg)+" m/m</span></div>"+
+        enSpark(r.series,"#00d4d4",200,28)+"</div>";
+    }).join("")+"<div style='font-size:9px;color:var(--text3)'>EIA, Baker Hughes-sourced. Monthly, published with a long lag — not the weekly Friday count.</div>";
+  }else{rh="<div style='font-size:11px;color:var(--text3)'>Rig count unavailable"+((D.errors&&D.errors.rigs)?" ("+D.errors.rigs+")":"")+".</div>";}
+  rh+="<div style='margin-top:10px'><a href='"+(D.beigeBook||"https://www.federalreserve.gov/monetarypolicy/beigebook.htm")+"' target='_blank' rel='noopener' style='color:var(--accent);font-size:11px'>Fed Beige Book ↗</a></div>";
+  wrap.appendChild(enCard("Rig Count (EIA) & Beige Book",rh));
   var O=D.outages&&D.outages.ercot,L=D.links||[];
   var oh=(O?"<div class='cv'>"+enFmt(O.totalMW)+" <span style='font-size:11px;color:var(--text3)'>MW ERCOT resource outages (hourly report)</span></div>":"<div style='font-size:11px;color:var(--text3)'>Resource outage feed unavailable.</div>")+
     "<div style='font-size:10px;color:var(--text3);margin:8px 0'>Flowgate / transmission outages have no free machine-readable feed through gridstatus — use the ISO pages:</div>"+
