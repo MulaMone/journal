@@ -11667,10 +11667,10 @@ function newsFeedTab(){
   var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Market News";
   var meta=div();meta.id="nf-meta";meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";
   l.appendChild(t);l.appendChild(meta);
-  var rb=h("button",{className:"btn"},["↻ REFRESH"]);
+  var rb=h("button",{className:"btn"},[isMobile()?"↻":"↻ REFRESH"]);
   rb.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;flex-shrink:0;";
   rb.addEventListener("click",function(){newsFeedFetch(true);});
-  var wm=h("a",{className:"btn",href:"https://www.worldmonitor.app/dashboard?zoom=1.00&view=global&timeRange=7d&layers=iranAttacks%2Chotspots%2Cconflicts%2Cbases%2Cnuclear%2Cmilitary%2Cweather%2CcanadaAlerts%2Coutages%2Cnatural%2Cwaterways%2Ceconomic%2Csanctions",target:"_blank",rel:"noopener"},["🌐 WORLD"]);
+  var wm=h("a",{className:"btn",href:"https://www.worldmonitor.app/dashboard?zoom=1.00&view=global&timeRange=7d&layers=iranAttacks%2Chotspots%2Cconflicts%2Cbases%2Cnuclear%2Cmilitary%2Cweather%2CcanadaAlerts%2Coutages%2Cnatural%2Cwaterways%2Ceconomic%2Csanctions",target:"_blank",rel:"noopener",title:"World Monitor","aria-label":"World Monitor"},["🌐"]);
   wm.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;flex-shrink:0;";
   var rt=div();rt.style.cssText="display:flex;gap:6px;align-items:center;flex-shrink:0;";rt.appendChild(wm);rt.appendChild(rb);
   hd.appendChild(l);hd.appendChild(rt);wrap.appendChild(hd);
@@ -11973,8 +11973,8 @@ function energyTab(){
     var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
     if(isos.length>1)isos.forEach(function(k){var b=h("button",{className:"btn"},[k.toUpperCase()]);b.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.iso===k?"color:var(--accent);border-color:var(--accent);":"");b.addEventListener("click",function(){_en.iso=k;paint();});btns.appendChild(b);});
-    var rb=h("button",{className:"btn"},[_en.busy?"…":"↻ REFRESH"]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
     var eia=h("a",{className:"btn",href:"https://www.eia.gov/naturalgas/weekly/supplement/",target:"_blank",rel:"noopener"},["EIA ↗"]);eia.style.cssText="min-height:36px;padding:0 12px;font-size:11px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;";btns.appendChild(eia);
+    var rb=h("button",{className:"btn"},[_en.busy?"…":(isMobile()?"↻":"↻ REFRESH")]);rb.style.cssText="min-height:36px;padding:0 12px;font-size:11px;"+(_en.busy?"opacity:.5;":"");rb.addEventListener("click",function(){if(_en.busy)return;_en.busy=true;enRefresh(function(m,c){st.textContent=m;st.style.color=c||"var(--text3)";},function(){if(State.tab==="energy")paint();}).then(function(){_en.busy=false;if(State.tab==="energy")paint();});});btns.appendChild(rb);
     enSecLoad(D,body);enSecLmp(D,body);enSecSpark(D,body);enSecMacro(D,body);enSecFlow(body);
     var errs=Object.keys(D.errors||{});
     if(errs.length){var e=div();e.style.cssText="margin-top:16px;font-size:10px;color:var(--text3);font-family:monospace;line-height:1.6;";e.innerHTML="<b>Feed notes:</b><br>"+errs.map(function(k){return k+": "+D.errors[k];}).join("<br>");body.appendChild(e);}
