@@ -945,6 +945,8 @@ function checkImagesChanged(callback){
 function getMktSyncId(){return getSyncId()+"__mkt";}
 var _mktPullP=null,_mktPullAt=0;
 function _cmeEffAt(o){if(!o)return 0;var e=o.final||o.prelim;return e&&e.fetchedAt?e.fetchedAt:0;}
+function gexPrevGet(){try{return JSON.parse(localStorage.getItem("edge_gex_prev")||"{}")||{};}catch(e){return {};}}
+function gexPrevSet(o){try{localStorage.setItem("edge_gex_prev",JSON.stringify(o));}catch(e){}}
 function loadMktFromCloud(force){
   if(!force&&_mktPullP&&(Date.now()-_mktPullAt)<20000) return _mktPullP;
   _mktPullAt=Date.now();
@@ -964,6 +966,12 @@ function loadMktFromCloud(force){
           if(JSON.stringify(out)!==JSON.stringify(local)){voiHistCacheSet(sym2,out);changed=true;}
         }
       });
+      if(s.gex_prev){
+        var gl=gexPrevGet(),gch=false;
+        Object.keys(s.gex_prev).forEach(function(k){var c=s.gex_prev[k],l=gl[k];
+          if(c&&(!l||(c.t||0)>(l.t||0))){gl[k]=c;gch=true;}});
+        if(gch){gexPrevSet(gl);changed=true;}
+      }
       var ff=s.fedfunds,lf=fedFundsCacheGet();
       if(ff&&ff.fetchedAt&&(!lf||ff.fetchedAt>(lf.fetchedAt||0))){fedFundsCacheSet(ff);changed=true;}
       return changed;
@@ -975,7 +983,7 @@ function syncMktToCloud(){
     var payload={user_id:getMktSyncId(),trades:[],levels:[],week_levels:[],
       settings:{cme_oi:{ES:cmeOiCacheGet("ES"),NQ:cmeOiCacheGet("NQ")},
                 voi_hist:{ES:voiHistCacheGet("ES"),NQ:voiHistCacheGet("NQ")},
-                fedfunds:fedFundsCacheGet()},
+                fedfunds:fedFundsCacheGet(),gex_prev:gexPrevGet()},
       updated_at:new Date().toISOString()};
     return supaFetch("POST","edge_data",payload);
   }).catch(function(){});
@@ -10762,8 +10770,7 @@ function analystTab(){
   // Direction of the last change of each OI level (per symbol + category), kept in
   // localStorage: arrow shows whether the level moved up or down vs its previous value.
   function gexTrack(d){
-    var st={};
-    try{st=JSON.parse(localStorage.getItem("edge_gex_prev")||"{}")||{};}catch(e){}
+    var st=gexPrevGet(),dirty=false;
     ["ES","NQ"].forEach(function(s){
       if(!d[s]) return;
       d[s]._arr={};
@@ -10771,13 +10778,18 @@ function analystTab(){
         var k=s+"|"+(d[s]._cat||"")+"|"+f,e=st[k],v=d[s][f];
         if(typeof v!=="number") return;
         if(!e) e={v:v,dir:0};
-        else if(e.v!==v) e={v:v,prev:e.v,dir:v>e.v?1:-1};
+        else if(e.v!==v){e={v:v,prev:e.v,dir:v>e.v?1:-1,t:Date.now()};dirty=true;}
         st[k]=e;d[s]._arr[f]={dir:e.dir,prev:e.prev};
       });
     });
-    try{localStorage.setItem("edge_gex_prev",JSON.stringify(st));}catch(e){}
+    gexPrevSet(st);
+    if(dirty) syncMktToCloud();
   }
   function renderGex(d){
+    // Pull the shared OI baseline first so every device shows the same PREV/arrow.
+    loadMktFromCloud(false).then(function(){renderGex2(d);},function(){renderGex2(d);});
+  }
+  function renderGex2(d){
     gexTrack(d);
     gexBody.innerHTML="";
     var row=div();row.style.cssText="display:grid;grid-template-columns:"+(isM?"1fr":"1fr 1fr")+";gap:11px;margin-bottom:12px;";
