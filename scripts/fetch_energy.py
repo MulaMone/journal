@@ -278,6 +278,18 @@ def pjm():
         out.setdefault("pjm", {})["fuel"] = rows[-48:]
     except Exception as e:
         out["errors"]["pjm_fuel"] = str(e)[:200]
+    try:  # Economic Max (daily total MW offered, posted ~5 AM ET): latest row + prior day for the delta
+        j = rget("https://api.pjm.com/api/v1/day_gen_capacity", params={"rowCount": 3, "startRow": 1, "sort": "bid_datetime_beginning_ept", "order": "Desc"},
+                 headers={"Ocp-Apim-Subscription-Key": key}, timeout=30).json()
+        items = (j.get("items") if isinstance(j, dict) else j) or []
+        if not items:
+            raise ValueError("no day_gen_capacity rows")
+        out.setdefault("pjm", {})["capacity"] = {
+            "economicMax": num(items[0].get("eco_max")),
+            "prev": num(items[1].get("eco_max")) if len(items) > 1 else None,
+            "date": str(items[0].get("bid_datetime_beginning_ept"))}
+    except Exception as e:
+        out["errors"]["pjm_econmax"] = f"{type(e).__name__}: {e}"[:200]
     try:  # Primary (contingency) operational reserves — latest 15-second reading, RTO level
         j = rget("https://api.pjm.com/api/v1/operational_reserves", params={"rowCount": 60, "startRow": 1, "sort": "datetime_beginning_ept", "order": "Desc"},
                  headers={"Ocp-Apim-Subscription-Key": key}, timeout=30).json()
