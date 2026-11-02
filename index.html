@@ -11773,7 +11773,8 @@ function enChart(lines,areas,opt){
   var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs);if(x1===x0)x1=x0+1;
   if(opt.zero!==false&&ymin>0&&areas&&areas.length) ymin=0;
   var pad=(ymax-ymin)*0.06||1;ymax+=pad;if(!(areas&&areas.length))ymin-=pad;
-  var nt=niceTicks(ymin,ymax,4),tk=nt.ticks;
+  if(opt.ymax) ymax=opt.ymax; // caller-set ceiling (e.g. highest committed capacity + 10%)
+  var nt=niceTicks(ymin,ymax,opt.tickCount||4),tk=nt.ticks;
   function X(t){return L+(t-x0)/(x1-x0)*(W-L-R);}
   function Y(v){return T+(1-(v-tk[0])/((tk[tk.length-1]-tk[0])||1))*(H-T-B);}
   var s="";
@@ -11835,7 +11836,7 @@ function enSecLoad(D,wrap){
   var loadSvg=enChart([
     {pts:rows.map(function(r){return [enTs(r.t),r.forecast];}),color:"#ff8c00",dash:true},
     {pts:rows.map(function(r){return [enTs(r.t),r.actual];}),color:"#00d4d4"}
-  ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]),null,{nowMs:last?enTs(last.t):null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
+  ].concat(hasCom?[{pts:rows.map(function(r){return [enTs(r.t),r.committed==null?null:r.committed];}),color:"#a78bfa"}]:[]),null,{nowMs:last?enTs(last.t):null,tickCount:6,ymax:hasCom?Math.max.apply(null,rows.map(function(r){return r.committed||0;}))*1.1:null,yfmt:function(v){return (v/1000).toFixed(0)+"k";}});
   wrap.appendChild(enCard("Load · Real-Time vs Day-Ahead Forecast (MW)",
     "<div style='margin-bottom:8px'>"+sig+(last?" <span style='font-size:11px;color:var(--text3);margin-left:8px'>Actual "+enFmt(last.actual)+" · Fcst "+enFmt(last.forecast)+(last.committed!=null?" · Committed "+enFmt(last.committed):"")+(primRes!=null?" · Primary Reserve "+enFmt(primRes)+(I.reserves.requirement!=null?" (req "+enFmt(I.reserves.requirement)+")":""):"")+" MW</span>":"")+"</div>"+loadSvg+
     enLegend([["Actual (RT)","#00d4d4"],["Forecast (DA)","#ff8c00"]].concat(hasCom?[["Committed Capacity","#a78bfa"]]:[]))+
@@ -11844,7 +11845,7 @@ function enSecLoad(D,wrap){
   var order=["nuclear","coal","gasCC","gasPeaker","gas","wind","solar","other"];
   var keys=order.filter(function(k){return fm.some(function(r){return r[k]>0;});});
   wrap.appendChild(enCard("Fuel Mix (MW)",
-    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
+    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{tickCount:6,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
     enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}))+
     (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")));
   if(key==="ercot"){
