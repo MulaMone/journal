@@ -447,11 +447,55 @@ def wind():
     out["windCorridors"] = res
 
 
+# ───────────────────────── EIA weekly storage (optional: EIA_API_KEY) ─────────────────────────
+STOR_REG = {"R48": "Lower 48", "R31": "East", "R32": "Midwest", "R33": "South Central", "R34": "Mountain", "R35": "Pacific"}
+
+
+@guard("storage")
+def storage():
+    key = os.environ.get("EIA_API_KEY")
+    if not key:
+        out["errors"]["storage"] = "EIA_API_KEY not set - add it as a repo secret + workflow env to enable regional storage"
+        return
+    start = (dt.date.today() - dt.timedelta(days=6 * 366)).isoformat()
+    r = rget("https://api.eia.gov/v2/natural-gas/stor/wkly/data/", params={
+        "api_key": key, "frequency": "weekly", "data[0]": "value", "facets[process][]": "SWO",
+        "start": start, "sort[0][column]": "period", "sort[0][direction]": "desc", "length": 5000}, timeout=40)
+    r.raise_for_status()
+    rows = r.json()["response"]["data"]
+    by = {}
+    for x in rows:
+        if x.get("duoarea") in STOR_REG and x.get("value") not in (None, ""):
+            by.setdefault(x["duoarea"], {})[x["period"]] = float(x["value"])
+    regs = []
+    for code, name in STOR_REG.items():
+        d = by.get(code)
+        if not d:
+            continue
+        per = sorted(d, reverse=True)
+        cur = dt.date.fromisoformat(per[0])
+        prev = d[per[1]] if len(per) > 1 else None
+        hist = []
+        for y in range(1, 6):
+            tgt = cur.replace(year=cur.year - y) if not (cur.month == 2 and cur.day == 29) else cur.replace(year=cur.year - y, day=28)
+            best = min(per, key=lambda p: abs((dt.date.fromisoformat(p) - tgt).days))
+            if abs((dt.date.fromisoformat(best) - tgt).days) <= 4:
+                hist.append(d[best])
+        avg = round(sum(hist) / len(hist), 1) if hist else None
+        regs.append({"code": code, "name": name, "period": per[0], "bcf": d[per[0]],
+                     "chg": round(d[per[0]] - prev, 1) if prev is not None else None,
+                     "avg5": avg, "devBcf": round(d[per[0]] - avg, 1) if avg else None,
+                     "devPct": round((d[per[0]] - avg) / avg * 100, 1) if avg else None,
+                     "series": [d[p] for p in reversed(per[:12])]})
+    if regs:
+        out["storage"] = regs
+
+
 if __name__ == "__main__":
     if ercot is not None:
         ercot_load(); ercot_fuel(); ercot_renew(); ercot_prices(); outages()
     pjm()
-    gas(); spark(); weather(); wind()
+    gas(); spark(); weather(); wind(); storage()
     out["links"] = [
         {"label": "ERCOT constraints / outages", "url": "https://www.ercot.com/gridmktinfo/dashboards"},
         {"label": "ERCOT transmission outages (MIS)", "url": "https://www.ercot.com/mp/data-products/data-product-details?id=NP3-233-CD"},
