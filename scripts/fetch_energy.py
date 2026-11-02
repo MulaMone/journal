@@ -42,6 +42,15 @@ def guard(name):
     return deco
 
 
+def ercot_recent(fn, *a, **k):
+    """ERCOT "today" reports are empty right after midnight CT; fall back to yesterday..now."""
+    try:
+        return fn("today", *a, **k)
+    except Exception:
+        now = pd.Timestamp.now(tz="US/Central")
+        return fn(now.normalize() - pd.Timedelta(days=1), *a, end=now, **k)
+
+
 def col(df, *needles, exclude=()):
     """first column whose lowercase name contains all needles"""
     for c in df.columns:
@@ -141,7 +150,7 @@ def ercot_renew():
     res = {}
     for key, fn, fcn in (("wind", ercot.get_wind_actual_and_forecast_hourly, "stwpf"),
                          ("solar", ercot.get_solar_actual_and_forecast_hourly, "stppf")):
-        d = fn("today")
+        d = ercot_recent(fn)
         ac = col(d, "gen", "system")
         fc = col(d, fcn, "system") or col(d, "cop", "system")
         tc = col(d, "interval start") or col(d, "time") or d.columns[0]
@@ -160,8 +169,8 @@ def ercot_renew():
 def ercot_prices():
     from gridstatus import Markets
     hubs = ["HB_NORTH", "HB_HOUSTON", "HB_SOUTH", "HB_WEST", "HB_PAN", "HB_BUSAVG"]
-    rt = ercot.get_spp("today", market=Markets.REAL_TIME_15_MIN, locations=hubs, location_type="Trading Hub")
-    da = ercot.get_spp("today", market=Markets.DAY_AHEAD_HOURLY, locations=hubs, location_type="Trading Hub")
+    rt = ercot_recent(ercot.get_spp, market=Markets.REAL_TIME_15_MIN, locations=hubs, location_type="Trading Hub")
+    da = ercot_recent(ercot.get_spp, market=Markets.DAY_AHEAD_HOURLY, locations=hubs, location_type="Trading Hub")
     pc = col(rt, "spp") or rt.columns[-1]
     dc = col(da, "spp") or da.columns[-1]
     rt = rt.sort_values("Interval Start")
