@@ -526,7 +526,15 @@ def rigs():
 # ───────────────────────── Baker Hughes weekly rig count (scraped from rigcount.bakerhughes.com summary) ─────────────────────────
 @guard("rigsWeekly")
 def rigs_weekly():
-    r = rget("https://rigcount.bakerhughes.com", headers={"User-Agent": "Mozilla/5.0 (edge-journal)"}, timeout=30)
+    hdr = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+           "Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.google.com/", "Upgrade-Insecure-Requests": "1",
+           "Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "cross-site", "Sec-Fetch-User": "?1"}
+    r = None
+    for url in ("https://rigcount.bakerhughes.com/", "https://rigcount.bakerhughes.com/na-rig-count"):
+        r = requests.get(url, headers=hdr, timeout=30)
+        if r.ok:
+            break
     r.raise_for_status()
     import re, html as _h
     txt = re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style).*?</\1>", " ", r.text))
