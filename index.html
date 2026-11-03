@@ -12052,19 +12052,40 @@ function enRigCard(D){
       });
       row.appendChild(iu);row.appendChild(ic);row.appendChild(sb);rm.appendChild(row);
     }
-    rm.innerHTML="<div style='font-size:10px;color:var(--text3)'>Loading Baker Hughes…</div>";
-    fetch(SUPA_URL+"/functions/v1/rig-count",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
-      .then(function(r){return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||("HTTP "+r.status));return j;});})
-      .then(function(j){
-        rm.innerHTML="";
-        [["us","U.S.","w/w"],["canada","Canada","w/w"],["international","International","m/m"]].forEach(function(k){
-          var x=j[k[0]];if(!x)return;
-          var c=x.chg>0?"var(--green)":x.chg<0?"var(--red)":"var(--text3)",cy=x.yoy>0?"var(--green)":x.yoy<0?"var(--red)":"var(--text3)";
-          var r=div();r.style.cssText="margin-bottom:10px";
-          r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · "+x.asOf+"</div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" "+k[2]+"</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
-          rm.appendChild(r);
+    function showRig(j){
+      rm.innerHTML="";
+      [["us","U.S.","w/w"],["canada","Canada","w/w"],["international","International","m/m"]].forEach(function(k){
+        var x=j[k[0]];if(!x)return;
+        var c=x.chg>0?"var(--green)":x.chg<0?"var(--red)":"var(--text3)",cy=x.yoy>0?"var(--green)":x.yoy<0?"var(--red)":"var(--text3)";
+        var r=div();r.style.cssText="margin-bottom:10px";
+        r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · "+x.asOf+"</div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" "+k[2]+"</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
+        rm.appendChild(r);
+      });
+    }
+    // Scraper quota: only call the function when a new Friday release (~2:30pm ET) has happened since the cached copy.
+    function lastRelease(now){
+      for(var d=0;d<=7;d++){
+        var ms=now-d*864e5,start=enDayStart(ms,"America/New_York");
+        if(new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short"}).format(new Date(ms))==="Fri"){var t=start+14.5*3600e3;if(t<=now)return t;}
+      }
+      return 0;
+    }
+    var now=Date.now(),rel=lastRelease(now),cache=ls("rig_cache",null),HR=3600e3;
+    var asOfOld=cache&&cache.data&&cache.data.us&&Date.parse(cache.data.us.asOf)<rel-2*864e5;
+    var need=!cache||cache.t<rel||(asOfOld&&now-cache.t>HR);
+    if(cache&&cache.fail&&now-cache.fail<HR)need=false;
+    if(cache&&cache.data)showRig(cache.data);
+    if(need){
+      if(!(cache&&cache.data))rm.innerHTML="<div style='font-size:10px;color:var(--text3)'>Loading Baker Hughes…</div>";
+      fetch(SUPA_URL+"/functions/v1/rig-count",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
+        .then(function(r){return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||("HTTP "+r.status));return j;});})
+        .then(function(j){ss("rig_cache",{t:Date.now(),data:j});showRig(j);})
+        .catch(function(e){
+          rigErr=String(e&&e.message||e);
+          ss("rig_cache",{t:cache?cache.t:0,data:cache?cache.data:null,fail:Date.now()});
+          if(!(cache&&cache.data))drawRm();
         });
-      }).catch(function(e){rigErr=String(e&&e.message||e);drawRm();});
+    }else if(!(cache&&cache.data))drawRm();
   }
   return rigCard;
 }
