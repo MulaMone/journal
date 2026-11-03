@@ -11949,7 +11949,6 @@ function enSecMacro(D,wrap){
     });
     wrap.appendChild(g);
   }
-  var RG=D.rigs||[];
   var RW=D.rigsWeekly||{},rw="";
   [["us","U.S."],["canada","Canada"]].forEach(function(k){
     var r=RW[k[0]];if(!r)return;
@@ -11959,14 +11958,6 @@ function enSecMacro(D,wrap){
   });
   var needMan=!rw;if(needMan)rw="<div id='rigman'></div>";
   var rh=rw;
-  if(RG.length){
-    rh+=RG.map(function(r){
-      var c=r.chg>0?"var(--green)":r.chg<0?"var(--red)":"var(--text3)";
-      return "<div style='margin-bottom:10px'><div style='font-size:10px;color:var(--text3)'>"+r.name+" · "+r.period+"</div>"+
-        "<div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(r.value)+" <span style='font-size:12px;color:"+c+"'>"+(r.chg>0?"+":"")+enFmt(r.chg)+" m/m</span></div>"+
-        enSpark(r.series,"#00d4d4",200,28)+"</div>";
-    }).join("")+"<div style='font-size:9px;color:var(--text3)'>EIA monthly (Baker Hughes-sourced, long lag).</div>";
-  }else{rh+="<div style='font-size:11px;color:var(--text3)'>Rig count unavailable"+((D.errors&&D.errors.rigs)?" ("+D.errors.rigs+")":"")+".</div>";}
   rh+="<div style='margin-top:10px'><a href='"+(D.beigeBook||"https://www.federalreserve.gov/monetarypolicy/beigebook.htm")+"' target='_blank' rel='noopener' style='color:var(--accent);font-size:11px'>Fed Beige Book ↗</a></div>";
   var rigCard=enCard("Rig Count & Beige Book",rh);
   wrap.appendChild(rigCard);
@@ -12001,11 +11992,11 @@ function enSecMacro(D,wrap){
       .then(function(r){return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||("HTTP "+r.status));return j;});})
       .then(function(j){
         rm.innerHTML="";
-        [["us","U.S."],["canada","Canada"]].forEach(function(k){
+        [["us","U.S.","w/w"],["canada","Canada","w/w"],["international","International","m/m"]].forEach(function(k){
           var x=j[k[0]];if(!x)return;
           var c=x.chg>0?"var(--green)":x.chg<0?"var(--red)":"var(--text3)",cy=x.yoy>0?"var(--green)":x.yoy<0?"var(--red)":"var(--text3)";
           var r=div();r.style.cssText="margin-bottom:10px";
-          r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · "+x.asOf+"</div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" w/w</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
+          r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · "+x.asOf+"</div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" "+k[2]+"</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
           rm.appendChild(r);
         });
       }).catch(function(e){rigErr=String(e&&e.message||e);drawRm();});
