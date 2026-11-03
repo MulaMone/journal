@@ -11949,6 +11949,7 @@ function enSecMacro(D,wrap){
     });
     wrap.appendChild(g);
   }
+  var RG=D.rigs||[];
   var RW=D.rigsWeekly||{},rw="";
   [["us","U.S."],["canada","Canada"]].forEach(function(k){
     var r=RW[k[0]];if(!r)return;
