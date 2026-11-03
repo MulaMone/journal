@@ -491,17 +491,50 @@ def storage():
         out["storage"] = regs
 
 
+# ───────────────────────── EIA rig count (monthly, Baker Hughes-sourced; needs EIA_API_KEY) ─────────────────────────
+@guard("rigs")
+def rigs():
+    key = os.environ.get("EIA_API_KEY")
+    if not key:
+        out["errors"]["rigs"] = "EIA_API_KEY not set"
+        return
+    r = rget("https://api.eia.gov/v2/petroleum/crd/drill/data/", params={
+        "api_key": key, "frequency": "monthly", "data[0]": "value",
+        "sort[0][column]": "period", "sort[0][direction]": "desc", "length": 5000}, timeout=40)
+    r.raise_for_status()
+    by = {}
+    for x in r.json()["response"]["data"]:
+        sid = str(x.get("series") or "")
+        desc = str(x.get("series-description") or "")
+        if not sid.startswith("E_ERTRR0") or x.get("value") in (None, ""):
+            continue
+        by.setdefault((sid, desc), {})[x["period"]] = float(x["value"])
+    rows = []
+    for (sid, desc), d in by.items():
+        per = sorted(d, reverse=True)
+        if len(per) < 2:
+            continue
+        rows.append({"id": sid, "name": desc.replace("Number of Elements", "").strip(" ()"), "period": per[0],
+                     "value": d[per[0]], "chg": d[per[0]] - d[per[1]],
+                     "series": [d[p] for p in reversed(per[:24])]})
+    # headline first: US onshore total, then the rest
+    rows.sort(key=lambda r: (0 if "RUSON" in r["id"] else 1, r["name"]))
+    if rows:
+        out["rigs"] = rows[:6]
+
+
 if __name__ == "__main__":
     if ercot is not None:
         ercot_load(); ercot_fuel(); ercot_renew(); ercot_prices(); outages()
     pjm()
-    gas(); spark(); weather(); wind(); storage()
+    gas(); spark(); weather(); wind(); storage(); rigs()
     out["links"] = [
         {"label": "ERCOT constraints / outages", "url": "https://www.ercot.com/gridmktinfo/dashboards"},
         {"label": "ERCOT transmission outages (MIS)", "url": "https://www.ercot.com/mp/data-products/data-product-details?id=NP3-233-CD"},
         {"label": "PJM transmission outages", "url": "https://www.pjm.com/markets-and-operations/transmission-service/transmission-outages"},
         {"label": "PJM Data Miner", "url": "https://dataminer2.pjm.com"},
     ]
+    out["beigeBook"] = "https://www.federalreserve.gov/monetarypolicy/beigebook.htm"
     if not any(k in out for k in ("ercot", "hubs", "gas", "weather")):
         print("no data at all - not overwriting", file=sys.stderr)
         sys.exit(1)
