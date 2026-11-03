@@ -523,38 +523,11 @@ def rigs():
         out["rigs"] = rows[:6]
 
 
-# ───────────────────────── Baker Hughes weekly rig count (scraped from rigcount.bakerhughes.com summary) ─────────────────────────
-@guard("rigsWeekly")
-def rigs_weekly():
-    hdr = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-           "Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.google.com/", "Upgrade-Insecure-Requests": "1",
-           "Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "cross-site", "Sec-Fetch-User": "?1"}
-    r = None
-    for url in ("https://rigcount.bakerhughes.com/", "https://rigcount.bakerhughes.com/na-rig-count"):
-        r = requests.get(url, headers=hdr, timeout=30)
-        if r.ok:
-            break
-    r.raise_for_status()
-    import re, html as _h
-    txt = re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style).*?</\1>", " ", r.text))
-    txt = re.sub(r"\s+", " ", _h.unescape(txt)).replace("\u2212", "-")
-    res = {}
-    for key, label in (("us", r"U\.S\."), ("canada", "Canada")):
-        m = re.search(label + r"\s+(\d{1,2} \w{3,9} \d{4})\s+(\d+)\s+([+-]?\d+)\s+([+-]?\d+)", txt)
-        if m:
-            res[key] = {"asOf": m.group(1), "count": int(m.group(2)), "chg": int(m.group(3)), "yoy": int(m.group(4))}
-    if not res:
-        out["errors"]["rigsWeekly"] = "summary table not found - page layout may have changed"
-        return
-    out["rigsWeekly"] = res
-
-
 if __name__ == "__main__":
     if ercot is not None:
         ercot_load(); ercot_fuel(); ercot_renew(); ercot_prices(); outages()
     pjm()
-    gas(); spark(); weather(); wind(); storage(); rigs(); rigs_weekly()
+    gas(); spark(); weather(); wind(); storage(); rigs()
     out["links"] = [
         {"label": "ERCOT constraints / outages", "url": "https://www.ercot.com/gridmktinfo/dashboards"},
         {"label": "ERCOT transmission outages (MIS)", "url": "https://www.ercot.com/mp/data-products/data-product-details?id=NP3-233-CD"},
