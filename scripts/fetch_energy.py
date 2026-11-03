@@ -438,12 +438,17 @@ def weather():
 def wind():
     res = []
     for name, (la, lo) in WIND_PTS.items():
-        r = rget("https://api.open-meteo.com/v1/forecast", params={
-            "latitude": la, "longitude": lo, "hourly": "wind_speed_80m,wind_speed_100m", "wind_speed_unit": "mph",
-            "forecast_days": 2, "timezone": "UTC"}, timeout=30)
-        r.raise_for_status()
-        hh = r.json()["hourly"]
-        res.append({"name": name, "t": hh["time"][:48:3], "v80": hh["wind_speed_80m"][:48:3], "v100": hh["wind_speed_100m"][:48:3]})
+        try:  # one slow point shouldn't drop the whole section
+            r = rget("https://api.open-meteo.com/v1/forecast", params={
+                "latitude": la, "longitude": lo, "hourly": "wind_speed_80m,wind_speed_100m", "wind_speed_unit": "mph",
+                "forecast_days": 2, "timezone": "UTC"}, timeout=60)
+            r.raise_for_status()
+            hh = r.json()["hourly"]
+            res.append({"name": name, "t": hh["time"][:48:3], "v80": hh["wind_speed_80m"][:48:3], "v100": hh["wind_speed_100m"][:48:3]})
+        except Exception as e:
+            out["errors"][f"wind_{name}"] = f"{type(e).__name__}: {e}"[:200]
+    if not res:
+        raise RuntimeError("no wind corridors returned")
     out["windCorridors"] = res
 
 
