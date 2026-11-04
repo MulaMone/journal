@@ -11845,6 +11845,46 @@ function enCushion(cu,iso){
   var wide=iso==="pjm"?15000:10000,c=cu>wide?"var(--green)":cu<3000?"var(--red)":"var(--amber)";
   return "<span style='color:"+c+"'>Cushion "+(cu>=0?"+":"")+enFmt(cu)+" MW</span>";
 }
+// hover tooltip for the Fuel Mix chart: crosshair + per-fuel GW and % of supply at the hovered time
+function enFuelHover(card,fm,keys,hasSt,x0,x1,tz){
+  var svg=card.querySelector("svg");if(!svg||!fm.length||x0==null)return;
+  var W=720,H=220,L=48,R=10,T=10,B=24,host=svg.parentNode;host.style.position="relative";
+  var ns="http://www.w3.org/2000/svg",ln=document.createElementNS(ns,"line");
+  ln.setAttribute("y1",T);ln.setAttribute("y2",H-B);ln.setAttribute("stroke","var(--text)");ln.setAttribute("stroke-dasharray","2 3");ln.style.display="none";ln.style.pointerEvents="none";svg.appendChild(ln);
+  var tip=document.createElement("div");
+  tip.style.cssText="position:absolute;display:none;pointer-events:none;z-index:5;background:var(--panel);border:1px solid var(--border3);border-radius:4px;padding:8px 10px;font-size:11px;min-width:210px;box-shadow:0 4px 14px rgba(0,0,0,.6);color:var(--text)";
+  host.appendChild(tip);
+  var rows=fm.map(function(r){return {r:r,t:enTs(r.t)};});
+  function hide(){ln.style.display="none";tip.style.display="none";}
+  function move(e){
+    var b=svg.getBoundingClientRect(),vx=(e.clientX-b.left)/b.width*W;
+    if(vx<L||vx>W-R){hide();return;}
+    var t=x0+(vx-L)/(W-L-R)*(x1-x0),best=null;
+    rows.forEach(function(o){if(best==null||Math.abs(o.t-t)<Math.abs(best.t-t))best=o;});
+    if(!best||t>rows[rows.length-1].t+18e5||t<rows[0].t-18e5){hide();return;}
+    var r=best.r,px=L+(best.t-x0)/(x1-x0)*(W-L-R);
+    ln.setAttribute("x1",px);ln.setAttribute("x2",px);ln.style.display="";
+    var st=r.storage||0,tot=0;
+    keys.forEach(function(k){tot+=Math.max(r[k]||0,0);});tot+=Math.max(st,0);
+    var items=keys.map(function(k){return {k:k,v:r[k]||0};});
+    if(hasSt)items.push({k:"storage",v:st});
+    items.sort(function(a,c){return c.v-a.v;});
+    var hm=new Date(best.t).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:tz,timeZoneName:"short"});
+    var html="<div style='display:flex;justify-content:space-between;gap:14px;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border)'><b>Hour Start</b><span>"+hm+"</span></div>";
+    items.forEach(function(o){
+      var gw=(Math.abs(o.v)/1000).toFixed(2)+" GW",lbl=EN_LBL[o.k]||o.k,val,pc="";
+      if(o.k==="storage"){lbl="Battery";val=(o.v<0?"−":"")+gw+(o.v<0?" (charging)":o.v>0?" (discharging)":"");if(o.v>0&&tot)pc=" ("+(o.v/tot*100).toFixed(1)+"%)";}
+      else{val=gw;if(tot)pc=" ("+(Math.max(o.v,0)/tot*100).toFixed(1)+"%)";}
+      html+="<div style='display:flex;justify-content:space-between;gap:14px;line-height:1.55'><span><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+EN_COL[o.k]+";margin-right:6px'></span>"+lbl+"</span><span>"+val+pc+"</span></div>";
+    });
+    html+="<div style='display:flex;justify-content:space-between;gap:14px;margin-top:5px;padding-top:5px;border-top:1px solid var(--border)'><b>Total supply</b><b>"+(tot/1000).toFixed(2)+" GW</b></div>";
+    tip.innerHTML=html;tip.style.display="block";
+    var hb=host.getBoundingClientRect(),x=e.clientX-hb.left,y=e.clientY-hb.top,tw=tip.offsetWidth,th=tip.offsetHeight;
+    var left=x+14+tw>hb.width?x-14-tw:x+14,top=Math.max(0,Math.min(y-th/2,hb.height-th));
+    tip.style.left=Math.max(0,left)+"px";tip.style.top=top+"px";
+  }
+  svg.addEventListener("pointermove",move);svg.addEventListener("pointerdown",move);svg.addEventListener("pointerleave",hide);
+}
 function enSecLoad(D,wrap){
   var key=_en.iso,I=D[key]||{};
   wrap.appendChild(enHead("ISO Generation & Load Ramps",key.toUpperCase(),"en-sec-load"));
@@ -11882,10 +11922,12 @@ function enSecLoad(D,wrap){
     {color:EN_COL.storage,pts:fm.map(function(r){return [enTs(r.t),Math.max(r.storage||0,0)];})},
     {color:EN_COL.storage,neg:true,pts:fm.map(function(r){return [enTs(r.t),Math.min(r.storage||0,0)];})}
   ]:[];
-  wrap.appendChild(enCard("Fuel Mix (MW)",
+  var fuelCard=enCard("Fuel Mix (MW)",
     enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}).concat(stAreas),{tickCount:6,x0:fx0,x1:fx1,zeroLine:true,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
     enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}).concat(hasSt?[[EN_LBL.storage,EN_COL.storage]]:[]))+
-    (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")));
+    (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":""));
+  wrap.appendChild(fuelCard);
+  enFuelHover(fuelCard,fm,keys,hasSt,fx0,fx1,key==="ercot"?"America/Chicago":"America/New_York");
   if(key==="ercot"){
     var R=I.renew||{},html="<div class='g2' style='margin-bottom:0'>";
     var anyRamp=false;
