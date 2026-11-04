@@ -11870,7 +11870,7 @@ function enFuelHover(card,fm,keys,hasSt,x0,x1,tz){
     if(hasSt)items.push({k:"storage",v:st});
     items.sort(function(a,c){return c.v-a.v;});
     var hm=new Date(best.t).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:tz,timeZoneName:"short"});
-    var html="<div style='display:flex;justify-content:space-between;gap:14px;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border)'><b>Hour Start</b><span>"+hm+"</span></div>";
+    var html="<div style='display:flex;justify-content:space-between;gap:14px;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border)'><b>Interval Start</b><span>"+hm+"</span></div>";
     items.forEach(function(o){
       var gw=(Math.abs(o.v)/1000).toFixed(2)+" GW",lbl=EN_LBL[o.k]||o.k,val,pc="";
       if(o.k==="storage"){lbl="Battery";val=(o.v<0?"−":"")+gw+(o.v<0?" (charging)":o.v>0?" (discharging)":"");if(o.v>0&&tot)pc=" ("+(o.v/tot*100).toFixed(1)+"%)";}
