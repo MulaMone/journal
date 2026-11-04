@@ -135,10 +135,12 @@ def ercot_fuel():
     d = d.resample("1h").mean(numeric_only=True).dropna(how="all")
     rows = []
     for t, r in d.iterrows():
-        g = {"gasCC": 0.0, "gasPeaker": 0.0, "gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0}
+        g = {"gasCC": 0.0, "gasPeaker": 0.0, "gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0, "storage": 0.0}
         for k, v in r.items():
             lk, v = str(k).lower(), (num(v) or 0.0)
-            if "gas" in lk and ("cc" in lk or "combined" in lk):
+            if "storage" in lk or "battery" in lk:
+                g["storage"] += v
+            elif "gas" in lk and ("cc" in lk or "combined" in lk):
                 g["gasCC"] += v
             elif "gas" in lk and ("peak" in lk or "gt" in lk or "turbine" in lk):
                 g["gasPeaker"] += v
@@ -174,8 +176,11 @@ def ercot_renew():
             a, f = num(r.get(ac)), num(r.get(fc))
             if a is None or f is None:
                 continue
-            rows.append({"t": iso(r[tc]), "actual": a, "forecast": f, "err": round(a - f, 1)})
-        res[key] = rows[-24:]
+            rows.append({"t": iso(pd.Timestamp(r[tc]).floor("h")), "actual": a, "forecast": f, "err": round(a - f, 1)})
+        byhr = {}
+        for x in rows:
+            byhr[x["t"]] = x  # last row per hour wins
+        res[key] = sorted(byhr.values(), key=lambda x: x["t"])[-24:]
     out.setdefault("ercot", {})["renew"] = res
 
 
@@ -320,8 +325,12 @@ def outages():
         cols = [c for c in d.columns if pd.api.types.is_numeric_dtype(d[c])]
     r = d.iloc[-1]
     parts = {str(c): num(r[c]) for c in cols}
+    sysc = [c for c in cols if str(c).strip().lower() == "total resource mw"]
+    total = num(r[sysc[0]]) if sysc else None
+    if total is None:  # fallback: system-level cols only (no zone subtotals)
+        total = sum(v for k, v in parts.items() if v and "zone" not in k.lower())
     out["outages"] = {"ercot": {"asOf": iso(r.get("Time", d.index[-1])) if "Time" in d.columns else None,
-                                "totalMW": round(sum(v for v in parts.values() if v), 1), "parts": parts}}
+                                "totalMW": round(total, 1), "parts": parts}}
 
 
 # ───────────────────────── Henry Hub ─────────────────────────
