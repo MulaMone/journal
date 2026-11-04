@@ -323,7 +323,12 @@ def outages():
     cols = [c for c in d.columns if "total" in str(c).lower() and "mw" in str(c).lower()]
     if not cols:
         cols = [c for c in d.columns if pd.api.types.is_numeric_dtype(d[c])]
-    r = d.iloc[-1]
+    if "Time" in d.columns:  # pick the current hour, not the last row (may be stale or future forecast)
+        tt = pd.to_datetime(d["Time"], utc=True)
+        cur = d[tt <= pd.Timestamp.now(tz="UTC")]
+        r = (cur.loc[tt[cur.index].idxmax()] if len(cur) else d.iloc[-1])
+    else:
+        r = d.iloc[-1]
     parts = {str(c): num(r[c]) for c in cols}
     sysc = [c for c in cols if str(c).strip().lower() == "total resource mw"]
     total = num(r[sysc[0]]) if sysc else None
