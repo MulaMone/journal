@@ -11743,8 +11743,8 @@ function newsFeedTab(){
 // Data: energy.json written by .github/workflows/update-energy.yml (scripts/fetch_energy.py,
 // gridstatus -> ERCOT/PJM + Henry Hub + Open-Meteo). Same same-origin-file pattern as yields.json.
 var _en={data:null,iso:"ercot",timer:null,err:null,loading:false};
-var EN_COL={gasCC:"#ff8c00",gasPeaker:"#ff5252",gas:"#ff8c00",solar:"#ffd600",wind:"#00d4d4",nuclear:"#b06aff",coal:"#8899aa",other:"#4a5a78"};
-var EN_LBL={gasCC:"Gas CC",gasPeaker:"Gas Peakers",gas:"Natural Gas",solar:"Solar",wind:"Wind",nuclear:"Nuclear",coal:"Coal",other:"Other"};
+var EN_COL={gasCC:"#ff8c00",gasPeaker:"#ff5252",gas:"#ff8c00",solar:"#ffd600",wind:"#00d4d4",nuclear:"#b06aff",coal:"#8899aa",other:"#4a5a78",storage:"#e040fb"};
+var EN_LBL={gasCC:"Gas CC",gasPeaker:"Gas Peakers",gas:"Natural Gas",solar:"Solar",wind:"Wind",nuclear:"Nuclear",coal:"Coal",other:"Other",storage:"Battery (+discharge / −charge)"};
 function enCacheGet(){try{var r=localStorage.getItem("edge_energy_v1");return r?JSON.parse(r):null;}catch(e){return null;}}
 function enCacheSet(o){try{localStorage.setItem("edge_energy_v1",JSON.stringify(o));}catch(e){}}
 function enLoad(force){
@@ -11776,13 +11776,17 @@ function enChart(lines,areas,opt){
   if(areas&&areas.length){
     var tmap={};areas.forEach(function(a){a.pts.forEach(function(p){tmap[p[0]]=1;xs.push(p[0]);});});
     var ts=Object.keys(tmap).map(Number).sort(function(a,b){return a-b;});
-    var cum=ts.map(function(){return 0;});stk=[];
+    var cum=ts.map(function(){return 0;}),ncum=ts.map(function(){return 0;}),nmin=0;stk=[];
     areas.forEach(function(a){
       var m={};a.pts.forEach(function(p){m[p[0]]=p[1]||0;});
+      if(a.neg){ // series stacked downward from zero (e.g. battery charging)
+        var nlo=ncum.slice();ts.forEach(function(t,i){ncum[i]+=Math.min(m[t]||0,0);nmin=Math.min(nmin,ncum[i]);});
+        stk.push({color:a.color,lo:nlo,hi:ncum.slice()});return;
+      }
       var lo=cum.slice();ts.forEach(function(t,i){cum[i]+=(m[t]||0);});
       stk.push({color:a.color,lo:lo,hi:cum.slice()});
     });
-    cum.forEach(function(v){ymax=Math.max(ymax,v);});ymin=Math.min(ymin,0);
+    cum.forEach(function(v){ymax=Math.max(ymax,v);});ymin=Math.min(ymin,0,nmin);
   }
   if(!xs.length) return "<div style='color:var(--text3);font-size:11px;padding:20px 0'>no data</div>";
   var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs);if(x1===x0)x1=x0+1;
@@ -11873,9 +11877,14 @@ function enSecLoad(D,wrap){
   if(fm.length){fx0=enDayStart(enTs(fm[fm.length-1].t),key==='ercot'?'America/Chicago':'America/New_York');fx1=fx0+24*36e5;fm=fm.filter(function(r){return enTs(r.t)>=fx0;});}
   var order=["nuclear","coal","gasCC","gasPeaker","gas","wind","solar","other"];
   var keys=order.filter(function(k){return fm.some(function(r){return r[k]>0;});});
+  var hasSt=fm.some(function(r){return r.storage!=null&&r.storage!==0;});
+  var stAreas=hasSt?[
+    {color:EN_COL.storage,pts:fm.map(function(r){return [enTs(r.t),Math.max(r.storage||0,0)];})},
+    {color:EN_COL.storage,neg:true,pts:fm.map(function(r){return [enTs(r.t),Math.min(r.storage||0,0)];})}
+  ]:[];
   wrap.appendChild(enCard("Fuel Mix (MW)",
-    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}),{tickCount:6,x0:fx0,x1:fx1,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
-    enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}))+
+    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}).concat(stAreas),{tickCount:6,x0:fx0,x1:fx1,zeroLine:true,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
+    enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}).concat(hasSt?[[EN_LBL.storage,EN_COL.storage]]:[]))+
     (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")));
   if(key==="ercot"){
     var R=I.renew||{},html="<div class='g2' style='margin-bottom:0'>";
