@@ -12294,9 +12294,43 @@ function enSecFlow(wrap){
     box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"],"<a href='#' class='en-pic-link' data-src='energy-proxy.png' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Proxy table ↗</a>")));
   wrap.querySelectorAll(".en-pic-link").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic(a.getAttribute("data-src"));});});
 }
+function _enBgLayer(){
+  var C="#00d4d4",O="#ff8c00",Y="#ffd600",BG="#040d1a",base=430,seed=9;
+  function rnd(){seed=(seed*16807)%2147483647;return seed/2147483647;}
+  function dl(){return (-rnd()*3.4).toFixed(2);}
+  function flame(x,y,s){return '<g transform="translate('+x+','+y+') scale('+s+')"><g class="flame"><path d="M0,0 C-8,-9 -7,-18 0,-30 C3,-20 9,-14 7,-7 C6,-2 3,0 0,0 Z" fill="'+O+'" fill-opacity=".9"/><path d="M0,0 C-3.5,-4 -3,-9 0,-15 C1.5,-10 4,-7 3,-3 Z" fill="'+Y+'"/></g></g>';}
+  function sphere(x,r,op){var cy=base-r-34*r/30;return '<g stroke="'+C+'" stroke-opacity="'+op+'" stroke-width="1.5" fill="'+BG+'"><circle cx="'+x+'" cy="'+cy+'" r="'+r+'"/><path d="M'+(x-r)+','+cy+' q'+r+','+(r*.3)+' '+(2*r)+',0" fill="none"/><path d="M'+(x-r*.55)+','+(cy+r*.85)+' L'+(x-r*.7)+','+base+' M'+(x+r*.55)+','+(cy+r*.85)+' L'+(x+r*.7)+','+base+' M'+x+','+(cy+r)+' L'+x+','+base+'" fill="none"/></g>';}
+  function tank(x,w,hh,op){return '<g stroke="'+C+'" stroke-opacity="'+op+'" stroke-width="1.5" fill="'+BG+'"><path d="M'+x+','+base+' L'+x+','+(base-hh)+' Q'+(x+w/2)+','+(base-hh-w*.28)+' '+(x+w)+','+(base-hh)+' L'+(x+w)+','+base+'"/><path d="M'+x+','+(base-hh*.66)+' L'+(x+w)+','+(base-hh*.66)+' M'+x+','+(base-hh*.33)+' L'+(x+w)+','+(base-hh*.33)+'" fill="none"/></g>';}
+  function stack(x,hh,op,f){return '<g stroke="'+C+'" stroke-opacity="'+op+'" stroke-width="1.5" fill="none"><path d="M'+(x-5)+','+base+' L'+(x-2.5)+','+(base-hh)+' L'+(x+2.5)+','+(base-hh)+' L'+(x+5)+','+base+'"/><path d="M'+(x-4)+','+(base-hh*.35)+' L'+(x+4)+','+(base-hh*.35)+' M'+(x-3.2)+','+(base-hh*.7)+' L'+(x+3.2)+','+(base-hh*.7)+'"/></g>'+(f?flame(x,base-hh,1.1):'');}
+  function rack(x1,x2,y,op){return '<path d="M'+x1+','+y+' L'+x2+','+y+'" stroke="'+C+'" stroke-opacity="'+op+'" stroke-width="2.4"/><path class="pulse" style="animation-delay:'+dl()+'s" d="M'+x1+','+y+' L'+x2+','+y+'" stroke="'+O+'" stroke-width="2.4" stroke-linecap="round" fill="none"/>';}
+  function tower(x,b,s,op){var top=b-110*s,a1=b-88*s,a2=b-62*s,w1=24*s,w2=17*s,l=7*s,st='stroke="'+C+'" stroke-opacity="'+op+'" stroke-width="'+(1.3*Math.max(s,.7))+'" fill="none" stroke-linejoin="round"';
+    return {svg:'<g '+st+'><path d="M'+(x-l)+','+b+' L'+(x-2*s)+','+top+' L'+(x+2*s)+','+top+' L'+(x+l)+','+b+'"/><path d="M'+(x-w1)+','+a1+' L'+(x+w1)+','+a1+' M'+(x-w2)+','+a2+' L'+(x+w2)+','+a2+'"/><path d="M'+(x-l)+','+b+' L'+(x+4*s)+','+(b-37*s)+' M'+(x+l)+','+b+' L'+(x-4*s)+','+(b-37*s)+' M'+(x-4*s)+','+(b-37*s)+' L'+(x+3*s)+','+(b-74*s)+' M'+(x+4*s)+','+(b-37*s)+' L'+(x-3*s)+','+(b-74*s)+'"/></g>',tips:[[-w1,a1],[w1,a1],[-w2,a2],[w2,a2]]};}
+  function towerRow(xs,b,s,op,pulses){var h='',T=xs.map(function(x){return tower(x,b,s,op);});
+    T.forEach(function(t,k){h+=t.svg;if(k<xs.length-1)t.tips.forEach(function(p,wi){var x1=xs[k]+p[0],x2=xs[k+1]+p[0],y=p[1],d='M'+x1+','+y+' Q'+((x1+x2)/2)+','+(y+52*s)+' '+x2+','+y;
+      h+='<path d="'+d+'" stroke="'+C+'" stroke-opacity="'+op*.9+'" stroke-width="'+Math.max(s,.8)+'" fill="none"/>';
+      if(pulses&&wi%2===0)h+='<path class="pulse" style="animation-delay:'+dl()+'s" d="'+d+'" stroke="'+Y+'" stroke-opacity="'+Math.min(1,op+.2)+'" stroke-width="'+(1.8*Math.max(s,.8))+'" fill="none" stroke-linecap="round"/>';});});
+    return h;}
+  var h='';
+  h+=towerRow([-30,130,290,450,610,770,930,1090],340,.9,.45,true);
+  h+=towerRow([-60,100,260,420,580,740,900,1060],255,.55,.25,false);
+  h+=rack(0,1000,base-42,.5)+rack(0,1000,base-64,.3);
+  h+=stack(40,200,.55,1)+sphere(125,36,.6)+tank(185,70,75,.55)+sphere(300,30,.5)+tank(355,64,100,.55)+stack(470,230,.55,1)+sphere(560,40,.6)+tank(640,86,68,.5)+sphere(770,34,.55)+tank(830,68,95,.5)+stack(940,170,.5,1)+sphere(985,24,.45);
+  [95,215,320,385,500,600,685,790,865,960].forEach(function(x){h+='<line x1="'+x+'" y1="'+base+'" x2="'+x+'" y2="'+(base-42)+'" stroke="'+C+'" stroke-opacity=".4" stroke-width="1.6"/>';});
+  var mob=isMobile();
+  var sty=document.createElement("style");
+  sty.textContent=".enbg .pulse{stroke-dasharray:7 46;animation:enpl 3.6s linear infinite}@keyframes enpl{to{stroke-dashoffset:-212}}"+
+    ".enbg .flame{transform-box:fill-box;transform-origin:50% 100%;animation:enfk 1.1s ease-in-out infinite alternate}@keyframes enfk{from{transform:scale(1,.85)}to{transform:scale(.9,1.12)}}"+
+    "#energy-wrap .card,#energy-wrap .chip,#energy-wrap [style*='var(--panel)']{background:rgba(13,30,56,.74)!important}";
+  var bg=div();bg.className="enbg";
+  bg.style.cssText="position:fixed;left:0;right:0;top:0;bottom:"+(mob?"calc(80px + env(safe-area-inset-bottom,0px))":"0")+";z-index:-1;pointer-events:none;opacity:.8;-webkit-mask-image:linear-gradient(to top,#000 40%,transparent 100%);mask-image:linear-gradient(to top,#000 40%,transparent 100%);";
+  bg.innerHTML='<svg viewBox="0 0 1000 440" preserveAspectRatio="xMidYMax slice" style="width:100%;height:100%;display:block">'+h+'</svg>';
+  var vig=div();vig.style.cssText="position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,transparent 55%,rgba(4,13,26,.55) 100%);";
+  return [sty,bg,vig];
+}
 function energyTab(){
   if(_en.timer){clearInterval(_en.timer);_en.timer=null;}
-  var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:clip;";
+  var wrap=div();wrap.style.cssText="max-width:1000px;margin:0 auto;width:100%;box-sizing:border-box;overflow-x:clip;position:relative;z-index:0;";wrap.id="energy-wrap";
+  _enBgLayer().forEach(function(n){wrap.appendChild(n);});
   var hd=div();hd.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;";
   var l=div();var t=div();t.style.cssText="font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;";t.textContent="Energy";
   var meta=div();meta.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:3px;";var st=div();st.style.cssText="font-family:monospace;font-size:10px;color:var(--text3);margin-top:2px;";l.appendChild(t);l.appendChild(meta);l.appendChild(st);
