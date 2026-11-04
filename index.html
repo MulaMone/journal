@@ -11925,7 +11925,8 @@ function enSecLoad(D,wrap){
   var fuelCard=enCard("Fuel Mix (MW)",
     enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}).concat(stAreas),{tickCount:6,x0:fx0,x1:fx1,zeroLine:true,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
     enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}).concat(hasSt?[[EN_LBL.storage,EN_COL.storage]]:[]))+
-    (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":""));
+    (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")+
+    (key==="ercot"?"<div style='text-align:right;margin-top:6px'><a href='https://www.ercot.com/gridmktinfo/dashboards/fuelmix' target='_blank' rel='noopener' style='font-size:11px;letter-spacing:1px;color:var(--accent);text-decoration:none'>Live ↗</a></div>":""));
   wrap.appendChild(fuelCard);
   enFuelHover(fuelCard,fm,keys,hasSt,fx0,fx1,key==="ercot"?"America/Chicago":"America/New_York");
   if(key==="ercot"){
