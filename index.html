@@ -11794,6 +11794,7 @@ function enChart(lines,areas,opt){
   if(opt.zero!==false&&ymin>0&&areas&&areas.length) ymin=0;
   var pad=(ymax-ymin)*0.06||1;ymax+=pad;if(!(areas&&areas.length))ymin-=pad;
   if(opt.ymax) ymax=opt.ymax; // caller-set ceiling (e.g. highest committed capacity + 10%)
+  if(opt.ymin!=null) ymin=opt.ymin; // caller-set floor
   var nt=niceTicks(ymin,ymax,opt.tickCount||4),tk=nt.ticks;
   function X(t){return L+(t-x0)/(x1-x0)*(W-L-R);}
   function Y(v){return T+(1-(v-tk[0])/((tk[tk.length-1]-tk[0])||1))*(H-T-B);}
@@ -11919,13 +11920,14 @@ function enSecLoad(D,wrap){
   var keys=order.filter(function(k){return fm.some(function(r){return r[k]>0;});});
   var hasSt=fm.some(function(r){return r.storage!=null&&r.storage!==0;});
   var fmax=0;fm.forEach(function(r){var t=Math.max(r.storage||0,0);keys.forEach(function(k){t+=Math.max(r[k]||0,0);});fmax=Math.max(fmax,t);});
-  var fyMax=Math.ceil(fmax*1.03/10000)*10000||null; // top of axis just above the tallest stack
+  var fyMax=Math.max(80000,Math.ceil(fmax*1.03/10000)*10000); // ERCOT-style fixed axis (-20k..80k), grows only if supply exceeds it
+  var fyMin=-20000;fm.forEach(function(r){fyMin=Math.min(fyMin,Math.floor((r.storage||0)*1.03/10000)*10000);});
   var stAreas=hasSt?[
     {color:EN_COL.storage,pts:fm.map(function(r){return [enTs(r.t),Math.max(r.storage||0,0)];})},
     {color:EN_COL.storage,neg:true,pts:fm.map(function(r){return [enTs(r.t),Math.min(r.storage||0,0)];})}
   ]:[];
   var fuelCard=enCard("Fuel Mix (MW)",
-    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}).concat(stAreas),{tickCount:8,h:300,ymax:fyMax,x0:fx0,x1:fx1,zeroLine:true,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
+    enChart(null,keys.map(function(k){return {color:EN_COL[k],pts:fm.map(function(r){return [enTs(r.t),r[k]||0];})};}).concat(stAreas),{tickCount:11,h:300,ymax:fyMax,ymin:fyMin,x0:fx0,x1:fx1,zeroLine:true,yfmt:function(v){return (v/1000).toFixed(0)+"k";}})+
     enLegend(keys.map(function(k){return [EN_LBL[k],EN_COL[k]];}).concat(hasSt?[[EN_LBL.storage,EN_COL.storage]]:[]))+
     (key==="ercot"&&keys.indexOf("gas")>-1?"<div style='font-size:10px;color:var(--text3);margin-top:6px'>ERCOT feed reports gas as one line (CC / peaker split not published here).</div>":"")+
     (key==="ercot"?"<div style='text-align:right;margin-top:6px'><a href='https://www.ercot.com/gridmktinfo/dashboards/fuelmix' target='_blank' rel='noopener' style='font-size:11px;letter-spacing:1px;color:var(--accent);text-decoration:none'>Live ↗</a></div>":""));
