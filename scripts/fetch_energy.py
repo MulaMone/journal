@@ -132,7 +132,7 @@ def ercot_load():
 def ercot_fuel():
     d = ercot.get_fuel_mix("today")
     d = d.set_index("Time") if "Time" in d.columns else d.set_index(d.columns[0])
-    d = d.resample("1h").mean(numeric_only=True).dropna(how="all")
+    d = d.select_dtypes("number").dropna(how="all")  # native 5-min intervals (no hourly averaging)
     rows = []
     for t, r in d.iterrows():
         g = {"gasCC": 0.0, "gasPeaker": 0.0, "gas": 0.0, "solar": 0.0, "wind": 0.0, "nuclear": 0.0, "coal": 0.0, "other": 0.0, "storage": 0.0}
@@ -158,7 +158,7 @@ def ercot_fuel():
                 g["other"] += v
         g["t"] = iso(t)
         rows.append({k: (round(v, 1) if k != "t" else v) for k, v in g.items()})
-    out.setdefault("ercot", {})["fuel"] = rows[-48:]
+    out.setdefault("ercot", {})["fuel"] = rows[-300:]  # ~1 day at 5-min
 
 
 @guard("ercot_renew")
