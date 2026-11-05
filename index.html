@@ -6523,24 +6523,36 @@ function chartTab(){
 
       chart.timeScale().fitContent();
 
-      // ── Previous-close level ────────────────────────────────────
-      // ≤30m → prior day close (PDC) · 1h/4h/8h → prior week close (PWC) ·
-      // 1d → prior month close (PMC). Pulled from the matching higher-TF OANDA
-      // candles (same session anchor as the chart) so it's right regardless of
-      // how few bars the current view loaded.
+      // ── Previous-close levels, one per period ───────────────────
+      // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
+      // shows the prior week's close (PWC) · 1d → each month shows the prior
+      // month's close (PMC). Built from OANDA D/W/M candles (same session anchor
+      // as the chart). The line steps with each new period; the first candle of a
+      // period is left blank so the old and new level never join diagonally.
       (function(){
-        var pcGran,pcLbl;
-        if(tf==="1d"){pcGran="M";pcLbl="PMC";}
-        else if(periodSec>=3600){pcGran="W";pcLbl="PWC";}
-        else {pcGran="D";pcLbl="PDC";}
-        var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count=3&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var pcGran,pcLbl,pcSec;
+        if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
+        else if(periodSec>=3600){pcGran="W";pcLbl="PWC";pcSec=604800;}
+        else {pcGran="D";pcLbl="PDC";pcSec=86400;}
+        var span=candles[candles.length-1].time-candles[0].time;
+        var n=Math.min(5000,Math.ceil(span/pcSec)+4);
+        var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
-          var cs=((d&&d.candles)||[]).filter(function(c){return c.complete;});
-          if(!cs.length) return;
-          var px=parseFloat(cs[cs.length-1].mid.c);
-          if(isNaN(px)) return;
-          series.createPriceLine({price:px,color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:pcLbl});
+          var hs=((d&&d.candles)||[]).map(function(c){
+            return {t:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,c:parseFloat(c.mid.c)};
+          });
+          if(hs.length<2) return;
+          var data=[],hi=0,prevHi=-1;
+          candles.forEach(function(c){
+            while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
+            if(c.time<hs[0].t||hi<1){return;} // no prior period known yet
+            if(hi!==prevHi){data.push({time:c.time});prevHi=hi;return;} // period start: gap
+            data.push({time:c.time,value:hs[hi-1].c});
+          });
+          if(!data.length) return;
+          var pcSeries=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:pcLbl,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+          pcSeries.setData(data);
         }).catch(function(){});
       })();
 
