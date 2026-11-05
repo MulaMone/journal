@@ -6553,6 +6553,9 @@ function chartTab(){
           });
           groups.forEach(function(g,gi){
             var isCur=gi===groups.length-1; // only the current period carries the axis tag
+            // Run each line out to the next period's first candle so it meets the
+            // boundary line instead of stopping a candle short.
+            if(!isCur) g.data.push({time:groups[gi+1].data[0].time,value:g.v});
             var ps=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?pcLbl:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             ps.setData(g.data);
           });
