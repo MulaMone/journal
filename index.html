@@ -6527,8 +6527,7 @@ function chartTab(){
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
       // shows the prior week's close (PWC) · 1d → each month shows the prior
       // month's close (PMC). Built from OANDA D/W/M candles (same session anchor
-      // as the chart). The line steps with each new period; the first candle of a
-      // period is left blank so the old and new level never join diagonally.
+      // as the chart). Each period gets its own line series; nothing joins one level to the next.
       (function(){
         var pcGran,pcLbl,pcSec;
         if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
@@ -6543,16 +6542,20 @@ function chartTab(){
             return {t:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,c:parseFloat(c.mid.c)};
           });
           if(hs.length<2) return;
-          var data=[],hi=0,prevHi=-1;
+          // One separate line series per period, so the level at the end of one
+          // period never connects diagonally to the next period's level.
+          var groups=[],hi=0,curG=null,curHi=-1;
           candles.forEach(function(c){
             while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
-            if(c.time<hs[0].t||hi<1){return;} // no prior period known yet
-            if(hi!==prevHi){data.push({time:c.time});prevHi=hi;return;} // period start: gap
-            data.push({time:c.time,value:hs[hi-1].c});
+            if(c.time<hs[0].t||hi<1) return; // no prior period known yet
+            if(hi!==curHi){curG={v:hs[hi-1].c,data:[]};groups.push(curG);curHi=hi;}
+            curG.data.push({time:c.time,value:curG.v});
           });
-          if(!data.length) return;
-          var pcSeries=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:pcLbl,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-          pcSeries.setData(data);
+          groups.forEach(function(g,gi){
+            var isCur=gi===groups.length-1; // only the current period carries the axis tag
+            var ps=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?pcLbl:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            ps.setData(g.data);
+          });
         }).catch(function(){});
       })();
 
