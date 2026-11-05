@@ -6354,11 +6354,15 @@ function chartTab(){
             return nearest.close-p.price;
           }
 
-          var markerSeries=chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-          var seenTs={};
-          var lineData=[];
+          // One hidden line series can hold only one point per timestamp. Rather than
+          // pushing extra fills into LATER candles (which smeared a busy day's fills
+          // across weeks on the daily chart), extra fills at the same candle go on
+          // additional layered series, so every marker stays on its own candle.
+          function makeMarkerSeries(){return chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});}
+          var layers=[{s:makeMarkerSeries(),seen:{},data:[],markers:[]}];
+          var markerSeries=layers[0].s;
           var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
-          var markers=displayPoints.map(function(p){
+          displayPoints.forEach(function(p){
             // Snap to the candle period the fill falls inside, rather than the raw
             // fill timestamp. The candlestick series only has data on period
             // boundaries (e.g. :00/:15/:30/:45 for 15m); plotting this marker's own
@@ -6366,14 +6370,21 @@ function chartTab(){
             // chart's axis has no candle for, rendering as a blank gap under the
             // marker. Snapping keeps the arrow on a real candle; price stays exact.
             var t=Math.floor(p.ts/periodSec)*periodSec-etOffsetSec; // snap in true time first, then shift to match the ET-shifted candles
+            var dayCandle=null;
             if(tf==="1d"){ // daily candles open at the 17:00/18:00 ET anchor, not UTC midnight — snap to the candle that contains the fill
-              var pd=p.ts-etOffsetSec;t=candles[0].time;
-              for(var di=0;di<candles.length;di++){if(candles[di].time<=pd)t=candles[di].time;else break;}
+              var pd=p.ts-etOffsetSec;dayCandle=candles[0];
+              for(var di=0;di<candles.length;di++){if(candles[di].time<=pd)dayCandle=candles[di];else break;}
+              t=dayCandle.time;
             }
-            while(seenTs[t]) t+=periodSec; // keep strictly increasing, still period-aligned, if multiple fills land in the same candle
-            seenTs[t]=true;
-            var val=p.price+nearestCandleOffset(p);
-            lineData.push({time:t,value:val});
+            var layer=null;
+            for(var li=0;li<layers.length&&!layer;li++){if(!layers[li].seen[t]) layer=layers[li];}
+            if(!layer){layer={s:makeMarkerSeries(),seen:{},data:[],markers:[]};layers.push(layer);}
+            layer.seen[t]=true;
+            // Daily: a day's range is wide, so sit the arrow at the real fill price
+            // (kept inside that candle's high/low to absorb the CFD-vs-futures gap)
+            // instead of at the candle's close.
+            var val=dayCandle?Math.min(dayCandle.high,Math.max(dayCandle.low,p.price)):p.price+nearestCandleOffset(p);
+            layer.data.push({time:t,value:val});
             hoverPoints.push({time:t,value:val,p:p});
             // Entry arrow reflects the opening action; exit arrow reflects
             // the closing action, which is the opposite side — closing a
@@ -6381,7 +6392,7 @@ function chartTab(){
             // their own color (purple) so they read as "closing" at a glance,
             // distinct from the green/red of entries.
             var isUp=p.kind==="entry"?p.isLong:!p.isLong;
-            return {
+            layer.markers.push({
               time:t,
               position:isUp?"belowBar":"aboveBar",
               color:p.kind==="entry"?(isUp?"#00e676":"#ff4444"):"#ff8c00",
@@ -6390,11 +6401,11 @@ function chartTab(){
               // above the bar and a Long's shows "L" below — a quick way to
               // tell separate trades apart at a glance without opening the list.
               text:p.kind==="entry"?(p.isLong?"L":"S"):""
-            };
+            });
           });
-          markerSeries.setData(lineData);
-          applyTradeVisibility=function(){markerSeries.setMarkers(showTrades?markers:[]);if(!showTrades)tip.style.display="none";};
-          markerSeries.setMarkers(showTrades?markers:[]);
+          layers.forEach(function(l){l.s.setData(l.data);});
+          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});if(!showTrades)tip.style.display="none";};
+          layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
           note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
@@ -6511,6 +6522,27 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
+
+      // ── Previous-close level ────────────────────────────────────
+      // ≤30m → prior day close (PDC) · 1h/4h/8h → prior week close (PWC) ·
+      // 1d → prior month close (PMC). Pulled from the matching higher-TF OANDA
+      // candles (same session anchor as the chart) so it's right regardless of
+      // how few bars the current view loaded.
+      (function(){
+        var pcGran,pcLbl;
+        if(tf==="1d"){pcGran="M";pcLbl="PMC";}
+        else if(periodSec>=3600){pcGran="W";pcLbl="PWC";}
+        else {pcGran="D";pcLbl="PDC";}
+        var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count=3&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        chartFetchJson(pcUrl).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var cs=((d&&d.candles)||[]).filter(function(c){return c.complete;});
+          if(!cs.length) return;
+          var px=parseFloat(cs[cs.length-1].mid.c);
+          if(isNaN(px)) return;
+          series.createPriceLine({price:px,color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:pcLbl});
+        }).catch(function(){});
+      })();
 
       var last=candles[candles.length-1];
       var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
