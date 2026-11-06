@@ -1373,7 +1373,14 @@ function parseGoal(str,def){
   return def;
 }
 function grc(g){return "gr"+g}
-function today(){var d=new Date();return pad(d.getMonth()+1)+"/"+pad(d.getDate())+"/"+String(d.getFullYear()).slice(2)}
+// Current wall-clock in America/New_York, independent of the device's timezone.
+var _etNowFmt=null;
+function etNowParts(){
+  if(!_etNowFmt) _etNowFmt=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hourCycle:"h23",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",second:"numeric"});
+  var q={};_etNowFmt.formatToParts(new Date()).forEach(function(x){q[x.type]=+x.value;});
+  return {y:q.year,mo:q.month,d:q.day,h:q.hour,mi:q.minute,s:q.second};
+}
+function today(){var e=etNowParts();return pad(e.mo)+"/"+pad(e.d)+"/"+String(e.y).slice(2)}
 function pad(n){return n<10?"0"+n:n}
 // Returns the futures session date for a trade (rolls forward if time >= 17:00 ET)
 function tradingDay(t){
@@ -1391,11 +1398,11 @@ function tradingDay(t){
 }
 // Returns today's session date (tomorrow's date if current time >= 17:00 ET)
 function sessionToday(){
-  var now=new Date();
-  var mins=now.getHours()*60+now.getMinutes();
+  var e=etNowParts();
+  var mins=e.h*60+e.mi;
   if(mins>=1020){
-    var d2=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
-    return pad(d2.getMonth()+1)+"/"+pad(d2.getDate())+"/"+String(d2.getFullYear()).slice(2);
+    var d2=new Date(Date.UTC(e.y,e.mo-1,e.d+1));
+    return pad(d2.getUTCMonth()+1)+"/"+pad(d2.getUTCDate())+"/"+String(d2.getUTCFullYear()).slice(2);
   }
   return today();
 }
@@ -2045,8 +2052,8 @@ function startClock(){
     var tEl=document.getElementById("clk-time");
     var cdEl=document.getElementById("clk-countdown");
     if(!tEl||!cdEl) return;
-    var now=new Date();
-    var hh=now.getHours(),mm=now.getMinutes(),ss2=now.getSeconds();
+    var en=etNowParts();
+    var hh=en.h,mm=en.mi,ss2=en.s; // header clock always shows New York time
     var ampm=hh>=12?"PM":"AM";
     var hh12=hh%12||12;
     tEl.textContent=(hh12<10?"0":"")+hh12+":"+(mm<10?"0":"")+mm+":"+(ss2<10?"0":"")+ss2+" "+ampm;
@@ -2600,7 +2607,7 @@ function mobileBarChart(data){
 
 // Build P&L heatmap for a month
 function mobilePnlHeatmap(trades){
-  var now=new Date();
+  var now=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"})); // New York calendar date
   var yr=now.getFullYear(),mo=now.getMonth();
   // Map trades by date key MM/DD (current month only)
   var byDate={};
@@ -4654,7 +4661,7 @@ function analyticsTab(){
 // ─── REVIEW TAB (Combined Weekly + Monthly + Calendar) ──────────────
 function reviewTab(){
   var el=div();
-  var now=new Date();
+  var now=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"})); // New York calendar date
   var calYear=State.rv_year!==undefined?State.rv_year:now.getFullYear();
   var calMonth=State.rv_month!==undefined?State.rv_month:now.getMonth();
   var viewMode=State.rv_view||"month";
@@ -8446,7 +8453,7 @@ var YC_SPREADS={
 // shows the full history the file actually has.
 var YC_RANGES=["1M","3M","6M","YTD","1Y","5Y"];
 function ycRangeCutoff(range){
-  var now=new Date(),y=now.getFullYear(),m=now.getMonth(),d=now.getDate();
+  var now=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"})),y=now.getFullYear(),m=now.getMonth(),d=now.getDate();
   function iso(dt){return dt.toISOString().slice(0,10);}
   if(range==="1M") return iso(new Date(y,m-1,d));
   if(range==="3M") return iso(new Date(y,m-3,d));
