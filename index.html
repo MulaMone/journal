@@ -6634,14 +6634,15 @@ function chartTab(){
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/pcSec)+4);
         var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-        // Instant first paint for daily levels: build them from the candles already
+        // Instant first paint for daily/weekly levels: build them from the candles already
         // in memory (same session-anchored day split as the day labels), so they show
         // with the chart. The first day on screen is partial, so its hi/lo is skipped.
         // The exact OANDA D-candle result below replaces these when it arrives.
-        if(pcGran==="D"){
+        if(pcGran==="D"||pcGran==="W"){
           var lg=[],g0=null,key0=null,prev0=null,dHi=-Infinity,dLo=Infinity,dCl=null,nDays=0;
           candles.forEach(function(c){
             var k=Math.floor((c.time+anchorShift)/86400);
+            if(pcGran==="W") k=Math.floor((k+3)/7); // Monday-start trading week (Sun open shifts into Monday)
             if(k!==key0){
               if(key0!==null) prev0={c:dCl,h:nDays<=1?null:dHi,l:nDays<=1?null:dLo};
               key0=k;nDays++;dHi=-Infinity;dLo=Infinity;
