@@ -6592,6 +6592,7 @@ function chartTab(){
         else {pcGran="D";pcLbl="PDC";pcSec=86400;}
         // Draw one separate line series per period (so levels never join diagonally),
         // each run out to the next period's first candle; only the newest carries the tag.
+        var pcSeries=[];
         function drawGroups(groups,fld,color,tag){
           groups.forEach(function(g,gi){
             if(g[fld]==null||!isFinite(g[fld])) return;
@@ -6600,6 +6601,7 @@ function chartTab(){
             if(!isCur) data.push({time:groups[gi+1].times[0],value:g[fld]});
             var ps=chart.addLineSeries({color:color,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(tag&&isCur)?pcLbl:"",lastValueVisible:!!(tag&&isCur),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             ps.setData(data);
+            pcSeries.push(ps);
           });
         }
         // prior-period close (yellow, tagged) + high (green) + low (red), lines only
@@ -6632,6 +6634,27 @@ function chartTab(){
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/pcSec)+4);
         var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        // Instant first paint for daily levels: build them from the candles already
+        // in memory (same session-anchored day split as the day labels), so they show
+        // with the chart. The first day on screen is partial, so its hi/lo is skipped.
+        // The exact OANDA D-candle result below replaces these when it arrives.
+        if(pcGran==="D"){
+          var lg=[],g0=null,key0=null,prev0=null,dHi=-Infinity,dLo=Infinity,dCl=null,nDays=0;
+          candles.forEach(function(c){
+            var k=Math.floor((c.time+anchorShift)/86400);
+            if(k!==key0){
+              if(key0!==null) prev0={c:dCl,h:nDays<=1?null:dHi,l:nDays<=1?null:dLo};
+              key0=k;nDays++;dHi=-Infinity;dLo=Infinity;
+              g0=prev0?{c:prev0.c,h:prev0.h,l:prev0.l,times:[]}:null;
+              if(g0) lg.push(g0);
+            }
+            if(c.high>dHi) dHi=c.high;
+            if(c.low<dLo) dLo=c.low;
+            dCl=c.close;
+            if(g0) g0.times.push(c.time);
+          });
+          if(lg.length) drawAll(lg);
+        }
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var hs=((d&&d.candles)||[]).map(function(c){
@@ -6646,7 +6669,11 @@ function chartTab(){
             if(hi!==curHi){curG2={c:hs[hi-1].c,h:hs[hi-1].h,l:hs[hi-1].l,times:[]};groups.push(curG2);curHi=hi;}
             curG2.times.push(c.time);
           });
-          if(groups.length) drawAll(groups);
+          if(groups.length){
+            pcSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
+            pcSeries=[];
+            drawAll(groups);
+          }
         }).catch(function(){});
       })();
 
