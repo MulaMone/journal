@@ -6065,10 +6065,17 @@ function chartTab(){
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
   // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
   function chartFetchJson(u){
-    var hdr={headers:{Authorization:"Bearer "+tok}};
-    function one(x){
-      return fetch(x,hdr).then(function(r){
+    // A 401 here is often transient or a stale token mid-sync (another device /
+    // the cloud pull can swap the saved token a moment later). Re-read the saved
+    // token fresh on every attempt and retry twice before surfacing the error.
+    function one(x,attempt){
+      attempt=attempt||0;
+      var useTok=ls("oanda_token","")||tok;
+      return fetch(x,{headers:{Authorization:"Bearer "+useTok}}).then(function(r){
         if(!r.ok){
+          if(r.status===401&&attempt<2){
+            return new Promise(function(res){setTimeout(res,attempt===0?700:2000);}).then(function(){return one(x,attempt+1);});
+          }
           return r.json().catch(function(){return null;}).then(function(body){
             var reason=body&&(body.errorMessage||body.message)?": "+(body.errorMessage||body.message):"";
             throw new Error("HTTP "+r.status+reason);
