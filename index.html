@@ -6246,6 +6246,20 @@ function chartTab(){
       // pass: above the grid (so a session line wins over a grid line under it),
       // but below the candles — so lines sit behind price action instead of
       // cutting through it, and stay perfectly in sync while scrolling/zooming.
+      // Weekday names along the bottom of the pane — 2m/5m only, and only for the
+      // trading days of the week we're currently in (from the latest week gap on).
+      // A day belongs to the session anchor (18:00/17:00 ET open), same as the day lines.
+      var dayLabels=[];
+      if(periodSec<=300){
+        var wkStart=weekBoundaries.length?weekBoundaries[weekBoundaries.length-1]:candles[0].time;
+        var DAY_ABBR=["SUN","MON","TUE","WED","THU","FRI","SAT"],lastDayKey=null,curDay=null;
+        candles.forEach(function(c){
+          if(c.time<wkStart) return;
+          var st=c.time+anchorShift,dk=Math.floor(st/86400);
+          if(dk!==lastDayKey){lastDayKey=dk;curDay={t0:c.time,t1:c.time,name:DAY_ABBR[new Date(st*1000).getUTCDay()]};dayLabels.push(curDay);}
+          curDay.t1=c.time;
+        });
+      }
       var _acc=(getComputedStyle(document.documentElement).getPropertyValue("--accent")||"").trim()||"#2ec4b6";
       var _repaint=null;
       function drawWeekLines(){ if(_repaint) _repaint(); } // resize hook — the chart repaints itself on its own otherwise
@@ -6302,6 +6316,15 @@ function chartTab(){
                       ctx.fillStyle=v.col;
                       for(var ci=0;ci<pick.txt.length;ci++) ctx.fillText(pick.txt.charAt(ci),pick.l0+ci*6.9,2+n*12);
                     });
+                    if(dayLabels.length){
+                      ctx.font="9px 'Courier New',monospace";ctx.textBaseline="bottom";ctx.fillStyle="#ffb020";ctx.globalAlpha=0.85;
+                      dayLabels.forEach(function(d){
+                        var x0=chart.timeScale().timeToCoordinate(d.t0),x1=chart.timeScale().timeToCoordinate(d.t1);
+                        if(x0==null||x1==null||x1<0||x0>paneW||x1-x0<26) return; // off-screen or too squeezed to read
+                        ctx.fillText(d.name,Math.max(x0,0)+4,paneH-3);
+                      });
+                      ctx.globalAlpha=1;
+                    }
                     ctx.restore();
                   });
                 }
