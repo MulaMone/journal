@@ -6134,6 +6134,18 @@ function chartTab(){
     // which the success-path clearInterval below wouldn't reach.
     clearInterval(_chartLiveTimer);
     clearInterval(_chartCountdownTimer);
+    // Prev-period close/hi/lo history: start its fetch NOW, in parallel with the
+    // main candle request, instead of after the chart has rendered. Window is
+    // over-estimated (x1.5 for weekend gaps); the consumer falls back to a fresh
+    // request if the real span turns out larger than what was prefetched.
+    var _pcPre=null;
+    if(tf!=="1d"){
+      var _pg=periodSec>=3600?"W":"D",_ps=periodSec>=3600?604800:86400;
+      var _estSpan=fromSec!=null?Math.max(0,Math.min(toSec,Math.floor(Date.now()/1000))-fromSec):periodSec*500;
+      var _pn=Math.min(5000,Math.ceil(_estSpan*1.5/_ps)+4);
+      var _pu=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+_pg+"&price=M&count="+_pn+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+      _pcPre={gran:_pg,n:_pn,p:chartFetchJson(_pu).catch(function(){return null;})};
+    }
     chartFetchJson(url)
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
@@ -6632,7 +6644,10 @@ function chartTab(){
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/pcSec)+4);
         var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-        chartFetchJson(pcUrl).then(function(d){
+        var pcReq=(_pcPre&&_pcPre.gran===pcGran&&_pcPre.n>=n)
+          ?_pcPre.p.then(function(d){return d||chartFetchJson(pcUrl);})
+          :chartFetchJson(pcUrl);
+        pcReq.then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var hs=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
