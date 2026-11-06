@@ -6533,6 +6533,33 @@ function chartTab(){
         if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
         else if(periodSec>=3600){pcGran="W";pcLbl="PWC";pcSec=604800;}
         else {pcGran="D";pcLbl="PDC";pcSec=86400;}
+        // Draw one separate line series per period (so levels never join diagonally),
+        // each run out to the next period's first candle; only the newest carries the tag.
+        function drawGroups(groups){
+          groups.forEach(function(g,gi){
+            var isCur=gi===groups.length-1;
+            if(!isCur) g.data.push({time:groups[gi+1].data[0].time,value:g.v});
+            var ps=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?pcLbl:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            ps.setData(g.data);
+          });
+        }
+        if(tf==="1d"){
+          // Daily: split months exactly where the MONTH lines are drawn (same session
+          // anchor shift), and take the prior month's close from the daily candles
+          // themselves — OANDA's own month-candle start is a day off from that line.
+          var mg=[],curG=null,curKey=null;
+          candles.forEach(function(c,ci){
+            var dd=new Date((c.time+anchorShift)*1000),key=dd.getUTCFullYear()*12+dd.getUTCMonth();
+            if(key!==curKey){
+              curKey=key;
+              curG=ci>0?{v:candles[ci-1].close,data:[]}:null; // first month on screen has no prior close
+              if(curG) mg.push(curG);
+            }
+            if(curG) curG.data.push({time:c.time,value:curG.v});
+          });
+          if(mg.length) drawGroups(mg);
+          return;
+        }
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/pcSec)+4);
         var pcUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+pcGran+"&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
@@ -6542,23 +6569,14 @@ function chartTab(){
             return {t:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,c:parseFloat(c.mid.c)};
           });
           if(hs.length<2) return;
-          // One separate line series per period, so the level at the end of one
-          // period never connects diagonally to the next period's level.
-          var groups=[],hi=0,curG=null,curHi=-1;
+          var groups=[],hi=0,curG2=null,curHi=-1;
           candles.forEach(function(c){
             while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
             if(c.time<hs[0].t||hi<1) return; // no prior period known yet
-            if(hi!==curHi){curG={v:hs[hi-1].c,data:[]};groups.push(curG);curHi=hi;}
-            curG.data.push({time:c.time,value:curG.v});
+            if(hi!==curHi){curG2={v:hs[hi-1].c,data:[]};groups.push(curG2);curHi=hi;}
+            curG2.data.push({time:c.time,value:curG2.v});
           });
-          groups.forEach(function(g,gi){
-            var isCur=gi===groups.length-1; // only the current period carries the axis tag
-            // Run each line out to the next period's first candle so it meets the
-            // boundary line instead of stopping a candle short.
-            if(!isCur) g.data.push({time:groups[gi+1].data[0].time,value:g.v});
-            var ps=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?pcLbl:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-            ps.setData(g.data);
-          });
+          if(groups.length) drawGroups(groups);
         }).catch(function(){});
       })();
 
