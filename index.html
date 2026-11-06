@@ -5317,7 +5317,7 @@ function parseCSV(text){
       if(ampm==="AM"&&hh===12) hh=0;
       // UTC to ET offset: -4 (summer DST), -5 (winter)
       var utcMs=Date.UTC(yr,mo,dy,hh,parseInt(mm),0);
-      var etOffset=(function(){var d=new Date(utcMs);var jan=new Date(Date.UTC(d.getUTCFullYear(),0,1));var jul=new Date(Date.UTC(d.getUTCFullYear(),6,1));var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;return isDST?4:5;})();
+      var etOffset=etOffsetHoursAt(utcMs);
       var etMs=utcMs-(etOffset*3600000);
       var ed=new Date(etMs);
       return {date:pad(ed.getUTCMonth()+1)+"/"+pad(ed.getUTCDate())+"/"+String(ed.getUTCFullYear()).slice(2),time:pad(ed.getUTCHours())+":"+pad(ed.getUTCMinutes())};
@@ -5733,6 +5733,18 @@ function syncTradovate(creds,days){
   });
 }
 
+// Exact UTC→New York offset in hours (4 = EDT, 5 = EST) for a UTC instant, from the
+// real tz database (handles the 2nd-Sun-Mar / 1st-Sun-Nov changeovers). Replaces the
+// old "Apr–Oct = DST" month guess, which was wrong for a week each March and November.
+var _etFmtG=null,_etCacheG={};
+function etOffsetHoursAt(utcMs){
+  var hk=Math.floor(utcMs/3600000);
+  if(_etCacheG[hk]!==undefined) return _etCacheG[hk];
+  if(!_etFmtG) _etFmtG=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hourCycle:"h23",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",second:"numeric"});
+  var q={};_etFmtG.formatToParts(new Date(hk*3600000)).forEach(function(x){q[x.type]=x.value;});
+  var off=Math.round((hk*3600-Date.UTC(+q.year,+q.month-1,+q.day,+q.hour,+q.minute,+q.second)/1000)/3600);
+  return (_etCacheG[hk]=off);
+}
 // Tradovate's /fill/list API returns timestamps in UTC ISO 8601. Convert to
 // ET (DST-aware) before extracting calendar date/time, mirroring the offset
 // logic used for the TradingView-paper-trading import above — otherwise
@@ -5740,9 +5752,7 @@ function syncTradovate(creds,days){
 function tvFillToET(raw){
   var utcMs=Date.parse(raw);
   if(isNaN(utcMs)) return {date:fmtImportDate(raw),time:fmtImportTime(raw)};
-  var d=new Date(utcMs);
-  var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;
-  var etOffset=isDST?4:5;
+  var etOffset=etOffsetHoursAt(utcMs);
   var ed=new Date(utcMs-(etOffset*3600000));
   return {date:pad(ed.getUTCMonth()+1)+"/"+pad(ed.getUTCDate())+"/"+String(ed.getUTCFullYear()).slice(2),time:pad(ed.getUTCHours())+":"+pad(ed.getUTCMinutes())};
 }
@@ -9948,13 +9958,10 @@ function dxyCacheSet(obj){try{localStorage.setItem("edge_dxy_v1",JSON.stringify(
 // tags every close with the date the candle opened, one day too early
 // (e.g. Monday's close was being filed under Sunday's date). Convert to
 // ET first, then advance a day to land on the date the candle actually
-// closes on. Same DST approximation (Apr–Sep = EDT) used elsewhere in
-// this file for consistency.
+// closes on. Uses the exact DST-aware offset.
 function oandaTradingDate(rawTime){
   var utcMs=Date.parse(rawTime);
-  var d=new Date(utcMs);
-  var isDST=d.getUTCMonth()>2&&d.getUTCMonth()<10;
-  var etOffset=isDST?4:5;
+  var etOffset=etOffsetHoursAt(utcMs);
   var etMs=utcMs-(etOffset*3600000)+86400000; // -> ET, then +1 day: open's ET-date -> the trading day it closes on
   var ed=new Date(etMs);
   return ed.getUTCFullYear()+"-"+pad(ed.getUTCMonth()+1)+"-"+pad(ed.getUTCDate());
