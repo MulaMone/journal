@@ -6565,29 +6565,41 @@ function chartTab(){
         else {pcGran="D";pcLbl="PDC";pcSec=86400;}
         // Draw one separate line series per period (so levels never join diagonally),
         // each run out to the next period's first candle; only the newest carries the tag.
-        function drawGroups(groups){
+        function drawGroups(groups,fld,color,tag){
           groups.forEach(function(g,gi){
+            if(g[fld]==null||!isFinite(g[fld])) return;
             var isCur=gi===groups.length-1;
-            if(!isCur) g.data.push({time:groups[gi+1].data[0].time,value:g.v});
-            var ps=chart.addLineSeries({color:"#ffd54f",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?pcLbl:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-            ps.setData(g.data);
+            var data=g.times.map(function(t){return {time:t,value:g[fld]};});
+            if(!isCur) data.push({time:groups[gi+1].times[0],value:g[fld]});
+            var ps=chart.addLineSeries({color:color,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(tag&&isCur)?pcLbl:"",lastValueVisible:!!(tag&&isCur),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            ps.setData(data);
           });
+        }
+        // prior-period close (yellow, tagged) + high (green) + low (red), lines only
+        function drawAll(groups){
+          drawGroups(groups,"c","#ffd54f",true);
+          drawGroups(groups,"h","#00b862",false);
+          drawGroups(groups,"l","#ff4444",false);
         }
         if(tf==="1d"){
           // Daily: split months exactly where the MONTH lines are drawn (same session
           // anchor shift), and take the prior month's close from the daily candles
           // themselves — OANDA's own month-candle start is a day off from that line.
-          var mg=[],curG=null,curKey=null;
+          var mg=[],curG=null,curKey=null,mHi=-Infinity,mLo=Infinity,mCount=0;
           candles.forEach(function(c,ci){
             var dd=new Date((c.time+anchorShift)*1000),key=dd.getUTCFullYear()*12+dd.getUTCMonth();
             if(key!==curKey){
-              curKey=key;
-              curG=ci>0?{v:candles[ci-1].close,data:[]}:null; // first month on screen has no prior close
+              // the first month on screen may be only partly loaded, so its hi/lo isn't trusted
+              var pHi=mHi,pLo=mLo,pPartial=(mCount<=1);
+              curKey=key;mCount++;mHi=-Infinity;mLo=Infinity;
+              curG=ci>0?{c:candles[ci-1].close,h:pPartial?null:pHi,l:pPartial?null:pLo,times:[]}:null; // first month on screen has no prior close
               if(curG) mg.push(curG);
             }
-            if(curG) curG.data.push({time:c.time,value:curG.v});
+            if(c.high>mHi) mHi=c.high;
+            if(c.low<mLo) mLo=c.low;
+            if(curG) curG.times.push(c.time);
           });
-          if(mg.length) drawGroups(mg);
+          if(mg.length) drawAll(mg);
           return;
         }
         var span=candles[candles.length-1].time-candles[0].time;
@@ -6596,17 +6608,17 @@ function chartTab(){
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var hs=((d&&d.candles)||[]).map(function(c){
-            return {t:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,c:parseFloat(c.mid.c)};
+            return {t:Math.floor(new Date(c.time).getTime()/1000)-etOffsetSec,c:parseFloat(c.mid.c),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
           });
           if(hs.length<2) return;
           var groups=[],hi=0,curG2=null,curHi=-1;
           candles.forEach(function(c){
             while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
             if(c.time<hs[0].t||hi<1) return; // no prior period known yet
-            if(hi!==curHi){curG2={v:hs[hi-1].c,data:[]};groups.push(curG2);curHi=hi;}
-            curG2.data.push({time:c.time,value:curG2.v});
+            if(hi!==curHi){curG2={c:hs[hi-1].c,h:hs[hi-1].h,l:hs[hi-1].l,times:[]};groups.push(curG2);curHi=hi;}
+            curG2.times.push(c.time);
           });
-          if(groups.length) drawGroups(groups);
+          if(groups.length) drawAll(groups);
         }).catch(function(){});
       })();
 
