@@ -5898,10 +5898,11 @@ function chartTab(){
       if(t!==tf&&_chartLive&&_chartLive.moved){
         try{
           var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
-          if(vr&&vr.from&&vr.to){
-            // getVisibleRange clamps to real candles; keep any empty space scrolled past the latest bar (in seconds)
-            var ex=(lr&&lr.to>_chartLive.lastIdx)?(lr.to-_chartLive.lastIdx)*_chartLive.per:0;
-            _chartKeepView={from:vr.from,to:vr.to,extraSec:ex};
+          if(vr&&vr.from&&vr.to&&lr){
+            // Exact right edge: seconds past the last visible bar's time, measured from its pixel position.
+            var w0=ts0.width(),bs0=w0/(lr.to-lr.from),x0=ts0.timeToCoordinate(vr.to);
+            var rb=(x0==null)?0:Math.max(0,(w0-x0)/bs0);
+            _chartKeepView={from:vr.from,to:vr.to,rightSec:rb*_chartLive.per};
           }
         }catch(e){}
       }
@@ -6618,10 +6619,11 @@ function chartTab(){
 
       chart.timeScale().fitContent();
       if(keepView){try{
-        // Restore exactly the window the user had (incl. any empty space past the last bar). No auto-zoom otherwise.
-        var tsr=chart.timeScale();
-        tsr.setVisibleRange({from:keepView.from,to:keepView.to});
-        if(keepView.extraSec>0){var lr2=tsr.getVisibleLogicalRange();if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+keepView.extraSec/periodSec});}
+        // Same time window as before, positioned by bar index so nothing is re-fit or re-zoomed.
+        var iFrom=0,iTo=candles.length-1,k;
+        for(k=0;k<candles.length;k++){if(candles[k].time>=keepView.from){iFrom=k;break;}}
+        for(k=candles.length-1;k>=0;k--){if(candles[k].time<=keepView.to){iTo=k;break;}}
+        chart.timeScale().setVisibleLogicalRange({from:iFrom,to:iTo+keepView.rightSec/periodSec});
       }catch(e){}}
 
       // ── Previous-close levels, one per period ───────────────────
