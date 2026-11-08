@@ -1037,6 +1037,8 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // stale and no-op, instead of mutating the chart/live-poll state for the
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
+var _chartLive=null;      // {chart,moved} for the chart currently on screen
+var _chartKeepView=null;  // {from,to} carried across a timeframe switch
 var _chartGapReloadAt=0; // last time the live poll forced a full reload because the loaded candles had fallen behind
 function initAutoSync(){
   _ss_orig=ss;
@@ -5850,6 +5852,7 @@ function chartTab(){
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
   var focusTs=State.chart_focus_ts||null;
+  var keepView=focusTs?null:_chartKeepView; _chartKeepView=null; // zoomed range carried over from the previous timeframe
 
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
@@ -5889,7 +5892,14 @@ function chartTab(){
       ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
       : "border-color:var(--red);color:var(--red);padding:6px 10px;";
     b.textContent=t;
-    b.addEventListener("click",function(){State.chart_interval=t;render();});
+    b.addEventListener("click",function(){
+      // If the user zoomed/panned, carry that time range into the new timeframe.
+      _chartKeepView=null;
+      if(t!==tf&&_chartLive&&_chartLive.moved){
+        try{var vr=_chartLive.chart.timeScale().getVisibleRange();if(vr&&vr.from&&vr.to)_chartKeepView={from:vr.from,to:vr.to};}catch(e){}
+      }
+      State.chart_interval=t;render();
+    });
     ctrlRow.appendChild(b);
   });
 
@@ -6067,6 +6077,18 @@ function chartTab(){
     if(fromSec>=toSec) fromSec=toSec-periodSec;
   }
 
+  if(keepView){
+    // Make sure the fetched window reaches back to the kept view (chart times are
+    // ET-shifted ~4-5h behind real UTC, so add 5h slack plus some left padding).
+    var kvFrom=keepView.from+18000-periodSec*20;
+    var kvNow=Math.floor(Date.now()/1000);
+    if(fromSec==null||kvFrom<fromSec){
+      fromSec=kvFrom;
+      if(toSec==null) toSec=kvNow-120;
+      if(toSec-fromSec>periodSec*4500) fromSec=toSec-periodSec*4500;
+    }
+  }
+
   if(fromSec!=null){
     var nowS=Math.floor(Date.now()/1000);
     if(toSec>=nowS-300){
@@ -6215,6 +6237,11 @@ function chartTab(){
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
         timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
+      });
+
+      _chartLive={chart:chart,moved:false};
+      ["wheel","mousedown","touchstart"].forEach(function(ev){
+        chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart)_chartLive.moved=true;},{passive:true});
       });
 
       var series=chart.addCandlestickSeries({
@@ -6583,6 +6610,7 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
+      if(keepView){try{chart.timeScale().setVisibleRange({from:keepView.from,to:keepView.to});}catch(e){}}
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
