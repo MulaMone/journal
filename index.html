@@ -6637,11 +6637,11 @@ function chartTab(){
         if(w/(n-1+g)<0.5) g=tagPx/0.5+0.5;
         return g;
       };
-      // 30m default view: the fetch window can reach back ~3 months (back to the earliest trade),
+      // Default view (30m and higher): the fetch window can reach back ~3 months (back to the earliest trade),
       // which fits to unreadably small candles. Open zoomed on the latest bars instead; the user
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
-      var ZOOM_30M=350; // bars shown (~7 sessions)
-      var zoomN=(tf==="30m"&&!focusTs&&!keepView&&candles.length>ZOOM_30M+1)?ZOOM_30M:0;
+      var ZOOM_BARS={"30m":350,"1h":300,"4h":250,"8h":200,"1d":150}; // bars shown on open, per timeframe
+      var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
         if(!keepView&&_w0>tagPx*3&&candles.length>1) chart.applyOptions({timeScale:{rightOffset:tagGap(_w0,zoomN?zoomN+1:candles.length)}});
