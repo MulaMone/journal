@@ -6791,6 +6791,7 @@ function chartTab(){
             pcSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
             pcSeries=[];
             drawAll(groups);
+            if(chart._pmRedraw) chart._pmRedraw(); // keep prev-month lines (8h) on top of the fresh weekly ones
             if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
         }).catch(function(){});
@@ -6833,16 +6834,27 @@ function chartTab(){
             }
             if(gCur) gCur.times.push(c.time);
           });
-          groups.forEach(function(g,gi){
-            var isCur=gi===groups.length-1;
+          // Later-added series paint on top. Draw high, then low, then close last, so PMC wins
+          // wherever it overlaps another level. The weekly lines are re-added when OANDA's
+          // weekly candles land, which would cover these, so the weekly code calls this again.
+          var pmSeries=[];
+          function pmDraw(){
+            pmSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
+            pmSeries=[];
             ["h","l","c"].forEach(function(f){
-              if(g[f]==null||!isFinite(g[f])) return;
-              var data=g.times.map(function(t){return {time:t,value:g[f]};});
-              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-              var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f!=="c")?PM_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-              ps.setData(data);
+              groups.forEach(function(g,gi){
+                var isCur=gi===groups.length-1;
+                if(g[f]==null||!isFinite(g[f])) return;
+                var data=g.times.map(function(t){return {time:t,value:g[f]};});
+                if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+                var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f!=="c")?PM_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+                ps.setData(data);
+                pmSeries.push(ps);
+              });
             });
-          });
+          }
+          chart._pmRedraw=pmDraw;
+          pmDraw();
           if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
         }).catch(function(){});
       })();
