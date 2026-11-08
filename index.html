@@ -6796,6 +6796,57 @@ function chartTab(){
         }).catch(function(){});
       })();
 
+      // ── 8h only: previous MONTH high / low / close ──────────────
+      // Built from OANDA daily candles grouped by month with the same session-anchored
+      // month split as the MONTH lines, so the boundary matches. One line series per month.
+      if(tf==="8h") (function(){
+        var PM_COL={h:"#4da3ff",l:"#ff6ec7",c:"#b8c4d9"}; // blue / pink / silver — distinct from week yellow/green/red, MONTH purple, ETH orange
+        var PM_TAG={h:"PMH",l:"PML",c:"PMC"};
+        var span=candles[candles.length-1].time-candles[0].time;
+        var n=Math.min(5000,Math.ceil(span/86400)+45); // +45d so the month before the first visible one is complete
+        var pmUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        chartFetchJson(pmUrl).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var ds=((d&&d.candles)||[]).map(function(c){
+            var _pu=Math.floor(new Date(c.time).getTime()/1000);
+            return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),c:parseFloat(c.mid.c)};
+          });
+          if(ds.length<2) return;
+          // month key -> {h,l,c,start}
+          var months=[],cur=null,curKey=null;
+          ds.forEach(function(x){
+            var dd=new Date((x.t+anchorShift)*1000),key=dd.getUTCFullYear()*12+dd.getUTCMonth();
+            if(key!==curKey){curKey=key;cur={key:key,h:-Infinity,l:Infinity,c:null};months.push(cur);}
+            if(x.h>cur.h) cur.h=x.h;
+            if(x.l<cur.l) cur.l=x.l;
+            cur.c=x.c;
+          });
+          // group chart candles by month; each takes the previous month's stats
+          var byKey={};months.forEach(function(m,i){byKey[m.key]=i;});
+          var groups=[],gCur=null,gKey=null;
+          candles.forEach(function(c){
+            var dd=new Date((c.time+anchorShift)*1000),key=dd.getUTCFullYear()*12+dd.getUTCMonth();
+            if(key!==gKey){
+              gKey=key;gCur=null;
+              var mi=byKey[key];
+              if(mi>=1&&mi-1>=1){var pm=months[mi-1];gCur={h:pm.h,l:pm.l,c:pm.c,times:[]};groups.push(gCur);} // skip if prior month is the (partial) first fetched month
+            }
+            if(gCur) gCur.times.push(c.time);
+          });
+          groups.forEach(function(g,gi){
+            var isCur=gi===groups.length-1;
+            ["h","l","c"].forEach(function(f){
+              if(g[f]==null||!isFinite(g[f])) return;
+              var data=g.times.map(function(t){return {time:t,value:g[f]};});
+              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+              var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PM_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              ps.setData(data);
+            });
+          });
+          if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
+        }).catch(function(){});
+      })();
+
       var last=candles[candles.length-1];
       var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
       lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
