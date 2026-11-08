@@ -6640,7 +6640,7 @@ function chartTab(){
       // Default view (30m and higher): the fetch window can reach back ~3 months (back to the earliest trade),
       // which fits to unreadably small candles. Open zoomed on the latest bars instead; the user
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
-      var ZOOM_BARS={"30m":300,"1h":300,"4h":250,"8h":200,"1d":150}; // bars shown on open, per timeframe
+      var ZOOM_BARS={"2m":1000,"5m":800,"30m":300,"1h":300,"4h":250,"8h":200,"1d":150}; // bars shown on open, per timeframe
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
