@@ -6322,7 +6322,7 @@ function chartTab(){
       // pass: above the grid (so a session line wins over a grid line under it),
       // but below the candles — so lines sit behind price action instead of
       // cutting through it, and stay perfectly in sync while scrolling/zooming.
-      // Weekday names along the bottom of the pane — 2m/5m (MON) and 30m (first letter, M), and only for the
+      // Weekday names along the bottom of the pane — 2m/5m/30m (MON), and only for the
       // trading days of the week we're currently in (from the latest week gap on).
       // A day belongs to the session anchor (18:00/17:00 ET open), same as the day lines.
       var dayLabels=[];
@@ -6332,7 +6332,7 @@ function chartTab(){
         candles.forEach(function(c){
           if(c.time<wkStart) return;
           var st=c.time+anchorShift,dk=Math.floor(st/86400);
-          if(dk!==lastDayKey){lastDayKey=dk;curDay={t0:c.time,t1:c.time,name:DAY_ABBR[new Date(st*1000).getUTCDay()]};if(periodSec>300) curDay.name=curDay.name.charAt(0);dayLabels.push(curDay);}
+          if(dk!==lastDayKey){lastDayKey=dk;curDay={t0:c.time,t1:c.time,name:DAY_ABBR[new Date(st*1000).getUTCDay()]};dayLabels.push(curDay);}
           curDay.t1=c.time;
         });
       }
