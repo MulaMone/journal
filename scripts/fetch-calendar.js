@@ -104,9 +104,18 @@ function merge(ffRows, tvEvents) {
     }
   });
 
+  // A TV-only event is a duplicate (worded differently) when FF already lists the same release in that slot,
+  // e.g. TV "Inflation Rate YoY" vs FF "CPI m/m": compare titles with the period words removed.
+  const PERIOD = new Set(["mom", "yoy", "qoq"]);
+  const strip = (k) => new Set([...k].filter((w) => !PERIOD.has(w)));
+  const dupOfFF = (a) => ff.some((b) => {
+    if (Math.abs(a.t - b.t) > MATCH_WINDOW_MS) return false;
+    const x = strip(a.k), y = strip(b.k);
+    return x.size > 0 && y.size > 0 && jaccard(x, y) >= MIN_SCORE;
+  });
   const added = [], addedInfo = [];
   tv.forEach((a, ai) => {
-    if (usedA.has(ai)) return;
+    if (usedA.has(ai) || dupOfFF(a)) return;
     const row = { title: a.e.title, country: "USD", impact: "High", date: toEtIso(a.t), source: "TV" };
     added.push(row);
     const near = ff.filter((b) => Math.abs(a.t - b.t) <= MATCH_WINDOW_MS).map((b) => b.r.title);
