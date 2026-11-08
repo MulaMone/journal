@@ -5899,10 +5899,10 @@ function chartTab(){
         try{
           var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
           if(vr&&vr.from&&vr.to&&lr){
-            // Exact right edge: seconds past the last visible bar's time, measured from its pixel position.
+            // Keep the same zoom (bars on screen) and the same centre point in time.
             var w0=ts0.width(),bs0=w0/(lr.to-lr.from),x0=ts0.timeToCoordinate(vr.to);
             var rb=(x0==null)?0:Math.max(0,(w0-x0)/bs0);
-            _chartKeepView={from:vr.from,to:vr.to,rightSec:rb*_chartLive.per};
+            _chartKeepView={from:vr.from,centerT:(vr.from+vr.to+rb*_chartLive.per)/2,spanBars:lr.to-lr.from};
           }
         }catch(e){}
       }
@@ -6088,7 +6088,7 @@ function chartTab(){
   if(keepView){
     // Make sure the fetched window reaches back to the kept view (chart times are
     // ET-shifted ~4-5h behind real UTC, so add 5h slack plus some left padding).
-    var kvFrom=keepView.from+18000-periodSec*20;
+    var kvFrom=keepView.centerT+18000-periodSec*(keepView.spanBars/2+20);
     var kvNow=Math.floor(Date.now()/1000);
     if(fromSec==null||kvFrom<fromSec){
       fromSec=kvFrom;
@@ -6619,11 +6619,10 @@ function chartTab(){
 
       chart.timeScale().fitContent();
       if(keepView){try{
-        // Same time window as before, positioned by bar index so nothing is re-fit or re-zoomed.
-        var iFrom=0,iTo=candles.length-1,k;
-        for(k=0;k<candles.length;k++){if(candles[k].time>=keepView.from){iFrom=k;break;}}
-        for(k=candles.length-1;k>=0;k--){if(candles[k].time<=keepView.to){iTo=k;break;}}
-        chart.timeScale().setVisibleLogicalRange({from:iFrom,to:iTo+keepView.rightSec/periodSec});
+        // Same candle size (same number of bars across), centred on the same moment in time.
+        var iC=candles.length-1,kk;
+        for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
+        chart.timeScale().setVisibleLogicalRange({from:iC-keepView.spanBars/2,to:iC+keepView.spanBars/2});
       }catch(e){}}
 
       // ── Previous-close levels, one per period ───────────────────
