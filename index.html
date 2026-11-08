@@ -6627,21 +6627,33 @@ function chartTab(){
         note.textContent="OANDA • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
       }
 
+      // Auto spacing: fitContent() shows everything at its normal zoom; the right gap is set BEFORE
+      // the fit so it lands in the right place on the first frame (no visible shift). The gap leaves
+      // room for the PDC/PWC/PMC tag (~58px box sticking out of the price axis into the plot), so the
+      // newest candle ends right before it. Gap is derived from the bar spacing the fit will produce
+      // (clamped at the library's 0.5px minimum on narrow charts / long histories).
+      var tagPx=58,tagGap=function(w,n){
+        var g=(tagPx*(n-1)/w+0.5)/(1-tagPx/w);
+        if(w/(n-1+g)<0.5) g=tagPx/0.5+0.5;
+        return g;
+      };
+      try{
+        var _w0=chart.timeScale().width();
+        if(!keepView&&_w0>tagPx*3&&candles.length>1) chart.applyOptions({timeScale:{rightOffset:tagGap(_w0,candles.length)}});
+      }catch(e){}
       chart.timeScale().fitContent();
-      // Auto spacing: keep fitContent's normal zoom, then slide the view so the newest candle ends
-      // right before the PDC/PWC/PMC tag (a ~58px box sticking out of the price axis into the plot).
-      // Gap is measured from the real bar spacing once the fit has applied (it applies on the next
-      // frame, and is clamped on narrow/mobile charts), so it holds at any zoom or screen size.
+      // Safety net: if layout settles to a different width after the first frame, correct the gap
+      // (no-op when it's already right, so there's no visible movement).
       if(!keepView){
         var anchorRight=function(){
           if(!_chartLive||_chartLive.chart!==chart||_chartLive.moved||candles.length<2) return;
           try{
             var ts=chart.timeScale(),x1=ts.logicalToCoordinate(candles.length-1),x0=ts.logicalToCoordinate(candles.length-2);
             if(x1==null||x0==null||x1-x0<=0) return;
-            ts.scrollToPosition(58/(x1-x0)+0.5,false);
+            var bs=x1-x0,want=tagPx/bs+0.5;
+            if(Math.abs(ts.scrollPosition()-want)*bs>3) ts.scrollToPosition(want,false);
           }catch(e){}
         };
-        requestAnimationFrame(function(){requestAnimationFrame(anchorRight);});
         [300,900,2000].forEach(function(ms){setTimeout(anchorRight,ms);});
       }
       if(keepView){
