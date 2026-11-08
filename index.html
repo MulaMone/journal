@@ -6839,7 +6839,7 @@ function chartTab(){
               if(g[f]==null||!isFinite(g[f])) return;
               var data=g.times.map(function(t){return {time:t,value:g[f]};});
               if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-              var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PM_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f!=="c")?PM_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
               ps.setData(data);
             });
           });
