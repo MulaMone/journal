@@ -5902,7 +5902,7 @@ function chartTab(){
             // Keep the same zoom (bars on screen) and the same centre point in time.
             var w0=ts0.width(),bs0=w0/(lr.to-lr.from),x0=ts0.timeToCoordinate(vr.to);
             var rb=(x0==null)?0:Math.max(0,(w0-x0)/bs0);
-            _chartKeepView={from:vr.from,centerT:(vr.from+vr.to+rb*_chartLive.per)/2,spanBars:lr.to-lr.from};
+            _chartKeepView={leftT:vr.from,spanBars:lr.to-lr.from};
           }
         }catch(e){}
       }
@@ -6088,7 +6088,7 @@ function chartTab(){
   if(keepView){
     // Make sure the fetched window reaches back to the kept view (chart times are
     // ET-shifted ~4-5h behind real UTC, so add 5h slack plus some left padding).
-    var kvFrom=keepView.centerT+18000-periodSec*(keepView.spanBars/2+20);
+    var kvFrom=keepView.leftT+18000-periodSec*20;
     var kvNow=Math.floor(Date.now()/1000);
     if(fromSec==null||kvFrom<fromSec){
       fromSec=kvFrom;
@@ -6249,7 +6249,7 @@ function chartTab(){
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,per:periodSec};
       ["wheel","mousedown","touchstart"].forEach(function(ev){
-        chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true});
+        chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true,capture:true});
       });
 
       var series=chart.addCandlestickSeries({
@@ -6624,14 +6624,18 @@ function chartTab(){
         var applyKeep=function(){
           if(!_chartLive||_chartLive.chart!==chart||_chartLive.moved) return;
           try{
-            var iC=candles.length-1,kk;
-            for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
-            chart.timeScale().setVisibleLogicalRange({from:iC-keepView.spanBars/2,to:iC+keepView.spanBars/2});
+            // TradingView-style: the left edge stays on the same moment in time and the candle size
+            // (bars across) stays the same, so the view lands exactly where it was.
+            var iL=0,kk;
+            for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.leftT){iL=kk;break;}}
+            chart.timeScale().setVisibleLogicalRange({from:iL,to:iL+keepView.spanBars});
           }catch(e){console.warn("[Edge] keep-view restore failed",e,keepView);}
         };
+        _chartLive.reapply=applyKeep;
         applyKeep();
         requestAnimationFrame(applyKeep);
-        setTimeout(applyKeep,300);
+        // Re-assert after late layers (levels, resize) finish, as long as the user hasn't touched the chart.
+        [300,900,2000].forEach(function(ms){setTimeout(applyKeep,ms);});
       }
 
       // ── Previous-close levels, one per period ───────────────────
@@ -6728,6 +6732,7 @@ function chartTab(){
             pcSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
             pcSeries=[];
             drawAll(groups);
+            if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
         }).catch(function(){});
       })();
