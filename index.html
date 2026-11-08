@@ -6627,19 +6627,14 @@ function chartTab(){
         note.textContent="OANDA • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
       }
 
-      chart.timeScale().fitContent();
-      // Auto spacing: the PDC/PWC/PMC tag is a box that sticks ~55px out of the price axis into
-      // the plot, so anchor the right edge at the LEFT side of that tag: the newest candle ends
-      // right before it. Gap is in pixels (converted to bars), so it holds at any zoom.
+      // Auto spacing: leave room on the right for the PDC/PWC/PMC tag (a ~58px box sticking out of
+      // the price axis) so the newest candle ends right before it. fitContent() keeps its normal
+      // "show everything" zoom; only the right gap (rightOffset, in bars) is set from that pixel width.
       try{
-        var _ts=chart.timeScale(),_fr=_ts.getVisibleLogicalRange(),_w=_ts.width(),_tagPx=58;
-        if(_fr&&_w>_tagPx*3){
-          // keep fitContent's zoom (same bar spacing) and only slide the view right
-          var _span=_fr.to-_fr.from,_gap=_tagPx/(_w/_span)+0.5,_to=(candles.length-1)+_gap;
-          _ts.applyOptions({rightOffset:_gap});
-          _ts.setVisibleLogicalRange({from:_to-_span,to:_to});
-        }
+        var _w=chart.timeScale().width(),_tagPx=58,_n=candles.length;
+        if(_w>_tagPx*3) chart.applyOptions({timeScale:{rightOffset:(_tagPx*(_n-1)/_w+0.5)/(1-_tagPx/_w)}});
       }catch(e){}
+      chart.timeScale().fitContent();
       if(keepView){
         // Same candle size (same number of bars across), centred on the same moment in time.
         // Applied now and again shortly after, in case a late layout/resize re-fits the chart.
