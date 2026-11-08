@@ -6627,14 +6627,23 @@ function chartTab(){
         note.textContent="OANDA • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
       }
 
-      // Auto spacing: leave room on the right for the PDC/PWC/PMC tag (a ~58px box sticking out of
-      // the price axis) so the newest candle ends right before it. fitContent() keeps its normal
-      // "show everything" zoom; only the right gap (rightOffset, in bars) is set from that pixel width.
-      try{
-        var _w=chart.timeScale().width(),_tagPx=58,_n=candles.length;
-        if(_w>_tagPx*3) chart.applyOptions({timeScale:{rightOffset:(_tagPx*(_n-1)/_w+0.5)/(1-_tagPx/_w)}});
-      }catch(e){}
       chart.timeScale().fitContent();
+      // Auto spacing: keep fitContent's normal zoom, then slide the view so the newest candle ends
+      // right before the PDC/PWC/PMC tag (a ~58px box sticking out of the price axis into the plot).
+      // Gap is measured from the real bar spacing once the fit has applied (it applies on the next
+      // frame, and is clamped on narrow/mobile charts), so it holds at any zoom or screen size.
+      if(!keepView){
+        var anchorRight=function(){
+          if(!_chartLive||_chartLive.chart!==chart||_chartLive.moved||candles.length<2) return;
+          try{
+            var ts=chart.timeScale(),x1=ts.logicalToCoordinate(candles.length-1),x0=ts.logicalToCoordinate(candles.length-2);
+            if(x1==null||x0==null||x1-x0<=0) return;
+            ts.scrollToPosition(58/(x1-x0)+0.5,false);
+          }catch(e){}
+        };
+        requestAnimationFrame(function(){requestAnimationFrame(anchorRight);});
+        [300,900,2000].forEach(function(ms){setTimeout(anchorRight,ms);});
+      }
       if(keepView){
         // Same candle size (same number of bars across), centred on the same moment in time.
         // Applied now and again shortly after, in case a late layout/resize re-fits the chart.
