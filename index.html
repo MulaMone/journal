@@ -6254,7 +6254,7 @@ function chartTab(){
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
-        timeScale:{borderColor:"#1a3260",rightOffset:0.5,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
+        timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,lastT:candles[candles.length-1].time,per:periodSec};
@@ -6634,9 +6634,10 @@ function chartTab(){
       try{
         var _ts=chart.timeScale(),_fr=_ts.getVisibleLogicalRange(),_w=_ts.width(),_tagPx=58;
         if(_fr&&_w>_tagPx*3){
-          var _L=(candles.length-1)+0.5-_fr.from,_span=_L/(1-_tagPx/_w);
-          _ts.applyOptions({rightOffset:_tagPx/(_w/_span)+0.5});
-          _ts.setVisibleLogicalRange({from:_fr.from,to:_fr.from+_span});
+          // keep fitContent's zoom (same bar spacing) and only slide the view right
+          var _span=_fr.to-_fr.from,_gap=_tagPx/(_w/_span)+0.5,_to=(candles.length-1)+_gap;
+          _ts.applyOptions({rightOffset:_gap});
+          _ts.setVisibleLogicalRange({from:_to-_span,to:_to});
         }
       }catch(e){}
       if(keepView){
