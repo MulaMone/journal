@@ -5852,7 +5852,7 @@ function chartTab(){
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
   var focusTs=State.chart_focus_ts||null;
-  var keepView=focusTs?null:_chartKeepView; _chartKeepView=null; // zoomed range carried over from the previous timeframe
+  var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
 
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
@@ -5879,7 +5879,7 @@ function chartTab(){
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
     b.textContent=s.l; b.title=s.n;
-    b.addEventListener("click",function(){State.chart_symbol=s.l;render();});
+    b.addEventListener("click",function(){_chartKeepView=null;State.chart_symbol=s.l;render();});
     ctrlRow.appendChild(b);
   });
 
@@ -6249,7 +6249,7 @@ function chartTab(){
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,per:periodSec};
       ["wheel","mousedown","touchstart"].forEach(function(ev){
-        chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart)_chartLive.moved=true;},{passive:true});
+        chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true});
       });
 
       var series=chart.addCandlestickSeries({
@@ -6618,12 +6618,21 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
-      if(keepView){try{
+      if(keepView){
         // Same candle size (same number of bars across), centred on the same moment in time.
-        var iC=candles.length-1,kk;
-        for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
-        chart.timeScale().setVisibleLogicalRange({from:iC-keepView.spanBars/2,to:iC+keepView.spanBars/2});
-      }catch(e){}}
+        // Applied now and again shortly after, in case a late layout/resize re-fits the chart.
+        var applyKeep=function(){
+          if(!_chartLive||_chartLive.chart!==chart||_chartLive.moved) return;
+          try{
+            var iC=candles.length-1,kk;
+            for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
+            chart.timeScale().setVisibleLogicalRange({from:iC-keepView.spanBars/2,to:iC+keepView.spanBars/2});
+          }catch(e){console.warn("[Edge] keep-view restore failed",e,keepView);}
+        };
+        applyKeep();
+        requestAnimationFrame(applyKeep);
+        setTimeout(applyKeep,300);
+      }
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
