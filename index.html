@@ -595,7 +595,7 @@ function _syncToCloudNow(){
       mindsetNote:State.mindsetNote,levelChecks:State.levelChecks,
       levelChecksDate:State.levelChecksDate,weekLevelChecks:State.weekLevelChecks,newsChecks:State.newsChecks,
       newsChecksDate:State.newsChecksDate,newsOther:State.newsOther,
-      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,newsTimes:State.newsTimes,
+      newsSelected:State.newsSelected,newsSelectedDate:State.newsSelectedDate,newsTimes:State.newsTimes,newsTitles:State.newsTitles,
       focusImprove:State.focusImprove,mantraNotes:State.mantraNotes,
       starredSetups:State.starredSetups,
       notes_session:ls("notes_session",{}),
@@ -715,6 +715,7 @@ function loadFromCloud(syncId,callback){
       if(s.newsSelected){State.newsSelected=s.newsSelected;ss("newsSelected",s.newsSelected);}
       if(s.newsSelectedDate){State.newsSelectedDate=s.newsSelectedDate;ss("newsSelectedDate",s.newsSelectedDate);}
       if(s.newsTimes){State.newsTimes=s.newsTimes;ss("newsTimes",s.newsTimes);}
+      if(s.newsTitles){State.newsTitles=s.newsTitles;ss("newsTitles",s.newsTitles);}
       if(s.focusImprove!==undefined){State.focusImprove=s.focusImprove;ss("focusImprove",s.focusImprove);}
       if(s.mantraNotes!==undefined){State.mantraNotes=s.mantraNotes;ss("mantraNotes",s.mantraNotes);}
       if(s.starredSetups){State.starredSetups=s.starredSetups;ss("starredSetups",s.starredSetups);}
@@ -1238,6 +1239,7 @@ var State={
   newsSelected:ls("newsSelected",[]),
   newsSelectedDate:ls("newsSelectedDate",""),
   newsTimes:ls("newsTimes",{}),
+  newsTitles:ls("newsTitles",{}),
   focusImprove:ls("focusImprove",""),
   mantraNotes:ls("mantraNotes",""),
   wkGoal:ls("wkGoal","$2,000 net P&L. Focus on A/B setups only. No revenge trading."),
@@ -2921,7 +2923,7 @@ function homeTab(){
       var npIcon=span();npIcon.style.cssText="color:var(--ca);font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
       var npTime=State.newsTimes&&State.newsTimes[evName];
       if(npTime){var npTimeEl=span("xs m");npTimeEl.style.cssText="font-family:Courier New,monospace;font-size:10px;flex-shrink:0;";npTimeEl.textContent=npTime;npRow.appendChild(npTimeEl);}
-      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=(State.newsTitles&&State.newsTitles[evName])||evName;npRow.appendChild(npLbl);
       var npBadge2=span();npBadge2.style.cssText="background:#ff8c0020;color:var(--ca);border:1px solid #ff8c0050;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge2.textContent="KEY";npRow.appendChild(npBadge2);
       newsPanel.appendChild(npRow);
     });
@@ -2932,7 +2934,7 @@ function homeTab(){
       var npIcon=span();npIcon.style.cssText="color:#b06aff;font-size:11px;font-weight:700;flex-shrink:0;";npIcon.textContent="◆";npRow.appendChild(npIcon);
       var npTime2=State.newsTimes&&State.newsTimes[evName];
       if(npTime2){var npTimeEl2=span("xs m");npTimeEl2.style.cssText="font-family:Courier New,monospace;font-size:10px;flex-shrink:0;";npTimeEl2.textContent=npTime2;npRow.appendChild(npTimeEl2);}
-      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=evName;npRow.appendChild(npLbl);
+      var npLbl=span("xs fw7");npLbl.style.cssText="color:var(--text2);font-size:12px;letter-spacing:.5px;flex:1;";npLbl.textContent=(State.newsTitles&&State.newsTitles[evName])||evName;npRow.appendChild(npLbl);
       var npBadge3=span();npBadge3.style.cssText="background:#b06aff20;color:#b06aff;border:1px solid #b06aff50;font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;";npBadge3.textContent="MACRO";npRow.appendChild(npBadge3);
       newsPanel.appendChild(npRow);
     });
@@ -3327,7 +3329,7 @@ var NEWS_MATCH_RULES=[
 // times carries each matched label's event time through to autoSelectNewsLabels below,
 // which is what lets the Home tab news panel show a time next to each event.
 function matchNewsLabels(events){
-  var matched=[],times={};
+  var matched=[],times={},titles={};
   events.forEach(function(ev){
     var rawTitle=ev&&ev.title!==undefined?ev.title:ev; // tolerate a plain string too
     var lower=(rawTitle||"").toLowerCase();
@@ -3338,10 +3340,10 @@ function matchNewsLabels(events){
       for(var i=0;i<rule.kw.length;i++){
         if(lower.indexOf(rule.kw[i])>-1){ hit=true; break; }
       }
-      if(hit){ matched.push(rule.l); if(ev&&ev.time) times[rule.l]=ev.time; break; }
+      if(hit){ matched.push(rule.l); if(ev&&ev.time) times[rule.l]=ev.time; if(rawTitle) titles[rule.l]=String(rawTitle); break; }
     }
   });
-  return {matched:matched,times:times};
+  return {matched:matched,times:times,titles:titles};
 }
 // Auto-flags matched labels as "today" in the manual checklist's selection
 // state (State.newsSelected) — same state the checklist rows already read
@@ -3352,13 +3354,15 @@ function autoSelectNewsLabels(events){
   var matched=result.matched;
   if(!matched.length) return false;
   var todayStr=today();
-  if(State.newsSelectedDate!==todayStr){State.newsSelected=[];State.newsSelectedDate=todayStr;State.newsTimes={};}
+  if(State.newsSelectedDate!==todayStr){State.newsSelected=[];State.newsSelectedDate=todayStr;State.newsTimes={};State.newsTitles={};}
   var changed=false;
+  if(!State.newsTitles) State.newsTitles={};
   matched.forEach(function(l){
+    if(result.titles[l]&&State.newsTitles[l]!==result.titles[l]){State.newsTitles[l]=result.titles[l];changed=true;}
     if(State.newsSelected.indexOf(l)===-1){State.newsSelected.push(l);changed=true;}
     if(result.times[l]&&State.newsTimes[l]!==result.times[l]){State.newsTimes[l]=result.times[l];changed=true;}
   });
-  if(changed){ss("newsSelected",State.newsSelected);ss("newsSelectedDate",State.newsSelectedDate);ss("newsTimes",State.newsTimes);}
+  if(changed){ss("newsSelected",State.newsSelected);ss("newsSelectedDate",State.newsSelectedDate);ss("newsTimes",State.newsTimes);ss("newsTitles",State.newsTitles);}
   return changed;
 }
 
@@ -6844,11 +6848,11 @@ function mobileHomeTab(){
     newsWarn.innerHTML='<div style="font-size:9px;color:'+mPanelAccent+';letter-spacing:1.5px;text-transform:uppercase;font-family:monospace;margin-bottom:4px">⚠ Today News Events</div>';
     mKeyEvents.forEach(function(n){
       var nTime=State.newsTimes&&State.newsTimes[n];
-      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+(nTime?'<span style="color:var(--text3);">'+nTime+'</span> ':'')+n;newsWarn.appendChild(row);
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:var(--ca);">◆</span> '+(nTime?'<span style="color:var(--text3);">'+nTime+'</span> ':'')+((State.newsTitles&&State.newsTitles[n])||n);newsWarn.appendChild(row);
     });
     mMacroEvents.forEach(function(n){
       var nTime2=State.newsTimes&&State.newsTimes[n];
-      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+(nTime2?'<span style="color:var(--text3);">'+nTime2+'</span> ':'')+n;newsWarn.appendChild(row);
+      var row=document.createElement("div");row.style.cssText="font-size:11px;color:var(--text2);font-family:monospace;padding:2px 0;";row.innerHTML='<span style="color:#b06aff;">◆</span> '+(nTime2?'<span style="color:var(--text3);">'+nTime2+'</span> ':'')+((State.newsTitles&&State.newsTitles[n])||n);newsWarn.appendChild(row);
     });
     el.appendChild(newsWarn);
   }
@@ -12238,7 +12242,7 @@ function enRigCard(D){
   [["us","U.S."],["canada","Canada"]].forEach(function(k){
     var r=RW[k[0]];if(!r)return;
     var c=r.chg>0?"var(--green)":r.chg<0?"var(--red)":"var(--text3)",cy=r.yoy>0?"var(--green)":r.yoy<0?"var(--red)":"var(--text3)";
-    rw+="<div style='margin-bottom:10px'><div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · "+r.asOf+"</div>"+
+    rw+="<div style='margin-bottom:10px'><div style='font-size:10px;color:var(--text3)'>Baker Hughes weekly · "+k[1]+" · <span style='color:#fff'>"+r.asOf+"</span></div>"+
       "<div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(r.count)+" <span style='font-size:12px;color:"+c+"'>"+(r.chg>0?"+":"")+r.chg+" w/w</span> <span style='font-size:12px;color:"+cy+"'>"+(r.yoy>0?"+":"")+r.yoy+" y/y</span></div></div>";
   });
   var needMan=!rw;if(needMan)rw="<div id='rigman'></div>";
@@ -12277,7 +12281,7 @@ function enRigCard(D){
         var x=j[k[0]];if(!x)return;
         var c=x.chg>0?"var(--green)":x.chg<0?"var(--red)":"var(--text3)",cy=x.yoy>0?"var(--green)":x.yoy<0?"var(--red)":"var(--text3)";
         var r=div();r.style.cssText="margin-bottom:10px";
-        r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes "+(k[2]==="m/m"?"monthly":"weekly")+" · "+k[1]+" · "+x.asOf+"</div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" "+k[2]+"</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
+        r.innerHTML="<div style='font-size:10px;color:var(--text3)'>Baker Hughes "+(k[2]==="m/m"?"monthly":"weekly")+" · "+k[1]+" · <span style='color:#fff'>"+x.asOf+"</span></div><div style='font-size:20px;font-weight:700;font-family:monospace'>"+enFmt(x.count)+" <span style='font-size:12px;color:"+c+"'>"+(x.chg>0?"+":"")+x.chg+" "+k[2]+"</span> <span style='font-size:12px;color:"+cy+"'>"+(x.yoy>0?"+":"")+x.yoy+" y/y</span></div>";
         rm.appendChild(r);
       });
     }
@@ -12419,7 +12423,7 @@ function enSecGas(D,wrap){
         return "<div style='border:1px solid var(--border);border-radius:4px;padding:10px 12px;background:var(--panel2)'><div style='display:flex;justify-content:space-between;font-size:11px'><b>"+s.name+"</b><span style='color:"+c+"'>"+(dv==null?"—":(dv>=0?"+":"")+dv+"% vs 5y")+"</span></div>"+
           "<div style='font-size:20px;margin:4px 0'>"+enFmt(s.bcf)+" <span style='font-size:10px;color:var(--text3)'>Bcf</span></div>"+
           "<div style='position:relative;height:8px;background:var(--border);border-radius:4px'><div style='height:8px;width:"+pos+"%;background:"+c+";border-radius:4px'></div><div style='position:absolute;top:-3px;bottom:-3px;left:"+ap+"%;border-left:2px solid var(--text)'></div></div>"+
-          "<div style='font-size:10px;color:var(--text3);margin-top:5px'>"+(s.chg==null?"":(s.chg>=0?"Injection +":"Withdrawal ")+enFmt(s.chg,0)+" Bcf wk")+" · 5y avg "+enFmt(s.avg5)+" · wk "+s.period+"</div><div style='margin-top:4px'>"+enSpark(s.series,c,110,22)+"</div></div>";}).join("");
+          "<div style='font-size:10px;color:var(--text3);margin-top:5px'>"+(s.chg==null?"":(s.chg>=0?"Injection +":"Withdrawal ")+enFmt(s.chg,0)+" Bcf wk")+" · 5y avg "+enFmt(s.avg5)+" · wk <span style='color:#fff'>"+s.period+"</span></div><div style='margin-top:4px'>"+enSpark(s.series,c,110,22)+"</div></div>";}).join("");
       var d=div("g3");d.style.marginBottom="12px";d.innerHTML=g;gw.appendChild(enCard("EIA Weekly Working Gas — Regional Storage",""));gw.lastChild.lastChild.appendChild(d);
     }else gw.appendChild(enCard("EIA Weekly Working Gas — Regional Storage","<div style='color:var(--text3);font-size:12px'>Storage feed not enabled. Add a free <b>EIA_API_KEY</b> (eia.gov/opendata) as a GitHub repo secret and pass it as an env var in update-energy.yml. "+((D.errors&&D.errors.storage)?"<br><span style='font-family:monospace'>"+D.errors.storage+"</span>":"")+"</div>"));
     gw.appendChild(enRigCard(D));
