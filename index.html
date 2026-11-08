@@ -6243,7 +6243,7 @@ function chartTab(){
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
-        timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
+        timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,per:periodSec};
@@ -6617,11 +6617,16 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
-      if(keepView){try{
-        var tsr=chart.timeScale();
-        tsr.setVisibleRange({from:keepView.from,to:keepView.to});
-        if(keepView.extraSec>0){var lr2=tsr.getVisibleLogicalRange();if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+keepView.extraSec/periodSec});}
-      }catch(e){}}
+      try{
+        // Leave breathing room (min 8 bars) between the last candle and the price axis.
+        var tsr=chart.timeScale(),padBars=8;
+        if(keepView){
+          tsr.setVisibleRange({from:keepView.from,to:keepView.to});
+          padBars=Math.max(8,(keepView.extraSec||0)/periodSec);
+        }
+        var lr2=tsr.getVisibleLogicalRange();
+        if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+padBars});
+      }catch(e){}
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
