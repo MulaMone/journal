@@ -6617,16 +6617,12 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
-      try{
-        // Leave breathing room (min 8 bars) between the last candle and the price axis.
-        var tsr=chart.timeScale(),padBars=8;
-        if(keepView){
-          tsr.setVisibleRange({from:keepView.from,to:keepView.to});
-          padBars=Math.max(8,(keepView.extraSec||0)/periodSec);
-        }
-        var lr2=tsr.getVisibleLogicalRange();
-        if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+padBars});
-      }catch(e){}
+      if(keepView){try{
+        // Restore exactly the window the user had (incl. any empty space past the last bar). No auto-zoom otherwise.
+        var tsr=chart.timeScale();
+        tsr.setVisibleRange({from:keepView.from,to:keepView.to});
+        if(keepView.extraSec>0){var lr2=tsr.getVisibleLogicalRange();if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+keepView.extraSec/periodSec});}
+      }catch(e){}}
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
