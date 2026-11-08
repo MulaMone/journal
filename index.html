@@ -6655,7 +6655,7 @@ function chartTab(){
             chart.timeScale().setVisibleLogicalRange({from:_zf,to:_zt});
             // Pin the right gap right away using the bar spacing this range produces (width/(span+1)), so the
             // first frame already matches what anchorRight() settles on — no one-bar nudge after load.
-            chart.timeScale().scrollToPosition(tagPx/(_wz/(_zt-_zf+1))+0.5,false);
+            chart.timeScale().scrollToPosition(tagPx/Math.max(0.5,_wz/(_zt-_zf+1))+0.5,false); // 0.5 = the library's minimum bar spacing (hit on narrow screens with 800-1000 bars)
           }
         }catch(e){}
       }
