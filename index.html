@@ -5896,7 +5896,14 @@ function chartTab(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
       if(t!==tf&&_chartLive&&_chartLive.moved){
-        try{var vr=_chartLive.chart.timeScale().getVisibleRange();if(vr&&vr.from&&vr.to)_chartKeepView={from:vr.from,to:vr.to};}catch(e){}
+        try{
+          var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
+          if(vr&&vr.from&&vr.to){
+            // getVisibleRange clamps to real candles; keep any empty space scrolled past the latest bar (in seconds)
+            var ex=(lr&&lr.to>_chartLive.lastIdx)?(lr.to-_chartLive.lastIdx)*_chartLive.per:0;
+            _chartKeepView={from:vr.from,to:vr.to,extraSec:ex};
+          }
+        }catch(e){}
       }
       State.chart_interval=t;render();
     });
@@ -6239,7 +6246,7 @@ function chartTab(){
         timeScale:{borderColor:"#1a3260",timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
-      _chartLive={chart:chart,moved:false};
+      _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,per:periodSec};
       ["wheel","mousedown","touchstart"].forEach(function(ev){
         chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart)_chartLive.moved=true;},{passive:true});
       });
@@ -6610,7 +6617,11 @@ function chartTab(){
       }
 
       chart.timeScale().fitContent();
-      if(keepView){try{chart.timeScale().setVisibleRange({from:keepView.from,to:keepView.to});}catch(e){}}
+      if(keepView){try{
+        var tsr=chart.timeScale();
+        tsr.setVisibleRange({from:keepView.from,to:keepView.to});
+        if(keepView.extraSec>0){var lr2=tsr.getVisibleLogicalRange();if(lr2)tsr.setVisibleLogicalRange({from:lr2.from,to:lr2.to+keepView.extraSec/periodSec});}
+      }catch(e){}}
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
