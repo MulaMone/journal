@@ -6650,7 +6650,7 @@ function chartTab(){
       if(zoomN){
         try{
           var _wz=chart.timeScale().width();
-          if(_wz>tagPx*3) chart.timeScale().setVisibleLogicalRange({from:candles.length-1-zoomN,to:candles.length-1+tagGap(_wz,zoomN+1)-1}); // -1: the library's right offset counts one bar further than this range's 'to', so this lands where anchorRight wants it (no nudge ~300ms after load)
+          if(_wz>tagPx*3) chart.timeScale().setVisibleLogicalRange({from:candles.length-1-zoomN,to:candles.length-1+tagGap(_wz,zoomN+1)});
         }catch(e){}
       }
       // Safety net: if layout settles to a different width after the first frame, correct the gap
@@ -6677,14 +6677,8 @@ function chartTab(){
             if(keepView.mode==="right"){
               to=(n-1)+keepView.gapBars; from=to-sp;
             } else {
-              // Fractional index of the centre moment: snapping to the next candle
-              // moved the view up to a whole candle on coarse bars (4h/8h).
               var iC=n-1,kk;
               for(kk=0;kk<n;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
-              if(kk<n&&kk>0&&candles[kk].time>keepView.centerT){
-                var t0=candles[kk-1].time,t1=candles[kk].time;
-                iC=(kk-1)+(keepView.centerT-t0)/(t1-t0);
-              }
               from=iC-sp/2; to=iC+sp/2;
             }
             chart.timeScale().setVisibleLogicalRange({from:from,to:to});
