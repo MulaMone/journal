@@ -12520,7 +12520,9 @@ function energyTab(){
     var D=_en.data;body.innerHTML="";
     if(!D){body.appendChild(enCard("Energy",_en.loading?"Loading…":"<div style='color:var(--text3);font-size:12px'>No energy.json yet"+(_en.err?" ("+_en.err+")":"")+". Run the <b>update-energy</b> workflow once from the GitHub Actions tab.</div>"));meta.textContent="";return;}
     var age=Math.round((Date.now()-new Date(D.generatedAt).getTime())/60000);
-    meta.innerHTML="Updated "+age+" min ago"+(age>15?" <span style='color:var(--red)'>· STALE</span>":"")+"<br>Cross-check: <a href='https://www.gridstatus.io/' target='_blank' rel='noopener' style='color:var(--accent)'>GridStatus.io ↗</a>";
+    var seasIc="<a href='#' class='en-seas-pic' title='NG / NBP seasonality' aria-label='NG / NBP seasonality' style='text-decoration:none;font-size:15px;line-height:1;margin-left:8px;cursor:pointer;vertical-align:-1px'>📅</a>";
+    meta.innerHTML="Updated "+age+" min ago"+(age>15?" <span style='color:var(--red)'>· STALE</span>":"")+(isMobile()?seasIc:"<br>Cross-check: <a href='https://www.gridstatus.io/' target='_blank' rel='noopener' style='color:var(--accent)'>GridStatus.io ↗</a>"+seasIc);
+    meta.querySelectorAll(".en-seas-pic").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic("energy-seasonality.png");});});
     btns.innerHTML="";
     var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
