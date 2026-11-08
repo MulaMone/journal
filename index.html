@@ -5902,7 +5902,11 @@ function chartTab(){
             // Keep the same zoom (bars on screen) and the same centre point in time.
             var w0=ts0.width(),bs0=w0/(lr.to-lr.from),x0=ts0.timeToCoordinate(vr.to);
             var rb=(x0==null)?0:Math.max(0,(w0-x0)/bs0);
-            _chartKeepView={leftT:vr.from,spanBars:lr.to-lr.from};
+            // TradingView-style: at the live edge keep the right edge pinned (same gap after the last bar);
+            // when scrolled back into history keep the centre of what you were looking at. Same candle size either way.
+            var atLive=vr.to>=_chartLive.lastT-_chartLive.per;
+            _chartKeepView=atLive?{mode:"right",gapBars:rb,spanBars:lr.to-lr.from}
+                                 :{mode:"center",centerT:(vr.from+vr.to)/2,spanBars:lr.to-lr.from};
           }
         }catch(e){}
       }
@@ -6088,12 +6092,18 @@ function chartTab(){
   if(keepView){
     // Make sure the fetched window reaches back to the kept view (chart times are
     // ET-shifted ~4-5h behind real UTC, so add 5h slack plus some left padding).
-    var kvFrom=keepView.leftT+18000-periodSec*20;
     var kvNow=Math.floor(Date.now()/1000);
+    var kvFrom=(keepView.mode=="right")?(kvNow-periodSec*(keepView.spanBars+30)):(keepView.centerT+18000-periodSec*(keepView.spanBars/2+20));
     if(fromSec==null||kvFrom<fromSec){
       fromSec=kvFrom;
       if(toSec==null) toSec=kvNow-120;
-      if(toSec-fromSec>periodSec*4500) fromSec=toSec-periodSec*4500;
+      if(toSec-fromSec>periodSec*4500){
+        if(keepView.mode==="center"){
+          // Too far back to reach from "now" within the candle cap: fetch a window around that spot instead.
+          var cUtc=keepView.centerT+18000,halfW=periodSec*(keepView.spanBars/2+40);
+          fromSec=cUtc-halfW; toSec=Math.min(kvNow-120,cUtc+halfW);
+        } else fromSec=toSec-periodSec*4500;
+      }
     }
   }
 
@@ -6247,7 +6257,7 @@ function chartTab(){
         timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
-      _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,per:periodSec};
+      _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,lastT:candles[candles.length-1].time,per:periodSec};
       ["wheel","mousedown","touchstart"].forEach(function(ev){
         chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true,capture:true});
       });
@@ -6624,11 +6634,15 @@ function chartTab(){
         var applyKeep=function(){
           if(!_chartLive||_chartLive.chart!==chart||_chartLive.moved) return;
           try{
-            // TradingView-style: the left edge stays on the same moment in time and the candle size
-            // (bars across) stays the same, so the view lands exactly where it was.
-            var iL=0,kk;
-            for(kk=0;kk<candles.length;kk++){if(candles[kk].time>=keepView.leftT){iL=kk;break;}}
-            chart.timeScale().setVisibleLogicalRange({from:iL,to:iL+keepView.spanBars});
+            var n=candles.length,sp=keepView.spanBars,from,to;
+            if(keepView.mode==="right"){
+              to=(n-1)+keepView.gapBars; from=to-sp;
+            } else {
+              var iC=n-1,kk;
+              for(kk=0;kk<n;kk++){if(candles[kk].time>=keepView.centerT){iC=kk;break;}}
+              from=iC-sp/2; to=iC+sp/2;
+            }
+            chart.timeScale().setVisibleLogicalRange({from:from,to:to});
           }catch(e){console.warn("[Edge] keep-view restore failed",e,keepView);}
         };
         _chartLive.reapply=applyKeep;
