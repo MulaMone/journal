@@ -6800,7 +6800,7 @@ function chartTab(){
       // Built from OANDA daily candles grouped by month with the same session-anchored
       // month split as the MONTH lines, so the boundary matches. One line series per month.
       if(tf==="8h") (function(){
-        var PM_COL={h:"#4da3ff",l:"#ff6ec7",c:"#b8c4d9"}; // blue / pink / silver — distinct from week yellow/green/red, MONTH purple, ETH orange
+        var PM_COL={h:"#a3e635",l:"#ff7a59",c:"#4da3ff"}; // PMH lime / PML coral / PMC blue
         var PM_TAG={h:"PMH",l:"PML",c:"PMC"};
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/86400)+45); // +45d so the month before the first visible one is complete
