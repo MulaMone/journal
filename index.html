@@ -6650,7 +6650,13 @@ function chartTab(){
       if(zoomN){
         try{
           var _wz=chart.timeScale().width();
-          if(_wz>tagPx*3) chart.timeScale().setVisibleLogicalRange({from:candles.length-1-zoomN,to:candles.length-1+tagGap(_wz,zoomN+1)});
+          if(_wz>tagPx*3){
+            var _zf=candles.length-1-zoomN,_zt=candles.length-1+tagGap(_wz,zoomN+1);
+            chart.timeScale().setVisibleLogicalRange({from:_zf,to:_zt});
+            // Pin the right gap right away using the bar spacing this range produces (width/(span+1)), so the
+            // first frame already matches what anchorRight() settles on — no one-bar nudge after load.
+            chart.timeScale().scrollToPosition(tagPx/(_wz/(_zt-_zf+1))+0.5,false);
+          }
         }catch(e){}
       }
       // Safety net: if layout settles to a different width after the first frame, correct the gap
