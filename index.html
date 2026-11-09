@@ -5824,7 +5824,7 @@ function loadNTFile(){
 // OANDA practice-account token for chart data only; your trades still
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
-var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",GBPCAD:"GBP_CAD",CL:"WTICO_USD",GC:"XAU_USD"};
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD"};
 var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D"};
 
 function tradeTs(t){
@@ -5873,7 +5873,7 @@ function chartTab(){
   ctrlRow.style.flexWrap="wrap";
   ctrlRow.style.rowGap="8px";
 
-  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"GBPCAD",n:"GBP/CAD"}];
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"}];
   SYMS.forEach(function(s){
     if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
     var b=h("button",{className:"btn"});
@@ -6047,7 +6047,7 @@ function chartTab(){
   // instead follow the interbank market's standard day rollover of 17:00 ET
   // (which is also OANDA's own unmodified default). Using 18:00 for a forex
   // pair would "fix" the futures alignment while breaking the forex one.
-  var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC"];
+  var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG"];
   var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
   var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
   var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400};
