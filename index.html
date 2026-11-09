@@ -9330,8 +9330,19 @@ function fetchTnxDirect(){
 var _tnxOhlcMem=null;
 function fetchTnxDailyOHLC(){
   if(_tnxOhlcMem&&Date.now()-_tnxOhlcMem.t<30*60*1000) return Promise.resolve(_tnxOhlcMem.rows);
+  // 1) same-origin tnx_daily.json (written by the update-tnx-daily Action; never CORS-blocked)
+  // 2) Yahoo direct from the browser
+  var fileTry=fetch("tnx_daily.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    var rows=j&&j.rows;
+    if(!rows||rows.length<50) throw new Error("tnx_daily.json too short");
+    _tnxOhlcMem={t:Date.now(),rows:rows};
+    return rows;
+  });
   var url="https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=3y&_="+Date.now();
-  return fetch(url).then(function(r){
+  return fileTry.catch(function(){return fetch(url).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
@@ -9350,7 +9361,7 @@ function fetchTnxDailyOHLC(){
     if(rows.length<50) throw new Error("too few OHLC rows");
     _tnxOhlcMem={t:Date.now(),rows:rows};
     return rows;
-  });
+  });});
 }
 function fetchTnxFromFile(){
   return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
