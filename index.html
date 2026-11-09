@@ -6911,6 +6911,34 @@ function chartTab(){
         }).catch(function(){});
       })();
 
+      // ── US10Y EOD only: previous YEAR high / low (PYH / PYL) ──────
+      // Same look as the 8h PMH / PML (lime / coral dashed, tag on the price axis).
+      // Built from the daily closes this chart is made of, grouped by calendar year.
+      if(eodOnly) (function(){
+        var PY_COL={h:"#a3e635",l:"#ff7a59"},PY_TAG={h:"PYH",l:"PYL"};
+        var yrs=[],yCur=null,yKey=null;
+        candles.forEach(function(c){
+          var key=new Date((c.time+anchorShift)*1000).getUTCFullYear();
+          if(key!==yKey){yKey=key;yCur={key:key,h:-Infinity,l:Infinity,times:[]};yrs.push(yCur);}
+          if(c.high>yCur.h) yCur.h=c.high;
+          if(c.low<yCur.l) yCur.l=c.low;
+          yCur.times.push(c.time);
+        });
+        // A year's lines come from the year before it; skip the first year on the chart
+        // (no prior year in the data) and any prior year that isn't fully covered.
+        var groups=[];
+        for(var yi=1;yi<yrs.length;yi++){ if(yrs[yi-1].key===yrs[yi].key-1&&yi-1>=1) groups.push({h:yrs[yi-1].h,l:yrs[yi-1].l,times:yrs[yi].times}); }
+        ["h","l"].forEach(function(f){
+          groups.forEach(function(g,gi){
+            var isCur=gi===groups.length-1;
+            var data=g.times.map(function(t){return {time:t,value:g[f]};});
+            if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+            var ps=chart.addLineSeries({color:PY_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PY_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            ps.setData(data);
+          });
+        });
+      })();
+
       var last=candles[candles.length-1];
       var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
       lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
@@ -6921,7 +6949,7 @@ function chartTab(){
       // both in one colored tag) ──
       // last.time is already shifted for ET display; add etOffsetSec back to
       // recover the candle's true start, then + periodSec for its true close.
-      var barEndTrue=last?(last.time+etOffsetSec+periodSec):null;
+      var barEndTrue=(last&&!eodOnly)?(last.time+etOffsetSec+periodSec):null;
       var lastBarTime=last?last.time:0;
       var currentPrice=last?last.close:null;
       var currentIsUp=last?(last.close>=last.open):true;
@@ -6964,6 +6992,34 @@ function chartTab(){
         cdBadge.style.top=((y<0||y>paneH)?Math.max(26,Math.min(paneH-26,y)):y)+"px";
       }
       renderCountdown();
+      // ── US10Y EOD chart: push the same live ^TNX quote the Analyst card shows into
+      // the last candle and the green price tag (every 30s). If the Treasury print for
+      // today isn't out yet, today's bar is created from the live quote.
+      var _tnxSkip=0;
+      var _etDayFmt=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"});
+      var _etWkFmt=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short"});
+      function tnxTick(){
+        fetchTnxJson().then(function(data){
+          if(myLoadToken!==_chartLoadToken||!data||typeof data.yieldVal!=="number"||!candles.length) return;
+          var v=Math.round(data.yieldVal*100)/100;
+          var lastC=candles[candles.length-1];
+          var nowD=new Date(),todayET=_etDayFmt.format(nowD),wk=_etWkFmt.format(nowD);
+          var lastDay=new Date(lastC.time*1000).toISOString().slice(0,10);
+          var bar;
+          if(lastDay<todayET&&wk!=="Sat"&&wk!=="Sun"){
+            var _u=Date.parse(todayET+"T23:00:00Z")/1000;
+            bar={time:_u-etOff(_u),open:lastC.close,high:Math.max(lastC.close,v),low:Math.min(lastC.close,v),close:v};
+            candles.push(bar);
+          } else {
+            bar=lastC;bar.close=v;bar.high=Math.max(bar.high,v);bar.low=Math.min(bar.low,v);
+          }
+          series.update(bar);
+          currentPrice=v;currentIsUp=bar.close>=bar.open;
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+v+'</span>';
+          renderCountdown();
+        }).catch(function(){});
+      }
+      if(eodOnly) tnxTick();
       clearInterval(_chartCountdownTimer);
       _chartCountdownTimer=setInterval(function(){
         if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(_chartCountdownTimer);return;}
@@ -6987,7 +7043,8 @@ function chartTab(){
       // self-clears the moment the person navigates off the Chart tab.
       clearInterval(_chartLiveTimer);
       _chartLiveTimer=setInterval(function(){
-        if(State.tab!=="chart"||eodOnly){clearInterval(_chartLiveTimer);return;}
+        if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
+        if(eodOnly){if(_tnxSkip++%2===0) tnxTick();return;} // 15s tick -> quote every 30s
         var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
