@@ -6158,7 +6158,9 @@ function chartTab(){
     }
     // US10Y: yield (%), not price. No OANDA feed — build daily bars from the same
     // Treasury yield history the Analyst 10Y card uses (open = prior close).
-    if(sym==="US10Y") return loadYieldCurveData(false).then(function(yd){
+    if(sym==="US10Y") return fetchTnxDailyOHLC().then(function(rows){
+      return {candles:rows.map(function(r){return {time:r.d+"T23:00:00Z",complete:true,mid:{o:r.o,h:r.h,l:r.l,c:r.c}};})};
+    }).catch(function(){return loadYieldCurveData(false).then(function(yd){
       var rows=((yd&&yd.rows)||[]).filter(function(r){return r.d&&typeof r.y10==="number";})
         .sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0;}).slice(-750);
       var out=[],prev=null;
@@ -6168,7 +6170,7 @@ function chartTab(){
         prev=c;
       });
       return {candles:out};
-    });
+    });});
     if(sym!=="DXY") return one(u);
     // Live poll asks for count=1; legs can print a new candle at slightly different
     // moments, so pull a few and let the per-time intersection pick the latest common one.
@@ -9322,6 +9324,33 @@ function fetchTnxDirect(){
     _tnxMemCache=obj;tnxCacheSet(obj);
     return obj;
   }).catch(function(err){_tnxDirectBlocked=true;throw err;});
+}
+// Daily OHLC for ^TNX (real intraday highs/lows -> wicks + true prior-year levels).
+// Used by the US10Y EOD chart; falls back to Treasury closes if Yahoo is unreachable.
+var _tnxOhlcMem=null;
+function fetchTnxDailyOHLC(){
+  if(_tnxOhlcMem&&Date.now()-_tnxOhlcMem.t<30*60*1000) return Promise.resolve(_tnxOhlcMem.rows);
+  var url="https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=3y&_="+Date.now();
+  return fetch(url).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(json){
+    var res=json&&json.chart&&json.chart.result&&json.chart.result[0];
+    var ts=res&&res.timestamp,q=res&&res.indicators&&res.indicators.quote&&res.indicators.quote[0];
+    if(!ts||!q) throw new Error("no OHLC in response");
+    var fmt=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"});
+    var rows=[],seen={};
+    for(var i=0;i<ts.length;i++){
+      var o=q.open[i],h=q.high[i],l=q.low[i],c=q.close[i];
+      if(![o,h,l,c].every(function(x){return typeof x==="number"&&isFinite(x);})) continue;
+      var d=fmt.format(new Date(ts[i]*1000));
+      if(seen[d]!==undefined){rows[seen[d]]={d:d,o:o,h:h,l:l,c:c};continue;}
+      seen[d]=rows.length;rows.push({d:d,o:o,h:h,l:l,c:c});
+    }
+    if(rows.length<50) throw new Error("too few OHLC rows");
+    _tnxOhlcMem={t:Date.now(),rows:rows};
+    return rows;
+  });
 }
 function fetchTnxFromFile(){
   return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
