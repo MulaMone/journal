@@ -6986,6 +6986,10 @@ function chartTab(){
         // price scale — recomputed every tick since panning/zooming the
         // chart shifts where a given price sits without firing an event we
         // can hook, so this just stays in sync passively on the 1s tick.
+        positionCdBadge();
+      }
+      function positionCdBadge(){
+        if(currentPrice==null) return;
         var y=series.priceToCoordinate(currentPrice);
         if(y==null){cdBadge.style.display="none";return;}
         cdBadge.style.display="";
@@ -6997,6 +7001,23 @@ function chartTab(){
         cdBadge.style.top=((y<0||y>paneH)?Math.max(26,Math.min(paneH-26,y)):y)+"px";
       }
       renderCountdown();
+      // Keep the badge glued to the price while the chart is panned/zoomed/scrolled (the library
+      // fires no event for vertical moves): follow every frame during interaction + a short tail
+      // for touch-scroll inertia, then go idle. The 1s tick still covers everything else.
+      var _cdUntil=0,_cdRun=false;
+      function _cdFollow(){
+        if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){_cdRun=false;return;}
+        positionCdBadge();
+        if(performance.now()<_cdUntil) requestAnimationFrame(_cdFollow); else _cdRun=false;
+      }
+      function _cdKick(){
+        _cdUntil=performance.now()+1500;
+        if(!_cdRun){_cdRun=true;requestAnimationFrame(_cdFollow);}
+      }
+      ["pointerdown","pointermove","pointerup","wheel","touchstart","touchmove","touchend","dblclick"].forEach(function(ev){
+        chartDiv.addEventListener(ev,_cdKick,{passive:true});
+      });
+      try{chart.timeScale().subscribeVisibleLogicalRangeChange(_cdKick);}catch(e){}
       // ── US10Y EOD chart: push the same live ^TNX quote the Analyst card shows into
       // the last candle and the green price tag (every 30s). If the Treasury print for
       // today isn't out yet, today's bar is created from the live quote.
