@@ -5824,7 +5824,7 @@ function loadNTFile(){
 // OANDA practice-account token for chart data only; your trades still
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
-var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD",US10Y:"USB10Y_USD"};
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD"};
 var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D"};
 
 function tradeTs(t){
@@ -5851,7 +5851,7 @@ function chartTab(){
 
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
-  var eodOnly=(sym==="US10Y"); // EOD price chart (opened from Analyst 10Y card): daily only
+  var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly) tf="1d";
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
@@ -6049,7 +6049,7 @@ function chartTab(){
   // instead follow the interbank market's standard day rollover of 17:00 ET
   // (which is also OANDA's own unmodified default). Using 18:00 for a forex
   // pair would "fix" the futures alignment while breaking the forex one.
-  var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG","US10Y"];
+  var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG"];
   var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
   var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
   var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400};
@@ -6147,6 +6147,19 @@ function chartTab(){
         return r.json();
       });
     }
+    // US10Y: yield (%), not price. No OANDA feed — build daily bars from the same
+    // Treasury yield history the Analyst 10Y card uses (open = prior close).
+    if(sym==="US10Y") return loadYieldCurveData(false).then(function(yd){
+      var rows=((yd&&yd.rows)||[]).filter(function(r){return r.d&&typeof r.y10==="number";})
+        .sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0;}).slice(-750);
+      var out=[],prev=null;
+      rows.forEach(function(r){
+        var c=r.y10,o=prev==null?c:prev;
+        out.push({time:r.d+"T23:00:00Z",complete:true,mid:{o:o,h:Math.max(o,c),l:Math.min(o,c),c:c}});
+        prev=c;
+      });
+      return {candles:out};
+    });
     if(sym!=="DXY") return one(u);
     // Live poll asks for count=1; legs can print a new candle at slightly different
     // moments, so pull a few and let the per-time intersection pick the latest common one.
@@ -6964,7 +6977,7 @@ function chartTab(){
       // self-clears the moment the person navigates off the Chart tab.
       clearInterval(_chartLiveTimer);
       _chartLiveTimer=setInterval(function(){
-        if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
+        if(State.tab!=="chart"||eodOnly){clearInterval(_chartLiveTimer);return;}
         var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
@@ -9447,8 +9460,8 @@ function buildYieldLevelView(fieldKey,label,rangeKey,data,isM){
     +"<div style='font-size:30px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+latest.v.toFixed(2)+"%"+assetEmojiHTML(label)+"</div>"
     +"<div style='font-size:13px;font-family:Courier New,monospace;color:"+(chg>=0?"#00e676":"#ff4444")+";margin-top:2px;'>"+(chg>=0?"+":"−")+Math.abs(chg).toFixed(2)+"% vs prior print</div>";
   card.appendChild(l);
-  // Tap the EOD print -> daily 10Y T-Note price chart (OANDA USB10Y_USD; price, not yield).
-  l.style.cursor="pointer";l.title="Open US 10Y T-Note price (daily) on chart";
+  // Tap the EOD print -> daily 10Y yield chart (Treasury history, no OANDA).
+  l.style.cursor="pointer";l.title="Open US 10Y yield (daily) on chart";
   l.addEventListener("click",function(){State.chart_symbol="US10Y";State.chart_interval="1d";State.chart_focus_ts=null;State.chart_selected_ids=[];switchTab("chart");});
   var tnxBadge=div();tnxBadge.id="live-tnx";
   tnxBadge.style.cssText="position:absolute;top:14px;right:16px;text-align:right;";
