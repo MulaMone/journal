@@ -6374,8 +6374,9 @@ function chartTab(){
                     if(wedBands.length){
                       var wts=chart.timeScale(),wp=periodSec;
                       wedBands.forEach(function(w){
-                        var x0=wts.timeToCoordinate(w.t0),x1=wts.timeToCoordinate(w.t1+wp);
+                        var x0=wts.timeToCoordinate(w.t0),x1=wts.timeToCoordinate(w.t1);
                         if(x0==null||x1==null) return;
+                        x1+=wts.options().barSpacing; // last bar's right edge (t1+period has no candle, so can't be looked up)
                         if(x1<0||x0>paneW) return;
                         var bx0=Math.max(x0,0),bx1=Math.min(x1,paneW);
                         ctx.globalAlpha=0.07;ctx.fillStyle="#ffb020";ctx.fillRect(bx0,0,bx1-bx0,paneH);
