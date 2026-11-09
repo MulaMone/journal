@@ -6131,10 +6131,19 @@ function chartTab(){
     // A 401 here is often transient or a stale token mid-sync (another device /
     // the cloud pull can swap the saved token a moment later). Re-read the saved
     // token fresh on every attempt and retry twice before surfacing the error.
+    // "Failed to fetch" is a network-level drop (flaky connection, device waking from
+    // sleep, brief OANDA hiccup) — not a bad token. Retry those twice before giving up.
+    function fetchRetry(x,useTok,n){
+      n=n||0;
+      return fetch(x,{headers:{Authorization:"Bearer "+useTok}}).catch(function(err){
+        if(n>=4) throw err;
+        return new Promise(function(res){setTimeout(res,600*(n+1));}).then(function(){return fetchRetry(x,useTok,n+1);});
+      });
+    }
     function one(x,attempt){
       attempt=attempt||0;
       var useTok=ls("oanda_token","")||tok;
-      return fetch(x,{headers:{Authorization:"Bearer "+useTok}}).then(function(r){
+      return fetchRetry(x,useTok).then(function(r){
         if(!r.ok){
           if(r.status===401&&attempt<2){
             return new Promise(function(res){setTimeout(res,attempt===0?700:2000);}).then(function(){return one(x,attempt+1);});
@@ -6200,6 +6209,7 @@ function chartTab(){
       // and the live-poll timer instead of this stale response.
       if(myLoadToken!==_chartLoadToken) return;
       loading.remove();
+      window._chartAutoRetries=0;
       // Lightweight Charts always displays numeric timestamps using UTC calendar
       // fields, no matter the browser's timezone (documented library behavior).
       // OANDA candle times are true UTC instants, so left as-is they render as
@@ -7007,6 +7017,18 @@ function chartTab(){
     })
     .catch(function(e){
       if(myLoadToken!==_chartLoadToken) return; // superseded by a newer load — don't show a stale error
+      // Network-level drop ("Failed to fetch"): not a token problem — quietly keep
+      // retrying in the background instead of showing an error. HTTP errors (bad
+      // token etc.) still show the message.
+      var isNet=!/^HTTP \d/.test(e.message||"");
+      window._chartAutoRetries=(window._chartAutoRetries||0);
+      if(isNet&&window._chartAutoRetries<20){
+        window._chartAutoRetries++;
+        loading.style.color="var(--text3)";
+        loading.textContent="Reconnecting…";
+        setTimeout(function(){if(myLoadToken===_chartLoadToken&&State.tab==="chart") render();},3000);
+        return;
+      }
       loading.style.color="var(--red)";
       loading.textContent="⚠ Could not load chart: "+e.message+" — check your token or connection";
     });
