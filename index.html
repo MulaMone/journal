@@ -6336,6 +6336,18 @@ function chartTab(){
           curDay.t1=c.time;
         });
       }
+      // 30m only: every Wednesday session in the loaded data (not just this week),
+      // shaded + labelled WED, collapsing to W when zoomed out.
+      var wedBands=[];
+      if(tf==="30m"){
+        var lastWk=null,curW=null;
+        candles.forEach(function(c){
+          var st=c.time+anchorShift,dk=Math.floor(st/86400);
+          if(new Date(st*1000).getUTCDay()!==3){lastWk=null;return;}
+          if(dk!==lastWk){lastWk=dk;curW={t0:c.time,t1:c.time};wedBands.push(curW);}
+          curW.t1=c.time;
+        });
+      }
       var _acc=(getComputedStyle(document.documentElement).getPropertyValue("--accent")||"").trim()||"#2ec4b6";
       var _repaint=null;
       function drawWeekLines(){ if(_repaint) _repaint(); } // resize hook — the chart repaints itself on its own otherwise
@@ -6359,6 +6371,19 @@ function chartTab(){
                     });
                     var obst=vis.filter(function(v){return v.m.label!=="ETH";}).map(function(v){return v.x;});
                     ctx.save();
+                    if(wedBands.length){
+                      var wts=chart.timeScale(),wp=periodSec;
+                      wedBands.forEach(function(w){
+                        var x0=wts.timeToCoordinate(w.t0),x1=wts.timeToCoordinate(w.t1+wp);
+                        if(x0==null||x1==null) return;
+                        if(x1<0||x0>paneW) return;
+                        var bx0=Math.max(x0,0),bx1=Math.min(x1,paneW);
+                        ctx.globalAlpha=0.07;ctx.fillStyle="#ffb020";ctx.fillRect(bx0,0,bx1-bx0,paneH);
+                        var wd=x1-x0,txt=wd>=26?"WED":(wd>=9?"W":"");
+                        if(txt){ctx.globalAlpha=0.9;ctx.font="9px 'Courier New',monospace";ctx.textBaseline="bottom";ctx.fillStyle="#ffb020";ctx.fillText(txt,bx0+4,paneH-3);}
+                      });
+                      ctx.globalAlpha=1;
+                    }
                     vis.forEach(function(v){
                       var x=v.x;
                       if(tickTimes[v.m.t]){ctx.fillStyle="#040d1a";ctx.fillRect(x-1,0,2,paneH);} // grid line right under it — cover so the session line wins
@@ -6395,6 +6420,7 @@ function chartTab(){
                     if(dayLabels.length){
                       ctx.font="9px 'Courier New',monospace";ctx.textBaseline="bottom";ctx.fillStyle="#ffb020";ctx.globalAlpha=0.85;
                       dayLabels.forEach(function(d){
+                        if(tf==="30m"&&d.name==="WED") return; // drawn by the Wednesday bands
                         var x0=chart.timeScale().timeToCoordinate(d.t0),x1=chart.timeScale().timeToCoordinate(d.t1);
                         if(x0==null||x1==null||x1<0||x0>paneW||x1-x0<(d.name.length>1?26:10)) return; // off-screen or too squeezed to read
                         ctx.fillText(d.name,Math.max(x0,0)+4,paneH-3);
