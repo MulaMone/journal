@@ -244,7 +244,7 @@ svg text{font-family:'Courier New',monospace}
 .star-btn.on{border-color:#ffd70055;background:#ffd70012;color:#ffd700}
 .star-btn.off{color:var(--border)}
 .star-btn.off:hover{border-color:#ffd70040;color:#ffd70055}
-@media(max-width:480px){
+@media(max-width:480px),(max-width:960px) and (display-mode:standalone){
   #app{padding-bottom:calc(80px + env(safe-area-inset-bottom));}
   #topbar{padding:0 14px;padding-top:env(safe-area-inset-top);height:calc(52px + env(safe-area-inset-top));position:fixed;top:0;left:0;right:0;z-index:201}
   #app{padding-top:calc(52px + env(safe-area-inset-top))}
