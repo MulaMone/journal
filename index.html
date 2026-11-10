@@ -7292,17 +7292,31 @@ function chartTab(){
         chartDiv.appendChild(bar);
       })();
 
-      // ── Click / tap the chart to hide the crosshair lines, click again to bring them back ──
+      // ── Tap / click the chart to hide the crosshair lines, tap again to bring them back ──
       // (kept across timeframe / symbol switches; a double-click recenter toggles twice = no change)
       (function(){
         function setXhair(on){
           try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:on}}});}catch(e){}
         }
         if(window._xhairOff) setXhair(false);
-        chart.subscribeClick(function(){
-          window._xhairOff=!window._xhairOff;
-          setXhair(!window._xhairOff);
-        });
+        // Own tap detection (pointer events, capture phase) — the library's click event is unreliable
+        // on touch. A tap = short press with little movement. A second tap within 400ms is a
+        // double-tap (recenter), so it undoes the first tap's toggle instead of toggling again.
+        var dn=null,lastTap=0;
+        function flip(){window._xhairOff=!window._xhairOff;setXhair(!window._xhairOff);}
+        chartDiv.addEventListener("pointerdown",function(e){
+          if(!e.isPrimary||(e.target.closest&&e.target.closest("button"))){dn=null;return;}
+          dn={x:e.clientX,y:e.clientY,t:performance.now()};
+        },{capture:true,passive:true});
+        chartDiv.addEventListener("pointerup",function(e){
+          if(!dn) return;
+          var d=dn;dn=null;
+          var n=performance.now();
+          if(n-d.t>350||Math.abs(e.clientX-d.x)>10||Math.abs(e.clientY-d.y)>10) return;
+          if(lastTap&&n-lastTap<400){lastTap=0;flip();return;} // double-tap: undo
+          lastTap=n;flip();
+        },{capture:true,passive:true});
+        chartDiv.addEventListener("pointercancel",function(){dn=null;},{capture:true,passive:true});
       })();
 
       // ── Live updates without a manual Refresh ──────────────────
