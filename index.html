@@ -7295,7 +7295,7 @@ function chartTab(){
       // ── Crosshair ────────────────────────────────────────────────
       // Touch: press-and-hold SHOWS the crosshair and it stays after you lift. Hold and drag moves it,
       // it stays where you lift. Press-and-hold again without moving HIDES it. A normal drag pans the
-      // chart and the crosshair stays on its spot. (The library clears the crosshair on every touch
+      // chart and the crosshair stays on its spot on the screen. (The library clears the crosshair on every touch
       // end from a document-level handler, so the shown crosshair is re-applied right after it.)
       // Mouse: it follows the pointer as usual; click hides / shows the lines (double-click recenter = no change).
       (function(){
@@ -7305,9 +7305,16 @@ function chartTab(){
         if(window._xhairOff) setXhair(false);
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
         var dn=null,lastTap=0,down=0,multi=false;
+        // The shown crosshair is kept at a fixed SPOT ON THE SCREEN (like the mouse crosshair on desktop),
+        // not on a candle — so panning the chart slides the candles under it instead of carrying it away.
         function applyPin(){
           if(!pin) return;
-          try{chart.setCrosshairPosition(pin.price,pin.time,series);}catch(e){}
+          try{
+            var li=chart.timeScale().coordinateToLogical(pin.x),pr=series.coordinateToPrice(pin.y);
+            if(li==null||pr==null) return;
+            var idx=Math.max(0,Math.min(candles.length-1,Math.round(li)));
+            chart.setCrosshairPosition(pr,candles[idx].time,series);
+          }catch(e){}
         }
         function flipLines(){
           window._xhairOff=!window._xhairOff;
@@ -7351,7 +7358,7 @@ function chartTab(){
           if(d&&d.touch&&tracked&&lastTrack&&!multi){
             var moved=Math.abs(lastTrack.x-trackStart.x)>6||Math.abs(lastTrack.y-trackStart.y)>6;
             if(pin&&!moved) pin=null;                                  // hold again without moving: hide
-            else pin={time:lastTrack.time,price:lastTrack.price};      // hold (and drag): show / move, keep it
+            else pin={x:lastTrack.x,y:lastTrack.y};                    // hold (and drag): show / move, keep it
           }
           // The library clears the crosshair after this handler, so re-apply it (now+0ms and next frame).
           setTimeout(applyPin,0);
