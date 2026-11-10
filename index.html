@@ -7811,16 +7811,16 @@ function mobileLogTab(){
 // ─── NEED TO KNOW (Notes) ─────────────────────────────────────────────
 var NTK_COLORS={"Market Cycle":"#ff8c00","Gamma Regimes":"#4ade80","Volume":"#38bdf8","Option Chain":"#fbbf24","Volume Profile":"#a78bfa"};
 var NTK_IMAGES=[
-  {g:"Market Cycle",src:"market-cycle-weekly-v2.png",title:"Weekly Market Cycle — Frontside / Backside"},
-  {g:"Market Cycle",src:"market-cycle-2.jpg",title:"All Markets Only Do Three Things"},
-  {g:"Gamma Regimes",src:"need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
-  {g:"Gamma Regimes",src:"need-to-know-2.png",title:"Comparative Gamma Regime Analysis"},
-  {g:"Volume",src:"need-to-know-3.png",title:"Volume Price Analysis — How to Read the Volume Indicator"},
-  {g:"Volume",src:"need-to-know-5.jpg",title:"Volume Indicator Guide — How to Read It & Use It"},
-  {g:"Option Chain",src:"need-to-know-7.png",title:"High OI vs Vol/OI Ratio"},
-  {g:"Option Chain",src:"need-to-know-8.jpg",title:"High Vol/OI on Puts vs Calls"},
-  {g:"Volume Profile",src:"need-to-know-4.png",title:"Volume Profile / Market Profile"},
-  {g:"Volume Profile",src:"need-to-know-6.png",title:"How High and Low Volume Nodes Behave"}
+  {g:"Market Cycle",src:"images/market-cycle-weekly-v2.png",title:"Weekly Market Cycle — Frontside / Backside"},
+  {g:"Market Cycle",src:"images/market-cycle-2.jpg",title:"All Markets Only Do Three Things"},
+  {g:"Gamma Regimes",src:"images/need-to-know-1.png",title:"Positive vs Negative Gamma — Buy Low / Sell High"},
+  {g:"Gamma Regimes",src:"images/need-to-know-2.png",title:"Comparative Gamma Regime Analysis"},
+  {g:"Volume",src:"images/need-to-know-3.png",title:"Volume Price Analysis — How to Read the Volume Indicator"},
+  {g:"Volume",src:"images/need-to-know-5.jpg",title:"Volume Indicator Guide — How to Read It & Use It"},
+  {g:"Option Chain",src:"images/need-to-know-7.png",title:"High OI vs Vol/OI Ratio"},
+  {g:"Option Chain",src:"images/need-to-know-8.jpg",title:"High Vol/OI on Puts vs Calls"},
+  {g:"Volume Profile",src:"images/need-to-know-4.png",title:"Volume Profile / Market Profile"},
+  {g:"Volume Profile",src:"images/need-to-know-6.png",title:"How High and Low Volume Nodes Behave"}
 ];
 var NTK_CACHE=[];
 function ntkPreload(start){if(NTK_CACHE.length)return;var n=NTK_IMAGES.length;for(var k=0;k<n;k++){var it=NTK_IMAGES[(start+k)%n];var im=new Image();im.src=it.src;if(im.decode)im.decode().catch(function(){});NTK_CACHE.push(im);}}
@@ -12931,7 +12931,7 @@ function enShowPic(src){
   if(document.getElementById("en-pic-modal")) return;
   var m=document.createElement("div");m.id="en-pic-modal";
   m.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
-  var img=document.createElement("img");img.src=src||"energy-proxy.png";img.alt="Grid event to proxy to trade";
+  var img=document.createElement("img");img.src=src||"images/energy-proxy.png";img.alt="Grid event to proxy to trade";
   img.style.cssText="max-width:100%;max-height:100%;border-radius:6px;object-fit:contain;";
   function close(){document.removeEventListener("keydown",onKey);window.removeEventListener("popstate",onPop);m.remove();if(history.state&&history.state.enPic)history.back();}
   function onKey(e){if(e.key==="Escape")close();}
@@ -13172,8 +13172,8 @@ function enSecFlow(wrap){
   }
   var arrow="<div style='text-align:center;padding:8px 0;color:var(--text3);font-size:11px;letter-spacing:1px'>│<br>(Catalyst / Setup Signal)<br>▼</div>";
   wrap.appendChild(enCard("Workflow",
-    box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"],"<a href='#' class='en-pic-link' data-src='energy-checklist.jpg' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Checklist ↗</a>")+arrow+
-    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"],"<a href='#' class='en-pic-link' data-src='energy-proxy.png' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Proxy table ↗</a>")));
+    box("ANALYTICS & DATA (this tab)","var(--accent)",["Pull 5-minute ERCOT/PJM grid data","Track Load vs. Forecast & Congestion","Watch weather forecasts"],"<a href='#' class='en-pic-link' data-src='images/energy-checklist.jpg' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Checklist ↗</a>")+arrow+
+    box("EXECUTION PLATFORM (standard broker)","var(--ca)",["Trade <b>NG</b> / <b>QG</b> futures","Trade IPP equities (<b>VST</b>, <b>CEG</b>)","Overlay macro risk on <b>NQ</b> / <b>ES</b>"],"<a href='#' class='en-pic-link' data-src='images/energy-proxy.png' style='color:var(--accent);text-decoration:underline;font-size:11px;white-space:nowrap'>Proxy table ↗</a>")));
   wrap.querySelectorAll(".en-pic-link").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic(a.getAttribute("data-src"));});});
 }
 function _enBgLayer(){
@@ -13237,7 +13237,7 @@ function energyTab(){
     var age=Math.round((Date.now()-new Date(D.generatedAt).getTime())/60000);
     var seasIc="<a href='#' class='en-seas-pic' title='NG / NBP seasonality' aria-label='NG / NBP seasonality' style='text-decoration:none;font-size:15px;line-height:1;margin-left:8px;cursor:pointer;vertical-align:-1px'>📅</a>";
     meta.innerHTML="Updated "+age+" min ago"+(age>15?" <span style='color:var(--red)'>· STALE</span>":"")+(isMobile()?seasIc:"<br>Cross-check: <a href='https://www.gridstatus.io/' target='_blank' rel='noopener' style='color:var(--accent)'>GridStatus.io ↗</a>"+seasIc);
-    meta.querySelectorAll(".en-seas-pic").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic("energy-seasonality.png");});});
+    meta.querySelectorAll(".en-seas-pic").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();enShowPic("images/energy-seasonality.png");});});
     btns.innerHTML="";
     var isos=["ercot"].concat(D.pjm?["pjm"]:[]);
     if(isos.indexOf(_en.iso)<0)_en.iso="ercot";
