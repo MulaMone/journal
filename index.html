@@ -7325,7 +7325,9 @@ function chartTab(){
         }
         // the library's own long-press tracking: remember where the crosshair is
         chart.subscribeCrosshairMove(function(pm){
-          if(!dn||!dn.touch||!pm||!pm.point||pm.time===undefined) return;
+          // Only real touch tracking (long-press) carries a source event. The library also re-fires this
+          // callback with none whenever the chart pans/redraws — those must not count as "hold".
+          if(!dn||!dn.touch||!pm||!pm.point||pm.time===undefined||!pm.sourceEvent) return;
           var pr=series.coordinateToPrice(pm.point.y);
           if(pr==null) return;
           if(!tracked){tracked=true;trackStart={x:pm.point.x,y:pm.point.y};}
