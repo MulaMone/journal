@@ -5986,7 +5986,39 @@ function chartTab(){
 
   // Double-click (double-tap on mobile — a tap fires the same "dblclick"
   // event) anywhere on the chart forces the same full reload as Refresh.
-  chartDiv.addEventListener("dblclick",function(e){e.preventDefault();render();});
+  // The native "dblclick" is unreliable on touch: the chart library handles/
+  // cancels touch events itself, so the browser often never synthesizes it
+  // (hence needing many attempts). Detect double-taps directly from pointer
+  // events in the capture phase instead, so the chart can't swallow them.
+  // dblclick stays for mouse; _dtFire de-dupes if both ever fire.
+  var _dtLast=0;
+  function _dtFire(e){
+    var n=performance.now();
+    if(n-_dtLast<600) return;
+    _dtLast=n;
+    if(e&&e.preventDefault) e.preventDefault();
+    render();
+  }
+  chartDiv.addEventListener("dblclick",_dtFire);
+  var _tapT=0,_tapX=0,_tapY=0,_dnX=0,_dnY=0,_dnT=0,_dnOk=false;
+  chartDiv.addEventListener("pointerdown",function(e){
+    if(e.pointerType==="mouse"||!e.isPrimary){_dnOk=false;return;}
+    _dnOk=true;_dnX=e.clientX;_dnY=e.clientY;_dnT=performance.now();
+  },{capture:true,passive:true});
+  chartDiv.addEventListener("pointerup",function(e){
+    if(!_dnOk||e.pointerType==="mouse") return;
+    _dnOk=false;
+    var n=performance.now();
+    // must be a real tap: short press, finger barely moved (not a pan/pinch)
+    if(n-_dnT>350||Math.abs(e.clientX-_dnX)>12||Math.abs(e.clientY-_dnY)>12){_tapT=0;return;}
+    // second tap: within 400ms and 50px of the first (generous for thumbs)
+    if(_tapT&&n-_tapT<400&&Math.abs(e.clientX-_tapX)<50&&Math.abs(e.clientY-_tapY)<50){
+      _tapT=0;_dtFire(null);
+    } else {
+      _tapT=n;_tapX=e.clientX;_tapY=e.clientY;
+    }
+  },{capture:true,passive:true});
+  chartDiv.addEventListener("pointercancel",function(){_dnOk=false;_tapT=0;},{capture:true,passive:true});
 
   var loading=div();
   loading.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;letter-spacing:2px;";
