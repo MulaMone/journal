@@ -27,7 +27,7 @@ YEARS_BACK = 5
 
 # ── Adjust this to wherever index.html actually lives in the repo ──
 # e.g. "journal/yields.json" if index.html is under a journal/ folder.
-OUTPUT_PATH = "yields.json"
+OUTPUT_PATH = "data/yields.json"
 
 # Treasury CSV column name -> compact key used in yields.json
 FIELD_MAP = {"3 Mo": "m3", "2 Yr": "y2", "5 Yr": "y5", "10 Yr": "y10", "30 Yr": "y30"}
