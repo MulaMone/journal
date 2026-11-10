@@ -14,7 +14,7 @@ const path = require("path");
 const FF_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
 const TV_URL = "https://economic-calendar.tradingview.com/events";
 const TV_COUNTRIES = "US"; // app only reads USD today
-const OUT = path.join(__dirname, "..", "calendar.json");
+const OUT = path.join(__dirname, "..", "data", "calendar.json");
 const MATCH_WINDOW_MS = 60 * 60 * 1000; // same event if within 1h...
 const MIN_SCORE = 0.5;                  // ...and titles overlap enough
 
