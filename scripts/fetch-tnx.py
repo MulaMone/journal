@@ -19,7 +19,7 @@ YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1
 # The "journal" repo's root IS what's served at mulamone.github.io/journal/
 # (GitHub Pages project-site convention) — index.html sits at repo root, so
 # this file needs to as well, not inside a nested journal/ subfolder.
-OUT_PATH = "tnx.json"
+OUT_PATH = "data/tnx.json"
 
 
 def fetch_tnx():
