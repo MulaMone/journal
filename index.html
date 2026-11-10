@@ -3269,7 +3269,7 @@ function homeTab(){
 // as the existing Supabase-sync restriction. When calendar.json isn't
 // reachable (not deployed yet, or local file:// testing), this falls
 // back to computing FOMC + NFP dates locally instead of showing nothing.
-var LOCAL_CALENDAR_URL="./calendar.json";
+var LOCAL_CALENDAR_URL="./data/calendar.json";
 function localCalendarCacheGet(){try{var raw=localStorage.getItem("edge_local_calendar_v1");return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function localCalendarCacheSet(obj){try{localStorage.setItem("edge_local_calendar_v1",JSON.stringify(obj));}catch(e){}}
 function loadLocalCalendar(force){
@@ -8431,7 +8431,7 @@ function cotExpectedReportDate(){
 function cotMergeFile(rows,kind,sym){
   var last=rows.length&&rows[rows.length-1].report_date_as_yyyy_mm_dd?rows[rows.length-1].report_date_as_yyyy_mm_dd.slice(0,10):"";
   if(last>=cotExpectedReportDate()) return Promise.resolve({rows:rows});
-  return fetch("cot.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+  return fetch("data/cot.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(j){
@@ -9193,7 +9193,7 @@ function fetchYcFromSupabase(){
   });
 }
 function fetchYcFromFile(force){
-  return fetch("yields.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
+  return fetch("data/yields.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
@@ -9273,7 +9273,7 @@ function loadLiquidityData(force){
     if(!r.ok) throw new Error("edge HTTP "+r.status);
     return r.json();
   }).catch(function(){
-    return fetch("liquidity.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
+    return fetch("data/liquidity.json"+(force?"?_="+Date.now():""),{cache:"no-store"}).then(function(r){
       if(!r.ok) throw new Error("HTTP "+r.status);
       return r.json();
     });
@@ -9682,7 +9682,7 @@ function fetchTnxDailyOHLC(){
   if(_tnxOhlcMem&&Date.now()-_tnxOhlcMem.t<30*60*1000) return Promise.resolve(_tnxOhlcMem.rows);
   // 1) same-origin tnx_daily.json (written by the update-tnx-daily Action; never CORS-blocked)
   // 2) Yahoo direct from the browser
-  var fileTry=fetch("tnx_daily.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+  var fileTry=fetch("data/tnx_daily.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(j){
@@ -9714,7 +9714,7 @@ function fetchTnxDailyOHLC(){
   });});
 }
 function fetchTnxFromFile(){
-  return fetch("tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+  return fetch("data/tnx.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).then(function(json){
@@ -12632,7 +12632,7 @@ function enCacheSet(o){try{localStorage.setItem("edge_energy_v1",JSON.stringify(
 function enLoad(force){
   if(_en.loading) return Promise.resolve(_en.data);
   _en.loading=true;
-  return fetch("energy.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+  return fetch("data/energy.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("energy.json HTTP "+r.status);
     return r.json();
   }).then(function(j){
