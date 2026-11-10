@@ -6093,6 +6093,7 @@ function chartTab(){
   var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
+  var LOOKBACK_BARS=(tf==="2m"||tf==="5m")?600:500; // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
 
   if(focusTs){
     // Focused on one specific trade: a fixed-size window around it, so it
@@ -6112,7 +6113,7 @@ function chartTab(){
     // NAS100_USD). Take whichever start is EARLIER so a symbol with trades
     // never shows less history than one with none — it can only show more,
     // if the trade itself is older than that default lookback.
-    var defaultLookback=periodSec*500;
+    var defaultLookback=periodSec*LOOKBACK_BARS;
     fromSec=Math.min(tradePoints[0].ts-padSec,nowSec-defaultLookback);
     // Never request past "now" — OANDA has no future candles and rejects the
     // request outright. The window's end is simply the present moment; if the
@@ -6160,7 +6161,7 @@ function chartTab(){
       url+="&to="+encodeURIComponent(new Date(toSec*1000).toISOString());
     }
   } else {
-    url+="&count=500";
+    url+="&count="+LOOKBACK_BARS;
   }
 
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
@@ -6733,8 +6734,8 @@ function chartTab(){
       // Default view (30m and higher): the fetch window can reach back ~3 months (back to the earliest trade),
       // which fits to unreadably small candles. Open zoomed on the latest bars instead; the user
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
-      var ZOOM_BARS={"2m":1000,"5m":800,"30m":250,"1h":300,"4h":250,"8h":200,"1d":150}; // bars shown on open, per timeframe
-      if(isMobile()){ZOOM_BARS["2m"]=400;ZOOM_BARS["5m"]=320;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;} // phone plot is ~300px wide: fewer bars so candles stay readable
+      var ZOOM_BARS={"2m":500,"5m":500,"30m":250,"1h":300,"4h":250,"8h":200,"1d":150}; // bars shown on open, per timeframe
+      if(isMobile()){ZOOM_BARS["2m"]=500;ZOOM_BARS["5m"]=500;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;} // phone plot is ~300px wide: fewer bars so candles stay readable
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
