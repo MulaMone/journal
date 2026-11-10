@@ -48,8 +48,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- tnx.json; then
-            git add tnx.json
+          if ! git diff --quiet -- data/tnx.json; then
+            git add data/tnx.json
             git commit -m "Update TNX quote"
             # Multiple data-fetch workflows can run around the same time and
             # each push to main independently — pull --rebase first so this
