@@ -7357,13 +7357,13 @@ function chartTab(){
           d.tap=(n-d.t<220&&still);
           d.up=n;
         },{capture:true,passive:true});
-        chartDiv.addEventListener("pointercancel",function(){dn=null;down=Math.max(0,down-1);if(down===0) multi=false;},{capture:true,passive:true});
-        // Bubble phase on the container: runs after the library's own touchend handling (which clears the crosshair)
+        chartDiv.addEventListener("pointercancel",function(){down=Math.max(0,down-1);if(down===0) multi=false;},{capture:true,passive:true}); // dn is left for touchend to settle
+        // Container handler: decides the new pin state (applied after the library's own touchend, see below)
         chartDiv.addEventListener("touchend",function(e){
           var d=dn;
           if(e.touches&&e.touches.length) return; // another finger is still down
           dn=null;
-          if(!d||d.type!=="touch") return;
+          if(d&&d.type==="touch"){
           if(tracked&&lastTrack){pin=lastTrack;}              // long-press drag: keep it where it was released
           else if(d.tap&&!multi){
             if(lastTap&&d.up-lastTap<400){lastTap=0;pin=prevPin;} // double-tap (recenter): back to how it was before the first tap
@@ -7373,7 +7373,11 @@ function chartTab(){
               else{pin=pinAt(d.x,d.y);}                         // tap while hidden: show here
             }
           }
-          applyPin();
+          }
+          // The library listens for touchend on the document, which runs AFTER this container handler and
+          // clears the crosshair — so re-apply once that has happened (twice: now+0ms and next frame).
+          setTimeout(applyPin,0);
+          requestAnimationFrame(applyPin);
         },{passive:true});
       })();
 
