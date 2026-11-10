@@ -26,7 +26,7 @@ import urllib.error
 from datetime import datetime, timezone
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
-OUT_PATH = "liquidity.json"
+OUT_PATH = "data/liquidity.json"
 
 # (series_id, output field name, multiplier to convert to plain dollars)
 # All three H.4.1-sourced series are reported by FRED in MILLIONS of
