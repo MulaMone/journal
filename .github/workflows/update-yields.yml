@@ -29,7 +29,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add yields.json
+          git add data/yields.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update yield curve data"
             # Multiple data-fetch workflows can run around the same time and
