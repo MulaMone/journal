@@ -7289,7 +7289,6 @@ function chartTab(){
         }
         zb("+","Zoom in",function(){zoomBy(0.7);});
         zb("\u2212","Zoom out",function(){zoomBy(1/0.7);});
-        zb("\u27f2","Reset zoom",function(){if(_chartLive&&_chartLive.chart===chart&&_chartLive.recenter) _chartLive.recenter();});
         chartDiv.appendChild(bar);
       })();
 
