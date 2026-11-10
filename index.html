@@ -6465,6 +6465,13 @@ function chartTab(){
           else quarterBoundaries.push(candles[qi].time);
         }
       }
+      // Daily: Apr / Jul / Oct month starts are quarter breaks (gold) instead of plain MONTH lines.
+      if(tf==="1d"){
+        monthBoundaries=monthBoundaries.filter(function(t){
+          if(new Date((t+anchorShift)*1000).getUTCMonth()%3!==0) return true;
+          quarterBoundaries.push(t);return false;
+        });
+      }
       // One line per candle: when boundaries coincide only the superior one is
       // kept (YEAR > MONTH > WEEK > ETH). No weekly line on the daily chart.
       var sessionMarks=[],markAt={};
