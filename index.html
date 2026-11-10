@@ -5901,7 +5901,9 @@ function chartTab(){
     b.addEventListener("click",function(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
-      if(t!==tf&&_chartLive&&_chartLive.moved){
+      // Phone: every timeframe opens at its own default bar count (same as recenter). Carrying the old
+      // span across made e.g. 2m's 400 bars show up on 1h. Desktop keeps the same-candle-size carry-over.
+      if(!isMobile()&&t!==tf&&_chartLive&&_chartLive.moved){
         try{
           var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
           if(vr&&vr.from&&vr.to&&lr){
