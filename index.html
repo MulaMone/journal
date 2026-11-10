@@ -7292,16 +7292,23 @@ function chartTab(){
         chartDiv.appendChild(bar);
       })();
 
-      // ── Crosshair: same behaviour on desktop and touch ────────────
-      // The crosshair follows the pointer — on touch, the finger — while you pan/hover, and goes when
-      // you lift. Click / tap (short, no drag) hides the crosshair lines, again shows them
-      // (a double-click / double-tap recenter toggles twice = no change).
+      // ── Crosshair ────────────────────────────────────────────────
+      // Touch: press-and-hold SHOWS the crosshair and it stays after you lift. Hold and drag moves it,
+      // it stays where you lift. Press-and-hold again without moving HIDES it. A normal drag pans the
+      // chart and the crosshair stays on its spot. (The library clears the crosshair on every touch
+      // end from a document-level handler, so the shown crosshair is re-applied right after it.)
+      // Mouse: it follows the pointer as usual; click hides / shows the lines (double-click recenter = no change).
       (function(){
         function setXhair(on){
           try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:on}}});}catch(e){}
         }
         if(window._xhairOff) setXhair(false);
-        var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
+        var pin=null,trackStart=null,lastTrack=null,tracked=false;
+        var dn=null,lastTap=0,down=0,multi=false;
+        function applyPin(){
+          if(!pin) return;
+          try{chart.setCrosshairPosition(pin.price,pin.time,series);}catch(e){}
+        }
         function flipLines(){
           window._xhairOff=!window._xhairOff;
           requestAnimationFrame(function(){
@@ -7309,50 +7316,47 @@ function chartTab(){
             if(window._xhairOff){try{chart.clearCrosshairPosition();}catch(e){}}
           });
         }
-        // touch: keep the crosshair under the finger while panning (the library only does this for a mouse)
-        function followFinger(){
-          raf=0;
-          if(!touching||multi||window._xhairOff) return;
-          try{
-            var r=chartDiv.getBoundingClientRect(),x=fx-r.left,y=fy-r.top;
-            var li=chart.timeScale().coordinateToLogical(x),pr=series.coordinateToPrice(y);
-            if(li==null||pr==null) return;
-            var idx=Math.max(0,Math.min(candles.length-1,Math.round(li)));
-            chart.setCrosshairPosition(pr,candles[idx].time,series);
-          }catch(e){}
-        }
-        function queueFollow(e){
-          fx=e.clientX;fy=e.clientY;
-          if(!raf) raf=requestAnimationFrame(followFinger);
-        }
+        // the library's own long-press tracking: remember where the crosshair is
+        chart.subscribeCrosshairMove(function(pm){
+          if(!dn||!dn.touch||!pm||!pm.point||pm.time===undefined) return;
+          var pr=series.coordinateToPrice(pm.point.y);
+          if(pr==null) return;
+          if(!tracked){tracked=true;trackStart={x:pm.point.x,y:pm.point.y};}
+          lastTrack={time:pm.time,price:pr,x:pm.point.x,y:pm.point.y};
+        });
         chartDiv.addEventListener("pointerdown",function(e){
           down++;
           if(down>1) multi=true;
           if(!e.isPrimary||(e.target.closest&&e.target.closest("button"))){dn=null;return;}
           dn={x:e.clientX,y:e.clientY,t:performance.now(),touch:e.pointerType!=="mouse"};
-          if(dn.touch){touching=true;queueFollow(e);}
+          tracked=false;trackStart=null;lastTrack=null;
         },{capture:true,passive:true});
-        chartDiv.addEventListener("pointermove",function(e){
-          if(touching&&e.isPrimary&&e.pointerType!=="mouse") queueFollow(e);
-        },{capture:true,passive:true});
-        function endTouch(){touching=false;}
         chartDiv.addEventListener("pointerup",function(e){
           down=Math.max(0,down-1);
           var wasMulti=multi;
           if(down===0) multi=false;
-          if(e.pointerType!=="mouse") endTouch();
-          if(!dn||wasMulti) return;
+          if(!dn||wasMulti||dn.touch) return;
+          // mouse click = hide / show the lines
           var d=dn;dn=null;
           var n=performance.now();
-          // a tap must be shorter than the library's long-press (240ms) and barely moved
-          if(n-d.t>(d.touch?220:350)||Math.abs(e.clientX-d.x)>10||Math.abs(e.clientY-d.y)>10) return;
-          if(lastTap&&n-lastTap<400){lastTap=0;flipLines();return;} // double-tap: undo
+          if(n-d.t>350||Math.abs(e.clientX-d.x)>10||Math.abs(e.clientY-d.y)>10) return;
+          if(lastTap&&n-lastTap<400){lastTap=0;flipLines();return;} // double-click: undo
           lastTap=n;flipLines();
         },{capture:true,passive:true});
-        chartDiv.addEventListener("pointercancel",function(e){
-          dn=null;down=Math.max(0,down-1);if(down===0) multi=false;
-          if(e.pointerType!=="mouse") endTouch();
-        },{capture:true,passive:true});
+        chartDiv.addEventListener("pointercancel",function(){down=Math.max(0,down-1);if(down===0) multi=false;},{capture:true,passive:true}); // dn left for touchend
+        // Container handler: decides the new state (applied after the library's own touchend, below)
+        chartDiv.addEventListener("touchend",function(e){
+          if(e.touches&&e.touches.length) return; // another finger is still down
+          var d=dn;dn=null;
+          if(d&&d.touch&&tracked&&lastTrack&&!multi){
+            var moved=Math.abs(lastTrack.x-trackStart.x)>6||Math.abs(lastTrack.y-trackStart.y)>6;
+            if(pin&&!moved) pin=null;                                  // hold again without moving: hide
+            else pin={time:lastTrack.time,price:lastTrack.price};      // hold (and drag): show / move, keep it
+          }
+          // The library clears the crosshair after this handler, so re-apply it (now+0ms and next frame).
+          setTimeout(applyPin,0);
+          requestAnimationFrame(applyPin);
+        },{passive:true});
       })();
 
 
