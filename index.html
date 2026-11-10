@@ -5853,7 +5853,7 @@ function loadNTFile(){
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
 var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD"};
-var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D"};
+var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W"};
 
 function tradeTs(t){
   if(!t||!t.date) return null;
@@ -5916,7 +5916,7 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp);
 
-  var TFS=eodOnly?["1d"]:["2m","5m","30m","1h","4h","8h","1d"];
+  var TFS=eodOnly?["1d"]:["2m","5m","30m","1h","4h","8h","1d","1w"];
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
@@ -6168,11 +6168,11 @@ function chartTab(){
   // pair would "fix" the futures alignment while breaking the forex one.
   var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG"];
   var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
-  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-  var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400};
+  var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+  var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
-  var LOOKBACK_BARS=(tf==="2m"||tf==="5m")?600:500; // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
+  var LOOKBACK_BARS=(tf==="2m"||tf==="5m")?600:(tf==="1w"?260:500); // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
 
   if(focusTs){
     // Focused on one specific trade: a fixed-size window around it, so it
@@ -6423,7 +6423,7 @@ function chartTab(){
       // whatever this feed actually returns rather than an assumed schedule.
       var weekBoundaries=[];
       for(var wbi=1;wbi<candles.length;wbi++){
-        if(candles[wbi].time-candles[wbi-1].time>2*24*3600) weekBoundaries.push(candles[wbi].time);
+        if(periodSec<604800&&candles[wbi].time-candles[wbi-1].time>2*24*3600) weekBoundaries.push(candles[wbi].time);
       }
       // Defined unconditionally (not just when boundaries exist) so the
       // ResizeObserver below can always call it safely — it no-ops when
@@ -6446,11 +6446,23 @@ function chartTab(){
       // the next trading day/month/year.
       var monthBoundaries=[],yearBoundaries=[];
       var anchorShift=(24-dailyAlign)*3600;
-      for(var mi=1;mi<candles.length;mi++){
+      for(var mi=1;mi<candles.length&&tf!=="1w";mi++){
         var dm=new Date((candles[mi].time+anchorShift)*1000),dp=new Date((candles[mi-1].time+anchorShift)*1000);
         if(dm.getUTCMonth()!==dp.getUTCMonth()){
           if(tf==="1d"&&dm.getUTCFullYear()!==dp.getUTCFullYear()) yearBoundaries.push(candles[mi].time);
           else monthBoundaries.push(candles[mi].time);
+        }
+      }
+      // Weekly: quarter breaks. A weekly bar belongs to the quarter holding most of its
+      // trading days (its Wednesday); a quarter that starts a new year is drawn as YEAR.
+      var quarterBoundaries=[];
+      if(tf==="1w"){
+        var wkQ=function(t){var q=new Date((t+anchorShift+2*86400)*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
+        for(var qi=1;qi<candles.length;qi++){
+          var qa=wkQ(candles[qi].time),qb=wkQ(candles[qi-1].time);
+          if(qa===qb) continue;
+          if(Math.floor(qa/4)!==Math.floor(qb/4)) yearBoundaries.push(candles[qi].time);
+          else quarterBoundaries.push(candles[qi].time);
         }
       }
       // One line per candle: when boundaries coincide only the superior one is
@@ -6459,6 +6471,7 @@ function chartTab(){
       function addMark(t,label,color){if(markAt[t])return;markAt[t]=true;sessionMarks.push({t:t,label:label,color:color});}
       yearBoundaries.forEach(function(t){addMark(t,"YEAR","#e8f0ff");});
       monthBoundaries.forEach(function(t){addMark(t,"MONTH","#b06aff");});
+      quarterBoundaries.forEach(function(t){addMark(t,"QUARTER","#ffc83d");});
       if(tf!=="1d") weekBoundaries.forEach(function(t){addMark(t,"WEEK","var(--accent)");});
       ethBoundaries.forEach(function(t){addMark(t,"ETH","#ffb020");});
       // Defined unconditionally (not just when boundaries exist) so the
@@ -6650,7 +6663,7 @@ function chartTab(){
             // marker. Snapping keeps the arrow on a real candle; price stays exact.
             var t=Math.floor(p.ts/periodSec)*periodSec;t-=etOff(t); // snap in true time first, then shift to match the ET-shifted candles
             var dayCandle=null;
-            if(tf==="1d"){ // daily candles open at the 17:00/18:00 ET anchor, not UTC midnight — snap to the candle that contains the fill
+            if(tf==="1d"||tf==="1w"){ // daily/weekly candles open at the 17:00/18:00 ET anchor, not UTC midnight — snap to the candle that contains the fill
               var pd=p.ts-etOff(p.ts);dayCandle=candles[0];
               for(var di=0;di<candles.length;di++){if(candles[di].time<=pd)dayCandle=candles[di];else break;}
               t=dayCandle.time;
@@ -6813,8 +6826,8 @@ function chartTab(){
       // Default view (30m and higher): the fetch window can reach back ~3 months (back to the earliest trade),
       // which fits to unreadably small candles. Open zoomed on the latest bars instead; the user
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
-      var ZOOM_BARS={"2m":250,"5m":200,"30m":250,"1h":300,"4h":200,"8h":150,"1d":150}; // bars shown on open, per timeframe
-      if(isMobile()){ZOOM_BARS["2m"]=400;ZOOM_BARS["5m"]=250;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;} // phone plot is ~300px wide: fewer bars so candles stay readable
+      var ZOOM_BARS={"2m":250,"5m":200,"30m":250,"1h":300,"4h":200,"8h":150,"1d":150,"1w":104}; // bars shown on open, per timeframe
+      if(isMobile()){ZOOM_BARS["2m"]=400;ZOOM_BARS["5m"]=250;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;ZOOM_BARS["1w"]=52;} // phone plot is ~300px wide: fewer bars so candles stay readable
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
@@ -6897,6 +6910,7 @@ function chartTab(){
       // month's close (PMC). Built from OANDA D/W/M candles (same session anchor
       // as the chart). Each period gets its own line series; nothing joins one level to the next.
       (function(){
+        if(tf==="1w") return; // weekly uses PQH/PQL below
         var pcGran,pcLbl,pcSec;
         if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
         else if(periodSec>=3600){pcGran="W";pcLbl="PWC";pcSec=604800;}
@@ -6988,6 +7002,52 @@ function chartTab(){
             if(chart._pmRedraw) chart._pmRedraw(); // keep prev-month lines (8h) on top of the fresh weekly ones
             if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
+        }).catch(function(){});
+      })();
+
+      // ── 1w only: previous QUARTER high / low (PQH / PQL) ──────────
+      // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
+      // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
+      if(tf==="1w") (function(){
+        var PQ_COL={h:"#00b862",l:"#ff4444"},PQ_TAG={h:"PQH",l:"PQL"};
+        var span=candles[candles.length-1].time-candles[0].time;
+        var n=Math.min(5000,Math.ceil(span/86400)+100); // +100d so the quarter before the first visible one is complete
+        var pqUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var qKey=function(t){var q=new Date(t*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
+        chartFetchJson(pqUrl).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var ds=((d&&d.candles)||[]).map(function(c){
+            var _pu=Math.floor(new Date(c.time).getTime()/1000);
+            return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
+          });
+          if(ds.length<2) return;
+          var qs={},firstKey=qKey(ds[0].t+anchorShift);
+          ds.forEach(function(x){
+            var k=qKey(x.t+anchorShift),q=qs[k]||(qs[k]={h:-Infinity,l:Infinity});
+            if(x.h>q.h) q.h=x.h;
+            if(x.l<q.l) q.l=x.l;
+          });
+          var groups=[],gCur=null,gKey=null;
+          candles.forEach(function(c){
+            var k=qKey(c.time+anchorShift+2*86400);
+            if(k!==gKey){
+              gKey=k;gCur=null;
+              var pq=qs[k-1];
+              if(pq&&k-1!==firstKey){gCur={h:pq.h,l:pq.l,times:[]};groups.push(gCur);} // skip if prior quarter is the (partial) first fetched one
+            }
+            if(gCur) gCur.times.push(c.time);
+          });
+          ["h","l"].forEach(function(f){
+            groups.forEach(function(g,gi){
+              var isCur=gi===groups.length-1;
+              if(g[f]==null||!isFinite(g[f])) return;
+              var data=g.times.map(function(t){return {time:t,value:g[f]};});
+              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              ps.setData(data);
+            });
+          });
+          if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
         }).catch(function(){});
       })();
 
@@ -7196,6 +7256,34 @@ function chartTab(){
       });
       ro.observe(chartDiv);
 
+      // ── Zoom buttons (+ / − / reset) — desktop and phone ──────────
+      // Wheel / pinch still work; these zoom about the centre of the visible range.
+      (function(){
+        var bar=div(),mob=isMobile(),sz=mob?40:30;
+        bar.style.cssText="position:absolute;left:8px;bottom:34px;display:flex;flex-direction:column;gap:4px;z-index:6;";
+        function zb(txt,title,fn){
+          var b=h("button",{className:"btn"});
+          b.textContent=txt;b.title=title;
+          b.style.cssText="width:"+sz+"px;height:"+sz+"px;padding:0;font-size:"+(mob?20:16)+"px;font-weight:700;line-height:1;background:#040d1acc;border-color:var(--border2);color:var(--text);touch-action:manipulation;";
+          b.addEventListener("click",function(e){e.stopPropagation();fn();});
+          bar.appendChild(b);
+        }
+        function zoomBy(f){
+          try{
+            var ts=chart.timeScale(),r=ts.getVisibleLogicalRange();
+            if(!r) return;
+            var c=(r.from+r.to)/2,half=Math.max(2.5,(r.to-r.from)/2*f);
+            ts.setVisibleLogicalRange({from:c-half,to:c+half});
+            if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;}
+            _chartKeepView=null;
+          }catch(e){}
+        }
+        zb("+","Zoom in",function(){zoomBy(0.7);});
+        zb("\u2212","Zoom out",function(){zoomBy(1/0.7);});
+        zb("\u27f2","Reset zoom",function(){if(_chartLive&&_chartLive.chart===chart&&_chartLive.recenter) _chartLive.recenter();});
+        chartDiv.appendChild(bar);
+      })();
+
       // ── Live updates without a manual Refresh ──────────────────
       // Poll for just the newest few bars and push them into the existing
       // series via update() (which appends a new bar or overwrites the
@@ -7208,7 +7296,7 @@ function chartTab(){
       _chartLiveTimer=setInterval(function(){
         if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
         if(eodOnly){if(_tnxSkip++%2===0) tnxTick();return;} // 15s tick -> quote every 30s
-        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
