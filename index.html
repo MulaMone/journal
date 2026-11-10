@@ -1949,6 +1949,7 @@ function switchTab(id){
   // Guard: if tab not in VIEWS (e.g. "chart" from old localStorage), fall back to home
   if(!VIEWS[id]) id="home";
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
+  if(id==="chart") State.chart_show_trades=!!State.chart_focus_ts;
   if(id!=="analytics"){State.rv_selected_day=null;}
   render();
   // Chart tab on mobile: the fixed topbar + symbol/timeframe controls above
@@ -2275,6 +2276,29 @@ function openSettings(){
   tnxTokRight.appendChild(tnxTokInp);tnxTokRight.appendChild(tnxTokSave);
   tnxTokRow.appendChild(tnxTokInfo);tnxTokRow.appendChild(tnxTokRight);
   body.appendChild(tnxTokRow);
+
+  var oaTokRow=document.createElement("div");
+  oaTokRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
+  var oaTokInfo=document.createElement("div");oaTokInfo.style.cssText="min-width:0;";
+  var oaTokLbl=document.createElement("div");oaTokLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";oaTokLbl.textContent="OANDA Token (Chart)";
+  var oaTokDesc=document.createElement("div");oaTokDesc.style.cssText="font-size:10px;color:var(--text3);";oaTokDesc.textContent="Practice-account token — used only to load chart price data. Clear it and tap SET to remove.";
+  oaTokInfo.appendChild(oaTokLbl);oaTokInfo.appendChild(oaTokDesc);
+  var oaTokRight=document.createElement("div");oaTokRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
+  var oaTokInp=document.createElement("input");
+  oaTokInp.type="password";oaTokInp.placeholder="OANDA practice token";
+  oaTokInp.value=ls("oanda_token","");
+  oaTokInp.style.cssText="width:150px;background:var(--panel3);border:1px solid var(--border2);color:var(--text);font-family:'Courier New',monospace;font-size:11px;padding:5px 8px;border-radius:3px;";
+  var oaTokSave=document.createElement("button");
+  oaTokSave.textContent="SET";
+  oaTokSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;padding:5px 8px;border-radius:3px;cursor:pointer;";
+  oaTokSave.onclick=function(){
+    ss("oanda_token",oaTokInp.value.trim());
+    oaTokSave.textContent="✓";setTimeout(function(){oaTokSave.textContent="SET";},1200);
+    if(State.tab==="chart") render();
+  };
+  oaTokRight.appendChild(oaTokInp);oaTokRight.appendChild(oaTokSave);
+  oaTokRow.appendChild(oaTokInfo);oaTokRow.appendChild(oaTokRight);
+  body.appendChild(oaTokRow);
 
   var allTrigRow=document.createElement("div");
   allTrigRow.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
@@ -5879,8 +5903,9 @@ function chartTab(){
   ctrlRow.style.flexWrap="wrap";
   ctrlRow.style.rowGap="8px";
 
+  var useWheels=isMobile()&&!eodOnly; // phone: symbol/timeframe wheels under the chart instead of button rows
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"}];
-  SYMS.forEach(function(s){
+  (useWheels?[]:SYMS).forEach(function(s){
     if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
@@ -5889,10 +5914,10 @@ function chartTab(){
     ctrlRow.appendChild(b);
   });
 
-  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp);
+  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp);
 
   var TFS=eodOnly?["1d"]:["2m","5m","30m","1h","4h","8h","1d"];
-  TFS.forEach(function(t){
+  (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
       ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
@@ -5923,10 +5948,10 @@ function chartTab(){
     ctrlRow.appendChild(b);
   });
 
-  var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrlRow.appendChild(sp2);
+  var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp2);
 
   // Show/hide trade markers toggle — eye icon, on by default.
-  var showTrades=State.chart_show_trades!==false;
+  var showTrades=State.chart_show_trades===true;
   var EYE_OPEN='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
   var EYE_OFF='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
   var eyeBtn=h("button",{className:"btn"});
@@ -5955,16 +5980,15 @@ function chartTab(){
   el.appendChild(hrow);
 
   // ── OANDA token gate ──────────────────────────────────────
+  // The token is entered in Settings → Live Data.
   var tok=ls("oanda_token","");
   if(!tok){
     var tokRow=div("row gap8 mb12");
-    var tin=h("input",{type:"password",placeholder:"OANDA practice API token"});
-    tin.style.cssText="flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;font-family:monospace;font-size:12px;";
-    function saveTok(){if(tin.value.trim()){ss("oanda_token",tin.value.trim());render();}}
-    var tsave=h("button",{className:"btn"});tsave.textContent="Save";
-    tsave.addEventListener("click",saveTok);
-    tin.addEventListener("keydown",function(e){if(e.key==="Enter") saveTok();});
-    tokRow.appendChild(tin);tokRow.appendChild(tsave);
+    var tmsg=div("xs m");tmsg.style.cssText="color:var(--text3);flex:1;";
+    tmsg.textContent="Add your OANDA practice token in Settings → Live Data to load chart data.";
+    var topen=h("button",{className:"btn"});topen.textContent="Open settings";
+    topen.addEventListener("click",function(){if(isMobile()) switchTab("settings"); else openSettings();});
+    tokRow.appendChild(tmsg);tokRow.appendChild(topen);
     el.appendChild(tokRow);
     var tnote=div("xs m");tnote.style.cssText="margin-bottom:12px;color:var(--text3);";
     tnote.textContent="Free OANDA practice token — used only to pull chart price data. Your trades still come from your own trade log, never from OANDA. Stored client-side, visible in this page's source/network tab.";
@@ -6023,6 +6047,45 @@ function chartTab(){
   },{capture:true,passive:true});
   chartDiv.addEventListener("pointercancel",function(){_dnOk=false;_tapT=0;},{capture:true,passive:true});
 
+  if(useWheels){
+    chartDiv.style.height="calc(100vh - 330px)";chartDiv.style.minHeight="400px";
+    var WH=36,wrap=div();
+    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:6px;overflow:hidden;";
+    var pill=div();pill.style.cssText="position:absolute;left:8px;right:8px;top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;background:var(--panel3);border:1px solid var(--border2);pointer-events:none;";
+    wrap.appendChild(pill);
+    var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
+    function makeWheel(list,cur,onPick){
+      var w=div(),items=[],ready=false,timer=null;
+      w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;";
+      w.className="wheel-col";
+      var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
+      list.forEach(function(t,i){
+        var d=div();d.textContent=t;
+        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-size:20px;color:var(--text);cursor:pointer;";
+        d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
+        w.appendChild(d);items.push(d);
+      });
+      var pad2=div();pad2.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad2);
+      function idx(){return Math.max(0,Math.min(list.length-1,Math.round(w.scrollTop/WH)));}
+      function fade(){var p=w.scrollTop/WH;items.forEach(function(d,i){var dist=Math.abs(i-p);d.style.opacity=Math.max(0.15,1-dist*0.6);d.style.fontWeight=dist<0.5?"700":"400";});}
+      w.addEventListener("scroll",function(){
+        fade();
+        if(!ready) return;
+        clearTimeout(timer);
+        timer=setTimeout(function(){var v=list[idx()];if(v!==cur){cur=v;onPick(v);}},160);
+      });
+      setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();setTimeout(function(){ready=true;},120);},30);
+      return w;
+    }
+    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}),sym,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
+    cols.appendChild(makeWheel(TFS,tf,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
+    wrap.appendChild(cols);
+    var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(var(--panel2),transparent);pointer-events:none;";
+    var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(transparent,var(--panel2));pointer-events:none;";
+    wrap.appendChild(fTop);wrap.appendChild(fBot);
+    el.appendChild(wrap);
+  }
+
   var loading=div();
   loading.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;letter-spacing:2px;";
   loading.textContent="LOADING CHART DATA...";
@@ -6032,10 +6095,6 @@ function chartTab(){
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
   note.textContent="Chart data via OANDA (times shown in ET) — markers show trade entries from your log";
   el.appendChild(note);
-
-  var chg=h("button",{className:"btn"});chg.style.cssText="margin-top:6px;font-size:11px;padding:3px 8px;";chg.textContent="Change OANDA token";
-  chg.addEventListener("click",function(){ss("oanda_token","");render();});
-  el.appendChild(chg);
 
   var oandaInst=OANDA_SYMS[sym]||"SPX500_USD";
   var gran=OANDA_GRAN[tf]||"H1";
@@ -12076,6 +12135,26 @@ function settingsTab(){
   tokRow.style.flexDirection="column";tokRow.style.alignItems="stretch";
   tokRow.appendChild(tokWrap);
   el.appendChild(tokRow);
+
+  var oaRow=mRow();
+  var oaInfo=document.createElement("div");
+  oaInfo.innerHTML="<div style='font-size:13px;color:#e8f0ff;'>OANDA token (chart)</div><div style='font-size:10px;color:#c9a84c;margin-top:2px;'>Practice-account token for chart prices. Clear and save to remove.</div>";
+  var oaInp=document.createElement("input");
+  oaInp.type="password";oaInp.placeholder="OANDA practice token";
+  oaInp.value=ls("oanda_token","");
+  oaInp.style.cssText="width:100%;background:#0a1a32;border:1px solid #1e3d73;color:#e8f0ff;font-family:'Courier New',monospace;font-size:12px;padding:8px 10px;border-radius:4px;margin-top:8px;";
+  var oaSave=document.createElement("button");
+  oaSave.textContent="Save token";
+  oaSave.style.cssText="background:none;border:1px solid var(--accent);color:var(--accent);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;margin-top:8px;width:100%;";
+  oaSave.addEventListener("click",function(){
+    ss("oanda_token",oaInp.value.trim());
+    oaSave.textContent="✓ Saved";setTimeout(function(){oaSave.textContent="Save token";},1200);
+  });
+  var oaWrap=document.createElement("div");oaWrap.style.cssText="width:100%;";
+  oaWrap.appendChild(oaInfo);oaWrap.appendChild(oaInp);oaWrap.appendChild(oaSave);
+  oaRow.style.flexDirection="column";oaRow.style.alignItems="stretch";
+  oaRow.appendChild(oaWrap);
+  el.appendChild(oaRow);
 
   var trigRow=mRow();
   var trigInfo=document.createElement("div");
