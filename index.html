@@ -6048,26 +6048,46 @@ function chartTab(){
   chartDiv.addEventListener("pointercancel",function(){_dnOk=false;_tapT=0;},{capture:true,passive:true});
 
   if(useWheels){
-    chartDiv.style.height="calc(100vh - 330px)";chartDiv.style.minHeight="400px";
-    var WH=36,wrap=div();
-    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:6px;overflow:hidden;";
-    var pill=div();pill.style.cssText="position:absolute;left:8px;right:8px;top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;background:var(--panel3);border:1px solid var(--border2);pointer-events:none;";
-    wrap.appendChild(pill);
+    // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
+    var WH=28,GREEN="#00e676",RED="#ff5252",wrap=div();
+    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
+    function mkPill(side,col){
+      var d=div();
+      d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;border:1px solid "+col+"88;background:"+col+"0d;box-shadow:0 0 10px "+col+"22,inset 0 0 8px "+col+"14;pointer-events:none;";
+      return d;
+    }
+    function mkTag(side,txt,col){
+      var d=div();d.textContent=txt;
+      d.style.cssText="position:absolute;"+side+":20px;top:"+(WH+6)+"px;font-family:'Courier New',monospace;font-size:8px;letter-spacing:1px;color:"+col+"99;pointer-events:none;";
+      return d;
+    }
+    wrap.appendChild(mkPill("left",GREEN));wrap.appendChild(mkPill("right",RED));
+    wrap.appendChild(mkTag("left","SYM",GREEN));wrap.appendChild(mkTag("right","TF",RED));
     var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
-    function makeWheel(list,cur,onPick){
+    function makeWheel(list,cur,col,onPick){
       var w=div(),items=[],ready=false,timer=null;
       w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;";
       w.className="wheel-col";
       var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
       list.forEach(function(t,i){
         var d=div();d.textContent=t;
-        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-size:20px;color:var(--text);cursor:pointer;";
+        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:15px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
         d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
         w.appendChild(d);items.push(d);
       });
       var pad2=div();pad2.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad2);
       function idx(){return Math.max(0,Math.min(list.length-1,Math.round(w.scrollTop/WH)));}
-      function fade(){var p=w.scrollTop/WH;items.forEach(function(d,i){var dist=Math.abs(i-p);d.style.opacity=Math.max(0.15,1-dist*0.6);d.style.fontWeight=dist<0.5?"700":"400";});}
+      function fade(){
+        var p=w.scrollTop/WH;
+        items.forEach(function(d,i){
+          var diff=i-p,dist=Math.abs(diff),on=dist<0.5;
+          d.style.opacity=Math.max(0.12,1-dist*0.55);
+          d.style.transform="perspective(260px) rotateX("+(-diff*38)+"deg) scale("+Math.max(0.7,1-dist*0.14)+")";
+          d.style.color=on?col:"#8da0ba";
+          d.style.fontWeight=on?"700":"400";
+          d.style.textShadow=on?"0 0 8px "+col+"88":"none";
+        });
+      }
       w.addEventListener("scroll",function(){
         fade();
         if(!ready) return;
@@ -6077,11 +6097,11 @@ function chartTab(){
       setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();setTimeout(function(){ready=true;},120);},30);
       return w;
     }
-    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}),sym,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
-    cols.appendChild(makeWheel(TFS,tf,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
+    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
+    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
     wrap.appendChild(cols);
-    var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(var(--panel2),transparent);pointer-events:none;";
-    var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(transparent,var(--panel2));pointer-events:none;";
+    var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
+    var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
     wrap.appendChild(fTop);wrap.appendChild(fBot);
     el.appendChild(wrap);
   }
