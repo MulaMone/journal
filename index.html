@@ -5984,8 +5984,8 @@ function chartTab(){
   chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;scroll-margin-top:calc(52px + env(safe-area-inset-top) + 10px);";
   el.appendChild(chartDiv);
 
-  // Double-click (double-tap on mobile — a tap fires the same "dblclick"
-  // event) anywhere on the chart forces the same full reload as Refresh.
+  // Double-click / double-tap anywhere on the chart RECENTERS the view (price
+  // autoscale + latest bars at default zoom) — it does not reload data.
   // The native "dblclick" is unreliable on touch: the chart library handles/
   // cancels touch events itself, so the browser often never synthesizes it
   // (hence needing many attempts). Detect double-taps directly from pointer
@@ -5997,7 +5997,7 @@ function chartTab(){
     if(n-_dtLast<600) return;
     _dtLast=n;
     if(e&&e.preventDefault) e.preventDefault();
-    render();
+    if(_chartLive&&_chartLive.recenter) _chartLive.recenter();
   }
   chartDiv.addEventListener("dblclick",_dtFire);
   var _tapT=0,_tapX=0,_tapY=0,_dnX=0,_dnY=0,_dnT=0,_dnOk=false;
@@ -6316,6 +6316,7 @@ function chartTab(){
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
+        handleScale:{axisDoubleClickReset:{time:false,price:false}}, // library's axis double-tap reset is flaky on touch; recenter() below replaces it
         timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
@@ -6762,6 +6763,24 @@ function chartTab(){
         };
         [300,900,2000].forEach(function(ms){setTimeout(anchorRight,ms);});
       }
+      // Recenter (double-tap/click): re-enable price autoscale and put the view back on the latest
+      // bars at the default zoom with the right-hand gap for the PDC/PWC/PMC tag.
+      _chartLive.recenter=function(){
+        try{
+          chart.priceScale("right").applyOptions({autoScale:true});
+          var ts=chart.timeScale(),w=ts.width();
+          if(w>tagPx*3&&candles.length>1){
+            if(zoomN){
+              var f=candles.length-1-zoomN,t=candles.length-1+tagGap(w,zoomN+1);
+              ts.setVisibleLogicalRange({from:f,to:t});
+              ts.scrollToPosition(tagPx/Math.max(0.5,w/(t-f+1))+0.5,false);
+            } else {
+              chart.applyOptions({timeScale:{rightOffset:tagGap(w,candles.length)}});
+              ts.fitContent();
+            }
+          } else ts.scrollToRealTime();
+        }catch(e){}
+      };
       if(keepView){
         // Same candle size (same number of bars across), centred on the same moment in time.
         // Applied now and again shortly after, in case a late layout/resize re-fits the chart.
