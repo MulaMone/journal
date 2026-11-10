@@ -10077,7 +10077,11 @@ function computeFedProbability(meetingIso,curve,effr){
   if(!isFinite(Rnext)) return null;
   var deltaBp=(Rnext-Rstart)*100;
   var stepProb=Math.max(0,Math.min(100,Math.abs(deltaBp)/25*100));
-  return {meetingCode:meetingCode,Rprior:Rstart,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb,anchor:anchor,effrDate:effrDate,rnextSource:rnextSource};
+  // Split across the two nearest 25bp steps (e.g. +28bp -> ~88% x 25bp, ~12% x 50bp)
+  var steps=Math.abs(deltaBp)/25,lo=Math.floor(steps),frac=steps-lo,dist=[];
+  if(lo>=1&&(1-frac)>0.005) dist.push({bp:lo*25,p:(1-frac)*100});
+  if(frac>0.005) dist.push({bp:(lo+1)*25,p:frac*100});
+  return {meetingCode:meetingCode,dist:dist,Rprior:Rstart,Rnext:Rnext,deltaBp:deltaBp,stepProb:stepProb,holdProb:100-stepProb,anchor:anchor,effrDate:effrDate,rnextSource:rnextSource};
 }
 
 // ─── Fed probability history — tracks the HOLD/MOVE read over time so the
@@ -10383,7 +10387,7 @@ function buildFedFundsView(data,isM){
     card.innerHTML="<div style='font-size:12px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;'>Next FOMC — "+meetingIso+" ("+prob.meetingCode+")</div>"
       +"<div style='display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;'>"
       +"<div><div style='font-size:9px;letter-spacing:1.5px;color:var(--text3);'>HOLD</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:#ffffff;'>"+prob.holdProb.toFixed(0)+"%</div></div>"
-      +"<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+moveLbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+prob.stepProb.toFixed(0)+"%</div></div>"
+      +prob.dist.map(function(x){var lbl=x.bp+"bp "+(isCut?"CUT":isHike?"HIKE":"MOVE");return "<div><div style='font-size:9px;letter-spacing:1.5px;color:"+moveCol+";'>"+lbl+"</div><div style='font-size:26px;font-weight:700;font-family:Courier New,monospace;color:"+moveCol+";'>"+x.p.toFixed(0)+"%</div></div>";}).join("")
       +"</div>"
       +"<div style='font-size:11px;color:var(--text3);margin-top:8px;'>Implied path: "+prob.Rprior.toFixed(2)+"% → "+prob.Rnext.toFixed(2)+"% ("+(prob.deltaBp>=0?"+":"")+prob.deltaBp.toFixed(0)+"bp)</div>";
     el.appendChild(card);
