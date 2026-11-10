@@ -6770,8 +6770,10 @@ function chartTab(){
           chart.priceScale("right").applyOptions({autoScale:true});
           var ts=chart.timeScale(),w=ts.width();
           if(w>tagPx*3&&candles.length>1){
-            if(zoomN){
-              var f=candles.length-1-zoomN,t=candles.length-1+tagGap(w,zoomN+1);
+            // zoomN is 0 when the chart opened with a carried-over view; recenter still wants the default zoom
+            var zn=(ZOOM_BARS[tf]&&!focusTs&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
+            if(zn){
+              var f=candles.length-1-zn,t=candles.length-1+tagGap(w,zn+1);
               ts.setVisibleLogicalRange({from:f,to:t});
               ts.scrollToPosition(tagPx/Math.max(0.5,w/(t-f+1))+0.5,false);
             } else {
