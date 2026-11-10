@@ -7292,6 +7292,19 @@ function chartTab(){
         chartDiv.appendChild(bar);
       })();
 
+      // ── Click / tap the chart to hide the crosshair lines, click again to bring them back ──
+      // (kept across timeframe / symbol switches; a double-click recenter toggles twice = no change)
+      (function(){
+        function setXhair(on){
+          try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:on}}});}catch(e){}
+        }
+        if(window._xhairOff) setXhair(false);
+        chart.subscribeClick(function(){
+          window._xhairOff=!window._xhairOff;
+          setXhair(!window._xhairOff);
+        });
+      })();
+
       // ── Live updates without a manual Refresh ──────────────────
       // Poll for just the newest few bars and push them into the existing
       // series via update() (which appends a new bar or overwrites the
