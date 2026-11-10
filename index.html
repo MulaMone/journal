@@ -7293,9 +7293,8 @@ function chartTab(){
       })();
 
       // ── Crosshair ────────────────────────────────────────────────
-      // Touch: press-and-hold SHOWS the crosshair and it stays after you lift. Hold and drag moves it,
-      // it stays where you lift. Press-and-hold again without moving HIDES it. A normal drag pans the
-      // chart and the crosshair stays on its spot on the screen. (The library clears the crosshair on every touch
+      // Touch: press-and-hold SHOWS the crosshair and it stays after you lift. While it is shown it follows your
+      // finger (also while you pan) and stays where you lift. Press-and-hold again without moving HIDES it. (The library clears the crosshair on every touch
       // end from a document-level handler, so the shown crosshair is re-applied right after it.)
       // Mouse: it follows the pointer as usual; click hides / shows the lines (double-click recenter = no change).
       (function(){
@@ -7304,7 +7303,7 @@ function chartTab(){
         }
         if(window._xhairOff) setXhair(false);
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
-        var dn=null,lastTap=0,down=0,multi=false;
+        var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
         // The shown crosshair is kept at a fixed SPOT ON THE SCREEN (like the mouse crosshair on desktop),
         // not on a candle — so panning the chart slides the candles under it instead of carrying it away.
         function applyPin(){
@@ -7315,6 +7314,18 @@ function chartTab(){
             var idx=Math.max(0,Math.min(candles.length-1,Math.round(li)));
             chart.setCrosshairPosition(pr,candles[idx].time,series);
           }catch(e){}
+        }
+        // While the crosshair is shown, it follows the finger (also while you pan) and stays where you lift.
+        function followFinger(){
+          raf=0;
+          if(!touching||multi||!pin) return;
+          var r=chartDiv.getBoundingClientRect();
+          pin={x:fx-r.left,y:fy-r.top};
+          applyPin();
+        }
+        function queueFollow(e){
+          fx=e.clientX;fy=e.clientY;
+          if(!raf) raf=requestAnimationFrame(followFinger);
         }
         function flipLines(){
           window._xhairOff=!window._xhairOff;
@@ -7339,11 +7350,16 @@ function chartTab(){
           if(!e.isPrimary||(e.target.closest&&e.target.closest("button"))){dn=null;return;}
           dn={x:e.clientX,y:e.clientY,t:performance.now(),touch:e.pointerType!=="mouse"};
           tracked=false;trackStart=null;lastTrack=null;
+          if(dn.touch&&pin){touching=true;queueFollow(e);}
+        },{capture:true,passive:true});
+        chartDiv.addEventListener("pointermove",function(e){
+          if(touching&&e.isPrimary&&e.pointerType!=="mouse") queueFollow(e);
         },{capture:true,passive:true});
         chartDiv.addEventListener("pointerup",function(e){
           down=Math.max(0,down-1);
           var wasMulti=multi;
           if(down===0) multi=false;
+          if(e.pointerType!=="mouse") touching=false;
           if(!dn||wasMulti||dn.touch) return;
           // mouse click = hide / show the lines
           var d=dn;dn=null;
@@ -7352,7 +7368,7 @@ function chartTab(){
           if(lastTap&&n-lastTap<400){lastTap=0;flipLines();return;} // double-click: undo
           lastTap=n;flipLines();
         },{capture:true,passive:true});
-        chartDiv.addEventListener("pointercancel",function(){down=Math.max(0,down-1);if(down===0) multi=false;},{capture:true,passive:true}); // dn left for touchend
+        chartDiv.addEventListener("pointercancel",function(){down=Math.max(0,down-1);if(down===0) multi=false;touching=false;},{capture:true,passive:true}); // dn left for touchend
         // Container handler: decides the new state (applied after the library's own touchend, below)
         chartDiv.addEventListener("touchend",function(e){
           if(e.touches&&e.touches.length) return; // another finger is still down
@@ -7360,7 +7376,7 @@ function chartTab(){
           if(d&&d.touch&&tracked&&lastTrack&&!multi){
             var moved=Math.abs(lastTrack.x-trackStart.x)>6||Math.abs(lastTrack.y-trackStart.y)>6;
             if(pin&&!moved) pin=null;                                  // hold again without moving: hide
-            else pin={x:lastTrack.x,y:lastTrack.y};                    // hold (and drag): show / move, keep it
+            else pin={x:lastTrack.x,y:lastTrack.y};                    // hold: show here and keep it
           }
           // The library clears the crosshair after this handler, so re-apply it (now+0ms and next frame).
           setTimeout(applyPin,0);
