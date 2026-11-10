@@ -7179,8 +7179,18 @@ function chartTab(){
         var timeLine="";
         if(barEndTrue!=null){
           var remain=Math.max(0,Math.floor(barEndTrue-Date.now()/1000));
-          var mm=Math.floor(remain/60),ss=remain%60;
-          timeLine='<div style="font-size:13px;font-weight:700;color:var(--accent);background:#040d1acc;border-radius:2px;padding:0 3px;margin-top:1px;display:inline-block;">'+mm+":"+(ss<10?"0":"")+ss+"</div>";
+          var p2=function(n){return (n<10?"0":"")+n;};
+          var cdTxt;
+          if(periodSec>86400){ // weekly+ : "5d 16h"
+            var dd=Math.floor(remain/86400),hh=Math.floor((remain%86400)/3600);
+            cdTxt=dd+"d "+hh+"h";
+          } else if(periodSec>=14400){ // 4h / 8h / 1D : HH:MM:SS
+            cdTxt=p2(Math.floor(remain/3600))+":"+p2(Math.floor((remain%3600)/60))+":"+p2(remain%60);
+          } else {
+            var mm=Math.floor(remain/60),ss=remain%60;
+            cdTxt=mm+":"+p2(ss);
+          }
+          timeLine='<div style="font-size:13px;font-weight:700;color:var(--accent);background:#040d1acc;border-radius:2px;padding:0 3px;margin-top:1px;display:inline-block;">'+cdTxt+"</div>";
         }
         cdBadge.innerHTML="<div>"+currentPrice+"</div>"+timeLine;
         // Pin the badge to exactly the chart's own reserved price-scale
