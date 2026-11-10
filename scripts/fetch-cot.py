@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 LEGACY_URL = "https://www.cftc.gov/dea/futures/deacmesf.htm"
 TFF_URL = "https://www.cftc.gov/dea/futures/financial_lf.htm"
 CODES = {"ES": "13874A", "NQ": "209742"}  # E-MINI S&P 500 / NASDAQ MINI (CME)
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cot.json")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "cot.json")
 NUM = re.compile(r"-?\d[\d,]*")
 
 
