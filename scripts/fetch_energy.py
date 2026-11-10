@@ -6,8 +6,8 @@ import os, json, sys, time, datetime as dt, traceback
 import requests
 import pandas as pd
 
-OUT = os.environ.get("ENERGY_OUT", "energy.json")
-NORMS = os.environ.get("ENERGY_NORMS", "energy_norms.json")
+OUT = os.environ.get("ENERGY_OUT", "data/energy.json")
+NORMS = os.environ.get("ENERGY_NORMS", "data/energy_norms.json")
 out = {"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "errors": {}}
 CT = "America/Chicago"
 
