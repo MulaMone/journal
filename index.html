@@ -7005,11 +7005,11 @@ function chartTab(){
         }).catch(function(){});
       })();
 
-      // ── 1w only: previous QUARTER high / low (PQH / PQL) ──────────
+      // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
       // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
       // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
       if(tf==="1w") (function(){
-        var PQ_COL={h:"#00b862",l:"#ff4444"},PQ_TAG={h:"PQH",l:"PQL"};
+        var PQ_COL={h:"#00b862",l:"#ff4444",c:"#b8c4d9"},PQ_TAG={h:"PQH",l:"PQL",c:"PQC"}; // close = standard silver
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/86400)+100); // +100d so the quarter before the first visible one is complete
         var pqUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
@@ -7018,12 +7018,13 @@ function chartTab(){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
-            return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
+            return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),c:parseFloat(c.mid.c)};
           });
           if(ds.length<2) return;
           var qs={},firstKey=qKey(ds[0].t+anchorShift);
           ds.forEach(function(x){
-            var k=qKey(x.t+anchorShift),q=qs[k]||(qs[k]={h:-Infinity,l:Infinity});
+            var k=qKey(x.t+anchorShift),q=qs[k]||(qs[k]={h:-Infinity,l:Infinity,c:null});
+            q.c=x.c; // last daily close of the quarter
             if(x.h>q.h) q.h=x.h;
             if(x.l<q.l) q.l=x.l;
           });
@@ -7033,11 +7034,11 @@ function chartTab(){
             if(k!==gKey){
               gKey=k;gCur=null;
               var pq=qs[k-1];
-              if(pq&&k-1!==firstKey){gCur={h:pq.h,l:pq.l,times:[]};groups.push(gCur);} // skip if prior quarter is the (partial) first fetched one
+              if(pq&&k-1!==firstKey){gCur={h:pq.h,l:pq.l,c:pq.c,times:[]};groups.push(gCur);} // skip if prior quarter is the (partial) first fetched one
             }
             if(gCur) gCur.times.push(c.time);
           });
-          ["h","l"].forEach(function(f){
+          ["h","l","c"].forEach(function(f){ // close drawn last so it stays on top
             groups.forEach(function(g,gi){
               var isCur=gi===groups.length-1;
               if(g[f]==null||!isFinite(g[f])) return;
