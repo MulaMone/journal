@@ -41,7 +41,7 @@ jobs:
           if len(out) < 50:
               sys.exit("too few rows: %d" % len(out))
           json.dump({"fetchedAt": datetime.datetime.utcnow().isoformat() + "Z", "rows": out},
-                    open("tnx_daily.json", "w"), separators=(",", ":"))
+                    open("data/tnx_daily.json", "w"), separators=(",", ":"))
           print("rows:", len(out), "last:", out[-1])
           PY
 
@@ -49,8 +49,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tnx_daily.json
-          if git diff --cached --quiet -- tnx_daily.json; then echo "no change"; exit 0; fi
+          git add data/tnx_daily.json
+          if git diff --cached --quiet -- data/tnx_daily.json; then echo "no change"; exit 0; fi
           git commit -m "Update tnx_daily.json"
           git pull --rebase origin main
           git push
