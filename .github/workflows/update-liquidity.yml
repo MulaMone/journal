@@ -56,8 +56,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- liquidity.json; then
-            git add liquidity.json
+          if ! git diff --quiet -- data/liquidity.json; then
+            git add data/liquidity.json
             git commit -m "Update liquidity data"
             # Multiple data-fetch workflows can run around the same time and
             # each push to main independently — pull --rebase first so this
