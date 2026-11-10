@@ -6399,6 +6399,7 @@ function chartTab(){
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
+        trackingMode:{exitMode:LightweightCharts.TrackingModeExitMode.OnTouchEnd}, // default is OnNextTap: a long-press would lock panning until the next tap
         handleScale:{axisDoubleClickReset:{time:false,price:false}}, // library's axis double-tap reset is flaky on touch; recenter() below replaces it
         timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
@@ -7299,12 +7300,9 @@ function chartTab(){
           try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:on}}});}catch(e){}
         }
         if(window._xhairOff) setXhair(false);
-        // Own tap detection (pointer events, capture phase) — the library's click event is unreliable
-        // on touch. A tap = short press with little movement. A second tap within 400ms is a
-        // double-tap (recenter), so it undoes the first tap's toggle instead of toggling again.
-        var dn=null,lastTap=0;
-        // Applied on the next frame, after the library has finished handling the same touch —
-        // changing chart options in the middle of its own gesture handling can stall panning.
+        // Own tap detection (pointer events, capture phase). A tap = short press with little
+        // movement; a second tap within 400ms is a double-tap (recenter), so it undoes the first toggle.
+        var dn=null,lastTap=0,down=0,multi=false; // down/multi: a 2-finger gesture is never a tap
         function flip(){
           window._xhairOff=!window._xhairOff;
           requestAnimationFrame(function(){
@@ -7312,7 +7310,6 @@ function chartTab(){
             if(window._xhairOff){try{chart.clearCrosshairPosition();}catch(e){}}
           });
         }
-        var down=0,multi=false; // pointers currently down; a 2-finger gesture is never a tap
         chartDiv.addEventListener("pointerdown",function(e){
           down++;
           if(down>1) multi=true;
@@ -7332,6 +7329,7 @@ function chartTab(){
         },{capture:true,passive:true});
         chartDiv.addEventListener("pointercancel",function(){dn=null;down=Math.max(0,down-1);if(down===0) multi=false;},{capture:true,passive:true});
       })();
+
 
       // ── Live updates without a manual Refresh ──────────────────
       // Poll for just the newest few bars and push them into the existing
