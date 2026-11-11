@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Write data/tnx_monthly.json: monthly ^TNX OHLC, full history from Yahoo."""
-import json, math, os, time, urllib.request
+"""Write data/tnx_monthly.json (Yahoo ^TNX monthly OHLC) and data/tnx_yearly.json
+(yearly OHLC: Yahoo where it has full years, FRED DGS10 daily closes for the years before)."""
+import csv, io, json, math, os, time, urllib.request
 from datetime import datetime, timezone
 
 BASE = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX"
-OUT = os.path.join(os.path.dirname(__file__), "..", "data", "tnx_monthly.json")
+FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NOW = int(time.time())
+UA = {"User-Agent": "Mozilla/5.0"}
 
 
-def fetch(interval):
+def fetch_yahoo(interval):
     # explicit period1/period2: range=max can silently truncate the history
     url = f"{BASE}?interval={interval}&period1=-631152000&period2={NOW}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    res = json.load(urllib.request.urlopen(req, timeout=60))["chart"]["result"][0]
+    res = json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60))["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
     out = []
     for i, t in enumerate(res["timestamp"]):
@@ -22,28 +24,60 @@ def fetch(interval):
     return out
 
 
-def monthly(raw):
+def roll(raw, n):
+    """Roll (date,o,h,l,c) tuples up by the first n chars of the date (7 = month, 4 = year)."""
     rows, cur = [], None
     for d, o, h, l, c in raw:
-        m = d[:7] + "-01"
-        if cur and cur["d"] == m:
+        k = d[:n]
+        if cur and cur["k"] == k:
             cur["h"] = max(cur["h"], h); cur["l"] = min(cur["l"], l); cur["c"] = c
         else:
-            cur = {"d": m, "o": o, "h": h, "l": l, "c": c}
+            cur = {"k": k, "d": (d[:7] + "-01") if n == 7 else (d[:4] + "-01-01"), "o": o, "h": h, "l": l, "c": c}
             rows.append(cur)
     return rows
 
 
-rows = monthly(fetch("1mo"))
-print(f"1mo: {len(rows)} rows from {rows[0]['d'] if rows else '-'}")
-if len(rows) < 500:  # truncated -> build months from daily bars instead
-    rows = monthly(fetch("1d"))
-    print(f"1d rolled up: {len(rows)} rows from {rows[0]['d'] if rows else '-'}")
-for r in rows:
-    for k in ("o", "h", "l", "c"):
-        r[k] = round(r[k], 4)
-assert len(rows) > 500, f"only {len(rows)} rows"
-os.makedirs(os.path.dirname(OUT), exist_ok=True)
-with open(OUT, "w") as f:
-    json.dump({"fetchedAt": datetime.now(timezone.utc).isoformat(), "rows": rows}, f, separators=(",", ":"))
-print(f"wrote {len(rows)} rows, {rows[0]['d']} -> {rows[-1]['d']}")
+def clean(rows):
+    return [{"d": r["d"], **{k: round(r[k], 4) for k in "ohlc"}} for r in rows]
+
+
+def write(name, rows):
+    os.makedirs(DATA, exist_ok=True)
+    with open(os.path.join(DATA, name), "w") as f:
+        json.dump({"fetchedAt": datetime.now(timezone.utc).isoformat(), "rows": rows}, f, separators=(",", ":"))
+    print(f"wrote {name}: {len(rows)} rows, {rows[0]['d']} -> {rows[-1]['d']}")
+
+
+# ---- monthly (Yahoo only) ----
+raw = fetch_yahoo("1mo")
+monthly = roll(raw, 7)
+print(f"yahoo 1mo: {len(monthly)} rows from {monthly[0]['d'] if monthly else '-'}")
+if len(monthly) < 300:  # truncated -> build months from daily bars instead
+    raw = fetch_yahoo("1d")
+    monthly = roll(raw, 7)
+    print(f"yahoo 1d rolled up: {len(monthly)} rows from {monthly[0]['d'] if monthly else '-'}")
+assert len(monthly) > 300, f"only {len(monthly)} monthly rows"
+write("tnx_monthly.json", clean(monthly))
+
+# ---- yearly: FRED closes for years before Yahoo's first full year ----
+yahoo_years = roll(raw, 4)
+# first year Yahoo has from January on (earlier years are partial)
+first_full = next(int(y["d"][:4]) for y in yahoo_years
+                  if any(m["d"] == f"{y['d'][:4]}-01-01" for m in monthly))
+yearly = [y for y in yahoo_years if int(y["d"][:4]) >= first_full]
+try:
+    txt = urllib.request.urlopen(urllib.request.Request(FRED, headers=UA), timeout=60).read().decode()
+    fred = []
+    for row in list(csv.reader(io.StringIO(txt)))[1:]:
+        try:
+            v = float(row[1])
+        except (ValueError, IndexError):
+            continue  # "." = no print that day
+        if int(row[0][:4]) < first_full:
+            fred.append((row[0], v, v, v, v))
+    older = roll(fred, 4)
+    yearly = older + yearly
+    print(f"fred: {len(older)} years before {first_full}")
+except Exception as e:  # keep the Yahoo-only yearly file rather than failing the job
+    print(f"WARNING: FRED fetch failed ({e}); yearly file is Yahoo-only")
+write("tnx_yearly.json", clean(yearly))
