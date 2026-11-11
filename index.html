@@ -5882,6 +5882,7 @@ function chartTab(){
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
   if(!eodOnly&&(tf==="1m"||tf==="1y")) tf="1d"; // 1m / 1y exist on the US10Y chart only
+  var TF_LBL=function(t){return t==="1m"?"1M":t==="1y"?"1Y":t;}; // month / year shown capitalised
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
 
@@ -5890,8 +5891,8 @@ function chartTab(){
   hrow.style.flexWrap="wrap";
   var sh=div("sh");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
   var shText=span();shText.textContent=focusTs
-    ? sym+" — "+tf+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
-    : sym+" — "+tf;
+    ? sym+" — "+TF_LBL(tf)+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
+    : sym+" — "+TF_LBL(tf);
   sh.appendChild(shText);
   var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;";liveTag.innerHTML=eodOnly?"EOD":"● LIVE";
   sh.appendChild(liveTag);
@@ -5904,7 +5905,7 @@ function chartTab(){
   ctrlRow.style.flexWrap="wrap";
   ctrlRow.style.rowGap="8px";
 
-  var useWheels=isMobile()&&!eodOnly; // phone: symbol/timeframe wheels under the chart instead of button rows
+  var useWheels=isMobile(); // phone: symbol/timeframe wheels under the chart instead of button rows
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"}];
   (useWheels?[]:SYMS).forEach(function(s){
     if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
@@ -5923,7 +5924,7 @@ function chartTab(){
     b.style.cssText=tf===t
       ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
       : "border-color:var(--red);color:var(--red);padding:6px 10px;";
-    b.textContent=t;
+    b.textContent=TF_LBL(t);
     b.addEventListener("click",function(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
@@ -6071,7 +6072,7 @@ function chartTab(){
       w.className="wheel-col";
       var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
       list.forEach(function(t,i){
-        var d=div();d.textContent=t;
+        var d=div();d.textContent=TF_LBL(t);
         d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:15px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
         d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
         w.appendChild(d);items.push(d);
@@ -6098,7 +6099,7 @@ function chartTab(){
       setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();setTimeout(function(){ready=true;},120);},30);
       return w;
     }
-    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
+    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
     cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
     wrap.appendChild(cols);
     var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
