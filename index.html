@@ -6952,7 +6952,7 @@ function chartTab(){
       // room for the PDC/PWC/PMC tag (~58px box sticking out of the price axis into the plot), so the
       // newest candle ends right before it. Gap is derived from the bar spacing the fit will produce
       // (clamped at the library's 0.5px minimum on narrow charts / long histories).
-      var tagPx=intraday?120:58,tagGap=function(w,n){
+      var tagPx=intraday?150:58,tagGap=function(w,n){
         var g=(tagPx*(n-1)/w+0.5)/(1-tagPx/w);
         if(w/(n-1+g)<0.5) g=tagPx/0.5+0.5;
         return g;
@@ -7150,7 +7150,7 @@ function chartTab(){
       // sit within a tag-height of each other share one row, side by side, highest timeframe first.
       var lvlTagsPos=null;
       if(intraday&&!eodOnly) (function(){
-        var lvUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count=130&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var lvUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count=800&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         chartFetchJson(lvUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
@@ -7162,6 +7162,8 @@ function chartTab(){
           while(di>0&&ds[di].t>curT) di--;
           var wkKey=function(t){return Math.floor((Math.floor((t+anchorShift)/86400)+3)/7);}; // Monday-start trading week
           var moKey=function(t){var q=new Date((t+anchorShift)*1000);return q.getUTCFullYear()*12+q.getUTCMonth();};
+          var qtKey=function(t){var q=new Date((t+anchorShift)*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
+          var yrKey=function(t){return new Date((t+anchorShift)*1000).getUTCFullYear();};
           function agg(keyFn,key){
             var o=null;
             ds.forEach(function(x){
@@ -7181,7 +7183,11 @@ function chartTab(){
             });
           }
           var DAYC=["#00b862","#ff4444","#b8c4d9"],MONC=["#a3e635","#ff7a59","#8a3ffc"];
-          // month (rank 3) and week (rank 2): skip when the prior period is the partial first fetched one
+          // year (5), quarter (4), month (3), week (2): skip when the prior period is the partial first fetched one
+          var cyk=yrKey(ds[di].t),py=agg(yrKey,cyk-1);
+          if(py&&py.first>ds[0].t) add(5,"PY",py,MONC);
+          var cqk=qtKey(ds[di].t),pq=agg(qtKey,cqk-1);
+          if(pq&&pq.first>ds[0].t) add(4,"PQ",pq,DAYC);
           var cmk=moKey(ds[di].t),pm=agg(moKey,cmk-1);
           if(pm&&pm.first>ds[0].t) add(3,"PM",pm,MONC);
           var cwk=wkKey(ds[di].t),pw=agg(wkKey,cwk-1);
