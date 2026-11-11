@@ -5880,8 +5880,8 @@ function chartTab(){
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
-  if(eodOnly&&["1d","1w","1m"].indexOf(tf)<0) tf="1d";
-  if(!eodOnly&&tf==="1m") tf="1d"; // 1m exists on the US10Y chart only
+  if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
+  if(!eodOnly&&(tf==="1m"||tf==="1y")) tf="1d"; // 1m / 1y exist on the US10Y chart only
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
 
@@ -5917,7 +5917,7 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp);
 
-  var TFS=eodOnly?["1d","1w","1m"]:["2m","5m","30m","1h","4h","8h","1d","1w"];
+  var TFS=eodOnly?["1d","1w","1m","1y"]:["2m","5m","30m","1h","4h","8h","1d","1w"];
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
@@ -6170,7 +6170,7 @@ function chartTab(){
   var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG"];
   var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
   var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
-  var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800,"1m":2592000};
+  var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800,"1m":2592000,"1y":31536000};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
   var LOOKBACK_BARS=(tf==="2m"||tf==="5m")?600:(tf==="1w"?260:500); // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
@@ -6277,7 +6277,7 @@ function chartTab(){
     }
     // US10Y: yield (%), not price. No OANDA feed — build daily bars from the same
     // Treasury yield history the Analyst 10Y card uses (open = prior close).
-    if(sym==="US10Y") return (tf==="1m"?fetchTnxMonthlyOHLC():fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,tf);})).then(function(rows){
+    if(sym==="US10Y") return ((tf==="1m"||tf==="1y")?fetchTnxMonthlyOHLC().then(function(rows){return tnxAggregate(rows,tf);}):fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,tf);})).then(function(rows){
       return {candles:rows.map(function(r){return {time:r.d+"T23:00:00Z",complete:true,mid:{o:r.o,h:r.h,l:r.l,c:r.c}};})};
     }).catch(function(){return loadYieldCurveData(false).then(function(yd){
       var rows=((yd&&yd.rows)||[]).filter(function(r){return r.d&&typeof r.y10==="number";})
@@ -6288,7 +6288,7 @@ function chartTab(){
         out.push({time:r.d+"T23:00:00Z",complete:true,mid:{o:o,h:Math.max(o,c),l:Math.min(o,c),c:c}});
         prev=c;
       });
-      if(tf==="1w"||tf==="1m"){
+      if(tf==="1w"||tf==="1m"||tf==="1y"){
         var ag=tnxAggregate(out.map(function(x){return {d:x.time.slice(0,10),o:x.mid.o,h:x.mid.h,l:x.mid.l,c:x.mid.c};}),tf);
         return {candles:ag.map(function(r){return {time:r.d+"T23:00:00Z",complete:true,mid:{o:r.o,h:r.h,l:r.l,c:r.c}};})};
       }
@@ -6452,7 +6452,7 @@ function chartTab(){
       // the next trading day/month/year.
       var monthBoundaries=[],yearBoundaries=[];
       var anchorShift=(24-dailyAlign)*3600;
-      for(var mi=1;mi<candles.length&&tf!=="1w"&&tf!=="1m";mi++){
+      for(var mi=1;mi<candles.length&&tf!=="1w"&&tf!=="1m"&&tf!=="1y";mi++){
         var dm=new Date((candles[mi].time+anchorShift)*1000),dp=new Date((candles[mi-1].time+anchorShift)*1000);
         if(dm.getUTCMonth()!==dp.getUTCMonth()){
           if(tf==="1d"&&dm.getUTCFullYear()!==dp.getUTCFullYear()) yearBoundaries.push(candles[mi].time);
@@ -6923,7 +6923,7 @@ function chartTab(){
       // month's close (PMC). Built from OANDA D/W/M candles (same session anchor
       // as the chart). Each period gets its own line series; nothing joins one level to the next.
       (function(){
-        if(tf==="1w"||tf==="1m") return; // weekly uses PQH/PQL below; US10Y monthly has no OANDA feed
+        if(tf==="1w"||tf==="1m"||tf==="1y") return; // weekly uses PQH/PQL below; US10Y monthly has no OANDA feed
         var pcGran,pcLbl,pcSec;
         if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
         else if(periodSec>=3600){pcGran="W";pcLbl="PWC";pcSec=604800;}
@@ -7155,22 +7155,23 @@ function chartTab(){
         });
       })();
 
-      // ── US10Y 1M only: previous DECADE high / low (P10H / P10L) ──
+      // ── US10Y 1M: previous DECADE high / low (P10H / P10L); 1Y: previous 20-YEAR high / low (P20H / P20L) ──
       // Same look as PYH / PYL. Each decade (2020s, 2010s, ...) shows the high and low of the
       // decade before it. Needs monthly history reaching back past the prior decade; the first
       // (partial) decade on the chart is never used as a source.
-      if(eodOnly&&tf==="1m") (function(){
-        var PD_COL={h:"#a3e635",l:"#ff7a59"},PD_TAG={h:"P10H",l:"P10L"};
+      if(eodOnly&&(tf==="1m"||tf==="1y")) (function(){
+        var SPAN=tf==="1y"?20:10;
+        var PD_COL={h:"#a3e635",l:"#ff7a59"},PD_TAG={h:"P"+SPAN+"H",l:"P"+SPAN+"L"};
         var decs=[],dCur=null,dKey=null;
         candles.forEach(function(c){
-          var key=Math.floor(new Date((c.time+anchorShift)*1000).getUTCFullYear()/10)*10;
+          var key=Math.floor(new Date((c.time+anchorShift)*1000).getUTCFullYear()/SPAN)*SPAN;
           if(key!==dKey){dKey=key;dCur={key:key,h:-Infinity,l:Infinity,times:[]};decs.push(dCur);}
           if(c.high>dCur.h) dCur.h=c.high;
           if(c.low<dCur.l) dCur.l=c.low;
           dCur.times.push(c.time);
         });
         var groups=[];
-        for(var di=2;di<decs.length;di++){ if(decs[di-1].key===decs[di].key-10) groups.push({h:decs[di-1].h,l:decs[di-1].l,times:decs[di].times}); }
+        for(var di=2;di<decs.length;di++){ if(decs[di-1].key===decs[di].key-SPAN) groups.push({h:decs[di-1].h,l:decs[di-1].l,times:decs[di].times}); }
         ["h","l"].forEach(function(f){
           groups.forEach(function(g,gi){
             var isCur=gi===groups.length-1;
@@ -9759,14 +9760,15 @@ function fetchTnxDailyOHLC(){
     return rows;
   });});
 }
-// Roll daily rows ({d,o,h,l,c}, d = "YYYY-MM-DD") up into weekly (Mon-start) or monthly bars.
+// Roll rows ({d,o,h,l,c}, d = "YYYY-MM-DD") up into weekly (Mon-start), monthly or yearly bars.
 // Each bar is dated by its first trading day; open = first open, close = last close.
 function tnxAggregate(rows,tf){
-  if(tf!=="1w"&&tf!=="1m") return rows;
+  if(tf!=="1w"&&tf!=="1m"&&tf!=="1y") return rows;
   var out=[],cur=null,curKey=null;
   rows.forEach(function(r){
     var key;
-    if(tf==="1m") key=r.d.slice(0,7);
+    if(tf==="1y") key=r.d.slice(0,4);
+    else if(tf==="1m") key=r.d.slice(0,7);
     else{var dt=new Date(r.d+"T12:00:00Z"),dow=(dt.getUTCDay()+6)%7;key=new Date(dt.getTime()-dow*86400000).toISOString().slice(0,10);}
     if(key!==curKey){curKey=key;cur={d:r.d,o:r.o,h:r.h,l:r.l,c:r.c};out.push(cur);}
     else{if(r.h>cur.h)cur.h=r.h;if(r.l<cur.l)cur.l=r.l;cur.c=r.c;}
