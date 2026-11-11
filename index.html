@@ -5967,7 +5967,7 @@ function chartTab(){
       : "border-color:var(--border);color:var(--text3);padding:6px 10px;";
     idBtn.addEventListener("click",function(){
       _chartKeepView=null;
-      if(intraday){setIntraday(false);State.chart_interval="30m";}
+      if(intraday){setIntraday(false);State.chart_interval="1h";}
       else{setIntraday(true);State.chart_interval="30m";}
       render();
     });
