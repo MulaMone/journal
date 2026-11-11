@@ -1234,6 +1234,7 @@ var State={
   logPageSize:parseInt(localStorage.getItem("edge_logPageSize")||"50"),
   chart_symbol:"NQ",
   chart_interval:"1h",
+  chart_intraday:false,
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
@@ -5883,6 +5884,10 @@ function chartTab(){
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
   if(!eodOnly&&(tf==="1m"||tf==="1y")) tf="1d"; // 1m / 1y exist on the US10Y chart only
   var TF_LBL=function(t){return t==="1m"?"1M":t==="1y"?"1Y":t;}; // month / year shown capitalised
+  // Intraday mode: tight zoom on the latest candles + prev day/week/month level tags. Works on 2m/5m/30m/1h only (not 4h and up).
+  var INTRA_TFS=["2m","5m","30m","1h"];
+  if(State.chart_intraday&&(eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false;
+  var intraday=State.chart_intraday===true;
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
 
@@ -5928,9 +5933,10 @@ function chartTab(){
     b.addEventListener("click",function(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
+      if(INTRA_TFS.indexOf(t)<0) State.chart_intraday=false; // 4h and up: intraday mode off
       // Phone: every timeframe opens at its own default bar count (same as recenter). Carrying the old
       // span across made e.g. 2m's 400 bars show up on 1h. Desktop keeps the same-candle-size carry-over.
-      if(!isMobile()&&t!==tf&&_chartLive&&_chartLive.moved){
+      if(!isMobile()&&!State.chart_intraday&&t!==tf&&_chartLive&&_chartLive.moved){
         try{
           var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
           if(vr&&vr.from&&vr.to&&lr){
@@ -5949,6 +5955,22 @@ function chartTab(){
     });
     ctrlRow.appendChild(b);
   });
+
+  if(!eodOnly){
+    var idBtn=h("button",{className:"btn"});
+    idBtn.textContent="INTRADAY";
+    idBtn.title=intraday?"Exit intraday mode (back to 30m)":"Intraday mode: zoom in close + prev day/week/month levels (2m–1h only)";
+    idBtn.style.cssText=intraday
+      ? "border-color:#ffb020;color:#ffb020;font-weight:700;padding:6px 10px;background:#ffb02018;"
+      : "border-color:var(--border);color:var(--text3);padding:6px 10px;";
+    idBtn.addEventListener("click",function(){
+      _chartKeepView=null;
+      if(intraday){State.chart_intraday=false;State.chart_interval="30m";}
+      else{State.chart_intraday=true;if(INTRA_TFS.indexOf(tf)<0) State.chart_interval="30m";}
+      render();
+    });
+    ctrlRow.appendChild(idBtn);
+  }
 
   var sp2=h("span");sp2.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp2);
 
@@ -6141,7 +6163,7 @@ function chartTab(){
       return w;
     }
     cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();},function(pos){symMirror(pos);}));
-    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
+    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;if(INTRA_TFS.indexOf(v)<0) State.chart_intraday=false;State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
     wrap.appendChild(cols);
     var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
     var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
@@ -6923,7 +6945,7 @@ function chartTab(){
       // room for the PDC/PWC/PMC tag (~58px box sticking out of the price axis into the plot), so the
       // newest candle ends right before it. Gap is derived from the bar spacing the fit will produce
       // (clamped at the library's 0.5px minimum on narrow charts / long histories).
-      var tagPx=58,tagGap=function(w,n){
+      var tagPx=intraday?120:58,tagGap=function(w,n){
         var g=(tagPx*(n-1)/w+0.5)/(1-tagPx/w);
         if(w/(n-1+g)<0.5) g=tagPx/0.5+0.5;
         return g;
@@ -6933,6 +6955,10 @@ function chartTab(){
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
       var ZOOM_BARS={"2m":250,"5m":200,"30m":250,"1h":300,"4h":200,"8h":150,"1d":150,"1w":75,"1m":100,"1y":40}; // bars shown on open, per timeframe
       if(isMobile()){ZOOM_BARS["2m"]=400;ZOOM_BARS["5m"]=250;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;ZOOM_BARS["1w"]=32;ZOOM_BARS["1m"]=60;ZOOM_BARS["1y"]=25;} // phone plot is ~300px wide: fewer bars so candles stay readable
+      if(intraday){ // close-up on the latest candles
+        var IZ=isMobile()?{"2m":70,"5m":60,"30m":30,"1h":20}:{"2m":120,"5m":96,"30m":48,"1h":32};
+        for(var izk in IZ) ZOOM_BARS[izk]=IZ[izk];
+      }
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
@@ -7015,6 +7041,7 @@ function chartTab(){
       // month's close (PMC). Built from OANDA D/W/M candles (same session anchor
       // as the chart). Each period gets its own line series; nothing joins one level to the next.
       (function(){
+        if(intraday) return; // intraday mode draws its own prev day/week/month levels below
         if(tf==="1w"||tf==="1m"||tf==="1y") return; // weekly uses PQH/PQL below; US10Y monthly has no OANDA feed
         var pcGran,pcLbl,pcSec;
         if(tf==="1d"){pcGran="M";pcLbl="PMC";pcSec=2592000;}
@@ -7107,6 +7134,104 @@ function chartTab(){
             if(chart._pmRedraw) chart._pmRedraw(); // keep prev-month lines (8h) on top of the fresh weekly ones
             if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
+        }).catch(function(){});
+      })();
+
+      // ── Intraday mode: previous DAY / WEEK / MONTH high, low, close with tags ──
+      // One daily fetch feeds all three (same session anchor + week/month split as the other levels).
+      // Lines are full-width price lines; tags are DOM pills at the right edge of the plot. Levels that
+      // sit within a tag-height of each other share one row, side by side, highest timeframe first.
+      var lvlTagsPos=null;
+      if(intraday&&!eodOnly) (function(){
+        var lvUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count=130&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        chartFetchJson(lvUrl).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var ds=((d&&d.candles)||[]).map(function(c){
+            var _pu=Math.floor(new Date(c.time).getTime()/1000);
+            return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),c:parseFloat(c.mid.c)};
+          });
+          if(ds.length<3||!candles.length) return;
+          var curT=candles[candles.length-1].time,di=ds.length-1;
+          while(di>0&&ds[di].t>curT) di--;
+          var wkKey=function(t){return Math.floor((Math.floor((t+anchorShift)/86400)+3)/7);}; // Monday-start trading week
+          var moKey=function(t){var q=new Date((t+anchorShift)*1000);return q.getUTCFullYear()*12+q.getUTCMonth();};
+          function agg(keyFn,key){
+            var o=null;
+            ds.forEach(function(x){
+              if(keyFn(x.t)!==key) return;
+              if(!o) o={h:-Infinity,l:Infinity,c:null,first:x.t};
+              if(x.h>o.h) o.h=x.h;
+              if(x.l<o.l) o.l=x.l;
+              o.c=x.c;
+            });
+            return o;
+          }
+          var lv=[];
+          function add(rank,pre,o,cols){
+            if(!o) return;
+            [["H",o.h,cols[0]],["L",o.l,cols[1]],["C",o.c,cols[2]]].forEach(function(r){
+              if(r[1]!=null&&isFinite(r[1])) lv.push({rank:rank,k:pre+r[0],price:r[1],col:r[2]});
+            });
+          }
+          var DAYC=["#00b862","#ff4444","#b8c4d9"],MONC=["#a3e635","#ff7a59","#8a3ffc"];
+          // month (rank 3) and week (rank 2): skip when the prior period is the partial first fetched one
+          var cmk=moKey(ds[di].t),pm=agg(moKey,cmk-1);
+          if(pm&&pm.first>ds[0].t) add(3,"PM",pm,MONC);
+          var cwk=wkKey(ds[di].t),pw=agg(wkKey,cwk-1);
+          if(pw&&pw.first>ds[0].t) add(2,"PW",pw,DAYC);
+          // day (rank 1): the daily candle before the one holding the latest chart candle
+          if(di>=1) add(1,"PD",ds[di-1],DAYC);
+          if(!lv.length) return;
+          lv.sort(function(a,b){return b.rank-a.rank;}); // highest timeframe first (stable: H, L, C within a rank)
+          var layer=div();
+          layer.style.cssText="position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:4;overflow:hidden;";
+          chartDiv.appendChild(layer);
+          var TAGH=14;
+          lv.forEach(function(L){
+            series.createPriceLine({price:L.price,color:L.col,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:false,title:""});
+            var el2=div();
+            var rgb=parseInt(L.col.slice(1),16),lum=0.299*(rgb>>16)+0.587*((rgb>>8)&255)+0.114*(rgb&255);
+            el2.textContent=L.k;
+            el2.style.cssText="position:absolute;height:"+TAGH+"px;line-height:"+TAGH+"px;padding:0 4px;box-sizing:border-box;border-radius:2px;font:700 10px 'Courier New',monospace;white-space:nowrap;background:"+L.col+";color:"+(lum>150?"#041018":"#fff")+";display:none;transform:translateY(-50%);";
+            layer.appendChild(el2);
+            L.el=el2;
+          });
+          lvlTagsPos=function(){
+            try{
+              var sw=chart.priceScale("right").width()||76;
+              var plotR=chartDiv.clientWidth-sw-4;
+              var paneH=chartDiv.clientHeight-((chart.timeScale().height&&chart.timeScale().height())||26);
+              var items=[];
+              lv.forEach(function(L){
+                var y=series.priceToCoordinate(L.price);
+                if(y==null||y<TAGH/2||y>paneH-TAGH/2){L.el.style.display="none";return;} // off the visible price range
+                items.push({L:L,y:y});
+              });
+              items.sort(function(a,b){return a.y-b.y;});
+              var rows=[],cur=null;
+              items.forEach(function(it){
+                if(cur&&it.y-cur.y0<TAGH){cur.items.push(it);cur.sum+=it.y;}
+                else{cur={y0:it.y,sum:it.y,items:[it]};rows.push(cur);}
+              });
+              var prevY=-1e9;
+              rows.forEach(function(r){
+                var y=r.sum/r.items.length;
+                if(y<prevY+TAGH) y=prevY+TAGH; // never let two rows overlap vertically
+                prevY=y;
+                // side by side, flush with the right edge; highest timeframe leftmost
+                r.items.sort(function(a,b){return b.L.rank-a.L.rank;});
+                var widths=r.items.map(function(it){it.L.el.style.display="";return it.L.el.offsetWidth;});
+                var x=plotR-widths.reduce(function(a,b){return a+b+2;},-2);
+                r.items.forEach(function(it,i){
+                  it.L.el.style.left=x+"px";it.L.el.style.top=y+"px";
+                  x+=widths[i]+2;
+                });
+              });
+            }catch(e){}
+          };
+          lvlTagsPos();
+          requestAnimationFrame(lvlTagsPos);
+          [150,500,1200].forEach(function(ms){setTimeout(function(){if(myLoadToken===_chartLoadToken&&lvlTagsPos)lvlTagsPos();},ms);});
         }).catch(function(){});
       })();
 
@@ -7330,6 +7455,7 @@ function chartTab(){
         positionCdBadge();
       }
       function positionCdBadge(){
+        if(lvlTagsPos) lvlTagsPos();
         if(currentPrice==null) return;
         var y=series.priceToCoordinate(currentPrice);
         if(y==null){cdBadge.style.display="none";return;}
