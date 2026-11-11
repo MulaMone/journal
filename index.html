@@ -6278,7 +6278,7 @@ function chartTab(){
     }
     // US10Y: yield (%), not price. No OANDA feed — build daily bars from the same
     // Treasury yield history the Analyst 10Y card uses (open = prior close).
-    if(sym==="US10Y") return ((tf==="1m"||tf==="1y")?fetchTnxMonthlyOHLC().then(function(rows){return tnxAggregate(rows,tf);}):fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,tf);})).then(function(rows){
+    if(sym==="US10Y") return (tf==="1y"?fetchTnxYearlyOHLC():tf==="1m"?fetchTnxMonthlyOHLC().then(function(rows){return tnxAggregate(rows,tf);}):fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,tf);})).then(function(rows){
       return {candles:rows.map(function(r){return {time:r.d+"T23:00:00Z",complete:true,mid:{o:r.o,h:r.h,l:r.l,c:r.c}};})};
     }).catch(function(){return loadYieldCurveData(false).then(function(yd){
       var rows=((yd&&yd.rows)||[]).filter(function(r){return r.d&&typeof r.y10==="number";})
@@ -9813,6 +9813,23 @@ function fetchTnxMonthlyOHLC(){
     });
   }).catch(function(){
     return fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,"1m");});
+  });
+}
+// Yearly bars for the US10Y 1Y chart only: data/tnx_yearly.json (Yahoo + FRED DGS10 closes for the
+// years before Yahoo starts, so it reaches back to 1962). Falls back to the monthly history rolled up.
+var _tnxYrMem=null;
+function fetchTnxYearlyOHLC(){
+  if(_tnxYrMem&&Date.now()-_tnxYrMem.t<6*60*60*1000) return Promise.resolve(_tnxYrMem.rows);
+  return fetch("data/tnx_yearly.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    var rows=j&&j.rows;
+    if(!rows||rows.length<20) throw new Error("tnx_yearly.json too short");
+    _tnxYrMem={t:Date.now(),rows:rows};
+    return rows;
+  }).catch(function(){
+    return fetchTnxMonthlyOHLC().then(function(rows){return tnxAggregate(rows,"1y");});
   });
 }
 function fetchTnxFromFile(){
