@@ -6085,6 +6085,19 @@ function chartTab(){
       }catch(e){}
     }
     var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
+    // finger on a drum: don't commit a pick or hide the popup until the finger lifts ANYWHERE on screen
+    // (listen on document, so dragging off the drum before lifting still counts as a release)
+    var WD=window._edgeWD||(window._edgeWD={down:false,arms:[]});WD.arms=[];
+    if(!WD.bound){
+      WD.bound=true;
+      var relAll=function(e){
+        if(e.touches&&e.touches.length) return; // another finger still down
+        if(!WD.down) return;
+        WD.down=false;
+        WD.arms.slice().forEach(function(f){f();});
+      };
+      ["touchend","touchcancel","mouseup","pointerup"].forEach(function(n){document.addEventListener(n,relAll,{passive:true,capture:true});});
+    }
     function makeWheel(list,cur,col,onPick,onMove){
       var w=div(),items=[],ready=false,timer=null,lastI=-1;
       w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;";
@@ -6114,9 +6127,16 @@ function chartTab(){
         if(!ready) return;
         var ci=idx();if(ci!==lastI){lastI=ci;haptic();}
         if(onMove)onMove(w.scrollTop/WH);
-        clearTimeout(timer);
-        timer=setTimeout(function(){var v=list[idx()];if(v!==cur){cur=v;onPick(v);}},160);
+        arm();
       });
+      function arm(){
+        clearTimeout(timer);
+        timer=setTimeout(function(){if(WD.down) return;var v=list[idx()];if(v!==cur){cur=v;onPick(v);}},160);
+      }
+      function dn(){WD.down=true;}
+      WD.arms.push(function(){if(ready)arm();});
+      w.addEventListener("touchstart",dn,{passive:true});
+      w.addEventListener("mousedown",dn);
       setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();lastI=idx();setTimeout(function(){ready=true;},120);},30);
       return w;
     }
@@ -6167,8 +6187,9 @@ function chartTab(){
       });
       mir.back.style.opacity="1";
       clearTimeout(mirHide);
-      mirHide=setTimeout(function(){
+      mirHide=setTimeout(function hideIt(){
         if(!mir) return;
+        if(WD.down){mirHide=setTimeout(hideIt,200);return;} // stay up while the finger is on the drum
         var m=mir;m.back.style.opacity="0";
         setTimeout(function(){if(m.back.parentNode)m.back.parentNode.removeChild(m.back);if(mir===m)mir=null;},180);
       },700);
