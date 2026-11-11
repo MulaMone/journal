@@ -1194,7 +1194,7 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 // ─── STATE ───────────────────────────────────────────────────────────
 function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn,ms);};}
 var _syncDebounced=debounce(syncToCloud,2000);
-function setIntraday(v){State.chart_intraday=!!v;try{localStorage.setItem("edge_chart_intraday",JSON.stringify(!!v));}catch(e){}}
+function setIntraday(v){State.chart_intraday=!!v;}
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
 var _isLocal=window.location.protocol==="file:";function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
@@ -1235,7 +1235,7 @@ var State={
   logPageSize:parseInt(localStorage.getItem("edge_logPageSize")||"50"),
   chart_symbol:"NQ",
   chart_interval:"1h",
-  chart_intraday:ls("chart_intraday",false)===true, // persisted: stays on across reloads
+  chart_intraday:false, // never saved: off after a reload and whenever you leave the chart tab
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
@@ -1952,7 +1952,7 @@ function switchTab(id){
   if(!VIEWS[id]) id="home";
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
   if(id==="chart") State.chart_show_trades=!!State.chart_focus_ts;
-  if(id==="chart"&&State.chart_intraday&&!isMobile()&&!State.chart_focus_ts) State.chart_interval="30m"; // intraday mode always opens on 30m
+  if(id!=="chart"&&State.chart_intraday) State.chart_intraday=false; // intraday mode is not kept when leaving the chart
   if(id!=="analytics"){State.rv_selected_day=null;}
   render();
   // Chart tab on mobile: the fixed topbar + symbol/timeframe controls above
@@ -5881,9 +5881,6 @@ function chartTab(){
   var myLoadToken=++_chartLoadToken;
 
   var sym=State.chart_symbol||"ES";
-  // Intraday mode (persisted) opens on 30m the first time the chart shows after a load; default stays 1h otherwise.
-  if(State.chart_intraday&&!window._intraOpened&&!isMobile()&&!State.chart_focus_ts) State.chart_interval="30m";
-  window._intraOpened=true;
   var tf=State.chart_interval||"1h";
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
@@ -5891,7 +5888,7 @@ function chartTab(){
   var TF_LBL=function(t){return t==="1m"?"1M":t==="1y"?"1Y":t;}; // month / year shown capitalised
   // Intraday mode: tight zoom on the latest candles + prev day/week/month level tags. Works on 2m/5m/30m/1h only (not 4h and up).
   var INTRA_TFS=["2m","5m","30m","1h"];
-  if(State.chart_intraday&&(isMobile()||eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false; // desktop only (in-memory; the saved choice is left alone)
+  if(State.chart_intraday&&(isMobile()||eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false; // desktop only
   var intraday=State.chart_intraday===true;
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
