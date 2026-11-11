@@ -6120,7 +6120,7 @@ function chartTab(){
       setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();lastI=idx();setTimeout(function(){ready=true;},120);},30);
       return w;
     }
-    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
+    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();},function(pos){symMirror(pos);}));
     cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
     wrap.appendChild(cols);
     var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
@@ -6132,8 +6132,9 @@ function chartTab(){
     // fades out shortly after it stops (the pick re-renders the chart anyway).
     var TF_LONG={"2m":"2 minutes","5m":"5 minutes","15m":"15 minutes","30m":"30 minutes","1h":"1 hour","4h":"4 hours","8h":"8 hours","1d":"1 day","1w":"1 week","1m":"1 month","1y":"1 year"};
     var SYSF="-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
+    function mkMirror(list,labelOf){
     var mir=null,mirHide=null;
-    function tfMirror(pos){
+    return function(pos){
       var RH=46,ROWS=5;
       if(!mir){
         var back=div();
@@ -6146,8 +6147,8 @@ function chartTab(){
         sc.style.cssText="position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
         var sp=div();sp.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp);
         var rows=[];
-        TFS.forEach(function(t){
-          var d=div();d.textContent=TF_LONG[t]||TF_LBL(t);
+        list.forEach(function(t){
+          var d=div();d.textContent=labelOf(t);
           d.style.cssText="height:"+RH+"px;display:flex;align-items:center;padding-left:30px;font-family:"+SYSF+";font-size:22px;";
           sc.appendChild(d);rows.push(d);
         });
@@ -6170,7 +6171,10 @@ function chartTab(){
         var m=mir;m.back.style.opacity="0";
         setTimeout(function(){if(m.back.parentNode)m.back.parentNode.removeChild(m.back);if(mir===m)mir=null;},180);
       },700);
+    };
     }
+    var tfMirror=mkMirror(TFS,function(t){return TF_LONG[t]||TF_LBL(t);});
+    var symMirror=mkMirror(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),function(t){return t;});
   }
 
   var loading=div();
