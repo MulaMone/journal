@@ -6085,7 +6085,7 @@ function chartTab(){
       }catch(e){}
     }
     var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
-    function makeWheel(list,cur,col,onPick){
+    function makeWheel(list,cur,col,onPick,onMove){
       var w=div(),items=[],ready=false,timer=null,lastI=-1;
       w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;";
       w.className="wheel-col";
@@ -6113,6 +6113,7 @@ function chartTab(){
         fade();
         if(!ready) return;
         var ci=idx();if(ci!==lastI){lastI=ci;haptic();}
+        if(onMove)onMove(w.scrollTop/WH);
         clearTimeout(timer);
         timer=setTimeout(function(){var v=list[idx()];if(v!==cur){cur=v;onPick(v);}},160);
       });
@@ -6120,66 +6121,56 @@ function chartTab(){
       return w;
     }
     cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
-    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
+    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
     wrap.appendChild(cols);
     var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
     var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
     wrap.appendChild(fTop);wrap.appendChild(fBot);
     el.appendChild(wrap);
     // ── TradingView-style timeframe popup ─────────────────────
-    // Chip on the chart; tap it and a frosted-glass wheel floats over the chart.
-    // Haptic tick on every row, pick applies when the wheel settles, tap outside closes.
+    // Appears over the chart while the timeframe drum is being spun, mirrors its position,
+    // fades out shortly after it stops (the pick re-renders the chart anyway).
     var TF_LONG={"2m":"2 minutes","5m":"5 minutes","15m":"15 minutes","30m":"30 minutes","1h":"1 hour","4h":"4 hours","8h":"8 hours","1d":"1 day","1w":"1 week","1m":"1 month","1y":"1 year"};
     var SYSF="-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
-    var tfChip=document.createElement("button");
-    tfChip.type="button";tfChip.textContent=TF_LBL(tf);
-    tfChip.style.cssText="position:absolute;top:8px;left:8px;z-index:30;padding:5px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.16);background:rgba(24,30,44,.6);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fff;font:600 13px "+SYSF+";cursor:pointer;";
-    function openTfPopup(){
-      if(chartDiv._tfPop) return;
-      var RH=46,ROWS=5,popReady=false,popTimer=null,popLast=-1,popCur=tf,rows=[];
-      var back=div();
-      back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);";
-      var card=div();
-      card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.55);-webkit-backdrop-filter:blur(28px) saturate(1.6);backdrop-filter:blur(28px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
-      var pill=div();
-      pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;background:rgba(255,255,255,.16);pointer-events:none;";
-      var sc=div();
-      sc.style.cssText="position:absolute;inset:0;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
-      sc.className="wheel-col";
-      function spacer(){var s=div();s.style.cssText="height:"+(RH*2)+"px;flex:none;";return s;}
-      sc.appendChild(spacer());
-      TFS.forEach(function(t,i){
-        var d=div();d.textContent=TF_LONG[t]||TF_LBL(t);
-        d.style.cssText="height:"+RH+"px;display:flex;align-items:center;padding-left:30px;scroll-snap-align:center;font-family:"+SYSF+";font-size:22px;color:rgba(235,240,250,.5);cursor:pointer;";
-        d.addEventListener("click",function(){if(t===popCur){closePop();}else{sc.scrollTo({top:i*RH,behavior:"smooth"});}});
-        sc.appendChild(d);rows.push(d);
-      });
-      sc.appendChild(spacer());
-      function pIdx(){return Math.max(0,Math.min(TFS.length-1,Math.round(sc.scrollTop/RH)));}
-      function pFade(){
-        var p=sc.scrollTop/RH;
-        rows.forEach(function(d,i){
-          var dist=Math.abs(i-p),on=dist<0.5;
-          d.style.opacity=Math.max(0.15,1-dist*0.5);
-          d.style.color=on?"#fff":"rgba(235,240,250,.5)";
-          d.style.fontWeight=on?"500":"400";
+    var mir=null,mirHide=null;
+    function tfMirror(pos){
+      var RH=46,ROWS=5;
+      if(!mir){
+        var back=div();
+        back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .15s;";
+        var card=div();
+        card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.5);-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
+        var pill=div();
+        pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;background:rgba(255,255,255,.16);";
+        var sc=div();
+        sc.style.cssText="position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
+        var sp=div();sp.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp);
+        var rows=[];
+        TFS.forEach(function(t){
+          var d=div();d.textContent=TF_LONG[t]||TF_LBL(t);
+          d.style.cssText="height:"+RH+"px;display:flex;align-items:center;padding-left:30px;font-family:"+SYSF+";font-size:22px;";
+          sc.appendChild(d);rows.push(d);
         });
+        var sp2=div();sp2.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp2);
+        card.appendChild(pill);card.appendChild(sc);back.appendChild(card);
+        chartDiv.appendChild(back);
+        mir={back:back,sc:sc,rows:rows,RH:RH};
       }
-      function closePop(){clearTimeout(popTimer);if(back.parentNode)back.parentNode.removeChild(back);chartDiv._tfPop=null;}
-      sc.addEventListener("scroll",function(){
-        pFade();
-        if(!popReady) return;
-        var ci=pIdx();if(ci!==popLast){popLast=ci;haptic();}
-        clearTimeout(popTimer);
-        popTimer=setTimeout(function(){var v=TFS[pIdx()];if(v!==popCur){popCur=v;_chartKeepView=null;State.chart_interval=v;render();}},180);
+      mir.sc.scrollTop=pos*mir.RH;
+      mir.rows.forEach(function(d,i){
+        var dist=Math.abs(i-pos),on=dist<0.5;
+        d.style.opacity=Math.max(0.15,1-dist*0.5);
+        d.style.color=on?"#fff":"rgba(235,240,250,.5)";
+        d.style.fontWeight=on?"500":"400";
       });
-      card.appendChild(pill);card.appendChild(sc);back.appendChild(card);
-      back.addEventListener("click",function(e){if(e.target===back)closePop();});
-      chartDiv.appendChild(back);chartDiv._tfPop=back;
-      setTimeout(function(){sc.scrollTop=Math.max(0,TFS.indexOf(tf))*RH;pFade();popLast=pIdx();setTimeout(function(){popReady=true;},120);},30);
+      mir.back.style.opacity="1";
+      clearTimeout(mirHide);
+      mirHide=setTimeout(function(){
+        if(!mir) return;
+        var m=mir;m.back.style.opacity="0";
+        setTimeout(function(){if(m.back.parentNode)m.back.parentNode.removeChild(m.back);if(mir===m)mir=null;},180);
+      },700);
     }
-    tfChip.addEventListener("click",openTfPopup);
-    chartDiv.appendChild(tfChip);
   }
 
   var loading=div();
