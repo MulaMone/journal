@@ -1194,6 +1194,7 @@ var DEFAULT_LEVELS=[{l:"VAH/VAL/POC",imp:"high",sess:"",builtin:true},{l:"PDH/PD
 // ─── STATE ───────────────────────────────────────────────────────────
 function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn,ms);};}
 var _syncDebounced=debounce(syncToCloud,2000);
+function setIntraday(v){State.chart_intraday=!!v;try{localStorage.setItem("edge_chart_intraday",JSON.stringify(!!v));}catch(e){}}
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
 var _isLocal=window.location.protocol==="file:";function ss(k,v){try{localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
@@ -1234,7 +1235,7 @@ var State={
   logPageSize:parseInt(localStorage.getItem("edge_logPageSize")||"50"),
   chart_symbol:"NQ",
   chart_interval:"1h",
-  chart_intraday:false,
+  chart_intraday:ls("chart_intraday",false)===true, // persisted: stays on across reloads
   mindsetChecks:ls("mindsetChecks",{}),
   mindsetChecksDate:ls("mindsetChecksDate",""),
   mindsetNote:ls("mindsetNote",""),
@@ -1951,6 +1952,7 @@ function switchTab(id){
   if(!VIEWS[id]) id="home";
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
   if(id==="chart") State.chart_show_trades=!!State.chart_focus_ts;
+  if(id==="chart"&&State.chart_intraday&&!isMobile()&&!State.chart_focus_ts) State.chart_interval="30m"; // intraday mode always opens on 30m
   if(id!=="analytics"){State.rv_selected_day=null;}
   render();
   // Chart tab on mobile: the fixed topbar + symbol/timeframe controls above
@@ -5879,6 +5881,9 @@ function chartTab(){
   var myLoadToken=++_chartLoadToken;
 
   var sym=State.chart_symbol||"ES";
+  // Intraday mode (persisted) opens on 30m the first time the chart shows after a load; default stays 1h otherwise.
+  if(State.chart_intraday&&!window._intraOpened&&!isMobile()&&!State.chart_focus_ts) State.chart_interval="30m";
+  window._intraOpened=true;
   var tf=State.chart_interval||"1h";
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
@@ -5886,7 +5891,7 @@ function chartTab(){
   var TF_LBL=function(t){return t==="1m"?"1M":t==="1y"?"1Y":t;}; // month / year shown capitalised
   // Intraday mode: tight zoom on the latest candles + prev day/week/month level tags. Works on 2m/5m/30m/1h only (not 4h and up).
   var INTRA_TFS=["2m","5m","30m","1h"];
-  if(State.chart_intraday&&(eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false;
+  if(State.chart_intraday&&(isMobile()||eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false; // desktop only (in-memory; the saved choice is left alone)
   var intraday=State.chart_intraday===true;
   var focusTs=State.chart_focus_ts||null;
   var keepView=focusTs?null:_chartKeepView; // zoomed range carried over from the previous timeframe
@@ -5933,7 +5938,7 @@ function chartTab(){
     b.addEventListener("click",function(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
-      if(INTRA_TFS.indexOf(t)<0) State.chart_intraday=false; // 4h and up: intraday mode off
+      if(INTRA_TFS.indexOf(t)<0) setIntraday(false); // 4h and up: intraday mode off
       // Phone: every timeframe opens at its own default bar count (same as recenter). Carrying the old
       // span across made e.g. 2m's 400 bars show up on 1h. Desktop keeps the same-candle-size carry-over.
       if(!isMobile()&&!State.chart_intraday&&t!==tf&&_chartLive&&_chartLive.moved){
@@ -5956,7 +5961,7 @@ function chartTab(){
     ctrlRow.appendChild(b);
   });
 
-  if(!eodOnly){
+  if(!eodOnly&&!useWheels){
     var idBtn=h("button",{className:"btn"});
     idBtn.textContent="INTRADAY";
     idBtn.title=intraday?"Exit intraday mode (back to 30m)":"Intraday mode: zoom in close + prev day/week/month levels (2m–1h only)";
@@ -5965,8 +5970,8 @@ function chartTab(){
       : "border-color:var(--border);color:var(--text3);padding:6px 10px;";
     idBtn.addEventListener("click",function(){
       _chartKeepView=null;
-      if(intraday){State.chart_intraday=false;State.chart_interval="30m";}
-      else{State.chart_intraday=true;if(INTRA_TFS.indexOf(tf)<0) State.chart_interval="30m";}
+      if(intraday){setIntraday(false);State.chart_interval="30m";}
+      else{setIntraday(true);State.chart_interval="30m";}
       render();
     });
     ctrlRow.appendChild(idBtn);
@@ -6163,7 +6168,7 @@ function chartTab(){
       return w;
     }
     cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();},function(pos){symMirror(pos);}));
-    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;if(INTRA_TFS.indexOf(v)<0) State.chart_intraday=false;State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
+    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;if(INTRA_TFS.indexOf(v)<0) setIntraday(false);State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
     wrap.appendChild(cols);
     var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
     var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
@@ -6624,15 +6629,17 @@ function chartTab(){
       }
       // 30m only: every Wednesday session in the loaded data (not just this week),
       // shaded + labelled WED, collapsing to W when zoomed out.
-      var wedBands=[];
+      // The Wednesday that is still being traded is NOT shaded until its session closes (it keeps its plain day label).
+      var wedBands=[],liveWedT0=null;
       if(tf==="30m"){
-        var lastWk=null,curW=null;
+        var lastWk=null,curW=null,nowDk=Math.floor((candles[candles.length-1].time+anchorShift)/86400);
         candles.forEach(function(c){
           var st=c.time+anchorShift,dk=Math.floor(st/86400);
           if(new Date(st*1000).getUTCDay()!==3){lastWk=null;return;}
-          if(dk!==lastWk){lastWk=dk;curW={t0:c.time,t1:c.time};wedBands.push(curW);}
+          if(dk!==lastWk){lastWk=dk;curW={t0:c.time,t1:c.time,dk:dk};wedBands.push(curW);}
           curW.t1=c.time;
         });
+        wedBands=wedBands.filter(function(w){if(w.dk===nowDk){liveWedT0=w.t0;return false;}return true;});
       }
       var _acc=(getComputedStyle(document.documentElement).getPropertyValue("--accent")||"").trim()||"#2ec4b6";
       var _repaint=null;
@@ -6707,7 +6714,7 @@ function chartTab(){
                     if(dayLabels.length){
                       ctx.font="9px 'Courier New',monospace";ctx.textBaseline="bottom";ctx.fillStyle="#ffb020";ctx.globalAlpha=0.85;
                       dayLabels.forEach(function(d){
-                        if(tf==="30m"&&d.name==="WED") return; // drawn by the Wednesday bands
+                        if(tf==="30m"&&d.name==="WED"&&d.t0!==liveWedT0) return; // drawn by the Wednesday bands (the live Wednesday has no band yet)
                         var x0=chart.timeScale().timeToCoordinate(d.t0),x1=chart.timeScale().timeToCoordinate(d.t1);
                         if(x0==null||x1==null||x1<0||x0>paneW||x1-x0<(d.name.length>1?26:10)) return; // off-screen or too squeezed to read
                         ctx.fillText(d.name,Math.max(x0,0)+4,paneH-3);
