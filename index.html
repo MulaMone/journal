@@ -7130,7 +7130,7 @@ function chartTab(){
       // ── US10Y EOD only: previous YEAR high / low (PYH / PYL) ──────
       // Same look as the 8h PMH / PML (lime / coral dashed, tag on the price axis).
       // Built from the daily closes this chart is made of, grouped by calendar year.
-      if(eodOnly&&tf==="1d") (function(){
+      if(eodOnly&&(tf==="1d"||tf==="1w")) (function(){
         var PY_COL={h:"#a3e635",l:"#ff7a59"},PY_TAG={h:"PYH",l:"PYL"};
         var yrs=[],yCur=null,yKey=null;
         candles.forEach(function(c){
