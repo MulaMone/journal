@@ -6132,7 +6132,7 @@ function chartTab(){
     // fades out shortly after it stops (the pick re-renders the chart anyway).
     var TF_LONG={"2m":"2 minutes","5m":"5 minutes","15m":"15 minutes","30m":"30 minutes","1h":"1 hour","4h":"4 hours","8h":"8 hours","1d":"1 day","1w":"1 week","1m":"1 month","1y":"1 year"};
     var SYSF="-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
-    function mkMirror(list,labelOf){
+    function mkMirror(list,labelOf,col){
     var mir=null,mirHide=null;
     return function(pos){
       var RH=46,ROWS=5;
@@ -6142,7 +6142,7 @@ function chartTab(){
         var card=div();
         card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.5);-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
         var pill=div();
-        pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;background:rgba(255,255,255,.16);";
+        pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;border:1px solid "+col+"88;background:"+col+"1f;box-shadow:0 0 12px "+col+"33,inset 0 0 10px "+col+"1a;box-sizing:border-box;";
         var sc=div();
         sc.style.cssText="position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
         var sp=div();sp.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp);
@@ -6161,8 +6161,9 @@ function chartTab(){
       mir.rows.forEach(function(d,i){
         var dist=Math.abs(i-pos),on=dist<0.5;
         d.style.opacity=Math.max(0.15,1-dist*0.5);
-        d.style.color=on?"#fff":"rgba(235,240,250,.5)";
-        d.style.fontWeight=on?"500":"400";
+        d.style.color=on?col:"rgba(235,240,250,.5)";
+        d.style.fontWeight=on?"600":"400";
+        d.style.textShadow=on?"0 0 8px "+col+"88":"none";
       });
       mir.back.style.opacity="1";
       clearTimeout(mirHide);
@@ -6173,8 +6174,8 @@ function chartTab(){
       },700);
     };
     }
-    var tfMirror=mkMirror(TFS,function(t){return TF_LONG[t]||TF_LBL(t);});
-    var symMirror=mkMirror(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),function(t){return t;});
+    var tfMirror=mkMirror(TFS,function(t){return TF_LONG[t]||TF_LBL(t);},RED);
+    var symMirror=mkMirror(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),function(t){return t;},GREEN);
   }
 
   var loading=div();
