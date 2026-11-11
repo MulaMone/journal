@@ -6961,7 +6961,7 @@ function chartTab(){
       // room for the PDC/PWC/PMC tag (~58px box sticking out of the price axis into the plot), so the
       // newest candle ends right before it. Gap is derived from the bar spacing the fit will produce
       // (clamped at the library's 0.5px minimum on narrow charts / long histories).
-      var tagPx=intraday?(isMobile()?90:150):58,tagGap=function(w,n){
+      var tagPx=intraday?(isMobile()?64:150):58,tagGap=function(w,n){
         var g=(tagPx*(n-1)/w+0.5)/(1-tagPx/w);
         if(w/(n-1+g)<0.5) g=tagPx/0.5+0.5;
         return g;
