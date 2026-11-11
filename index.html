@@ -6840,7 +6840,7 @@ function chartTab(){
       // Default view (30m and higher): the fetch window can reach back ~3 months (back to the earliest trade),
       // which fits to unreadably small candles. Open zoomed on the latest bars instead; the user
       // can still scroll/zoom out. Not applied to a focused-trade view or a carried-over view.
-      var ZOOM_BARS={"2m":250,"5m":200,"30m":250,"1h":300,"4h":200,"8h":150,"1d":150,"1w":75,"1m":120,"1y":40}; // bars shown on open, per timeframe
+      var ZOOM_BARS={"2m":250,"5m":200,"30m":250,"1h":300,"4h":200,"8h":150,"1d":150,"1w":75,"1m":100,"1y":40}; // bars shown on open, per timeframe
       if(isMobile()){ZOOM_BARS["2m"]=400;ZOOM_BARS["5m"]=250;ZOOM_BARS["30m"]=100;ZOOM_BARS["1h"]=120;ZOOM_BARS["4h"]=80;ZOOM_BARS["8h"]=60;ZOOM_BARS["1d"]=60;ZOOM_BARS["1w"]=32;ZOOM_BARS["1m"]=60;ZOOM_BARS["1y"]=25;} // phone plot is ~300px wide: fewer bars so candles stay readable
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
