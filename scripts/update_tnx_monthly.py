@@ -65,19 +65,34 @@ yahoo_years = roll(raw, 4)
 first_full = next(int(y["d"][:4]) for y in yahoo_years
                   if any(m["d"] == f"{y['d'][:4]}-01-01" for m in monthly))
 yearly = [y for y in yahoo_years if int(y["d"][:4]) >= first_full]
-try:
-    txt = urllib.request.urlopen(urllib.request.Request(FRED, headers=UA), timeout=60).read().decode()
-    fred = []
+MIRROR = "https://raw.githubusercontent.com/datasets/bond-yields-us-10y/main/data/monthly.csv"
+
+
+def older_rows(url, timeout):
+    """(date,v,v,v,v) rows from a 2-column CSV (date, value) for years before Yahoo starts."""
+    txt = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read().decode()
+    out = []
     for row in list(csv.reader(io.StringIO(txt)))[1:]:
         try:
             v = float(row[1])
         except (ValueError, IndexError):
             continue  # "." = no print that day
         if int(row[0][:4]) < first_full:
-            fred.append((row[0], v, v, v, v))
-    older = roll(fred, 4)
+            out.append((row[0], v, v, v, v))
+    return out
+
+
+older = []
+for label, url, timeout in (("FRED DGS10 daily closes", FRED, 20),
+                            ("GitHub datasets mirror of FRED GS10 (monthly averages)", MIRROR, 30)):
+    try:
+        older = roll(older_rows(url, timeout), 4)
+        print(f"{label}: {len(older)} years before {first_full}")
+        break
+    except Exception as e:
+        print(f"WARNING: {label} failed ({e})")
+if older:
     yearly = older + yearly
-    print(f"fred: {len(older)} years before {first_full}")
-except Exception as e:  # keep the Yahoo-only yearly file rather than failing the job
-    print(f"WARNING: FRED fetch failed ({e}); yearly file is Yahoo-only")
+else:
+    print("WARNING: no pre-Yahoo source worked; yearly file is Yahoo-only")
 write("tnx_yearly.json", clean(yearly))
