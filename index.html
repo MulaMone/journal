@@ -6051,14 +6051,20 @@ function chartTab(){
 
   if(useWheels){
     // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
-    var WH=34,GREEN="#00e676",RED="#ff5252",wrap=div();
-    // iOS-style frosted-glass drum (same look as TradingView's timeframe picker)
-    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:rgba(24,30,44,.55);-webkit-backdrop-filter:blur(22px) saturate(1.5);backdrop-filter:blur(22px) saturate(1.5);border:1px solid rgba(255,255,255,.09);border-radius:22px;box-shadow:0 10px 28px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.1);overflow:hidden;";
+    var WH=28,GREEN="#00e676",RED="#ff5252",wrap=div();
+    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
     function mkPill(side,col){
       var d=div();
-      d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);pointer-events:none;";
+      d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;border:1px solid "+col+"88;background:"+col+"0d;box-shadow:0 0 10px "+col+"22,inset 0 0 8px "+col+"14;pointer-events:none;";
       return d;
     }
+    function mkTag(side,txt,col){
+      var d=div();d.textContent=txt;
+      d.style.cssText="position:absolute;"+side+":20px;top:"+(WH+6)+"px;font-family:'Courier New',monospace;font-size:8px;letter-spacing:1px;color:"+col+"99;pointer-events:none;";
+      return d;
+    }
+    wrap.appendChild(mkPill("left",GREEN));wrap.appendChild(mkPill("right",RED));
+    wrap.appendChild(mkTag("left","SYM",GREEN));wrap.appendChild(mkTag("right","TF",RED));
     // Haptic tick per row. Android: Vibration API. iOS Safari/PWA has no vibrate(), so
     // toggle a hidden <input type=checkbox switch> via its label (iOS 17.4+ fires a native tick).
     var _hp=window._edgeHaptic;
@@ -6078,13 +6084,6 @@ function chartTab(){
         if(_hp.label)_hp.label.click();
       }catch(e){}
     }
-    function mkTag(side,txt,col){
-      var d=div();d.textContent=txt;
-      d.style.cssText="position:absolute;"+side+":20px;top:"+(WH+6)+"px;font-family:'Courier New',monospace;font-size:8px;letter-spacing:1px;color:"+col+"99;pointer-events:none;";
-      return d;
-    }
-    wrap.appendChild(mkPill("left",GREEN));wrap.appendChild(mkPill("right",RED));
-    wrap.appendChild(mkTag("left","SYM",GREEN));wrap.appendChild(mkTag("right","TF",RED));
     var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
     function makeWheel(list,cur,col,onPick){
       var w=div(),items=[],ready=false,timer=null,lastI=-1;
@@ -6093,7 +6092,7 @@ function chartTab(){
       var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
       list.forEach(function(t,i){
         var d=div();d.textContent=TF_LBL(t);
-        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;font-size:17px;color:rgba(235,240,250,.45);cursor:pointer;";
+        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:15px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
         d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
         w.appendChild(d);items.push(d);
       });
@@ -6105,8 +6104,9 @@ function chartTab(){
           var diff=i-p,dist=Math.abs(diff),on=dist<0.5;
           d.style.opacity=Math.max(0.12,1-dist*0.55);
           d.style.transform="perspective(260px) rotateX("+(-diff*38)+"deg) scale("+Math.max(0.7,1-dist*0.14)+")";
-          d.style.color=on?"#fff":"rgba(235,240,250,.45)";
-          d.style.fontWeight=on?"600":"400";
+          d.style.color=on?col:"#8da0ba";
+          d.style.fontWeight=on?"700":"400";
+          d.style.textShadow=on?"0 0 8px "+col+"88":"none";
         });
       }
       w.addEventListener("scroll",function(){
@@ -6121,9 +6121,65 @@ function chartTab(){
     }
     cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();}));
     cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;State.chart_interval=v;render();}));
-    cols.style.webkitMaskImage=cols.style.maskImage="linear-gradient(transparent 0,#000 30%,#000 70%,transparent 100%)";
     wrap.appendChild(cols);
+    var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
+    var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
+    wrap.appendChild(fTop);wrap.appendChild(fBot);
     el.appendChild(wrap);
+    // ── TradingView-style timeframe popup ─────────────────────
+    // Chip on the chart; tap it and a frosted-glass wheel floats over the chart.
+    // Haptic tick on every row, pick applies when the wheel settles, tap outside closes.
+    var TF_LONG={"2m":"2 minutes","5m":"5 minutes","15m":"15 minutes","30m":"30 minutes","1h":"1 hour","4h":"4 hours","8h":"8 hours","1d":"1 day","1w":"1 week","1m":"1 month","1y":"1 year"};
+    var SYSF="-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
+    var tfChip=document.createElement("button");
+    tfChip.type="button";tfChip.textContent=TF_LBL(tf);
+    tfChip.style.cssText="position:absolute;top:8px;left:8px;z-index:30;padding:5px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.16);background:rgba(24,30,44,.6);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fff;font:600 13px "+SYSF+";cursor:pointer;";
+    function openTfPopup(){
+      if(chartDiv._tfPop) return;
+      var RH=46,ROWS=5,popReady=false,popTimer=null,popLast=-1,popCur=tf,rows=[];
+      var back=div();
+      back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);";
+      var card=div();
+      card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.55);-webkit-backdrop-filter:blur(28px) saturate(1.6);backdrop-filter:blur(28px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
+      var pill=div();
+      pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;background:rgba(255,255,255,.16);pointer-events:none;";
+      var sc=div();
+      sc.style.cssText="position:absolute;inset:0;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
+      sc.className="wheel-col";
+      function spacer(){var s=div();s.style.cssText="height:"+(RH*2)+"px;flex:none;";return s;}
+      sc.appendChild(spacer());
+      TFS.forEach(function(t,i){
+        var d=div();d.textContent=TF_LONG[t]||TF_LBL(t);
+        d.style.cssText="height:"+RH+"px;display:flex;align-items:center;padding-left:30px;scroll-snap-align:center;font-family:"+SYSF+";font-size:22px;color:rgba(235,240,250,.5);cursor:pointer;";
+        d.addEventListener("click",function(){if(t===popCur){closePop();}else{sc.scrollTo({top:i*RH,behavior:"smooth"});}});
+        sc.appendChild(d);rows.push(d);
+      });
+      sc.appendChild(spacer());
+      function pIdx(){return Math.max(0,Math.min(TFS.length-1,Math.round(sc.scrollTop/RH)));}
+      function pFade(){
+        var p=sc.scrollTop/RH;
+        rows.forEach(function(d,i){
+          var dist=Math.abs(i-p),on=dist<0.5;
+          d.style.opacity=Math.max(0.15,1-dist*0.5);
+          d.style.color=on?"#fff":"rgba(235,240,250,.5)";
+          d.style.fontWeight=on?"500":"400";
+        });
+      }
+      function closePop(){clearTimeout(popTimer);if(back.parentNode)back.parentNode.removeChild(back);chartDiv._tfPop=null;}
+      sc.addEventListener("scroll",function(){
+        pFade();
+        if(!popReady) return;
+        var ci=pIdx();if(ci!==popLast){popLast=ci;haptic();}
+        clearTimeout(popTimer);
+        popTimer=setTimeout(function(){var v=TFS[pIdx()];if(v!==popCur){popCur=v;_chartKeepView=null;State.chart_interval=v;render();}},180);
+      });
+      card.appendChild(pill);card.appendChild(sc);back.appendChild(card);
+      back.addEventListener("click",function(e){if(e.target===back)closePop();});
+      chartDiv.appendChild(back);chartDiv._tfPop=back;
+      setTimeout(function(){sc.scrollTop=Math.max(0,TFS.indexOf(tf))*RH;pFade();popLast=pIdx();setTimeout(function(){popReady=true;},120);},30);
+    }
+    tfChip.addEventListener("click",openTfPopup);
+    chartDiv.appendChild(tfChip);
   }
 
   var loading=div();
