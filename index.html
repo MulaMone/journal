@@ -7329,8 +7329,12 @@ function chartTab(){
           try{
             var ts=chart.timeScale(),r=ts.getVisibleLogicalRange();
             if(!r) return;
-            var c=(r.from+r.to)/2,half=Math.max(2.5,(r.to-r.from)/2*f);
-            ts.setVisibleLogicalRange({from:c-half,to:c+half});
+            // Anchor on the latest bar (current price) so it stays put on screen while zooming; fall back to the
+            // centre only if the latest bar is scrolled out of view.
+            var last=candles.length-1,a=(last>=r.from&&last<=r.to)?last:(r.from+r.to)/2;
+            var nf=a-(a-r.from)*f,nt=a+(r.to-a)*f;
+            if(nt-nf<5){var m=(nf+nt)/2;nf=m-2.5;nt=m+2.5;}
+            ts.setVisibleLogicalRange({from:nf,to:nt});
             if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;}
             _chartKeepView=null;
           }catch(e){}
