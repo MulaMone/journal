@@ -6002,8 +6002,8 @@ function chartTab(){
   if(intraday&&!eodOnly&&sym==="NQ"){
     var numBtn=h("button",{className:"btn"});
     var styleNumBtn=function(){
-      if(useWheels){
-        numBtn.style.cssText="position:absolute;left:100px;top:8px;z-index:6;padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(hideNums?"border-color:var(--border2);color:var(--text3);background:#040d1acc;":"border-color:var(--accent);color:var(--accent);background:#040d1acc;");
+      if(true){
+        numBtn.style.cssText="position:absolute;left:"+(useWheels?100:8)+"px;top:8px;z-index:6;padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(hideNums?"border-color:var(--border2);color:var(--text3);background:#040d1acc;":"border-color:var(--accent);color:var(--accent);background:#040d1acc;");
         numBtn.title=hideNums?"Show round numbers":"Hide round numbers";
         return;
       }
@@ -6015,11 +6015,11 @@ function chartTab(){
       hideNums=!hideNums;State.chart_hide_nums=hideNums;styleNumBtn();
       if(applyNumVisibility)applyNumVisibility();
     });
-    if(useWheels){
+    {
       numBtn.addEventListener("click",function(e){e.stopPropagation();});
       ["pointerdown","touchstart","dblclick"].forEach(function(ev){numBtn.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
       numBtnMobile=numBtn;
-    }else ctrlRow.appendChild(numBtn);
+    }
   }
 
   if(focusTs){
