@@ -7259,9 +7259,12 @@ function chartTab(){
 
       // ── Intraday mode, NQ only: 000 / 250 / 500 / 750 round levels around price ──
       if(intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
-        var last=candles[candles.length-1].close,SPAN=1500,STEP=250;
-        if(!isFinite(last)) return;
-        for(var p=Math.ceil((last-SPAN)/STEP)*STEP;p<=last+SPAN;p+=STEP){
+        var STEP=250,lo=Infinity,hi=-Infinity;
+        candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
+        if(!isFinite(lo)||!isFinite(hi)) return;
+        lo-=1000;hi+=1000; // pad so zooming out / scrolling still shows levels
+        if(hi-lo>40000) return;
+        for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
           series.createPriceLine({price:p,color:big?"#ffd24a":half?"#4aa8ff":"#7a8699",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m});
         }
