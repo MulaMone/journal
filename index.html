@@ -5996,6 +5996,23 @@ function chartTab(){
   });
   ctrlRow.appendChild(eyeBtn);
 
+  // "#" toggle: hide/show the NQ 000/250/500/750 round-number lines (NQ intraday only)
+  var hideNums=State.chart_hide_nums===true;
+  var applyNumVisibility=null;
+  if(intraday&&!eodOnly&&sym==="NQ"){
+    var numBtn=h("button",{className:"btn"});
+    var styleNumBtn=function(){
+      numBtn.style.cssText="display:flex;align-items:center;justify-content:center;padding:6px 12px;font-weight:700;"+(hideNums?"border-color:var(--border);color:var(--text3);":"border-color:var(--accent);color:var(--accent);");
+      numBtn.title=hideNums?"Show round numbers":"Hide round numbers";
+    };
+    numBtn.textContent="#";styleNumBtn();
+    numBtn.addEventListener("click",function(){
+      hideNums=!hideNums;State.chart_hide_nums=hideNums;styleNumBtn();
+      if(applyNumVisibility)applyNumVisibility();
+    });
+    ctrlRow.appendChild(numBtn);
+  }
+
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
     clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
@@ -7259,15 +7276,17 @@ function chartTab(){
 
       // ── Intraday mode, NQ only: 000 / 250 / 500 / 750 round levels around price ──
       if(intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
-        var STEP=250,lo=Infinity,hi=-Infinity;
+        var STEP=250,lo=Infinity,hi=-Infinity,numLines=[];
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
         lo-=1000;hi+=1000; // pad so zooming out / scrolling still shows levels
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m});
+          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m}));
         }
+        applyNumVisibility=function(){numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});};
+        applyNumVisibility();
       })();
 
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
