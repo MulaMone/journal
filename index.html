@@ -5998,10 +5998,15 @@ function chartTab(){
 
   // "#" toggle: hide/show the NQ 000/250/500/750 round-number lines (NQ intraday only)
   var hideNums=State.chart_hide_nums===true;
-  var applyNumVisibility=null;
+  var applyNumVisibility=null,numBtnMobile=null;
   if(intraday&&!eodOnly&&sym==="NQ"){
     var numBtn=h("button",{className:"btn"});
     var styleNumBtn=function(){
+      if(useWheels){
+        numBtn.style.cssText="position:absolute;left:100px;top:8px;z-index:6;padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(hideNums?"border-color:var(--border2);color:var(--text3);background:#040d1acc;":"border-color:var(--accent);color:var(--accent);background:#040d1acc;");
+        numBtn.title=hideNums?"Show round numbers":"Hide round numbers";
+        return;
+      }
       numBtn.style.cssText="display:flex;align-items:center;justify-content:center;padding:6px 12px;font-weight:700;"+(hideNums?"border-color:var(--border);color:var(--text3);":"border-color:var(--accent);color:var(--accent);");
       numBtn.title=hideNums?"Show round numbers":"Hide round numbers";
     };
@@ -6010,7 +6015,11 @@ function chartTab(){
       hideNums=!hideNums;State.chart_hide_nums=hideNums;styleNumBtn();
       if(applyNumVisibility)applyNumVisibility();
     });
-    ctrlRow.appendChild(numBtn);
+    if(useWheels){
+      numBtn.addEventListener("click",function(e){e.stopPropagation();});
+      ["pointerdown","touchstart","dblclick"].forEach(function(ev){numBtn.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
+      numBtnMobile=numBtn;
+    }else ctrlRow.appendChild(numBtn);
   }
 
   if(focusTs){
@@ -6065,6 +6074,7 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){idMob.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
     chartDiv.appendChild(idMob);
   }
+  if(numBtnMobile) chartDiv.appendChild(numBtnMobile);
 
   // Double-click / double-tap anywhere on the chart RECENTERS the view (price
   // autoscale + latest bars at default zoom) — it does not reload data.
