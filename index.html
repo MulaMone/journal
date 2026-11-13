@@ -7266,7 +7266,7 @@ function chartTab(){
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          series.createPriceLine({price:p,color:big?"#ffd24a":half?"#4aa8ff":"#7a8699",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m});
+          series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m});
         }
       })();
 
