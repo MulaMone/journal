@@ -10675,6 +10675,13 @@ function fedProbHistMerge(primary,secondary){
 // see fetchFedFundsData above) — normalize to a sortable "YYYY-MM-DD".
 function bulletinDateISO(dateStr){
   if(!dateStr) return null;
+  // Parse the parts directly — new Date("Wed, Sep 16, 2026") is LOCAL midnight, and toISOString() converts to UTC,
+  // which shifts the date back a day on any device east of UTC (and so mis-dates the 1-day lookback).
+  var m=String(dateStr).match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/);
+  if(m){
+    var mi=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[1].toLowerCase());
+    if(mi>=0) return m[3]+"-"+(mi<9?"0":"")+(mi+1)+"-"+(m[2].length<2?"0":"")+m[2];
+  }
   var d=new Date(dateStr);
   return isNaN(d.getTime())?null:d.toISOString().slice(0,10);
 }
@@ -10757,14 +10764,41 @@ function etDateISO(){ // today's date in New York, not UTC (UTC flips to "tomorr
 // Pulls together everything the card needs to show 1-day / 1-week /
 // 1-month change for the CURRENT meeting only — mixing in a stale prior
 // meeting's numbers would misread as a change that never happened.
-function fedProbDeltas(prob,todayISO,nowISO){
+// `priorSettle` is the previous trading day's read derived straight from today's bulletin (see
+// fedPriorSettleProb) — the 1-day chip uses it so it never depends on the app having been opened
+// yesterday or on the backfill succeeding. Recorded history is only the fallback for 1-day.
+function fedProbDeltas(prob,todayISO,nowISO,priorSettle){
   if(!prob) return null;
   var hist=fedProbHistGet().filter(function(r){return r.meetingCode===prob.meetingCode;});
-  if(hist.length<2) return null; // need at least one prior trading day's bulletin to diff against
-  var d1=fedProbSnapshotDaysAgo(hist,todayISO,1);
-  var d7=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,7);
-  var d30=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,30);
+  var d1=priorSettle||null;
+  if(!d1&&todayISO&&hist.length>=1){
+    var h1=fedProbSnapshotDaysAgo(hist,todayISO,1);
+    // never present an old row as "1-day": must be within a long weekend of the anchor
+    if(h1&&h1.dateISO&&(new Date(todayISO+"T00:00:00Z")-new Date(h1.dateISO+"T00:00:00Z"))<=5*86400000) d1=h1;
+  }
+  var d7=null,d30=null;
+  if(hist.length>=2){
+    d7=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,7);
+    d30=fedProbSnapshotDaysAgo(hist,nowISO||todayISO,30);
+  }
+  if(!d1&&!d7&&!d30) return null;
   return {d1:d1,d7:d7,d30:d30};
+}
+// Previous trading day's settle-only read, derived from the SAME bulletin: each contract row carries its
+// point change vs the prior settle (rateChg = change in rate), so prior rate = rate - rateChg. Returns null
+// if the bulletin carried no usable changes (parse drift) so the caller falls back to recorded history.
+function fedPriorSettleProb(meetingIso,curve,effr,bulletinISO){
+  try{
+    if(!meetingIso||!bulletinISO||!curve||!curve.length) return null;
+    var anyChg=curve.some(function(c){return isFinite(c.rateChg)&&Math.abs(c.rateChg)>1e-9;});
+    if(!anyChg) return null; // all-zero changes = column layout shifted (or a dead day) — don't fake "unch"
+    var prior=curve.map(function(c){return {code:c.code,rate:c.rate-(isFinite(c.rateChg)?c.rateChg:0)};});
+    var p=computeFedProbability(meetingIso,prior,effr);
+    if(!p) return null;
+    var dt=new Date(bulletinISO+"T00:00:00Z");
+    do{dt.setUTCDate(dt.getUTCDate()-1);}while(dt.getUTCDay()===0||dt.getUTCDay()===6);
+    return {meetingCode:p.meetingCode,hold:p.holdProb,move:p.stepProb,deltaBp:p.deltaBp,dateISO:dt.toISOString().slice(0,10),derived:1};
+  }catch(e){return null;}
 }
 // After an FOMC rolls over, the new "next meeting" has no recorded rows, so the 1d/1w/1m chips
 // went blank. Rebuild its history from past ZQ settles (meeting + prior month contracts), same
@@ -10787,14 +10821,15 @@ function backfillFedProbHistory(meetingIso,effr){
   try{
     if(!meetingIso) return Promise.resolve(false);
     var code=contractMonthCodeFromISO(meetingIso),key="edge_fedprob_backfill_v7_"+code;
-    var have=fedProbHistGet().filter(function(r){return r.meetingCode===code&&!r.backfill;}).length;
-    if(have>=30) return Promise.resolve(false);
+    // No row-count gate: gaps from days the app wasn't opened heal on the next open, because the settle history comes from fed-history, not from what was recorded locally. Existing real rows are never overwritten (seen[] below).
     var last=0;try{last=parseInt(localStorage.getItem(key)||"0",10)||0;}catch(e){}
     if(Date.now()-last<6*3600*1000) return Promise.resolve(false);
     try{localStorage.setItem(key,String(Date.now()));}catch(e){}
     var prev=prevContractMonthCode(code),next=nextContractMonthCode(code);
     return Promise.all([fetchZQSettleHistory(code),fetchZQSettleHistory(prev),fetchZQSettleHistory(next)]).then(function(res){
       var mR=res[0],pR=res[1],nR=res[2],today=etDateISO(),added=0;
+      // Empty fetch = the history function failed (errors are swallowed upstream). Don't lock out retries for 6h — retry in ~30 min.
+      if(!Object.keys(mR).length){try{localStorage.setItem(key,String(Date.now()-5.5*3600*1000));}catch(e){}}
       var all=fedProbHistGet().filter(function(r){return !(r.meetingCode===code&&r.backfill);}),seen={};
       var priorIso=null;FOMC_DECISION_DATES_ALL.forEach(function(x){if(x<meetingIso) priorIso=x;});
       all.forEach(function(r){if(r.meetingCode===code) seen[r.dateISO]=1;});
@@ -10948,7 +10983,7 @@ function buildFedFundsView(data,isM){
     var settleProb=computeFedProbability(meetingIso,data.curve,data.effr); // settle-only (no live quote) so history matches CME
     if(bulletinISO&&settleProb) recordFedProbSnapshot(settleProb,bulletinISO);
     var todayISO=bulletinISO||(liveApplied?fedLastTradingISO(data.live):null);
-    var deltas=fedProbDeltas(prob,todayISO,fedLastTradingISO(liveApplied?data.live:null));
+    var deltas=fedProbDeltas(prob,todayISO,fedLastTradingISO(liveApplied?data.live:null),fedPriorSettleProb(meetingIso,data.curve,data.effr,bulletinISO));
     if(deltas){
       var histRow=div();histRow.style.cssText="display:flex;gap:"+(isM?"10px":"18px")+";flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:14px;";
       function fedChipDate(iso){
