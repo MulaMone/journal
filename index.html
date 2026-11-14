@@ -1117,7 +1117,7 @@ function chartPrefetchView(sym,tf){
     if(fresh(_chartCache[key])) return Promise.resolve();
     return chartIdbGet(key).then(function(e){
       if(fresh(e)){_chartCache[key]=e;return;}
-      return fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;}).then(function(d){
+      return (inst==="BTC_USD"?btcCandles(key+"&count="+n):fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;})).then(function(d){
         if(!d||!d.candles||!d.candles.length) return;
         var ent={t:Date.now(),n:n,data:d};
         _chartCache[key]=ent;chartIdbPut(key,ent);
@@ -5953,6 +5953,52 @@ function loadNTFile(){
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
 var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD",BTC:"BTC_USD"};
 var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W","1m":"M","1y":"M"}; // 1y = monthly bars rolled up by year
+// ── BTC feed: Binance.US klines (24/7), adapted to the OANDA candle JSON shape the chart code already consumes ──
+// OANDA's BTC_USD is closed outside CFD hours, so BTC bypasses OANDA entirely. Takes the same OANDA-style URL
+// (granularity / count / from / to) and returns {candles:[{time,complete,mid:{o,h,l,c}}]}, so the cache, IndexedDB,
+// prefetch, delta refresh and live poll all work unchanged. Pages are fetched in parallel (1000 bars each).
+var BTC_REST="https://api.binance.us/api/v3/klines?symbol=BTCUSDT&limit=1000&interval=";
+var BTC_WS="wss://stream.binance.us:9443/ws/btcusdt@trade";
+var BTC_IV={M2:["1m",60000,2],M5:["5m",300000,1],M15:["15m",900000,1],M30:["30m",1800000,1],H1:["1h",3600000,1],H4:["4h",14400000,1],H8:["8h",28800000,1],D:["1d",86400000,1],W:["1w",604800000,1]};
+function btcCandles(u){
+  var q={};
+  (u.split("?")[1]||"").split("&").forEach(function(p){var i=p.indexOf("=");if(i>0) q[p.slice(0,i)]=decodeURIComponent(p.slice(i+1));});
+  var spec=BTC_IV[q.granularity];
+  if(!spec) return Promise.reject(new Error("HTTP 400: BTC timeframe not supported"));
+  var iv=spec[0],base=spec[1],agg=spec[2],per=base*agg,now=Date.now();
+  var n=parseInt(q.count,10)||500,fromMs=q.from?Date.parse(q.from):NaN,toMs=q.to?Date.parse(q.to):NaN;
+  var latest=!isFinite(fromMs);
+  var endMs=isFinite(toMs)?toMs:now;
+  var startMs=latest?(Math.floor(now/per)*per-(n+1)*per):fromMs;
+  var win=1000*base,wins=[];
+  for(var s=startMs;s<=endMs;s+=win) wins.push([s,Math.min(endMs,s+win-1)]);
+  if(wins.length>14) wins=latest?wins.slice(-14):wins.slice(0,14);
+  return Promise.all(wins.map(function(w){
+    return fetch(BTC_REST+iv+"&startTime="+w[0]+"&endTime="+w[1]).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    });
+  })).then(function(pages){
+    var seen={},rows=[];
+    pages.forEach(function(pg){(pg||[]).forEach(function(k){if(!seen[k[0]]){seen[k[0]]=1;rows.push(k);}});});
+    rows.sort(function(a,b){return a[0]-b[0];});
+    var out=[];
+    if(agg===1){
+      rows.forEach(function(k){out.push({t:k[0],o:k[1],h:+k[2],l:+k[3],c:k[4],done:k[6]<now});});
+      out.forEach(function(x){x.h=String(x.h);x.l=String(x.l);});
+    } else {
+      var cur=null;
+      rows.forEach(function(k){
+        var t=Math.floor(k[0]/per)*per;
+        if(!cur||cur.t!==t){cur={t:t,o:k[1],h:+k[2],l:+k[3],c:k[4],done:k[6]<now};out.push(cur);}
+        else{if(+k[2]>cur.h)cur.h=+k[2];if(+k[3]<cur.l)cur.l=+k[3];cur.c=k[4];cur.done=k[6]<now;}
+      });
+      out.forEach(function(x){x.h=String(x.h);x.l=String(x.l);});
+    }
+    if(latest&&out.length>n) out=out.slice(-n);
+    return {candles:out.map(function(x){return {time:new Date(x.t).toISOString(),complete:x.done,mid:{o:x.o,h:x.h,l:x.l,c:x.c}};})};
+  });
+}
 
 // Account id is needed for the pricing stream URL; fetched once with the token and cached.
 function oandaAcct(token){
@@ -6436,7 +6482,7 @@ function chartTab(){
 
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent="Chart data via OANDA (times shown in ET) — markers show trade entries from your log";
+  note.textContent=(sym==="BTC"?"Chart data via Binance.US BTC/USDT":"Chart data via OANDA")+" (times shown in ET) — markers show trade entries from your log";
   el.appendChild(note);
 
   var oandaInst=OANDA_SYMS[sym]||"SPX500_USD";
@@ -6585,6 +6631,7 @@ function chartTab(){
     }
     function one(x,attempt){
       attempt=attempt||0;
+      if(x.indexOf("/instruments/BTC_USD/")>-1) return btcCandles(x); // BTC: Binance.US feed, not OANDA
       var useTok=ls("oanda_token","")||tok;
       return fetchRetry(x,useTok).then(function(r){
         if(!r.ok){
@@ -6758,6 +6805,9 @@ function chartTab(){
         return {time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
       });
 
+      if(sym==="BTC"){ // 24/7 market: the fall-back hour maps two candles to the same ET time — keep times strictly ascending
+        candles=candles.filter(function(c,i){return i===0||c.time>candles[i-1].time;});
+      }
       if(!candles.length){
         var msg=div();
         msg.style.cssText="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px;gap:10px;";
@@ -8088,6 +8138,24 @@ function chartTab(){
         };
         var connectStream=function(){
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart"||strFail>5) return;
+          if(sym==="BTC"){ // BTC: Binance.US trade websocket (24/7) instead of the OANDA pricing stream
+            try{
+              var ws=new WebSocket(BTC_WS),wsDone=false;
+              _chartStreamAbort={abort:function(){wsDone=true;try{ws.close();}catch(e){}}};
+              ws.onmessage=function(ev){
+                var m;try{m=JSON.parse(ev.data);}catch(e){return;}
+                if(!m||!m.p) return;
+                lastMsgAt=Date.now();strFail=0;
+                onTick(parseFloat(m.p),Math.floor((m.T||Date.now())/1000));
+              };
+              ws.onclose=ws.onerror=function(){
+                if(wsDone) return;
+                wsDone=true;strFail++;
+                setTimeout(connectStream,3000);
+              };
+            }catch(e){}
+            return;
+          }
           var ac=new AbortController();_chartStreamAbort=ac;
           var tk=ls("oanda_token","")||tok;
           oandaAcct(tk).then(function(acct){
