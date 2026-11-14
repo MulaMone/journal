@@ -7359,6 +7359,29 @@ function chartTab(){
         }
       })();
 
+      // ── Intraday mode: previous YEAR high / low / close (PYH / PYL / PYC) as flat dashed lines, same colors as the 8h PMH / PML / PMC ──
+      // One daily-candle request (~2.5 years); the prior calendar year's stats are drawn across the whole chart.
+      if(intraday&&!eodOnly&&candles.length) (function(){
+        var PY_COL={h:"#a3e635",l:"#ff7a59",c:"#8a3ffc"},PY_TAG={h:"PYH",l:"PYL",c:"PYC"};
+        var pyUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count=700&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        chartFetchJson(pyUrl).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var ds=((d&&d.candles)||[]).map(function(c){
+            var _pu=Math.floor(new Date(c.time).getTime()/1000),dd=new Date((_pu-etOff(_pu)+anchorShift)*1000);
+            return {y:dd.getUTCFullYear(),m:dd.getUTCMonth(),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),c:parseFloat(c.mid.c)};
+          });
+          if(ds.length<2) return;
+          var py=ds[ds.length-1].y-1,first=ds[0];
+          if(first.y>py||(first.y===py&&first.m>0)) return; // prior year not fully covered
+          var st={h:-Infinity,l:Infinity,c:null};
+          ds.forEach(function(x){if(x.y!==py)return;if(x.h>st.h)st.h=x.h;if(x.l<st.l)st.l=x.l;st.c=x.c;});
+          if(st.c==null) return;
+          ["h","l","c"].forEach(function(f){
+            series.createPriceLine({price:st[f],color:PY_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:PY_TAG[f]});
+          });
+        }).catch(function(){});
+      })();
+
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
       // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
       // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
