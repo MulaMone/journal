@@ -6555,7 +6555,7 @@ function chartTab(){
       // reflects live price action up to the moment of the request.
       var candles=raw.map(function(c){
         var _u=Math.floor(new Date(c.time).getTime()/1000);
-        return {time:_u-etOff(_u),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+        return {time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
       });
 
       if(!candles.length){
@@ -6593,7 +6593,7 @@ function chartTab(){
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
         trackingMode:{exitMode:LightweightCharts.TrackingModeExitMode.OnTouchEnd}, // default is OnNextTap: a long-press would lock panning until the next tap
         handleScale:{axisDoubleClickReset:{time:false,price:false}}, // library's axis double-tap reset is flaky on touch; recenter() below replaces it
-        timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false,tickMarkFormatter:fmtTick},
+        timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:!monthlyFetch,secondsVisible:false,tickMarkFormatter:fmtTick},
       });
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,lastT:candles[candles.length-1].time,per:periodSec};
@@ -7863,7 +7863,7 @@ function chartTab(){
           // throws. Only touch the single newest candle, never anything
           // before it, so this can never violate that and silently no-op.
           var c=freshCandles[freshCandles.length-1];
-          var _cu=Math.floor(new Date(c.time).getTime()/1000),cShift=_cu-etOff(_cu);
+          var _cu=Math.floor(new Date(c.time).getTime()/1000),cShift=_cu-etOff(_cu)+(monthlyFetch?(24-dailyAlign)*3600:0);
           if(cShift-lastBarTime>3*periodSec&&Date.now()-_chartGapReloadAt>60000){
             _chartGapReloadAt=Date.now();render();return; // chart data is stale (e.g. tab left open) — fetch it fresh
           }
