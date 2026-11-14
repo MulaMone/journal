@@ -5927,9 +5927,10 @@ function chartTab(){
   var TFS=eodOnly?["1d","1w","1m","1y"]:(monthlyOk?["2m","5m","30m","1h","4h","8h","1d","1w","1m","1y"]:["2m","5m","30m","1h","4h","8h","1d","1w"]);
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
+    var tfBase=((sym==="DXY"||sym==="CL")&&(t==="1m"||t==="1y"))?"#a855f7":"var(--red)"; // DXY / Oil: monthly + yearly base color purple
     b.style.cssText=tf===t
       ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
-      : "border-color:var(--red);color:var(--red);padding:6px 10px;";
+      : "border-color:"+tfBase+";color:"+tfBase+";padding:6px 10px;";
     b.textContent=TF_LBL(t);
     b.addEventListener("click",function(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
