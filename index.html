@@ -6883,7 +6883,11 @@ function chartTab(){
       });
 
       if(sym==="BTC"){ // 24/7 market: the fall-back hour maps two candles to the same ET time — keep times strictly ascending
-        candles=candles.filter(function(c,i){return i===0||c.time>candles[i-1].time;});
+        // Compare against the last KEPT candle, not the previous raw one: the old check let a second fall-back-hour
+        // candle (e.g. 01:30 EST after 01:30 EDT) through, leaving duplicate times that corrupt the chart ("Value is null").
+        var _kept=[];
+        candles.forEach(function(c){if(!_kept.length||c.time>_kept[_kept.length-1].time) _kept.push(c);});
+        candles=_kept;
       }
       if(!candles.length){
         var msg=div();
