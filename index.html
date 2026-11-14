@@ -7319,8 +7319,10 @@ function chartTab(){
               bigOutline.forEach(function(b){
                 var y=series.priceToCoordinate(b.price);if(y==null)return;var H=sc.bitmapSize.height/vr;y=Math.min(Math.max(y,h/2),H-h/2); // library pins edge labels inside the scale
                 var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr);
-                ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
-                ctx.strokeRect(sc.bitmapSize.width-w+0.5,Math.round((y-h/2)*vr)+0.5,w-1.5,Math.round(h*vr)-1);
+                // tag ("00" / "500") painted back to the normal filled look: line color, dark digits
+                var x0=sc.bitmapSize.width-w,y0=Math.round((y-h/2)*vr),hh=Math.round(h*vr);
+                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,y0,w,hh,Math.round(2*hr));else ctx.rect(x0,y0,w,hh);ctx.fill();
+                ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(b.title,x0+w/2,y0+hh/2+Math.round(0.5*vr));
               });
             });
           }};}}],
