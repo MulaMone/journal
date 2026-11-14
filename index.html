@@ -6538,11 +6538,13 @@ function chartTab(){
     var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&sym!=="DXY"&&url.indexOf("&count=")>=0;
     var _cc=cacheable?_chartCache[url]:null;
     var fromCache=!!(_cc&&Date.now()-_cc.t<3600000);
+    var _tp0=performance.now(),_tFetch=0,_tLib=0;
     var chartP=fromCache?Promise.resolve(_cc.data):chartFetchJson(url,monthlyFetch);
     chartP
     .then(function(d){
+      _tFetch=performance.now();
       if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length) _cc=_chartCache[url]={t:Date.now(),data:d};
-      return libP.then(function(){return d;});
+      return libP.then(function(){_tLib=performance.now();return d;});
     })
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
@@ -7885,6 +7887,9 @@ function chartTab(){
       if(!eodOnly&&sym!=="DXY"){
         var floorOk=(tf==="2m"||tf==="5m"||tf==="30m"||tf==="1h"); // bars aligned to plain epoch multiples
         var flushT=null,strFail=0;
+        // Direct to OANDA first; if that fails before any tick (CORS / blocked), flip to the oanda-stream
+        // Supabase function and back. The mode that delivers a tick is remembered.
+        var strProxy=ls("oanda_stream_mode","")==="proxy",gotTick=false;
         var flushTick=function(){
           flushT=null;
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
@@ -7913,7 +7918,10 @@ function chartTab(){
           var ac=new AbortController();_chartStreamAbort=ac;
           var tk=ls("oanda_token","")||tok;
           oandaAcct(tk).then(function(acct){
-            return fetch(OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+oandaInst,{headers:{Authorization:"Bearer "+tk},signal:ac.signal});
+            return fetch(
+              strProxy?SUPA_URL+"/functions/v1/oanda-stream?account="+acct+"&instruments="+oandaInst
+                      :OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+oandaInst,
+              {headers:strProxy?{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"x-oanda-token":tk}:{Authorization:"Bearer "+tk},signal:ac.signal});
           }).then(function(r){
             if(!r.ok||!r.body) throw new Error("stream "+r.status);
             var rd=r.body.getReader(),dec=new TextDecoder(),buf="";
@@ -7927,6 +7935,7 @@ function chartTab(){
                   var m;try{m=JSON.parse(ln);}catch(e){return;}
                   if(m.type!=="PRICE"||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
                   strFail=0;
+                  if(!gotTick){gotTick=true;try{localStorage.setItem("edge_oanda_stream_mode",JSON.stringify(strProxy?"proxy":"direct"));}catch(e){}}
                   onTick((parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Math.floor(Date.parse(m.time.slice(0,19)+"Z")/1000));
                 });
                 return pump();
@@ -7935,6 +7944,7 @@ function chartTab(){
             return pump();
           }).catch(function(){
             if(ac.signal.aborted) return;
+            if(!gotTick) strProxy=!strProxy;
             strFail++;
             setTimeout(connectStream,3000);
           });
@@ -7964,6 +7974,8 @@ function chartTab(){
           _cc.t=Date.now();
         }).catch(function(){});
       }
+
+      console.log("[chart] "+sym+" "+tf+(fromCache?" (cache)":"")+": fetch "+Math.round(_tFetch-_tp0)+"ms, lib wait "+Math.round(_tLib-_tFetch)+"ms, build "+Math.round(performance.now()-_tLib)+"ms, total "+Math.round(performance.now()-_tp0)+"ms");
 
       clearInterval(_chartLiveTimer);
       _chartLiveTimer=setInterval(function(){
