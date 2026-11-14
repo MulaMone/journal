@@ -7847,12 +7847,12 @@ function chartTab(){
       // ── BTC only: 50 EMAs from 1w / 1d / 8h / 1h / 5m, drawn on every chart timeframe ──
       // Each EMA(50) is built from Coinbase candles of ITS OWN timeframe. One higher than the chart waits for its
       // bar to complete (flat until the bar closes, with a price line); equal / lower ones track the live bar.
-      // The 1h EMA is green while rising and red while falling. The 5m EMA is dashed. Tag = timeframe, on the price axis.
+      // The 1h EMA is green while rising and red while falling. The 5m and 1h EMAs are dashed. Tag = timeframe, on the price axis.
       if(sym==="BTC") (function(){
         var LS=LightweightCharts.LineStyle,EMA_N=50,K=2/(EMA_N+1),UP="#22c55e",DN="#ef4444";
         var SPECS=[
-          {tf:"5m",g:"M5",per:300,col:"#facc15",n:1200,dash:true},
-          {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true},
+          {tf:"5m",g:"M5",per:300,col:"#facc15",n:1200,dash:true,w:1},
+          {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true,dash:true,w:2},
           {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700},
           {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260},
           {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600}
@@ -7890,7 +7890,7 @@ function chartTab(){
         function draw(sp){
           if(sp.s){try{chart.removeSeries(sp.s);}catch(e){}}
           var step=sp.per>periodSec;
-          var o={color:sp.col,lineWidth:sp.dash?1:2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
+          var o={color:sp.col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
           if(sp.dash) o.lineStyle=LS.Dashed;
           sp.s=chart.addLineSeries(o);
           var data=[];
