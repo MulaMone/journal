@@ -15,6 +15,10 @@
 <title>EDGE — Trading Terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api-fxpractice.oanda.com">
+<link rel="preconnect" href="https://stream-fxpractice.oanda.com">
+<link rel="preconnect" href="https://unpkg.com">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Rye&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1041,6 +1045,7 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // stale and no-op, instead of mutating the chart/live-poll state for the
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
+var _chartStreamAbort=null; // OANDA tick stream for the chart; aborted on every chart reload / tab leave
 var _chartLive=null;      // {chart,moved} for the chart currently on screen
 var _chartKeepView=null;  // {from,to} carried across a timeframe switch
 var _chartGapReloadAt=0; // last time the live poll forced a full reload because the loaded candles had fallen behind
@@ -5856,6 +5861,18 @@ var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to 
 var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD"};
 var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W","1m":"M","1y":"M"}; // 1y = monthly bars rolled up by year
 
+// Account id is needed for the pricing stream URL; fetched once with the token and cached.
+function oandaAcct(token){
+  var a=ls("oanda_acct","");
+  if(a) return Promise.resolve(a);
+  return fetch(OANDA_ENV_BASE+"/v3/accounts",{headers:{Authorization:"Bearer "+token}}).then(function(r){return r.json();}).then(function(d){
+    var id=d&&d.accounts&&d.accounts[0]&&d.accounts[0].id;
+    if(!id) throw new Error("no account");
+    try{localStorage.setItem("edge_oanda_acct",JSON.stringify(id));}catch(e){}
+    return id;
+  });
+}
+
 function tradeTs(t){
   if(!t||!t.date) return null;
   var p=t.date.split("/");if(p.length!==3) return null;
@@ -6513,7 +6530,10 @@ function chartTab(){
     // which the success-path clearInterval below wouldn't reach.
     clearInterval(_chartLiveTimer);
     clearInterval(_chartCountdownTimer);
+    if(_chartStreamAbort){try{_chartStreamAbort.abort();}catch(e){}_chartStreamAbort=null;}
+    // candle fetch runs in parallel with the chart library download; only the render waits for the library
     chartFetchJson(url,monthlyFetch)
+    .then(function(d){return libP.then(function(){return d;});})
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
       // chartTab() call is now the current one — let that one own the DOM
@@ -7848,9 +7868,73 @@ function chartTab(){
       // disturbed. Only one poll loop ever runs: clear any prior one first,
       // since switching symbol/timeframe re-enters this function. The loop
       // self-clears the moment the person navigates off the Chart tab.
+      // ── Real-time ticks via OANDA pricing stream (single-instrument symbols, e.g. NQ) ──
+      // Builds the forming candle from live mid prices (bid+ask)/2 — same basis as price=M candles —
+      // and pushes it with series.update(). The 15s poll below stays as fallback / gap repair.
+      var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
+      if(!eodOnly&&sym!=="DXY"){
+        var floorOk=(tf==="2m"||tf==="5m"||tf==="30m"||tf==="1h"); // bars aligned to plain epoch multiples
+        var flushT=null,strFail=0;
+        var flushTick=function(){
+          flushT=null;
+          if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
+          try{series.update(liveBar);}catch(e){return;}
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+liveBar.close+'</span>';
+          currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
+          renderCountdown();
+        };
+        var onTick=function(px,t){
+          if(t>=barEndTrue){
+            if(!floorOk) return; // other timeframes: the poll starts the new bar
+            var ns=Math.floor(t/periodSec)*periodSec;
+            barEndTrue=ns+periodSec;
+            liveBar={time:ns-etOff(ns),open:px,high:px,low:px,close:px};
+            lastBarTime=liveBar.time;
+          } else if(t<barEndTrue-periodSec) return;
+          else {
+            if(px>liveBar.high) liveBar.high=px;
+            if(px<liveBar.low) liveBar.low=px;
+            liveBar.close=px;
+          }
+          if(!flushT) flushT=setTimeout(flushTick,100); // cap chart redraws at ~10/s
+        };
+        var connectStream=function(){
+          if(myLoadToken!==_chartLoadToken||State.tab!=="chart"||strFail>5) return;
+          var ac=new AbortController();_chartStreamAbort=ac;
+          var tk=ls("oanda_token","")||tok;
+          oandaAcct(tk).then(function(acct){
+            return fetch(OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+oandaInst,{headers:{Authorization:"Bearer "+tk},signal:ac.signal});
+          }).then(function(r){
+            if(!r.ok||!r.body) throw new Error("stream "+r.status);
+            var rd=r.body.getReader(),dec=new TextDecoder(),buf="";
+            var pump=function(){
+              return rd.read().then(function(x){
+                if(x.done) throw new Error("closed");
+                buf+=dec.decode(x.value,{stream:true});
+                var lines=buf.split("\n");buf=lines.pop();
+                lines.forEach(function(ln){
+                  if(!ln) return;
+                  var m;try{m=JSON.parse(ln);}catch(e){return;}
+                  if(m.type!=="PRICE"||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
+                  strFail=0;
+                  onTick((parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Math.floor(Date.parse(m.time.slice(0,19)+"Z")/1000));
+                });
+                return pump();
+              });
+            };
+            return pump();
+          }).catch(function(){
+            if(ac.signal.aborted) return;
+            strFail++;
+            setTimeout(connectStream,3000);
+          });
+        };
+        connectStream();
+      }
+
       clearInterval(_chartLiveTimer);
       _chartLiveTimer=setInterval(function(){
-        if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
+        if(State.tab!=="chart"){clearInterval(_chartLiveTimer);if(_chartStreamAbort){try{_chartStreamAbort.abort();}catch(e){}_chartStreamAbort=null;}return;}
         if(eodOnly){if(_tnxSkip++%2===0) tnxTick();return;} // 15s tick -> quote every 30s
         var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:1)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
@@ -7867,7 +7951,8 @@ function chartTab(){
             _chartGapReloadAt=Date.now();render();return; // chart data is stale (e.g. tab left open) — fetch it fresh
           }
           if(cShift>lastBarTime) lastBarTime=cShift;
-          series.update({time:cShift,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)});
+          liveBar={time:cShift,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+          series.update(liveBar);
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(c.mid.c)+'</span>';
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
@@ -7898,18 +7983,17 @@ function chartTab(){
     });
   }
 
-  if(window.LightweightCharts){
-    fetchAndRender();
-  } else {
+  var libP=window.LightweightCharts?Promise.resolve():new Promise(function(res){ // on load failure it stays pending, like before
     var script=document.createElement("script");
     script.src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js";
-    script.onload=function(){fetchAndRender();};
+    script.onload=function(){res();};
     script.onerror=function(){
       loading.style.color="var(--red)";
       loading.textContent="⚠ Could not load chart library — check your connection";
     };
     document.head.appendChild(script);
-  }
+  });
+  fetchAndRender();
 
   return el;
 }
