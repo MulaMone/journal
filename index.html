@@ -10252,7 +10252,7 @@ function fetchLongMonthly(sym){
       for(var i=0;i<ts.length;i++){
         var o=q.open[i],h=q.high[i],l=q.low[i],c=q.close[i];
         if(![o,h,l,c].every(function(x){return typeof x==="number"&&isFinite(x);})) continue;
-        var d=fmt.format(new Date(ts[i]*1000)).slice(0,8)+"01";
+        var d=new Date(ts[i]*1000+43200000).toISOString().slice(0,8)+"01";
         if(seen[d]!==undefined){rows[seen[d]]={d:d,o:o,h:h,l:l,c:c};continue;}
         seen[d]=rows.length;rows.push({d:d,o:o,h:h,l:l,c:c});
       }
@@ -10340,7 +10340,7 @@ var GH_BRANCH="main"; // adjust if this repo's default branch isn't "main"
 // redeploy the committed JSON, then force-reloads the cached yield /
 // liquidity / calendar / COT data and repaints if you're on Analyst or Prep. A
 // second pass ~50s later catches a slow Pages deploy.
-var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml"];
+var GH_ALL_WORKFLOWS=["update-tnx.yml","update-liquidity.yml","update-yields.yml","economic-calendar.yml","update-cot.yml","update-long-monthly.yml"];
 // ── "New data" sign: a teal database icon that fades in/out just left of
 // BILLION$ in the header. It's absolutely positioned (out of flow) and only
 // animates opacity, so nothing in the header can shift. Positioned from the
