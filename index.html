@@ -6123,7 +6123,7 @@ function chartTab(){
   (useWheels?[]:SYMS).forEach(function(s){
     if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
     var b=h("button",{className:"btn"});
-    if(sym===s.l) b.style.cssText="border-color:var(--accent);color:var(--accent);font-weight:700;";
+    if(sym===s.l) b.style.cssText="--caglow:#ffffff25;border-color:#ffffff;color:#ffffff;font-weight:700;"; // selected symbol: white
     else if(s.l!=="BTC"){var symCol=({GC:"#fbbf24",DXY:"#22c55e"})[s.l]||"#3b82f6";b.style.cssText="--ca:"+symCol+";--caglow:"+symCol+"25;";} // symbol buttons: GC gold, DXY green, rest blue; BTC keeps the default orange
     b.textContent=s.l; b.title=s.n;
     b.addEventListener("click",function(){_chartKeepView=null;State.chart_symbol=s.l;render();});
