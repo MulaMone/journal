@@ -1049,7 +1049,7 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
 var _chartCache={}; // view key -> {t, n, data}: last OANDA candle response per chart view, so switching back paints instantly
-var CHART_CACHE_TTL=3600000; // 1h; the delta refresh makes any age safe, this just bounds the catch-up jump
+var CHART_CACHE_TTL=259200000; // 3d; the delta refresh makes any age safe, this just bounds the catch-up jump (5000-candle cap: 2m stays gap-free under ~7d)
 // Same entries are mirrored to IndexedDB so the first view after a page refresh also paints from cache.
 var _chartDbP=null;
 function chartDb(){
@@ -1113,7 +1113,7 @@ function chartPrefetchView(sym,tf){
       if(fs>=te) fs=te-ps;
       n=Math.min(5000,Math.max(50,Math.ceil((nowS-fs)/ps)+5));
     }
-    var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n&&Date.now()-e.t<CHART_CACHE_TTL/2);};
+    var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n&&Date.now()-e.t<1800000);};
     if(fresh(_chartCache[key])) return Promise.resolve();
     return chartIdbGet(key).then(function(e){
       if(fresh(e)){_chartCache[key]=e;return;}
