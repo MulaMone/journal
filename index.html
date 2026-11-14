@@ -6404,7 +6404,7 @@ function chartTab(){
 
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
   // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
-  function chartFetchJson(u){
+  function chartFetchJson(u,hist){
     // A 401 here is often transient or a stale token mid-sync (another device /
     // the cloud pull can swap the saved token a moment later). Re-read the saved
     // token fresh on every attempt and retry twice before surfacing the error.
@@ -6467,7 +6467,21 @@ function chartTab(){
       });
       return {candles:out};
     }
-    if(sym!=="DXY") return one(u).then(yrAgg);
+    // hist (initial load of the 1M / 1Y chart only): prepend Yahoo monthly bars older than OANDA's first candle.
+    var _ymFmt=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit"});
+    function addHist(d){
+      if(!hist||!d||!d.candles||!d.candles.length) return d;
+      return fetchLongMonthly(sym).then(function(rows){
+        var fk=_ymFmt.format(new Date(new Date(d.candles[0].time).getTime()+(24-dailyAlign)*3600000)).slice(0,7);
+        var pre=rows.filter(function(r){return r.d.slice(0,7)<fk;}).map(function(r){
+          // candle opens 17:00/18:00 ET on the day before the 1st: 23:00Z that day lands on the right side of both anchors
+          var t=new Date(new Date(r.d+"T00:00:00Z").getTime()-3600000).toISOString().slice(0,19)+"Z";
+          return {time:t,complete:true,mid:{o:r.o,h:r.h,l:r.l,c:r.c}};
+        });
+        return {candles:pre.concat(d.candles)};
+      });
+    }
+    if(sym!=="DXY") return one(u).then(addHist).then(yrAgg);
     // Live poll asks for count=1; legs can print a new candle at slightly different
     // moments, so pull a few and let the per-time intersection pick the latest common one.
     u=u.replace("&count=1&","&count=3&");
@@ -6491,7 +6505,7 @@ function chartTab(){
         });
         out.push({time:t,complete:c0.complete,mid:{o:vals[0],h:Math.max.apply(null,vals),l:Math.min.apply(null,vals),c:vals[3]}});
       });
-      return yrAgg({candles:out});
+      return Promise.resolve(addHist({candles:out})).then(yrAgg);
     });
   }
   function fetchAndRender(){
@@ -6500,7 +6514,7 @@ function chartTab(){
     // which the success-path clearInterval below wouldn't reach.
     clearInterval(_chartLiveTimer);
     clearInterval(_chartCountdownTimer);
-    chartFetchJson(url)
+    chartFetchJson(url,monthlyFetch)
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
       // chartTab() call is now the current one — let that one own the DOM
@@ -10208,6 +10222,44 @@ function fetchTnxMonthlyOHLC(){
   }).catch(function(){
     return fetchTnxDailyOHLC().then(function(rows){return tnxAggregate(rows,"1m");});
   });
+}
+// Long monthly history for Oil (CL) and DXY, used to extend the OANDA 1M/1Y charts back past OANDA's
+// ~2005 start. 1) same-origin data/dxy_monthly.json | data/cl_monthly.json ({rows:[{d,o,h,l,c}]})
+// 2) Yahoo direct (DX-Y.NYB back to 1971, CL=F back to 2000). Any failure returns [] (OANDA-only chart).
+var _longMonMem={};
+function fetchLongMonthly(sym){
+  var m=_longMonMem[sym];
+  if(m&&Date.now()-m.t<6*60*60*1000) return Promise.resolve(m.rows);
+  var keep=function(rows){_longMonMem[sym]={t:Date.now(),rows:rows};return rows;};
+  var nm=sym==="DXY"?"dxy":"cl",ysym=sym==="DXY"?"DX-Y.NYB":"CL%3DF";
+  return fetch("data/"+nm+"_monthly.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(j){
+    var rows=j&&j.rows;
+    if(!rows||rows.length<24) throw new Error("monthly file too short");
+    return keep(rows);
+  }).catch(function(){
+    return fetch("https://query1.finance.yahoo.com/v8/finance/chart/"+ysym+"?interval=1mo&range=max&_="+Date.now()).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    }).then(function(json){
+      var res=json&&json.chart&&json.chart.result&&json.chart.result[0];
+      var ts=res&&res.timestamp,q=res&&res.indicators&&res.indicators.quote&&res.indicators.quote[0];
+      if(!ts||!q) throw new Error("no OHLC in response");
+      var fmt=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"});
+      var rows=[],seen={};
+      for(var i=0;i<ts.length;i++){
+        var o=q.open[i],h=q.high[i],l=q.low[i],c=q.close[i];
+        if(![o,h,l,c].every(function(x){return typeof x==="number"&&isFinite(x);})) continue;
+        var d=fmt.format(new Date(ts[i]*1000)).slice(0,8)+"01";
+        if(seen[d]!==undefined){rows[seen[d]]={d:d,o:o,h:h,l:l,c:c};continue;}
+        seen[d]=rows.length;rows.push({d:d,o:o,h:h,l:l,c:c});
+      }
+      if(rows.length<24) throw new Error("too few monthly rows");
+      return keep(rows);
+    });
+  }).catch(function(){return [];});
 }
 // Yearly bars for the US10Y 1Y chart only: data/tnx_yearly.json (Yahoo + FRED DGS10 closes for the
 // years before Yahoo starts, so it reaches back to 1962). Falls back to the monthly history rolled up.
