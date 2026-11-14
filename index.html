@@ -14398,18 +14398,6 @@ setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_int
 
 </script>
 <script>if("serviceWorker" in navigator&&location.protocol==="https:"){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}
-// Mobile: hide the phone's status bar (Android) by entering fullscreen on the first tap.
-(function(){
-  var de=document.documentElement;
-  if(!(de.requestFullscreen||de.webkitRequestFullscreen)) return;
-  function go(){
-    if(!(window.matchMedia&&window.matchMedia("(max-width:960px)").matches)) return;
-    if(document.fullscreenElement||document.webkitFullscreenElement) return;
-    try{var r=(de.requestFullscreen||de.webkitRequestFullscreen).call(de,{navigationUI:"hide"});if(r&&r.catch)r.catch(function(){});}catch(e){}
-  }
-  document.addEventListener("touchend",go,{passive:true});
-  document.addEventListener("click",go);
-})();
 
 // No page zoom (iOS ignores user-scalable=no, so block its pinch gesture too).
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();});});
