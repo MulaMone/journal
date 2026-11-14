@@ -7321,6 +7321,10 @@ function chartTab(){
                 var xs=0,t=Math.max(1,Math.round(hr)),y0=Math.round(L.y0),hh=Math.round(L.hh); // outline starts right at the seam, same box as the regular labels
                 ctx.fillStyle=b.color; // four whole-pixel edges (no half-pixel strokes) so every side is equally crisp
                 ctx.fillRect(xs,y0,xr-xs,t);ctx.fillRect(xs,y0+hh-t,xr-xs,t);ctx.fillRect(xs,y0,t,hh);ctx.fillRect(xr-t,y0,t,hh);
+                // On fractional screen scaling (e.g. 125%) the browser smears the top, bottom and right lines by a faint extra pixel on the inside;
+                // the left line sits on the canvas edge and isn't smeared. Add the same faint pixel to the left line so the inside corners match.
+                var fr=hr-Math.floor(hr);
+                if(fr>0.1&&fr<0.45&&hh>2*t+2){ctx.globalAlpha=fr;ctx.fillRect(xs+t,y0+t+1,1,hh-2*t-2);ctx.globalAlpha=1;}
               });
             });
           }};}}]);},
