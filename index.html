@@ -7525,10 +7525,10 @@ function chartTab(){
             if(g0) g0.times.push(c.time);
           });
           if(lg.length) drawAll(lg);
-          window._pdcMem=lg.length?lg[lg.length-1].c:null;
         }
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
+          if(sym==="BTC") return; // Coinbase D/W candles start at 00:00 UTC, not the chart's 17:00 ET session, so they pick the wrong prior close; keep the in-memory levels
           var hs=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
             return {t:_pu-etOff(_pu),c:parseFloat(c.mid.c),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
@@ -7542,8 +7542,6 @@ function chartTab(){
             curG2.times.push(c.time);
           });
           if(groups.length){
-            console.log("[pdc] "+sym+" "+tf+" instant:",window._pdcMem,"oanda:",groups[groups.length-1].c,"candles",candles.length,"first",new Date(candles[0].time*1000).toISOString());
-            console.log("[pdc] "+pcGran+" last candle",new Date(candles[candles.length-1].time*1000).toISOString(),"| oanda tail",hs.slice(-3).map(function(x){return new Date(x.t*1000).toISOString()+" c="+x.c;}).join(" ; "));
             // draw the exact levels first, then drop the instant-paint ones, so the line never disappears between the two
             var _oldPc=pcSeries;
             pcSeries=[];
