@@ -7910,39 +7910,22 @@ function chartTab(){
           return pts;
         }
         function plain(pts){return pts.map(function(p){return {time:p.time,value:p.value};});}
-        // Up / down coloring without per-point colors: a green series holds the rising segments, a red one the falling
-        // segments, with a whitespace point wherever a run breaks so the line never bridges across the other colour.
-        function dirData(pts){
-          var S={up:{a:[],open:false,last:-1},dn:{a:[],open:false,last:-1}};
-          for(var i=1;i<pts.length;i++){
-            var isUp=pts[i].value>=pts[i-1].value,T=isUp?S.up:S.dn,O=isUp?S.dn:S.up;
-            if(!T.open){
-              if(T.last>=0&&pts[i-1].ci>T.last+1&&candles[T.last+1]) T.a.push({time:candles[T.last+1].time});
-              if(pts[i-1].ci!==T.last) T.a.push({time:pts[i-1].time,value:pts[i-1].value});
-              T.open=true;
-            }
-            T.a.push({time:pts[i].time,value:pts[i].value});T.last=pts[i].ci;O.open=false;
-          }
-          return {up:S.up.a,dn:S.dn.a,lastUp:pts.length<2||pts[pts.length-1].value>=pts[pts.length-2].value};
+        function colored(pts){ // single line, green while rising / red while falling (per-point colors)
+          return pts.map(function(p,i){return {time:p.time,value:p.value,color:(i>0&&p.value<pts[i-1].value)?DN:UP};});
         }
         function fillDir(sp,pts){
-          var d=dirData(pts),col=d.lastUp?UP:DN,l=pts[pts.length-1];
-          sp.sUp.setData(d.up);sp.sDn.setData(d.dn);
-          sp.sL.setData(l?[{time:l.time,value:l.value}]:[]); // one-point series that carries the tag + price line
-          sp.sL.applyOptions({color:col,priceLineColor:col});
+          var d=colored(pts);
+          sp.s.setData(d);
+          if(d.length) sp.s.applyOptions({priceLineColor:d[d.length-1].color});
         }
         function draw(sp){
-          [sp.s,sp.sUp,sp.sDn,sp.sL].forEach(function(x){if(x){try{chart.removeSeries(x);}catch(e){}}});
-          sp.s=sp.sUp=sp.sDn=sp.sL=null;
+          if(sp.s){try{chart.removeSeries(sp.s);}catch(e){}}
           var step=sp.per>periodSec;
-          function mk(col,tag){
-            var o={color:col,lineWidth:sp.w||2,title:tag?sp.tf:"",lastValueVisible:!!tag,priceLineVisible:!!tag&&step,priceLineColor:col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
-            if(sp.dash) o.lineStyle=LS.Dashed;
-            return chart.addLineSeries(o);
-          }
+          var o={color:sp.col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
+          if(sp.dash) o.lineStyle=LS.Dashed;
+          sp.s=chart.addLineSeries(o);
           var pts=buildPts(sp);
-          if(sp.dir){sp.sUp=mk(UP,false);sp.sDn=mk(DN,false);sp.sL=mk(UP,true);fillDir(sp,pts);}
-          else{sp.s=mk(sp.col,true);sp.s.setData(plain(pts));}
+          if(sp.dir) fillDir(sp,pts); else sp.s.setData(plain(pts));
         }
         function load(sp){
           var c=store[sp.tf];
@@ -7956,7 +7939,6 @@ function chartTab(){
             return load(sp).then(function(b){
               if(myLoadToken!==_chartLoadToken||b.length<=EMA_N) return;
               sp.bars=b;sp.ema=emaOf(b);draw(sp);
-              if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
             }).catch(function(){});
           });
         });
@@ -7966,7 +7948,7 @@ function chartTab(){
           try{if(localStorage.getItem("ema_nolive")){clearInterval(timer);return;}}catch(e){}
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
           SPECS.forEach(function(sp){
-            if(!sp.s&&!sp.sL) return;
+            if(!sp.s) return;
             chartFetchJson(urlFor(sp,3)).then(function(d){
               if(myLoadToken!==_chartLoadToken) return;
               var b=sp.bars;
