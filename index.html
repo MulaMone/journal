@@ -6802,8 +6802,9 @@ function chartTab(){
       if(!(e&&e.data&&e.data.candles&&e.data.candles.length)) return false;
       var age=Date.now()-e.t;
       // Monthly views store the FINAL merged result (OANDA + Yahoo history, yearly roll-up for 1Y): no delta refresh is
-      // possible on that, so they just expire after 1h and refetch whole. Their length is also unrelated to the count asked for.
-      if(monthlyFetch) return age<3600000;
+      // possible on that, so they just expire (same TTL as intraday) and refetch whole. The 15s live poll refreshes the last bar
+      // and appends a new month's bar, so a cached entry is never stale. Their length is also unrelated to the count asked for.
+      if(monthlyFetch) return age<CHART_CACHE_TTL;
       return age<CHART_CACHE_TTL&&e.data.candles.length+Math.ceil(age/1000/periodSec)+2>=needN;
     };
     var _cc=cacheable?_chartCache[ckey]:null;
