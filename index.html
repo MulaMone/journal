@@ -7894,6 +7894,7 @@ function chartTab(){
           if(sp.dash) o.lineStyle=LS.Dashed;
           sp.s=chart.addLineSeries(o);
           var data=[];
+          function stepPt(t,v,j){var q={time:t,value:v};if(sp.dir) q.color=(j>0&&sp.ema[j-1]!=null&&v<sp.ema[j-1])?DN:UP;return q;}
           if(step){ // one point per completed higher-timeframe bar, joined by a plain line (no stairs)
             var c0=candles[0].time,seed=null,lastT=-1,B=sp.bars;
             for(var j=0;j+1<B.length;j++){
@@ -7903,8 +7904,8 @@ function chartTab(){
               var lo=0,hi=candles.length-1,ci=-1;
               while(lo<=hi){var m=(lo+hi)>>1;if(candles[m].time>=tc){ci=m;hi=m-1;}else lo=m+1;}
               if(ci<0) break;
-              if(seed!=null){data.push({time:c0,value:seed});lastT=c0;seed=null;}
-              if(candles[ci].time>lastT){data.push({time:candles[ci].time,value:sp.ema[j]});lastT=candles[ci].time;}
+              if(seed!=null){data.push(stepPt(c0,seed,j-1));lastT=c0;seed=null;}
+              if(candles[ci].time>lastT){data.push(stepPt(candles[ci].time,sp.ema[j],j));lastT=candles[ci].time;}
             }
             var pe=ptAt(sp,candles[candles.length-1].time);
             if(pe&&pe.time>lastT) data.push(pe);
