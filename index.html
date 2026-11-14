@@ -7468,24 +7468,25 @@ function chartTab(){
         }).catch(function(){});
       })();
 
-      // ── US10Y EOD only: previous YEAR high / low (PYH / PYL) ──────
-      // Same look as the 8h PMH / PML (lime / coral dashed, tag on the price axis).
+      // ── Previous YEAR high / low (PYH / PYL): US10Y EOD (1d/1w) and every other symbol on 1w; 1w non-EOD also gets the close (PYC) ──
+      // Same look as the 8h PMH / PML / PMC (lime / coral / violet dashed, tag on the price axis).
       // Built from the daily closes this chart is made of, grouped by calendar year.
-      if(eodOnly&&(tf==="1d"||tf==="1w")) (function(){
-        var PY_COL={h:"#a3e635",l:"#ff7a59"},PY_TAG={h:"PYH",l:"PYL"};
+      if(tf==="1w"||(eodOnly&&tf==="1d")) (function(){
+        var PY_COL={h:"#a3e635",l:"#ff7a59",c:"#8a3ffc"},PY_TAG={h:"PYH",l:"PYL",c:"PYC"},pyFields=eodOnly?["h","l"]:["h","l","c"];
         var yrs=[],yCur=null,yKey=null;
         candles.forEach(function(c){
           var key=new Date((c.time+anchorShift)*1000).getUTCFullYear();
-          if(key!==yKey){yKey=key;yCur={key:key,h:-Infinity,l:Infinity,times:[]};yrs.push(yCur);}
+          if(key!==yKey){yKey=key;yCur={key:key,h:-Infinity,l:Infinity,c:null,times:[]};yrs.push(yCur);}
           if(c.high>yCur.h) yCur.h=c.high;
           if(c.low<yCur.l) yCur.l=c.low;
+          yCur.c=c.close;
           yCur.times.push(c.time);
         });
         // A year's lines come from the year before it; skip the first year on the chart
         // (no prior year in the data) and any prior year that isn't fully covered.
         var groups=[];
-        for(var yi=1;yi<yrs.length;yi++){ if(yrs[yi-1].key===yrs[yi].key-1&&yi-1>=1) groups.push({h:yrs[yi-1].h,l:yrs[yi-1].l,times:yrs[yi].times}); }
-        ["h","l"].forEach(function(f){
+        for(var yi=1;yi<yrs.length;yi++){ if(yrs[yi-1].key===yrs[yi].key-1&&yi-1>=1) groups.push({h:yrs[yi-1].h,l:yrs[yi-1].l,c:yrs[yi-1].c,times:yrs[yi].times}); }
+        pyFields.forEach(function(f){
           groups.forEach(function(g,gi){
             var isCur=gi===groups.length-1;
             var data=g.times.map(function(t){return {time:t,value:g[f]};});
