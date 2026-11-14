@@ -2035,16 +2035,6 @@ function renderTabs(){
 function switchTab(id){
   // Guard: if tab not in VIEWS (e.g. "chart" from old localStorage), fall back to home
   if(!VIEWS[id]) id="home";
-  // Mobile Chart tab = real fullscreen (hides the phone status bar); leaving the tab exits it.
-  // Runs inside the tap that triggered the switch, which browsers require for fullscreen.
-  try{
-    var _de=document.documentElement,_fsEl=document.fullscreenElement||document.webkitFullscreenElement;
-    if(id==="chart"&&isMobile()){
-      if(!_fsEl){var _rq=_de.requestFullscreen||_de.webkitRequestFullscreen;if(_rq){var _p=_rq.call(_de,{navigationUI:"hide"});if(_p&&_p.catch)_p.catch(function(){});}}
-    } else if(_fsEl){
-      var _ex=document.exitFullscreen||document.webkitExitFullscreen;if(_ex){var _p2=_ex.call(document);if(_p2&&_p2.catch)_p2.catch(function(){});}
-    }
-  }catch(e){}
   State.tab=id;ss("tab",id);State.expanded=null;State.adding=false;State.editing=null;State.pb_adding=false;State.pb_editing=undefined;State.logPage=0;
   if(id==="chart") State.chart_show_trades=!!State.chart_focus_ts;
   if(id!=="chart"&&State.chart_intraday) State.chart_intraday=false; // intraday mode is not kept when leaving the chart
