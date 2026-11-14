@@ -6793,14 +6793,17 @@ function chartTab(){
     // candles since the cached last one and apply them with series.update() (see "delta refresh" below).
     // Key ignores the count (it drifts as time passes); an entry is usable if it was fetched with at least the
     // count this view needs. Memory first, then IndexedDB (survives a page refresh).
-    var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&url.indexOf("&count=")>=0;
-    var ckey=cacheable?url.replace(/&count=\d+/,""):"";
+    var cacheable=!focusTs&&!eodOnly&&url.indexOf("&count=")>=0;
+    var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
     var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
     // Trade-anchored views ask for ~1 more bar per elapsed candle, which the delta refresh supplies — so count the
     // bars the entry will gain since it was saved when checking it's deep enough.
     var okEntry=function(e){
       if(!(e&&e.data&&e.data.candles&&e.data.candles.length)) return false;
       var age=Date.now()-e.t;
+      // Monthly views store the FINAL merged result (OANDA + Yahoo history, yearly roll-up for 1Y): no delta refresh is
+      // possible on that, so they just expire after 1h and refetch whole. Their length is also unrelated to the count asked for.
+      if(monthlyFetch) return age<3600000;
       return age<CHART_CACHE_TTL&&e.data.candles.length+Math.ceil(age/1000/periodSec)+2>=needN;
     };
     var _cc=cacheable?_chartCache[ckey]:null;
@@ -8264,7 +8267,7 @@ function chartTab(){
 
       // ── Delta refresh after a cache paint: fetch only candles since the cached last one ──
       var deltaP=null;
-      if(fromCache&&raw.length){
+      if(fromCache&&raw.length&&!monthlyFetch){ // monthly cache entries are merged / rolled up: never append raw candles to them
         var _lastRaw=raw[raw.length-1].time;
         var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(new Date(_lastRaw).toISOString())+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         deltaP=chartFetchJson(dUrl).then(function(dd){
@@ -8292,7 +8295,7 @@ function chartTab(){
       if(startStream) (deltaP||Promise.resolve()).then(startStream);
 
       // Once this view is up, quietly pre-load the other timeframes (one at a time) so switching to them is instant.
-      if(cacheable) setTimeout(function(){
+      if(cacheable&&!monthlyFetch) setTimeout(function(){ // intraday views only; monthly views are cached on open, never prefetched
         var p=Promise.resolve();
         ["2m","5m","30m","1h","4h","8h","1d","1w"].forEach(function(t){
           if(t===tf) return;
