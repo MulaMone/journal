@@ -7299,6 +7299,18 @@ function chartTab(){
         applyNumVisibility();
       })();
 
+      // ── 8h only, NQ: big round numbers (every 5000: 20000 / 25000 / 30000 ...) as amber price-axis labels only, no line ──
+      if(tf==="8h"&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
+        var STEP=5000,lo=Infinity,hi=-Infinity;
+        candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
+        if(!isFinite(lo)||!isFinite(hi)) return;
+        lo-=5000;hi+=5000;
+        for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
+          if(p<=0) continue;
+          series.createPriceLine({price:p,color:"#ffbf00",lineWidth:1,lineVisible:false,axisLabelVisible:true,title:""});
+        }
+      })();
+
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
       // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
       // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
