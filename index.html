@@ -7525,6 +7525,7 @@ function chartTab(){
             if(g0) g0.times.push(c.time);
           });
           if(lg.length) drawAll(lg);
+          window._pdcMem=lg.length?lg[lg.length-1].c:null;
         }
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
@@ -7541,6 +7542,7 @@ function chartTab(){
             curG2.times.push(c.time);
           });
           if(groups.length){
+            console.log("[pdc] "+sym+" "+tf+" instant:",window._pdcMem,"oanda:",groups[groups.length-1].c,"candles",candles.length,"first",new Date(candles[0].time*1000).toISOString());
             // draw the exact levels first, then drop the instant-paint ones, so the line never disappears between the two
             var _oldPc=pcSeries;
             pcSeries=[];
