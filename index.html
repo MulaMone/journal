@@ -7293,14 +7293,15 @@ function chartTab(){
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:(m<100?"0":"")+m}));
+          var bigLvl=(p%2500===0); // 20000 / 22500 / 25000... keep the line's own color, white digits on the axis label
+          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelTextColor:(bigLvl?"#ffffff":undefined),title:(m<100?"0":"")+m}));
         }
         applyNumVisibility=function(){numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});};
         applyNumVisibility();
       })();
 
       // ── NQ, all timeframes: big round numbers (every 5000: 20000 / 25000 / 30000 ...) as amber price-axis labels only, no line ──
-      if(!eodOnly&&sym==="NQ"&&candles.length) (function(){
+      if(!intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
         var STEP=2500,lo=Infinity,hi=-Infinity; // every 5000 plus the 2500s between them (22500, 27500...)
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
