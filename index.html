@@ -7508,7 +7508,7 @@ function chartTab(){
         // in memory (same session-anchored day split as the day labels), so they show
         // with the chart. The first day on screen is partial, so its hi/lo is skipped.
         // The exact OANDA D-candle result below replaces these when it arrives.
-        if(pcGran==="D"||pcGran==="W"){
+        if((pcGran==="D"||pcGran==="W")&&sym!=="BTC"){ // BTC days/weeks are UTC (Coinbase D/W candles), not the 17:00 ET session this instant pass uses: draw BTC only from the fetched candles
           var lg=[],g0=null,key0=null,prev0=null,dHi=-Infinity,dLo=Infinity,dCl=null,nDays=0;
           candles.forEach(function(c){
             var k=Math.floor((c.time+anchorShift)/86400);
@@ -7528,7 +7528,6 @@ function chartTab(){
         }
         chartFetchJson(pcUrl).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
-          if(sym==="BTC") return; // Coinbase D/W candles start at 00:00 UTC, not the chart's 17:00 ET session, so they pick the wrong prior close; keep the in-memory levels
           var hs=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
             return {t:_pu-etOff(_pu),c:parseFloat(c.mid.c),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
