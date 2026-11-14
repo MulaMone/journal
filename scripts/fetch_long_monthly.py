@@ -2,14 +2,14 @@
 """Writes data/dxy_monthly.json and data/cl_monthly.json (monthly OHLC, full history).
 DXY: Yahoo DX-Y.NYB (back to 1971).  Oil: FRED DCOILWTICO daily spot (1986+) rolled to months,
 then Yahoo CL=F (2000+) wins for every month it covers."""
-import datetime, json, os, sys, time, urllib.request
+import datetime, json, os, sys, urllib.request
 
 UA = {"User-Agent": "Mozilla/5.0"}
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
 
-def get(url):
-    return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60).read().decode()
+def get(url, timeout=60):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read().decode()
 
 
 def yahoo_monthly(sym):
@@ -28,25 +28,21 @@ def yahoo_monthly(sym):
 
 
 def fred_monthly(series):
-    # fredgraph.csv sometimes stalls or refuses cloud runners: try a few URL forms, 3 attempts each
+    # GitHub-hosted WTI daily CSV (datasets/oil-prices, 1986+, same EIA/FRED data) first: reachable from Actions runners.
+    # fredgraph.csv often hangs on cloud runners, so it is only a short-timeout fallback.
     urls = [
+        "https://raw.githubusercontent.com/datasets/oil-prices/main/data/wti-daily.csv",
         "https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s&cosd=1986-01-01" % series,
-        "https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s" % series,
-        "https://fred.stlouisfed.org/data/%s.txt" % series,
     ]
     text, err = None, None
     for u in urls:
-        for _ in range(3):
-            try:
-                text = get(u)
-                break
-            except Exception as e:
-                err = e
-                time.sleep(3)
-        if text:
+        try:
+            text = get(u, 25)
             break
+        except Exception as e:
+            err = e
     if not text:
-        raise RuntimeError("all FRED URLs failed: %s" % err)
+        raise RuntimeError("all oil-history URLs failed: %s" % err)
     rows = {}
     for line in text.splitlines():
         rec = line.replace(",", " ").split()
@@ -86,4 +82,4 @@ except Exception as e:
 cl.update(yahoo_monthly("CL%3DF"))
 write("cl_monthly.json", cl)
 if fred_err:  # still commit what we have, but turn the run red so it is noticed
-    sys.exit("FRED failed, oil history starts at 2000: %s" % fred_err)
+    sys.exit("Oil history before 2000 failed: %s" % fred_err)
