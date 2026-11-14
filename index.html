@@ -1045,7 +1045,37 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // stale and no-op, instead of mutating the chart/live-poll state for the
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
-var _chartCache={}; // url -> {t, data}: last OANDA candle response per chart view, so switching back paints instantly
+var _chartCache={}; // view key -> {t, n, data}: last OANDA candle response per chart view, so switching back paints instantly
+var CHART_CACHE_TTL=3600000; // 1h; the delta refresh makes any age safe, this just bounds the catch-up jump
+// Same entries are mirrored to IndexedDB so the first view after a page refresh also paints from cache.
+var _chartDbP=null;
+function chartDb(){
+  if(_chartDbP) return _chartDbP;
+  _chartDbP=new Promise(function(res){
+    try{
+      var rq=indexedDB.open("edge_chart_cache",1);
+      rq.onupgradeneeded=function(){rq.result.createObjectStore("c");};
+      rq.onsuccess=function(){res(rq.result);};
+      rq.onerror=rq.onblocked=function(){res(null);};
+    }catch(e){res(null);}
+  });
+  return _chartDbP;
+}
+function chartIdbGet(key){ // never rejects; resolves null on any problem or after 400ms
+  var q=chartDb().then(function(db){
+    if(!db) return null;
+    return new Promise(function(res){
+      try{var r=db.transaction("c","readonly").objectStore("c").get(key);r.onsuccess=function(){res(r.result||null);};r.onerror=function(){res(null);};}catch(e){res(null);}
+    });
+  });
+  return Promise.race([q,new Promise(function(res){setTimeout(function(){res(null);},400);})]);
+}
+function chartIdbPut(key,val){ // fire and forget
+  chartDb().then(function(db){
+    if(!db) return;
+    try{db.transaction("c","readwrite").objectStore("c").put(val,key);}catch(e){}
+  });
+}
 var _chartStreamAbort=null; // OANDA tick stream for the chart; aborted on every chart reload / tab leave
 var _chartLive=null;      // {chart,moved} for the chart currently on screen
 var _chartKeepView=null;  // {from,to} carried across a timeframe switch
@@ -6535,15 +6565,35 @@ function chartTab(){
     // candle fetch runs in parallel with the chart library download; only the render waits for the library
     // Cache hit (<1h old, plain "latest N candles" views only): paint from cache now, then pull only the
     // candles since the cached last one and apply them with series.update() (see "delta refresh" below).
+    // Key ignores the count (it drifts as time passes); an entry is usable if it was fetched with at least the
+    // count this view needs. Memory first, then IndexedDB (survives a page refresh).
     var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&sym!=="DXY"&&url.indexOf("&count=")>=0;
-    var _cc=cacheable?_chartCache[url]:null;
-    var fromCache=!!(_cc&&Date.now()-_cc.t<3600000);
+    var ckey=cacheable?url.replace(/&count=\d+/,""):"";
+    var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
+    // Trade-anchored views ask for ~1 more bar per elapsed candle, which the delta refresh supplies — so count the
+    // bars the entry will gain since it was saved when checking it's deep enough.
+    var okEntry=function(e){
+      if(!(e&&e.data&&e.data.candles&&e.data.candles.length)) return false;
+      var age=Date.now()-e.t;
+      return age<CHART_CACHE_TTL&&e.data.candles.length+Math.ceil(age/1000/periodSec)+2>=needN;
+    };
+    var _cc=cacheable?_chartCache[ckey]:null;
+    var fromCache=okEntry(_cc);
     var _tp0=performance.now(),_tFetch=0,_tLib=0;
-    var chartP=fromCache?Promise.resolve(_cc.data):chartFetchJson(url,monthlyFetch);
+    var chartP;
+    if(fromCache) chartP=Promise.resolve(_cc.data);
+    else if(cacheable) chartP=chartIdbGet(ckey).then(function(e){
+      if(okEntry(e)){_cc=_chartCache[ckey]=e;fromCache=true;return e.data;}
+      return chartFetchJson(url,monthlyFetch);
+    });
+    else chartP=chartFetchJson(url,monthlyFetch);
     chartP
     .then(function(d){
       _tFetch=performance.now();
-      if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length) _cc=_chartCache[url]={t:Date.now(),data:d};
+      if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length){
+        _cc=_chartCache[ckey]={t:Date.now(),n:needN,data:d};
+        chartIdbPut(ckey,_cc);
+      }
       return libP.then(function(){_tLib=performance.now();return d;});
     })
     .then(function(data){
@@ -7976,8 +8026,10 @@ function chartTab(){
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+liveBar.close+'</span>';
           renderCountdown();
+          // don't trim the old end — trade-anchored views need their start bar; 5000 is just a safety cap
           _cc.data.candles=_cc.data.candles.filter(function(x){return x.time<_lastRaw;}).concat(fc).slice(-5000);
           _cc.t=Date.now();
+          chartIdbPut(ckey,_cc);
         }).catch(function(){});
       }
       // Stream starts only once the cache delta has landed — otherwise a tick could open a new bar first and
