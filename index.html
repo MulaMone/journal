@@ -7293,39 +7293,44 @@ function chartTab(){
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          var bigLvl=(p%2500===0); if(bigLvl) bigOutline.push({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",title:(m<100?"0":"")+m}); // 20000 / 22500 / 25000... keep the line's own color, inverted label (chart-bg box, line-colored digits)
-          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?(big?"#ffd24a":half?"#ff9f1a":"#22e5ff"):undefined),title:(m<100?"0":"")+m}));
+          var bigLvl=(p%2500===0),lc=big?"#ffd24a":half?"#ff9f1a":"#22e5ff"; // 20000 / 22500 / 25000...: price box inverted + outlined, tag filled like the others
+          if(bigLvl) bigOutline.push({price:p,color:lc,title:(m<100?"0":"")+m});
+          numLines.push(series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?lc:undefined),title:(m<100?"0":"")+m}));
         }
-        // outline around the inverted big-level axis labels (the library has no label border option)
+        // The library has no label border option, so outline the big-level price boxes (and repaint their tags) ourselves.
+        // Label placement follows the library's own rule: pinned to the edge when less than half a label is off screen, hidden beyond that.
         try{series.attachPrimitive({
-          _v:[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
+          _lbl:function(sc,b){
+            var vr=sc.verticalPixelRatio,H=sc.bitmapSize.height/vr,fs=12,h=fs+2*(2.5/12*fs),hh=Math.floor(h/2);
+            var y=series.priceToCoordinate(b.price);if(y==null||y<=-hh||y>=H+hh)return null;
+            if(y<hh)y=hh;else if(y>H-hh)y=H-hh;
+            return {y0:Math.round((y-h/2)*vr),hh:Math.round(h*vr)};
+          },
+          _av:null,_pv:null,
+          priceAxisPaneViews:function(){var me=this;return this._av||(this._av=[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
             if(hideNums) return;
             target.useBitmapCoordinateSpace(function(sc){
-              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
+              var ctx=sc.context,hr=sc.horizontalPixelRatio;
               bigOutline.forEach(function(b){
-                var y=series.priceToCoordinate(b.price);if(y==null)return;var H=sc.bitmapSize.height/vr;if(y<0||y>H)return;y=Math.min(Math.max(y,h/2),H-h/2); // library pins edge labels inside the scale
+                var L=me._lbl(sc,b);if(!L)return;
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
-                ctx.strokeRect(0.5,Math.round((y-h/2)*vr)+0.5,sc.bitmapSize.width-1.5,Math.round(h*vr)-1);
+                ctx.strokeRect(0.5,L.y0+0.5,sc.bitmapSize.width-1.5,L.hh-1);
               });
             });
-          }};}}],
-          priceAxisPaneViews:function(){return this._v;},
-          paneViews:function(){return this._pv;},
-          _pv:[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
+          }};}}]);},
+          paneViews:function(){var me=this;return this._pv||(this._pv=[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
             if(hideNums) return;
             target.useBitmapCoordinateSpace(function(sc){
-              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
-              ctx.font=Math.round(fs*vr)+"px "+chart.options().layout.fontFamily;
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio;
+              ctx.font=Math.round(12*vr)+"px "+chart.options().layout.fontFamily;
               bigOutline.forEach(function(b){
-                var y=series.priceToCoordinate(b.price);if(y==null)return;var H=sc.bitmapSize.height/vr;if(y<0||y>H)return;y=Math.min(Math.max(y,h/2),H-h/2); // library pins edge labels inside the scale
-                var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr);
-                // tag ("00" / "500") painted back to the normal filled look: line color, dark digits
-                var x0=sc.bitmapSize.width-w,y0=Math.round((y-h/2)*vr),hh=Math.round(h*vr);
-                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,y0,w,hh,Math.round(2*hr));else ctx.rect(x0,y0,w,hh);ctx.fill();
-                ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(b.title,x0+w/2,y0+hh/2+Math.round(0.5*vr));
+                var L=me._lbl(sc,b);if(!L)return;
+                var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr),x0=sc.bitmapSize.width-w;
+                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,w,L.hh,Math.round(2*hr));else ctx.rect(x0,L.y0,w,L.hh);ctx.fill();
+                ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(b.title,x0+w/2,L.y0+L.hh/2+Math.round(0.5*vr));
               });
             });
-          }};}}],
+          }};}}]);},
           updateAllViews:function(){}
         });}catch(e){}
         applyNumVisibility=function(){numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});};
