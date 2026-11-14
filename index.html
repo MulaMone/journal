@@ -14401,6 +14401,24 @@ setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_int
 
 // No page zoom (iOS ignores user-scalable=no, so block its pinch gesture too).
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();});});
+
+// Installed fullscreen app: Android brings the status bar back after the app was in the background.
+// Re-hide it on the first touch after returning (only runs in the installed app, not in a browser tab).
+(function(){
+  var mq=function(q){return window.matchMedia&&window.matchMedia(q).matches;};
+  if(!(mq("(display-mode: fullscreen)")||mq("(display-mode: standalone)"))) return;
+  var de=document.documentElement,rq=de.requestFullscreen||de.webkitRequestFullscreen;
+  if(!rq) return;
+  function arm(){
+    function go(){
+      document.removeEventListener("touchend",go,true);
+      if(document.fullscreenElement||document.webkitFullscreenElement) return;
+      try{var r=rq.call(de,{navigationUI:"hide"});if(r&&r.catch)r.catch(function(){});}catch(e){}
+    }
+    document.addEventListener("touchend",go,true);
+  }
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)arm();});
+})();
 </script>
 </body>
 </html>
