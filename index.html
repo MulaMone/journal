@@ -7844,7 +7844,7 @@ function chartTab(){
         }).catch(function(){});
       })();
 
-      // ── BTC only: 50 EMAs from 1w / 1d / 4h / 1h / 5m, drawn on every chart timeframe ──
+      // ── BTC only: 50 EMAs from 1w / 1d / 8h / 1h / 5m, drawn on every chart timeframe ──
       // Each EMA(50) is built from Coinbase candles of ITS OWN timeframe. One higher than the chart waits for its
       // bar to complete (flat until the bar closes, with a price line); equal / lower ones track the live bar.
       // The 1h EMA is green while rising and red while falling. The 5m EMA is dashed. Tag = timeframe, on the price axis.
@@ -7855,7 +7855,7 @@ function chartTab(){
           {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true},
           {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700},
           {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260},
-          {tf:"4h",g:"H4",per:14400,col:"#fb923c",n:1000}
+          {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600}
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
