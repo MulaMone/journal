@@ -5856,7 +5856,7 @@ function loadNTFile(){
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
 var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD"};
-var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W"};
+var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W","1m":"M","1y":"M"}; // 1y = monthly bars rolled up by year
 
 function tradeTs(t){
   if(!t||!t.date) return null;
@@ -5884,8 +5884,9 @@ function chartTab(){
   var tf=State.chart_interval||"1h";
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
-  if(!eodOnly&&(tf==="1m"||tf==="1y")) tf="1d"; // 1m / 1y exist on the US10Y chart only
-  var TF_LBL=function(t){return t==="1m"?"1M":t==="1y"?"1Y":t;}; // month / year shown capitalised
+  var monthlyOk=eodOnly||sym==="CL"||sym==="DXY"; // 1M / 1Y exist on US10Y, Oil and DXY only
+  if(!monthlyOk&&(tf==="1m"||tf==="1y")) tf="1d";
+  var TF_LBL=function(t){return t==="1d"?"D":t==="1w"?"W":t==="1m"?"M":t==="1y"?"Y":t;}; // day / week / month / year shown as a single capital letter
   // Intraday mode: tight zoom on the latest candles + prev day/week/month level tags. Works on 2m/5m/30m/1h only (not 4h and up).
   var INTRA_TFS=["2m","5m","30m","1h"];
   if(State.chart_intraday&&(eodOnly||INTRA_TFS.indexOf(tf)<0)) State.chart_intraday=false;
@@ -5925,7 +5926,7 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp);
 
-  var TFS=eodOnly?["1d","1w","1m","1y"]:["2m","5m","30m","1h","4h","8h","1d","1w"];
+  var TFS=eodOnly?["1d","1w","1m","1y"]:(monthlyOk?["2m","5m","30m","1h","4h","8h","1d","1w","1m","1y"]:["2m","5m","30m","1h","4h","8h","1d","1w"]);
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
     b.style.cssText=tf===t
@@ -6328,7 +6329,8 @@ function chartTab(){
   var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800,"1m":2592000,"1y":31536000};
   var periodSec=PERIOD_SEC[tf]||3600;
   var fromSec=null,toSec=null;
-  var LOOKBACK_BARS=(tf==="2m"||tf==="5m")?600:(tf==="1w"?260:500); // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
+  var monthlyFetch=!eodOnly&&(tf==="1m"||tf==="1y"); // full monthly history (needed for the previous-decade levels)
+  var LOOKBACK_BARS=monthlyFetch?600:((tf==="2m"||tf==="5m")?600:(tf==="1w"?260:500)); // 2m/5m open on 500 bars, so fetch a little more than that for the zoom to apply
 
   if(focusTs){
     // Focused on one specific trade: a fixed-size window around it, so it
@@ -6383,6 +6385,7 @@ function chartTab(){
     }
   }
 
+  if(monthlyFetch) fromSec=null; // always latest N monthly bars, never a trade-anchored window
   if(fromSec!=null){
     var nowS=Math.floor(Date.now()/1000);
     if(toSec>=nowS-300){
@@ -6449,7 +6452,22 @@ function chartTab(){
       }
       return {candles:out};
     });});
-    if(sym!=="DXY") return one(u);
+    // 1Y (oil / DXY): OANDA has no yearly granularity — roll the monthly candles up by NY calendar year.
+    // A candle opens at the 17:00/18:00 ET anchor of the previous calendar day, so shift by the anchor first.
+    var _yrFmt=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric"});
+    function yrAgg(d){
+      if(tf!=="1y"||!d||!d.candles) return d;
+      var out=[],cur=null,key=null;
+      d.candles.forEach(function(c){
+        if(!c.mid) return;
+        var k=_yrFmt.format(new Date(new Date(c.time).getTime()+(24-dailyAlign)*3600000));
+        var o=parseFloat(c.mid.o),h=parseFloat(c.mid.h),l=parseFloat(c.mid.l),cl=parseFloat(c.mid.c);
+        if(k!==key){key=k;cur={time:c.time,complete:c.complete,mid:{o:o,h:h,l:l,c:cl}};out.push(cur);}
+        else{if(h>cur.mid.h)cur.mid.h=h;if(l<cur.mid.l)cur.mid.l=l;cur.mid.c=cl;cur.complete=c.complete;}
+      });
+      return {candles:out};
+    }
+    if(sym!=="DXY") return one(u).then(yrAgg);
     // Live poll asks for count=1; legs can print a new candle at slightly different
     // moments, so pull a few and let the per-time intersection pick the latest common one.
     u=u.replace("&count=1&","&count=3&");
@@ -6473,7 +6491,7 @@ function chartTab(){
         });
         out.push({time:t,complete:c0.complete,mid:{o:vals[0],h:Math.max.apply(null,vals),l:Math.min.apply(null,vals),c:vals[3]}});
       });
-      return {candles:out};
+      return yrAgg({candles:out});
     });
   }
   function fetchAndRender(){
@@ -6614,6 +6632,12 @@ function chartTab(){
           else monthBoundaries.push(candles[mi].time);
         }
       }
+      // Oil / DXY 1M and 1Y: a DECADE break line where a new decade starts (2010, 2020, ...).
+      var decadeBoundaries=[];
+      if(!eodOnly&&(tf==="1m"||tf==="1y")){
+        var decOf=function(t){return Math.floor(new Date((t+anchorShift)*1000).getUTCFullYear()/10);};
+        for(var dbi=1;dbi<candles.length;dbi++){ if(decOf(candles[dbi].time)!==decOf(candles[dbi-1].time)) decadeBoundaries.push(candles[dbi].time); }
+      }
       // Weekly: quarter breaks. A weekly bar belongs to the quarter holding most of its
       // trading days (its Wednesday); a quarter that starts a new year is drawn as YEAR.
       var quarterBoundaries=[];
@@ -6637,6 +6661,7 @@ function chartTab(){
       // kept (YEAR > MONTH > WEEK > ETH). No weekly line on the daily chart.
       var sessionMarks=[],markAt={};
       function addMark(t,label,color){if(markAt[t])return;markAt[t]=true;sessionMarks.push({t:t,label:label,color:color});}
+      decadeBoundaries.forEach(function(t){addMark(t,"DECADE","#ff7a59");});
       yearBoundaries.forEach(function(t){addMark(t,"YEAR","#e8f0ff");});
       monthBoundaries.forEach(function(t){addMark(t,"MONTH","#b06aff");});
       quarterBoundaries.forEach(function(t){addMark(t,"QUARTER","#ffc83d");});
@@ -7524,8 +7549,8 @@ function chartTab(){
       // Same look as PYH / PYL. Each decade (2020s, 2010s, ...) shows the high and low of the
       // decade before it. Needs monthly history reaching back past the prior decade; the first
       // (partial) decade on the chart is never used as a source.
-      if(eodOnly&&(tf==="1m"||tf==="1y")) (function(){
-        var SPAN=tf==="1y"?20:10;
+      if(tf==="1m"||tf==="1y") (function(){
+        var SPAN=(eodOnly&&tf==="1y")?20:10; // oil / DXY history is too short for 20-year levels, so 1Y uses the previous decade too
         var PD_COL={h:"#a3e635",l:"#ff7a59"},PD_TAG={h:"P"+SPAN+"H",l:"P"+SPAN+"L"};
         var decs=[],dCur=null,dKey=null;
         candles.forEach(function(c){
@@ -7814,7 +7839,7 @@ function chartTab(){
       _chartLiveTimer=setInterval(function(){
         if(State.tab!=="chart"){clearInterval(_chartLiveTimer);return;}
         if(eodOnly){if(_tnxSkip++%2===0) tnxTick();return;} // 15s tick -> quote every 30s
-        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count=1&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:1)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
