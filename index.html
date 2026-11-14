@@ -7295,7 +7295,7 @@ function chartTab(){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
           var bigLvl=(p%2500===0),lc=big?"#ffd24a":half?"#ff9f1a":"#22e5ff"; // 20000 / 22500 / 25000...: price box inverted + outlined, tag filled like the others
           if(bigLvl) bigOutline.push({price:p,color:lc,title:(m<100?"0":"")+m});
-          numLines.push(series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?lc:undefined),title:(m<100?"0":"")+m}));
+          numLines.push(series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?"#040d1a":undefined),title:(m<100?"0":"")+m}));
         }
         // The library has no label border option, so outline the big-level price boxes (and repaint their tags) ourselves.
         // Sizes/positions mirror the library's own label geometry; edge handling: pinned if < half a label off screen, hidden beyond.
@@ -7321,6 +7321,8 @@ function chartTab(){
                 var xs=0,t=Math.max(1,Math.round(hr)),y0=Math.round(L.y0),hh=Math.round(L.hh); // outline starts right at the seam, same box as the regular labels
                 ctx.fillStyle=b.color; // four whole-pixel edges (no half-pixel strokes) so every side is equally crisp
                 ctx.fillRect(xs,y0,xr-xs,t);ctx.fillRect(xs,y0+hh-t,xr-xs,t);ctx.fillRect(xs,y0,t,hh);ctx.fillRect(xr-t,y0,t,hh);
+                ctx.textAlign="left";ctx.textBaseline="middle"; // library digits are hidden (same color as the box); redraw them centered so left/right inside gaps match
+                ctx.fillText(txt,Math.round((xr-ctx.measureText(txt).width)/2),y0+hh/2+Math.round(0.5*hr));
               });
             });
           }};}}]);},
