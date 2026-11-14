@@ -6270,7 +6270,7 @@ function chartTab(){
     }
     function makeWheel(list,cur,col,onPick,onMove){
       var w=div(),items=[],ready=false,timer=null,lastI=-1;
-      w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;";
+      w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:none;overscroll-behavior:contain;";
       w.className="wheel-col";
       var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
       list.forEach(function(t,i){
@@ -6307,6 +6307,60 @@ function chartTab(){
       WD.arms.push(function(){if(ready)arm();});
       w.addEventListener("touchstart",dn,{passive:true});
       w.addEventListener("mousedown",dn);
+      // Speed-based fling: own touch tracking + momentum so a hard flick travels the whole drum,
+      // a gentle one moves a few rows. Tune FLING_GAIN (more reach) / FLING_FRICTION (higher = stops sooner).
+      var FLING_GAIN=2.4,FLING_FRICTION=0.0055,maxTop=(list.length-1)*WH;
+      var tY=0,tS=0,smp=[],raf=0,touching=false;
+      function clampTop(v){return Math.max(0,Math.min(maxTop,v));}
+      function stopAnim(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+      function settle(){
+        var from=w.scrollTop,to=clampTop(Math.round(from/WH)*WH),t0=0;
+        if(Math.abs(to-from)<0.5){w.scrollTop=to;w.style.scrollSnapType="y mandatory";return;}
+        (function step(ts){
+          if(!t0)t0=ts;var k=Math.min(1,(ts-t0)/110);
+          w.scrollTop=from+(to-from)*(1-Math.pow(1-k,3));
+          if(k<1)raf=requestAnimationFrame(step);else{raf=0;w.style.scrollSnapType="y mandatory";}
+        })(performance.now());
+      }
+      function fling(v){
+        var last=0;
+        (function step(ts){
+          if(!last){last=ts;raf=requestAnimationFrame(step);return;}
+          var dt=Math.min(32,ts-last);last=ts;
+          var next=w.scrollTop+v*dt;
+          if(next<=0||next>=maxTop){w.scrollTop=clampTop(next);raf=0;settle();return;}
+          w.scrollTop=next;
+          v*=Math.exp(-FLING_FRICTION*dt);
+          if(Math.abs(v)<0.04){raf=0;settle();return;}
+          raf=requestAnimationFrame(step);
+        })(performance.now());
+      }
+      w.addEventListener("touchstart",function(e){
+        stopAnim();w.style.scrollSnapType="none";touching=true;
+        tY=e.touches[0].clientY;tS=w.scrollTop;smp=[{t:e.timeStamp,y:tY}];
+      },{passive:true});
+      w.addEventListener("touchmove",function(e){
+        if(!touching)return;
+        if(e.cancelable)e.preventDefault();
+        var y=e.touches[0].clientY;
+        w.scrollTop=clampTop(tS+(tY-y));
+        smp.push({t:e.timeStamp,y:y});if(smp.length>8)smp.shift();
+      },{passive:false});
+      function endTouch(useVel,tEnd){
+        if(!touching)return;touching=false;
+        var v=0;
+        if(useVel&&smp.length>1){
+          var b=smp[smp.length-1],a=smp[0];
+          for(var i=smp.length-2;i>=0;i--){if(b.t-smp[i].t>100)break;a=smp[i];}
+          var dtm=b.t-a.t;
+          // finger rested before lifting (>90ms since last move) = no fling
+          if(dtm>0&&(tEnd-b.t)<90) v=(a.y-b.y)/dtm; // px/ms, finger up = scroll down
+        }
+        v*=FLING_GAIN;
+        if(Math.abs(v)<0.08)settle();else fling(v);
+      }
+      w.addEventListener("touchend",function(e){endTouch(true,e.timeStamp);},{passive:true});
+      w.addEventListener("touchcancel",function(e){endTouch(false,e.timeStamp);},{passive:true});
       setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();lastI=idx();setTimeout(function(){ready=true;},120);},30);
       return w;
     }
