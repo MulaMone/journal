@@ -6108,8 +6108,7 @@ function chartTab(){
     ? sym+" — "+TF_LBL(tf)+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
     : sym+" — "+TF_LBL(tf);
   sh.appendChild(shText);
-  var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;";liveTag.innerHTML=eodOnly?"EOD":"● LIVE";
-  sh.appendChild(liveTag);
+  if(eodOnly){var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;";liveTag.innerHTML="EOD";sh.appendChild(liveTag);} // "● LIVE" removed (was static, never updated); 10Y keeps EOD
   hrow.appendChild(sh);
   var ctrlRow=div("row gap8");
   // No horizontal scroll here, and this row holds a LOT of buttons (5
