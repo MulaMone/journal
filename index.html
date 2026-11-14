@@ -11102,7 +11102,7 @@ function buildFedFundsView(data,isM){
           return o;
         }
         function histChip(label,fromRec,toMoveVal,daysBack){
-        var wrap=div();wrap.style.cssText="min-width:240px;";
+        var wrap=div();wrap.style.cssText="min-width:190px;";
         var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:3px;";lbl.textContent=label;
         wrap.appendChild(lbl);
         var tgtISO=fromRec&&fromRec.dateISO;
@@ -11119,13 +11119,13 @@ function buildFedFundsView(data,isM){
           keys.forEach(function(bp){
             var f=fromB[bp]||0,t=toB[bp]||0;
             if(f<0.5&&t<0.5) return;
-            var row=div();row.style.cssText="display:flex;gap:6px;align-items:baseline;font-family:Courier New,monospace;margin-top:2px;white-space:nowrap;";
-            var nm=document.createElement("span");nm.style.cssText="font-size:9px;color:var(--text3);min-width:112px;";
+            var row=div();row.style.cssText="display:flex;gap:4px;align-items:baseline;font-family:Courier New,monospace;margin-top:2px;white-space:nowrap;";
+            var nm=document.createElement("span");nm.style.cssText="font-size:8px;color:var(--text3);min-width:84px;";
             var lo=baseLoBp+bp;nm.textContent=lo+"–"+(lo+25)+(bp===0?" (Current)":"");
             var d=fmtFedDelta(f,t);
-            var v=document.createElement("span");v.style.cssText="font-size:12px;font-weight:700;color:"+d.col+";";
+            var v=document.createElement("span");v.style.cssText="font-size:11px;font-weight:700;color:"+d.col+";";
             v.textContent=f.toFixed(0)+"% → "+t.toFixed(0)+"%";
-            var dv=document.createElement("span");dv.style.cssText="font-size:10px;font-weight:700;color:"+d.col+";";dv.textContent=d.txt;
+            var dv=document.createElement("span");dv.style.cssText="font-size:9px;font-weight:700;color:"+d.col+";";dv.textContent=d.txt;
             row.appendChild(nm);row.appendChild(v);row.appendChild(dv);wrap.appendChild(row);
           });
         }
@@ -11140,7 +11140,7 @@ function buildFedFundsView(data,isM){
         while(card.firstChild) fomcLeft.appendChild(card.firstChild);
         card.style.display="flex";card.style.gap="28px";card.style.alignItems="stretch";card.style.flexWrap="wrap";
         var fomcDivider=div();fomcDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;";
-        histRow.style.cssText="display:flex;gap:28px;align-items:flex-start;flex:1;";
+        histRow.style.cssText="display:flex;gap:12px;align-items:flex-start;flex:1;";
         card.appendChild(fomcLeft);card.appendChild(fomcDivider);card.appendChild(histRow);
         var cdDivider=div();cdDivider.style.cssText="width:1px;background:var(--border);align-self:stretch;margin-left:auto;";
         histRow.appendChild(cdDivider);histRow.appendChild(buildFomcCountdown(meetingIso));
