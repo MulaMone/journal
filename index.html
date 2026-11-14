@@ -7298,36 +7298,41 @@ function chartTab(){
           numLines.push(series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?lc:undefined),title:(m<100?"0":"")+m}));
         }
         // The library has no label border option, so outline the big-level price boxes (and repaint their tags) ourselves.
-        // Label placement follows the library's own rule: pinned to the edge when less than half a label is off screen, hidden beyond that.
+        // Sizes/positions mirror the library's own label geometry; edge handling: pinned if < half a label off screen, hidden beyond.
         try{series.attachPrimitive({
           _lbl:function(sc,b){
             var vr=sc.verticalPixelRatio,H=sc.bitmapSize.height/vr,fs=12,h=fs+2*(2.5/12*fs),hh=Math.floor(h/2);
             var y=series.priceToCoordinate(b.price);if(y==null||y<=-hh||y>=H+hh)return null;
             if(y<hh)y=hh;else if(y>H-hh)y=H-hh;
-            return {y0:Math.round((y-h/2)*vr),hh:Math.round(h*vr)};
+            var tick=Math.max(1,Math.floor(vr)),tot=Math.round(h*vr);if(tot%2!==tick%2)tot+=1;
+            var mid=Math.round(y*vr)-Math.floor(vr*0.5);
+            return {y0:Math.floor(mid+tick/2-tot/2),hh:tot};
           },
           _av:null,_pv:null,
           priceAxisPaneViews:function(){var me=this;return this._av||(this._av=[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
             if(hideNums) return;
             target.useBitmapCoordinateSpace(function(sc){
-              var ctx=sc.context,hr=sc.horizontalPixelRatio;
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,W=sc.bitmapSize.width;
+              ctx.font=Math.round(12*hr)+"px "+chart.options().layout.fontFamily;
               bigOutline.forEach(function(b){
                 var L=me._lbl(sc,b);if(!L)return;
+                var txt;try{txt=series.priceFormatter().format(b.price);}catch(e){txt=b.price.toFixed(2);}
+                var xr=Math.min(W,Math.round((Math.ceil(ctx.measureText(txt).width/hr)+16)*hr)); // price box is left-aligned: text + 1 border + 5 + 5 padding + 5 tick
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
-                var W=sc.bitmapSize.width;ctx.beginPath();ctx.moveTo(0,L.y0+0.5);ctx.lineTo(W-0.5,L.y0+0.5);ctx.lineTo(W-0.5,L.y0+L.hh-0.5);ctx.lineTo(0,L.y0+L.hh-0.5);ctx.stroke(); // open on the left: joins the tag
+                ctx.beginPath();ctx.moveTo(0,L.y0+0.5);ctx.lineTo(xr-0.5,L.y0+0.5);ctx.lineTo(xr-0.5,L.y0+L.hh-0.5);ctx.lineTo(0,L.y0+L.hh-0.5);ctx.stroke(); // open on the left: joins the tag
               });
             });
           }};}}]);},
           paneViews:function(){var me=this;return this._pv||(this._pv=[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
             if(hideNums) return;
             target.useBitmapCoordinateSpace(function(sc){
-              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio;
-              ctx.font=Math.round(12*vr)+"px "+chart.options().layout.fontFamily;
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,W=sc.bitmapSize.width;
+              ctx.font=Math.round(12*hr)+"px "+chart.options().layout.fontFamily;
               bigOutline.forEach(function(b){
                 var L=me._lbl(sc,b);if(!L)return;
-                var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr),x0=sc.bitmapSize.width-w;
-                var rr=Math.round(2*hr);ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,w,L.hh,[rr,0,0,rr]);else ctx.rect(x0,L.y0,w,L.hh);ctx.fill();
-                ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(b.title,x0+w/2,L.y0+L.hh/2+Math.round(0.5*vr));
+                var wc=Math.ceil(ctx.measureText(b.title).width/hr)+11,xr=W-Math.round(hr),x0=xr-Math.round(wc*hr),rr=Math.round(2*hr); // tag = text + 1 + 5 + 5, 1px seam at its right
+                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,xr-x0,L.hh,[rr,0,0,rr]);else ctx.rect(x0,L.y0,xr-x0,L.hh);ctx.fill();
+                ctx.fillStyle="#000";ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(b.title,W-Math.round(7*hr),L.y0+L.hh/2+Math.round(0.5*hr));
               });
             });
           }};}}]);},
