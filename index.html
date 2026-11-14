@@ -7845,17 +7845,19 @@ function chartTab(){
       })();
 
       // ── BTC only: 50 EMAs from 1w / 1d / 8h / 1h / 5m, drawn on every chart timeframe ──
-      // Each EMA(50) is built from Coinbase candles of ITS OWN timeframe. One higher than the chart waits for its
-      // bar to complete (flat until the bar closes, with a price line); equal / lower ones track the live bar.
-      // The 1h EMA is green while rising and red while falling. The 5m and 1h EMAs are dashed. Tag = timeframe, on the price axis.
+      // Each EMA(50) is built from Coinbase candles of ITS OWN timeframe. One higher than the chart waits for its bar to
+      // complete (with a price line across); equal / lower ones track the live bar. 1h is green while rising / red while falling.
+      // 5m and 1h are dashed. The tag (timeframe) sits at the end of each line.
+      // Drawn as a canvas overlay on the candle series (same mechanism as the Wednesday bands above) — NOT as chart series,
+      // so it never touches the chart's time scale / data (adding series after load was blanking the desktop candles).
       if(sym==="BTC") (function(){
-        var LS=LightweightCharts.LineStyle,EMA_N=50,K=2/(EMA_N+1),UP="#22c55e",DN="#ef4444";
+        var EMA_N=50,K=2/(EMA_N+1),UP="#22c55e",DN="#ef4444";
         var SPECS=[
           {tf:"5m",g:"M5",per:300,col:"#facc15",n:1200,dash:true,w:1},
           {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true,dash:true,w:2},
-          {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700},
-          {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260},
-          {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600}
+          {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700,w:2},
+          {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260,w:2},
+          {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600,w:2}
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
@@ -7874,18 +7876,17 @@ function chartTab(){
           while(lo<=hi){var m=(lo+hi)>>1;if(strict?b[m].t<lim:b[m].t<=lim){r=m;lo=m+1;}else hi=m-1;}
           return r;
         }
-        function ptAt(sp,t){ // EMA point for chart candle at time t
+        function ptAt(sp,t){ // EMA value for chart candle at time t
           var b=sp.bars,j;
           if(sp.per>periodSec){ // higher timeframe than the chart: last COMPLETED bar only
             var k=lastIdx(b,t,false);
             j=k<0?-1:((b[k].t+sp.per<=t)?k:k-1);
           } else j=lastIdx(b,t+periodSec,true); // same / lower: latest bar inside this candle, live one included
-          if(j<0||sp.ema[j]==null) return null;
-          return {time:t,value:sp.ema[j]};
+          return (j<0||sp.ema[j]==null)?null:sp.ema[j];
         }
-        function buildPts(sp){ // [{time,value,ci}] at chart-candle times only (ci = candle index)
+        function buildPts(sp){ // [{time,value}] at chart-candle times only
           var pts=[],n=candles.length,i;
-          if(sp.per>periodSec){ // one point per completed higher-timeframe bar, joined by a plain line (no stairs)
+          if(sp.per>periodSec){ // one point per completed higher-timeframe bar, joined by a plain line
             var c0=candles[0].time,seed=null,lastCi=-1,B=sp.bars;
             for(var j=0;j+1<B.length;j++){
               if(sp.ema[j]==null) continue;
@@ -7894,31 +7895,88 @@ function chartTab(){
               var lo=0,hi=n-1,ci=-1;
               while(lo<=hi){var m=(lo+hi)>>1;if(candles[m].time>=tc){ci=m;hi=m-1;}else lo=m+1;}
               if(ci<0) break;
-              if(seed!=null){pts.push({time:c0,value:seed,ci:0});lastCi=0;seed=null;}
-              if(ci>lastCi){pts.push({time:candles[ci].time,value:sp.ema[j],ci:ci});lastCi=ci;}
+              if(seed!=null){pts.push({time:c0,value:seed});lastCi=0;seed=null;}
+              if(ci>lastCi){pts.push({time:candles[ci].time,value:sp.ema[j]});lastCi=ci;}
             }
             var pe=ptAt(sp,candles[n-1].time);
-            if(pe){
-              if(pts.length&&pts[pts.length-1].ci===n-1) pts[pts.length-1].value=pe.value;
-              else pts.push({time:pe.time,value:pe.value,ci:n-1});
+            if(pe!=null){
+              if(lastCi===n-1) pts[pts.length-1].value=pe;
+              else pts.push({time:candles[n-1].time,value:pe});
             }
           } else {
-            for(i=0;i<n;i++){var p=ptAt(sp,candles[i].time);if(p) pts.push({time:p.time,value:p.value,ci:i});}
+            for(i=0;i<n;i++){var v=ptAt(sp,candles[i].time);if(v!=null) pts.push({time:candles[i].time,value:v});}
           }
           return pts;
         }
-        function plain(pts){return pts.map(function(p){return {time:p.time,value:p.value};});}
-        function draw(sp){ // same plain line-series pattern the other chart overlays use
-          var step=sp.per>periodSec,pts=buildPts(sp);
-          if(!pts.length) return;
-          var col=sp.col;
-          if(sp.dir) col=(pts.length>1&&pts[pts.length-1].value<pts[pts.length-2].value)?DN:UP; // 1h: red if falling now, green if rising
-          var o={color:col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
-          if(sp.dash) o.lineStyle=LS.Dashed;
-          var ls=chart.addLineSeries(o);
-          ls.setData(plain(pts));
-          if(step) ls.createPriceLine({price:pts[pts.length-1].value,color:col,lineWidth:1,lineStyle:sp.dash?LS.Dashed:LS.Dotted,axisLabelVisible:false,title:""}); // higher timeframe: price line across the chart
-        }
+        var _emaRepaint=null;
+        var emaPrimitive={
+          attached:function(param){_emaRepaint=param.requestUpdate;},
+          detached:function(){_emaRepaint=null;},
+          paneViews:function(){
+            return [{
+              zOrder:function(){return "normal";},
+              renderer:function(){
+                return {
+                  draw:function(target){
+                    target.useMediaCoordinateSpace(function(scope){
+                      var ctx=scope.context,W=scope.mediaSize.width,H=scope.mediaSize.height,ts=chart.timeScale();
+                      ctx.save();
+                      ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
+                      ctx.font="bold 10px 'Courier New',monospace";ctx.textBaseline="middle";
+                      SPECS.forEach(function(sp){
+                        var pts=sp.pts;
+                        if(!pts||!pts.length) return;
+                        var xs=[],ys=[],i,x,y;
+                        for(i=0;i<pts.length;i++){
+                          x=ts.timeToCoordinate(pts[i].time);y=series.priceToCoordinate(pts[i].value);
+                          xs.push(x);ys.push(y);
+                        }
+                        ctx.lineWidth=sp.w;ctx.lineJoin="round";ctx.setLineDash(sp.dash?[6,4]:[]);
+                        if(sp.dir){ // 1h: each segment green if rising, red if falling
+                          for(i=1;i<pts.length;i++){
+                            if(xs[i]==null||ys[i]==null||xs[i-1]==null||ys[i-1]==null) continue;
+                            ctx.strokeStyle=pts[i].value<pts[i-1].value?DN:UP;
+                            ctx.beginPath();ctx.moveTo(xs[i-1],ys[i-1]);ctx.lineTo(xs[i],ys[i]);ctx.stroke();
+                          }
+                        } else {
+                          ctx.strokeStyle=sp.col;ctx.beginPath();
+                          var pen=false;
+                          for(i=0;i<pts.length;i++){
+                            if(xs[i]==null||ys[i]==null){pen=false;continue;}
+                            if(pen) ctx.lineTo(xs[i],ys[i]); else {ctx.moveTo(xs[i],ys[i]);pen=true;}
+                          }
+                          ctx.stroke();
+                        }
+                        var li=pts.length-1;
+                        while(li>=0&&(xs[li]==null||ys[li]==null)) li--;
+                        if(li<0) return;
+                        var lastV=pts[li].value,col=sp.col;
+                        if(sp.dir&&li>0) col=lastV<pts[li-1].value?DN:UP;
+                        ctx.setLineDash([]);
+                        // higher-than-chart timeframe: price line across the whole chart at the current value
+                        if(sp.per>periodSec&&ys[li]>=0&&ys[li]<=H){
+                          ctx.globalAlpha=0.55;ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([2,3]);
+                          ctx.beginPath();ctx.moveTo(0,ys[li]);ctx.lineTo(W,ys[li]);ctx.stroke();
+                          ctx.setLineDash([]);ctx.globalAlpha=1;
+                        }
+                        // tag at the end of the line (arrow + clamped to the edge when the line is off-screen)
+                        var ty=ys[li],txt=sp.tf;
+                        if(ty<8){ty=8;txt="↑"+sp.tf;} else if(ty>H-8){ty=H-8;txt="↓"+sp.tf;}
+                        var tw=ctx.measureText(txt).width,tx=xs[li]+6;
+                        if(tx+tw>W-2) tx=Math.max(2,W-tw-2);
+                        ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(tx-2,ty-7,tw+4,14);
+                        ctx.fillStyle=col;ctx.fillText(txt,tx,ty);
+                      });
+                      ctx.restore();
+                    });
+                  }
+                };
+              }
+            }];
+          }
+        };
+        series.attachPrimitive(emaPrimitive);
+        function refresh(sp){sp.pts=buildPts(sp);if(_emaRepaint) _emaRepaint();}
         function load(sp){
           var c=store[sp.tf];
           if(c&&Date.now()-c.at<300000) return Promise.resolve(c.bars);
@@ -7930,10 +7988,23 @@ function chartTab(){
             if(myLoadToken!==_chartLoadToken) return;
             return load(sp).then(function(b){
               if(myLoadToken!==_chartLoadToken||b.length<=EMA_N) return;
-              sp.bars=b;sp.ema=emaOf(b);draw(sp);
+              sp.bars=b;sp.ema=emaOf(b);refresh(sp);
             }).catch(function(){});
           });
         });
+        // Live: every 30s patch each timeframe's newest bars and repaint.
+        var timer=setInterval(function(){
+          if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
+          SPECS.forEach(function(sp){
+            if(!sp.bars) return;
+            chartFetchJson(urlFor(sp,3)).then(function(d){
+              if(myLoadToken!==_chartLoadToken) return;
+              var b=sp.bars;
+              toBars(d).forEach(function(x){var i=lastIdx(b,x.t,false);if(i>=0&&b[i].t===x.t) b[i]=x;else if(i===b.length-1) b.push(x);});
+              sp.ema=emaOf(b);refresh(sp);
+            }).catch(function(){});
+          });
+        },30000);
       })();
 
       // ── Previous YEAR high / low (PYH / PYL): US10Y EOD (1d/1w) and every other symbol on 1w; 1w non-EOD also gets the close (PYC) ──
