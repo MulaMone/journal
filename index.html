@@ -1084,10 +1084,27 @@ function chartIdbPut(key,val){ // fire and forget
 // Mirrors how chartTab builds its plain "latest N candles" request (URL, alignment, trade-anchored count); if this
 // ever drifts from chartTab the only effect is a cache miss and a normal fetch. Never throws, never blocks.
 var CHART_PERIOD_SEC={"2m":120,"5m":300,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800};
+// ICE USDX formula over the six OANDA legs; res = array of {candles} in OANDA_DXY_PAIRS order. Only candle times present in every leg are kept.
+function dxyCombineLegs(res){
+  var maps=res.map(function(d){var m={};((d&&d.candles)||[]).forEach(function(c){if(c.mid)m[c.time]=c.mid;});return m;});
+  var out=[];
+  ((res[0]&&res[0].candles)||[]).forEach(function(c0){
+    var t=c0.time,ok=true;
+    maps.forEach(function(m){if(!m[t])ok=false;});
+    if(!ok) return;
+    var vals=["o","h","l","c"].map(function(k){
+      var v=50.14348112;
+      OANDA_DXY_PAIRS.forEach(function(p,i){v*=Math.pow(parseFloat(maps[i][t][k]),p.weight);});
+      return v;
+    });
+    out.push({time:t,complete:c0.complete,mid:{o:vals[0],h:Math.max.apply(null,vals),l:Math.min.apply(null,vals),c:vals[3]}});
+  });
+  return out;
+}
 function chartPrefetchView(sym,tf){
   try{
     var ps=CHART_PERIOD_SEC[tf];
-    if(!ps||!sym||sym==="DXY"||sym==="US10Y") return Promise.resolve();
+    if(!ps||!sym||sym==="US10Y") return Promise.resolve();
     var tok=ls("oanda_token","");
     if(!tok||navigator.onLine===false) return Promise.resolve();
     if(navigator.connection&&navigator.connection.saveData) return Promise.resolve();
@@ -1113,11 +1130,18 @@ function chartPrefetchView(sym,tf){
       if(fs>=te) fs=te-ps;
       n=Math.min(5000,Math.max(50,Math.ceil((nowS-fs)/ps)+5));
     }
-    var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n&&Date.now()-e.t<1800000);};
+    var slack=sym==="DXY"?20:0; // DXY keeps only candle times common to all six legs, so it can come back a few bars short
+    var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n-slack&&Date.now()-e.t<1800000);};
     if(fresh(_chartCache[key])) return Promise.resolve();
     return chartIdbGet(key).then(function(e){
       if(fresh(e)){_chartCache[key]=e;return;}
-      return (inst==="BTCUSD_CB"?btcCandles(key+"&count="+n):fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;})).then(function(d){
+      var getJ=function(u){return fetch(u,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;});};
+      var src=inst==="BTCUSD_CB"?btcCandles(key+"&count="+n)
+        :sym==="DXY"?Promise.all(OANDA_DXY_PAIRS.map(function(p){return getJ(key.replace("/instruments/DXY/","/instruments/"+p.inst+"/")+"&count="+n);})).then(function(res){
+            for(var i=0;i<res.length;i++) if(!res[i]||!res[i].candles) return null;
+            return {candles:dxyCombineLegs(res)};})
+        :getJ(key+"&count="+n);
+      return src.then(function(d){
         if(!d||!d.candles||!d.candles.length) return;
         var ent={t:Date.now(),n:n,data:d};
         _chartCache[key]=ent;chartIdbPut(key,ent);
@@ -6753,23 +6777,7 @@ function chartTab(){
     return Promise.all(OANDA_DXY_PAIRS.map(function(p){
       return one(u.replace("/instruments/DXY/","/instruments/"+p.inst+"/"));
     })).then(function(res){
-      var maps=res.map(function(d){
-        var m={};
-        ((d&&d.candles)||[]).forEach(function(c){ if(c.mid) m[c.time]=c.mid; });
-        return m;
-      });
-      var out=[];
-      ((res[0]&&res[0].candles)||[]).forEach(function(c0){
-        var t=c0.time, ok=true;
-        maps.forEach(function(m){ if(!m[t]) ok=false; });
-        if(!ok) return;
-        var vals=["o","h","l","c"].map(function(k){
-          var v=50.14348112;
-          OANDA_DXY_PAIRS.forEach(function(p,i){ v*=Math.pow(parseFloat(maps[i][t][k]),p.weight); });
-          return v;
-        });
-        out.push({time:t,complete:c0.complete,mid:{o:vals[0],h:Math.max.apply(null,vals),l:Math.min.apply(null,vals),c:vals[3]}});
-      });
+      var out=dxyCombineLegs(res);
       return Promise.resolve(addHist({candles:out})).then(yrAgg);
     });
   }
@@ -6785,7 +6793,7 @@ function chartTab(){
     // candles since the cached last one and apply them with series.update() (see "delta refresh" below).
     // Key ignores the count (it drifts as time passes); an entry is usable if it was fetched with at least the
     // count this view needs. Memory first, then IndexedDB (survives a page refresh).
-    var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&sym!=="DXY"&&url.indexOf("&count=")>=0;
+    var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&url.indexOf("&count=")>=0;
     var ckey=cacheable?url.replace(/&count=\d+/,""):"";
     var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
     // Trade-anchored views ask for ~1 more bar per elapsed candle, which the delta refresh supplies — so count the
