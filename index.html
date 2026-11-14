@@ -1045,6 +1045,7 @@ var _chartCountdownTimer=null; // 1s ticker for the "time until this bar closes"
 // stale and no-op, instead of mutating the chart/live-poll state for the
 // wrong instrument if its response happens to arrive after a newer one's.
 var _chartLoadToken=0;
+var _chartCache={}; // url -> {t, data}: last OANDA candle response per chart view, so switching back paints instantly
 var _chartStreamAbort=null; // OANDA tick stream for the chart; aborted on every chart reload / tab leave
 var _chartLive=null;      // {chart,moved} for the chart currently on screen
 var _chartKeepView=null;  // {from,to} carried across a timeframe switch
@@ -6532,8 +6533,17 @@ function chartTab(){
     clearInterval(_chartCountdownTimer);
     if(_chartStreamAbort){try{_chartStreamAbort.abort();}catch(e){}_chartStreamAbort=null;}
     // candle fetch runs in parallel with the chart library download; only the render waits for the library
-    chartFetchJson(url,monthlyFetch)
-    .then(function(d){return libP.then(function(){return d;});})
+    // Cache hit (<1h old, plain "latest N candles" views only): paint from cache now, then pull only the
+    // candles since the cached last one and apply them with series.update() (see "delta refresh" below).
+    var cacheable=!focusTs&&!monthlyFetch&&!eodOnly&&sym!=="DXY"&&url.indexOf("&count=")>=0;
+    var _cc=cacheable?_chartCache[url]:null;
+    var fromCache=!!(_cc&&Date.now()-_cc.t<3600000);
+    var chartP=fromCache?Promise.resolve(_cc.data):chartFetchJson(url,monthlyFetch);
+    chartP
+    .then(function(d){
+      if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length) _cc=_chartCache[url]={t:Date.now(),data:d};
+      return libP.then(function(){return d;});
+    })
     .then(function(data){
       // A symbol/timeframe switch since this fetch started means a newer
       // chartTab() call is now the current one — let that one own the DOM
@@ -7930,6 +7940,29 @@ function chartTab(){
           });
         };
         connectStream();
+      }
+
+      // ── Delta refresh after a cache paint: fetch only candles since the cached last one ──
+      if(fromCache&&raw.length){
+        var _lastRaw=raw[raw.length-1].time;
+        var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(_lastRaw)+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+        chartFetchJson(dUrl).then(function(dd){
+          if(myLoadToken!==_chartLoadToken) return;
+          var fc=(dd&&dd.candles)||[];
+          if(!fc.length) return;
+          fc.forEach(function(c){
+            var cu=Math.floor(new Date(c.time).getTime()/1000),cs=cu-etOff(cu);
+            if(cs<lastBarTime) return;
+            var b={time:cs,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+            try{series.update(b);}catch(e){return;}
+            lastBarTime=cs;liveBar=b;barEndTrue=cu+periodSec;
+          });
+          currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+liveBar.close+'</span>';
+          renderCountdown();
+          _cc.data.candles=_cc.data.candles.filter(function(x){return x.time<_lastRaw;}).concat(fc).slice(-5000);
+          _cc.t=Date.now();
+        }).catch(function(){});
       }
 
       clearInterval(_chartLiveTimer);
