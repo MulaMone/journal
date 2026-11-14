@@ -6000,14 +6000,25 @@ function btcPool(jobs,limit){
   for(var c=0;c<Math.min(limit,jobs.length);c++) ws.push(next());
   return Promise.all(ws).then(function(){return out;});
 }
+// Coinbase's public limit is ~10 req/s per IP. A 30m chart is rolled up from 15m rows (~30 pages), and the EMA overlay +
+// timeframe prefetch hit the same API at the same time, so bursts got 429'd (no CORS headers -> "Failed to fetch") and one
+// dead page failed the whole candle load. Every Coinbase request now goes through one shared gate (<=~8/s).
+var _btcGateAt=0;
+function btcGate(){
+  var now=Date.now(),at=Math.max(now,_btcGateAt);
+  _btcGateAt=at+120;
+  return new Promise(function(res){setTimeout(res,at-now);});
+}
 function btcCbPage(g,s,e,n){ // rows [t(s),low,high,open,close,vol], newest first, <=300
   n=n||0;
-  return fetch(BTC_CB+g+"&start="+encodeURIComponent(new Date(s).toISOString())+"&end="+encodeURIComponent(new Date(e).toISOString())).then(function(r){
+  return btcGate().then(function(){
+    return fetch(BTC_CB+g+"&start="+encodeURIComponent(new Date(s).toISOString())+"&end="+encodeURIComponent(new Date(e).toISOString()));
+  }).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).catch(function(err){
-    if(n>=4) throw err;
-    return new Promise(function(res){setTimeout(res,600*(n+1));}).then(function(){return btcCbPage(g,s,e,n+1);});
+    if(n>=6) throw err;
+    return new Promise(function(res){setTimeout(res,800*(n+1));}).then(function(){return btcCbPage(g,s,e,n+1);});
   });
 }
 function btcCbRange(g,startMs,endMs,fromEnd){ // all Coinbase rows for [startMs,endMs], paged 300 at a time, max 40 pages
