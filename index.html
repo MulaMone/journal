@@ -7286,16 +7286,46 @@ function chartTab(){
 
       // ── Intraday mode, NQ only: 000 / 250 / 500 / 750 round levels around price ──
       if(intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
-        var STEP=250,lo=Infinity,hi=-Infinity,numLines=[];
+        var STEP=250,lo=Infinity,hi=-Infinity,numLines=[],bigOutline=[];
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
         lo-=1000;hi+=1000; // pad so zooming out / scrolling still shows levels
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          var bigLvl=(p%2500===0); // 20000 / 22500 / 25000... keep the line's own color, inverted label (chart-bg box, line-colored digits)
+          var bigLvl=(p%2500===0); if(bigLvl) bigOutline.push({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",title:(m<100?"0":"")+m}); // 20000 / 22500 / 25000... keep the line's own color, inverted label (chart-bg box, line-colored digits)
           numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?(big?"#ffd24a":half?"#ff9f1a":"#22e5ff"):undefined),title:(m<100?"0":"")+m}));
         }
+        // outline around the inverted big-level axis labels (the library has no label border option)
+        try{series.attachPrimitive({
+          _v:[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
+            if(hideNums) return;
+            target.useBitmapCoordinateSpace(function(sc){
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
+              bigOutline.forEach(function(b){
+                var y=series.priceToCoordinate(b.price);if(y==null)return;
+                ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
+                ctx.strokeRect(0.5,Math.round((y-h/2)*vr)+0.5,sc.bitmapSize.width-1.5,Math.round(h*vr)-1);
+              });
+            });
+          }};}}],
+          priceAxisPaneViews:function(){return this._v;},
+          paneViews:function(){return this._pv;},
+          _pv:[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
+            if(hideNums) return;
+            target.useBitmapCoordinateSpace(function(sc){
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
+              ctx.font=Math.round(fs*vr)+"px "+chart.options().layout.fontFamily;
+              bigOutline.forEach(function(b){
+                var y=series.priceToCoordinate(b.price);if(y==null)return;
+                var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr);
+                ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
+                ctx.strokeRect(sc.bitmapSize.width-w+0.5,Math.round((y-h/2)*vr)+0.5,w-1.5,Math.round(h*vr)-1);
+              });
+            });
+          }};}}],
+          updateAllViews:function(){}
+        });}catch(e){}
         applyNumVisibility=function(){numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});};
         applyNumVisibility();
       })();
