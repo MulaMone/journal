@@ -8092,7 +8092,7 @@ function chartTab(){
             return chartPrefetchView(sym,t);
           });
         });
-      },2000);
+      },800);
 
       console.log("[chart] "+sym+" "+tf+(fromCache?" (cache)":"")+": fetch "+Math.round(_tFetch-_tp0)+"ms, lib wait "+Math.round(_tLib-_tFetch)+"ms, build "+Math.round(performance.now()-_tLib)+"ms, total "+Math.round(performance.now()-_tp0)+"ms");
 
@@ -14374,7 +14374,7 @@ var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
 // First render is now triggered by the cloud loader above
 // Warm the chart cache for the default chart view (NQ 1h) so the first Chart tab open is instant.
-setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_interval||"1h");},2000);
+setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_interval||"1h");},1000);
 
 
 </script>
