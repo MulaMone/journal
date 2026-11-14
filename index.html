@@ -1076,6 +1076,52 @@ function chartIdbPut(key,val){ // fire and forget
     try{db.transaction("c","readwrite").objectStore("c").put(val,key);}catch(e){}
   });
 }
+
+// Background pre-load of one chart view into the cache (memory + IndexedDB) so the first open of it is instant.
+// Mirrors how chartTab builds its plain "latest N candles" request (URL, alignment, trade-anchored count); if this
+// ever drifts from chartTab the only effect is a cache miss and a normal fetch. Never throws, never blocks.
+var CHART_PERIOD_SEC={"2m":120,"5m":300,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800};
+function chartPrefetchView(sym,tf){
+  try{
+    var ps=CHART_PERIOD_SEC[tf];
+    if(!ps||!sym||sym==="DXY"||sym==="US10Y") return Promise.resolve();
+    var tok=ls("oanda_token","");
+    if(!tok||navigator.onLine===false) return Promise.resolve();
+    if(navigator.connection&&navigator.connection.saveData) return Promise.resolve();
+    var inst=OANDA_SYMS[sym]||"SPX500_USD",gran=OANDA_GRAN[tf];
+    if(!gran) return Promise.resolve();
+    var da=["ES","NQ","MES","MNQ","CL","GC","NG"].indexOf(sym)>-1?18:17;
+    var key=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+da+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+    // how many bars chartTab would ask for
+    var lb=(tf==="2m"||tf==="5m")?600:(tf==="1w"?260:500),n=lb,nowS=Math.floor(Date.now()/1000);
+    var fam=({ES:["ES","US500"],NQ:["NQ","US100"]})[sym]||[sym],first=null;
+    activeTrades().forEach(function(t){
+      if(fam.indexOf(t.inst)<0) return;
+      var d=tradeTs(t),a=d?Math.floor(d.getTime()/1000):NaN;
+      if(t.entry!=null&&isFinite(a)&&(first==null||a<first)) first=a;
+      if(t.xdate&&t.xtime&&t.exit!=null){
+        var xd=tradeExitTs(t),b=xd?Math.floor(xd.getTime()/1000):NaN;
+        if(isFinite(b)&&(first==null||b<first)) first=b;
+      } else if(t.exit!=null&&isFinite(a)&&(first==null||a<first)) first=a;
+    });
+    if(first!=null){
+      var fs=Math.min(first-ps*20,nowS-ps*lb),te=nowS-120;
+      if(te-fs>ps*4500) fs=te-ps*4500;
+      if(fs>=te) fs=te-ps;
+      n=Math.min(5000,Math.max(50,Math.ceil((nowS-fs)/ps)+5));
+    }
+    var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n&&Date.now()-e.t<CHART_CACHE_TTL/2);};
+    if(fresh(_chartCache[key])) return Promise.resolve();
+    return chartIdbGet(key).then(function(e){
+      if(fresh(e)){_chartCache[key]=e;return;}
+      return fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;}).then(function(d){
+        if(!d||!d.candles||!d.candles.length) return;
+        var ent={t:Date.now(),n:n,data:d};
+        _chartCache[key]=ent;chartIdbPut(key,ent);
+      });
+    }).catch(function(){});
+  }catch(e){return Promise.resolve();}
+}
 var _chartStreamAbort=null; // OANDA tick stream for the chart; aborted on every chart reload / tab leave
 var _chartLive=null;      // {chart,moved} for the chart currently on screen
 var _chartKeepView=null;  // {from,to} carried across a timeframe switch
@@ -8036,6 +8082,18 @@ function chartTab(){
       // the delta's older candles would be skipped, leaving a gap in the chart.
       if(startStream) (deltaP||Promise.resolve()).then(startStream);
 
+      // Once this view is up, quietly pre-load the other timeframes (one at a time) so switching to them is instant.
+      if(cacheable) setTimeout(function(){
+        var p=Promise.resolve();
+        ["2m","5m","30m","1h","4h","8h","1d","1w"].forEach(function(t){
+          if(t===tf) return;
+          p=p.then(function(){
+            if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return; // navigated away / switched view: stop
+            return chartPrefetchView(sym,t);
+          });
+        });
+      },2000);
+
       console.log("[chart] "+sym+" "+tf+(fromCache?" (cache)":"")+": fetch "+Math.round(_tFetch-_tp0)+"ms, lib wait "+Math.round(_tLib-_tFetch)+"ms, build "+Math.round(performance.now()-_tLib)+"ms, total "+Math.round(performance.now()-_tp0)+"ms");
 
       clearInterval(_chartLiveTimer);
@@ -14315,6 +14373,8 @@ window.addEventListener("resize",function(){
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
 // First render is now triggered by the cloud loader above
+// Warm the chart cache for the default chart view (NQ 1h) so the first Chart tab open is instant.
+setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_interval||"1h");},2000);
 
 
 </script>
