@@ -1117,7 +1117,7 @@ function chartPrefetchView(sym,tf){
     if(fresh(_chartCache[key])) return Promise.resolve();
     return chartIdbGet(key).then(function(e){
       if(fresh(e)){_chartCache[key]=e;return;}
-      return (inst==="BTC_USD"?btcCandles(key+"&count="+n):fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;})).then(function(d){
+      return (inst==="BTCUSD_CB"?btcCandles(key+"&count="+n):fetch(key+"&count="+n,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;})).then(function(d){
         if(!d||!d.candles||!d.candles.length) return;
         var ent={t:Date.now(),n:n,data:d};
         _chartCache[key]=ent;chartIdbPut(key,ent);
@@ -5951,26 +5951,48 @@ function loadNTFile(){
 // OANDA practice-account token for chart data only; your trades still
 // come from your own trade log (Tradovate/NinjaTrader import), never OANDA.
 var OANDA_ENV_BASE="https://api-fxpractice.oanda.com"; // practice env; swap to api-fxtrade.oanda.com only if you deliberately want a live token here
-var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD",BTC:"BTC_USD"};
+var OANDA_SYMS={ES:"SPX500_USD",MES:"SPX500_USD",NQ:"NAS100_USD",DXY:"DXY",MNQ:"NAS100_USD",CL:"WTICO_USD",GC:"XAU_USD",NG:"NATGAS_USD",BTC:"BTCUSD_CB"};
 var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4","8h":"H8","1d":"D","1w":"W","1m":"M","1y":"M"}; // 1y = monthly bars rolled up by year
-// ── BTC feed: Binance.US klines (24/7), adapted to the OANDA candle JSON shape the chart code already consumes ──
+// ── BTC feed: Coinbase BTC-USD (24/7, true USD, public, no key), adapted to the OANDA candle JSON shape ──
 // OANDA's BTC_USD is closed outside CFD hours, so BTC bypasses OANDA entirely. Takes the same OANDA-style URL
 // (granularity / count / from / to) and returns {candles:[{time,complete,mid:{o,h,l,c}}]}, so the cache, IndexedDB,
-// prefetch, delta refresh and live poll all work unchanged. Pages are fetched in parallel (1000 bars each).
-// Monthly (1M / 1Y) comes from Coinbase BTC-USD daily bars rolled up by month: clean true-USD history back to 2015.
-var BTC_REST="https://api.binance.us/api/v3/klines?symbol=BTCUSDT&limit=1000&interval=";
-var BTC_WS="wss://stream.binance.us:9443/ws/btcusdt@trade";
-var BTC_IV={M2:["1m",60000,2],M5:["5m",300000,1],M15:["15m",900000,1],M30:["30m",1800000,1],H1:["1h",3600000,1],H4:["4h",14400000,1],H8:["8h",28800000,1],D:["1d",86400000,1],W:["1w",604800000,1]};
-var BTC_CB="https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=86400";
+// prefetch, delta refresh and live poll all work unchanged. Coinbase serves 1m/5m/15m/1h/1d (300 bars a call), so
+// 2m / 30m / 4h / 8h / 1w are built by rolling those up; pages are fetched 4 at a time with retry on rate limits.
+var BTC_CB="https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=";
+var BTC_WS="wss://ws-feed.exchange.coinbase.com";
+var BTC_IV={M2:[60,2],M5:[300,1],M15:[900,1],M30:[900,2],H1:[3600,1],H4:[3600,4],H8:[3600,8],D:[86400,1],W:[86400,7]}; // [coinbase granularity s, bars rolled up]
+var BTC_MON0=4*86400000; // weeks start Monday 00:00 UTC (epoch day 0 is a Thursday)
 var _btcHistP=null;
-function btcCbDaily(s,e,n){ // Coinbase daily rows [t,low,high,open,close,vol] for [s,e] (<=300 days), newest first
+function btcPool(jobs,limit){
+  var out=new Array(jobs.length),i=0;
+  function next(){
+    if(i>=jobs.length) return Promise.resolve();
+    var k=i++;
+    return jobs[k]().then(function(r){out[k]=r;return next();});
+  }
+  var ws=[];
+  for(var c=0;c<Math.min(limit,jobs.length);c++) ws.push(next());
+  return Promise.all(ws).then(function(){return out;});
+}
+function btcCbPage(g,s,e,n){ // rows [t(s),low,high,open,close,vol], newest first, <=300
   n=n||0;
-  return fetch(BTC_CB+"&start="+encodeURIComponent(new Date(s).toISOString())+"&end="+encodeURIComponent(new Date(e).toISOString())).then(function(r){
+  return fetch(BTC_CB+g+"&start="+encodeURIComponent(new Date(s).toISOString())+"&end="+encodeURIComponent(new Date(e).toISOString())).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).catch(function(err){
-    if(n>=3) throw err;
-    return new Promise(function(res){setTimeout(res,700*(n+1));}).then(function(){return btcCbDaily(s,e,n+1);});
+    if(n>=4) throw err;
+    return new Promise(function(res){setTimeout(res,600*(n+1));}).then(function(){return btcCbPage(g,s,e,n+1);});
+  });
+}
+function btcCbRange(g,startMs,endMs,fromEnd){ // all Coinbase rows for [startMs,endMs], paged 300 at a time, max 40 pages
+  var gms=g*1000,W=300*gms,wins=[];
+  for(var s=Math.floor(startMs/gms)*gms;s<=endMs;s+=W) wins.push([s,Math.min(endMs,s+W-gms)]);
+  if(wins.length>40) wins=fromEnd?wins.slice(-40):wins.slice(0,40);
+  return btcPool(wins.map(function(w){return function(){return btcCbPage(g,w[0],w[1]);};}),4).then(function(pages){
+    var seen={},rows=[];
+    pages.forEach(function(pg){(pg||[]).forEach(function(r){if(!seen[r[0]]){seen[r[0]]=1;rows.push(r);}});});
+    rows.sort(function(a,b){return a[0]-b[0];});
+    return rows;
   });
 }
 function btcMonthAgg(rows){ // daily rows -> ascending monthly {t,o,h,l,c} (UTC months)
@@ -5982,34 +6004,24 @@ function btcMonthAgg(rows){ // daily rows -> ascending monthly {t,o,h,l,c} (UTC 
   });
   return out;
 }
-function btcMonthly(n){
-  var now=new Date(),cut=Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-3,1),DAY=86400000,W=299*DAY,LS="edge_btc_hist_v1";
+function btcMonthly(n){ // 1M: Coinbase daily bars rolled up by month, back to Jul 2015
+  var now=new Date(),cut=Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-3,1),LS="edge_btc_hist_v1";
   if(!_btcHistP||_btcHistP.cut!==cut){
     var cached=null;
     try{cached=JSON.parse(localStorage.getItem(LS)||"null");}catch(e){}
     var p;
     if(cached&&cached.cut===cut&&cached.rows&&cached.rows.length) p=Promise.resolve(cached.rows);
-    else { // closed months before the cut: fetched once (~14 requests, 3 at a time), then kept in localStorage until the cut moves
-      var wins=[];
-      for(var s=Date.UTC(2015,6,1);s<cut;s+=W+DAY) wins.push([s,Math.min(cut-1,s+W)]);
-      var all=[],idx=0;
-      var worker=function(){
-        if(idx>=wins.length) return Promise.resolve();
-        var w=wins[idx++];
-        return btcCbDaily(w[0],w[1]).then(function(r){all=all.concat(r||[]);return worker();});
-      };
-      p=Promise.all([worker(),worker(),worker()]).then(function(){
-        var rows=btcMonthAgg(all);
-        try{localStorage.setItem(LS,JSON.stringify({t:Date.now(),cut:cut,rows:rows}));}catch(e){}
-        return rows;
-      });
-    }
+    else p=btcCbRange(86400,Date.UTC(2015,6,1),cut-1,false).then(function(all){ // closed months before the cut: fetched once, kept in localStorage
+      var rows=btcMonthAgg(all);
+      try{localStorage.setItem(LS,JSON.stringify({t:Date.now(),cut:cut,rows:rows}));}catch(e){}
+      return rows;
+    });
     _btcHistP={cut:cut,p:p};
     p.catch(function(){if(_btcHistP&&_btcHistP.p===p)_btcHistP=null;});
   }
   return _btcHistP.p.then(function(hist){
-    return btcCbDaily(cut,Date.now()).then(function(rec){ // recent months, refreshed on every call (live poll too)
-      var rows=hist.concat(btcMonthAgg(rec||[])),now2=Date.now(),cm=Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),1);
+    return btcCbRange(86400,cut,Date.now(),false).then(function(rec){ // recent months, refreshed on every call (live poll too)
+      var rows=hist.concat(btcMonthAgg(rec)),nw=new Date(),cm=Date.UTC(nw.getUTCFullYear(),nw.getUTCMonth(),1);
       if(rows.length>n) rows=rows.slice(-n);
       return {candles:rows.map(function(x){return {time:new Date(x.t).toISOString(),complete:x.t<cm,mid:{o:String(x.o),h:String(x.h),l:String(x.l),c:String(x.c)}};})};
     });
@@ -6021,36 +6033,21 @@ function btcCandles(u){
   if(q.granularity==="M") return btcMonthly(parseInt(q.count,10)||600);
   var spec=BTC_IV[q.granularity];
   if(!spec) return Promise.reject(new Error("HTTP 400: BTC timeframe not supported"));
-  var iv=spec[0],base=spec[1],agg=spec[2],per=base*agg,now=Date.now();
+  var g=spec[0],gms=g*1000,per=gms*spec[1],off=q.granularity==="W"?BTC_MON0:0,now=Date.now();
+  var bucket=function(ms){return Math.floor((ms-off)/per)*per+off;};
   var n=parseInt(q.count,10)||500,fromMs=q.from?Date.parse(q.from):NaN,toMs=q.to?Date.parse(q.to):NaN;
   var latest=!isFinite(fromMs);
   var endMs=isFinite(toMs)?toMs:now;
-  var startMs=latest?(Math.floor(now/per)*per-(n+1)*per):fromMs;
-  var win=1000*base,wins=[];
-  for(var s=startMs;s<=endMs;s+=win) wins.push([s,Math.min(endMs,s+win-1)]);
-  if(wins.length>14) wins=latest?wins.slice(-14):wins.slice(0,14);
-  return Promise.all(wins.map(function(w){
-    return fetch(BTC_REST+iv+"&startTime="+w[0]+"&endTime="+w[1]).then(function(r){
-      if(!r.ok) throw new Error("HTTP "+r.status);
-      return r.json();
-    });
-  })).then(function(pages){
-    var seen={},rows=[];
-    pages.forEach(function(pg){(pg||[]).forEach(function(k){if(!seen[k[0]]){seen[k[0]]=1;rows.push(k);}});});
-    rows.sort(function(a,b){return a[0]-b[0];});
+  var startMs=latest?bucket(now)-n*per:bucket(fromMs);
+  return btcCbRange(g,startMs,endMs,latest).then(function(rows){
     var out=[],cur=null;
-    rows.forEach(function(k){
-      var t=Math.floor(k[0]/per)*per,h=+k[2],l=+k[3];
-      if(agg===1||!cur||cur.t!==t){cur={t:t,o:+k[1],h:h,l:l,c:+k[4],done:k[6]<now};out.push(cur);}
-      else{if(h>cur.h)cur.h=h;if(l<cur.l)cur.l=l;cur.c=+k[4];cur.done=k[6]<now;}
-    });
-    out.forEach(function(x){ // thin-market bad prints (e.g. a 138k wick on a 27k month): clamp absurd wicks to the bar body
-      var hi=Math.max(x.o,x.c),lo=Math.min(x.o,x.c);
-      if(x.h>hi*1.6) x.h=hi;
-      if(x.l<lo/1.6) x.l=lo;
+    rows.forEach(function(r){
+      var t=bucket(r[0]*1000);
+      if(!cur||cur.t!==t){cur={t:t,o:r[3],h:r[2],l:r[1],c:r[4]};out.push(cur);}
+      else{if(r[2]>cur.h)cur.h=r[2];if(r[1]<cur.l)cur.l=r[1];cur.c=r[4];}
     });
     if(latest&&out.length>n) out=out.slice(-n);
-    return {candles:out.map(function(x){return {time:new Date(x.t).toISOString(),complete:x.done,mid:{o:String(x.o),h:String(x.h),l:String(x.l),c:String(x.c)}};})};
+    return {candles:out.map(function(x){return {time:new Date(x.t).toISOString(),complete:x.t+per<=now,mid:{o:String(x.o),h:String(x.h),l:String(x.l),c:String(x.c)}};})};
   });
 }
 
@@ -6537,7 +6534,7 @@ function chartTab(){
 
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
-  note.textContent=(sym==="BTC"?"Chart data via Binance.US BTC/USDT":"Chart data via OANDA")+" (times shown in ET) — markers show trade entries from your log";
+  note.textContent=(sym==="BTC"?"Chart data via Coinbase BTC-USD":"Chart data via OANDA")+" (times shown in ET) — markers show trade entries from your log";
   el.appendChild(note);
 
   var oandaInst=OANDA_SYMS[sym]||"SPX500_USD";
@@ -6686,7 +6683,7 @@ function chartTab(){
     }
     function one(x,attempt){
       attempt=attempt||0;
-      if(x.indexOf("/instruments/BTC_USD/")>-1) return btcCandles(x); // BTC: Binance.US feed, not OANDA
+      if(x.indexOf("/instruments/BTCUSD_CB/")>-1) return btcCandles(x); // BTC: Coinbase feed, not OANDA
       var useTok=ls("oanda_token","")||tok;
       return fetchRetry(x,useTok).then(function(r){
         if(!r.ok){
@@ -8193,15 +8190,18 @@ function chartTab(){
         };
         var connectStream=function(){
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart"||strFail>5) return;
-          if(sym==="BTC"){ // BTC: Binance.US trade websocket (24/7) instead of the OANDA pricing stream
+          if(sym==="BTC"){ // BTC: Coinbase ticker websocket (24/7) instead of the OANDA pricing stream
             try{
               var ws=new WebSocket(BTC_WS),wsDone=false;
               _chartStreamAbort={abort:function(){wsDone=true;try{ws.close();}catch(e){}}};
+              ws.onopen=function(){ws.send(JSON.stringify({type:"subscribe",product_ids:["BTC-USD"],channels:["ticker","heartbeat"]}));};
               ws.onmessage=function(ev){
                 var m;try{m=JSON.parse(ev.data);}catch(e){return;}
-                if(!m||!m.p) return;
+                if(!m) return;
+                if(m.type==="heartbeat"){lastMsgAt=Date.now();strFail=0;return;} // 1/s: keeps the silent-stream watchdog quiet
+                if(m.type!=="ticker"||!m.price) return;
                 lastMsgAt=Date.now();strFail=0;
-                onTick(parseFloat(m.p),Math.floor((m.T||Date.now())/1000));
+                onTick(parseFloat(m.price),Math.floor((m.time?Date.parse(m.time):Date.now())/1000));
               };
               ws.onclose=ws.onerror=function(){
                 if(wsDone) return;
