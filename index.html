@@ -292,8 +292,6 @@ svg text{font-family:'Courier New',monospace}
   .tbl th,.tbl td{padding:6px 7px;font-size:11px}
 }
 @media(max-width:480px),(max-width:960px) and (display-mode:standalone){body.m-chart-full #m-bnav,body.m-chart-full #m-more-drawer,body.m-chart-full #m-more-bd{display:none!important}body.m-chart-full #app{padding-bottom:0!important}}
-#chart-canvas-anchor{transition:opacity .18s ease}
-body.fs-wait #chart-canvas-anchor{opacity:0}
 @media(max-width:480px){input,select,textarea{font-size:16px!important}}
 @media(display-mode:standalone){input,select,textarea{font-size:16px!important}}
 @media(max-width:380px){
@@ -2056,27 +2054,15 @@ function switchTab(id){
   }
 }
 
-// Android + Chart tab: tapping the EDGE logo toggles fullscreen. The chart panel stays hidden until the
-// system has finished resizing the window, then fades in once at its final size.
+// Android + Chart tab: tapping the EDGE logo toggles fullscreen.
 (function(){
   if(!/Android/i.test(navigator.userAgent)) return;
   var logo=document.querySelector("#topbar .logo"),de=document.documentElement;
   var rq=de.requestFullscreen||de.webkitRequestFullscreen,ex=document.exitFullscreen||document.webkitExitFullscreen;
   if(!logo||!rq) return;
-  var busy=false;
-  function inFs(){return !!(document.fullscreenElement||document.webkitFullscreenElement);}
   logo.addEventListener("click",function(){
-    if(busy||State.tab!=="chart"||!isMobile()) return;
-    busy=true;document.body.classList.add("fs-wait");
-    var done=false,t=0;
-    function fin(){
-      if(done) return;done=true;clearTimeout(t);
-      document.removeEventListener("fullscreenchange",fin);document.removeEventListener("webkitfullscreenchange",fin);
-      setTimeout(function(){document.body.classList.remove("fs-wait");busy=false;},250); // let the resize settle
-    }
-    document.addEventListener("fullscreenchange",fin);document.addEventListener("webkitfullscreenchange",fin);
-    t=setTimeout(fin,1000);
-    try{var p=inFs()?ex.call(document):rq.call(de,{navigationUI:"hide"});if(p&&p.catch)p.catch(fin);}catch(e){fin();}
+    if(State.tab!=="chart"||!isMobile()) return;
+    try{var inFs=!!(document.fullscreenElement||document.webkitFullscreenElement);var p=inFs?ex.call(document):rq.call(de,{navigationUI:"hide"});if(p&&p.catch)p.catch(function(){});}catch(e){}
   });
 })();
 
