@@ -7892,7 +7892,22 @@ function chartTab(){
           if(sp.dash) o.lineStyle=LS.Dashed;
           sp.s=chart.addLineSeries(o);
           var data=[];
-          candles.forEach(function(c){var p=ptAt(sp,c.time);if(p) data.push(p);});
+          if(step){ // one point per completed higher-timeframe bar, joined by a plain line (no stairs)
+            var c0=candles[0].time,seed=null,lastT=-1,B=sp.bars;
+            for(var j=0;j+1<B.length;j++){
+              if(sp.ema[j]==null) continue;
+              var tc=B[j+1].t; // time this bar completed
+              if(tc<=c0){seed=sp.ema[j];continue;}
+              var lo=0,hi=candles.length-1,ci=-1;
+              while(lo<=hi){var m=(lo+hi)>>1;if(candles[m].time>=tc){ci=m;hi=m-1;}else lo=m+1;}
+              if(ci<0) break;
+              if(seed!=null){data.push({time:c0,value:seed});lastT=c0;seed=null;}
+              if(candles[ci].time>lastT){data.push({time:candles[ci].time,value:sp.ema[j]});lastT=candles[ci].time;}
+            }
+            var pe=ptAt(sp,candles[candles.length-1].time);
+            if(pe&&pe.time>lastT) data.push(pe);
+            else if(pe&&data.length) data[data.length-1].value=pe.value;
+          } else candles.forEach(function(c){var p=ptAt(sp,c.time);if(p) data.push(p);});
           sp.s.setData(data);
           if(sp.dir&&data.length) sp.s.applyOptions({priceLineColor:data[data.length-1].color});
         }
