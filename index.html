@@ -7857,8 +7857,6 @@ function chartTab(){
           {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260},
           {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600}
         ];
-        // Debug switches (browser console, then reload): localStorage.ema_skip="1h,1d" hides those EMAs; localStorage.ema_nolive=1 stops the 30s refresh.
-        try{var _sk=(localStorage.getItem("ema_skip")||"").split(",");SPECS=SPECS.filter(function(x){return _sk.indexOf(x.tf)<0;});}catch(e){}
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
         function toBars(d){return ((d&&d.candles)||[]).map(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);return {t:u-etOff(u),c:parseFloat(c.mid.c)};});}
@@ -7910,22 +7908,16 @@ function chartTab(){
           return pts;
         }
         function plain(pts){return pts.map(function(p){return {time:p.time,value:p.value};});}
-        function colored(pts){ // single line, green while rising / red while falling (per-point colors)
-          return pts.map(function(p,i){return {time:p.time,value:p.value,color:(i>0&&p.value<pts[i-1].value)?DN:UP};});
-        }
-        function fillDir(sp,pts){
-          var d=colored(pts);
-          sp.s.setData(d);
-          if(d.length) sp.s.applyOptions({priceLineColor:d[d.length-1].color});
-        }
-        function draw(sp){
-          if(sp.s){try{chart.removeSeries(sp.s);}catch(e){}}
-          var step=sp.per>periodSec;
-          var o={color:sp.col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
+        function draw(sp){ // same plain line-series pattern the other chart overlays use
+          var step=sp.per>periodSec,pts=buildPts(sp);
+          if(!pts.length) return;
+          var col=sp.col;
+          if(sp.dir) col=(pts.length>1&&pts[pts.length-1].value<pts[pts.length-2].value)?DN:UP; // 1h: red if falling now, green if rising
+          var o={color:col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
           if(sp.dash) o.lineStyle=LS.Dashed;
-          sp.s=chart.addLineSeries(o);
-          var pts=buildPts(sp);
-          if(sp.dir) fillDir(sp,pts); else sp.s.setData(plain(pts));
+          var ls=chart.addLineSeries(o);
+          ls.setData(plain(pts));
+          if(step) ls.createPriceLine({price:pts[pts.length-1].value,color:col,lineWidth:1,lineStyle:sp.dash?LS.Dashed:LS.Dotted,axisLabelVisible:false,title:""}); // higher timeframe: price line across the chart
         }
         function load(sp){
           var c=store[sp.tf];
@@ -7942,28 +7934,6 @@ function chartTab(){
             }).catch(function(){});
           });
         });
-        // Live: every 30s patch each timeframe's newest bars and push the latest chart candle's value.
-        // A higher-timeframe EMA only moves when its bar completes; same / lower ones move with the live bar.
-        var timer=setInterval(function(){
-          try{if(localStorage.getItem("ema_nolive")){clearInterval(timer);return;}}catch(e){}
-          if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
-          SPECS.forEach(function(sp){
-            if(!sp.s) return;
-            chartFetchJson(urlFor(sp,3)).then(function(d){
-              if(myLoadToken!==_chartLoadToken) return;
-              var b=sp.bars;
-              toBars(d).forEach(function(x){var i=lastIdx(b,x.t,false);if(i>=0&&b[i].t===x.t) b[i]=x;else if(i===b.length-1) b.push(x);});
-              sp.ema=emaOf(b);
-              var p=ptAt(sp,lastBarTime);
-              if(!p) return;
-              if(sp.dir){
-                var pts=buildPts(sp);
-                if(lastBarTime>candles[candles.length-1].time) pts.push({time:lastBarTime,value:p.value,ci:candles.length});
-                fillDir(sp,pts);
-              } else {try{sp.s.update(p);}catch(e){}}
-            }).catch(function(){});
-          });
-        },30000);
       })();
 
       // ── Previous YEAR high / low (PYH / PYL): US10Y EOD (1d/1w) and every other symbol on 1w; 1w non-EOD also gets the close (PYC) ──
