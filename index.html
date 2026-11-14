@@ -7301,7 +7301,7 @@ function chartTab(){
 
       // ── 8h only, NQ: big round numbers (every 5000: 20000 / 25000 / 30000 ...) as amber price-axis labels only, no line ──
       if(tf==="8h"&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
-        var STEP=5000,lo=Infinity,hi=-Infinity;
+        var STEP=2500,lo=Infinity,hi=-Infinity; // every 5000 plus the 2500s between them (22500, 27500...)
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
         lo-=5000;hi+=5000;
