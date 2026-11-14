@@ -5959,7 +5959,7 @@ var OANDA_GRAN={"2m":"M2","5m":"M5","15m":"M15","30m":"M30","1h":"H1","4h":"H4",
 // prefetch, delta refresh and live poll all work unchanged. Pages are fetched in parallel (1000 bars each).
 var BTC_REST="https://api.binance.us/api/v3/klines?symbol=BTCUSDT&limit=1000&interval=";
 var BTC_WS="wss://stream.binance.us:9443/ws/btcusdt@trade";
-var BTC_IV={M2:["1m",60000,2],M5:["5m",300000,1],M15:["15m",900000,1],M30:["30m",1800000,1],H1:["1h",3600000,1],H4:["4h",14400000,1],H8:["8h",28800000,1],D:["1d",86400000,1],W:["1w",604800000,1]};
+var BTC_IV={M2:["1m",60000,2],M5:["5m",300000,1],M15:["15m",900000,1],M30:["30m",1800000,1],H1:["1h",3600000,1],H4:["4h",14400000,1],H8:["8h",28800000,1],D:["1d",86400000,1],W:["1w",604800000,1],M:["1M",2678400000,1]};
 function btcCandles(u){
   var q={};
   (u.split("?")[1]||"").split("&").forEach(function(p){var i=p.indexOf("=");if(i>0) q[p.slice(0,i)]=decodeURIComponent(p.slice(i+1));});
@@ -5973,8 +5973,9 @@ function btcCandles(u){
   var win=1000*base,wins=[];
   for(var s=startMs;s<=endMs;s+=win) wins.push([s,Math.min(endMs,s+win-1)]);
   if(wins.length>14) wins=latest?wins.slice(-14):wins.slice(0,14);
+  if(q.granularity==="M") wins=[[null,null]]; // monthly: one request for the latest 1000 months
   return Promise.all(wins.map(function(w){
-    return fetch(BTC_REST+iv+"&startTime="+w[0]+"&endTime="+w[1]).then(function(r){
+    return fetch(BTC_REST+iv+(w[0]==null?"":"&startTime="+w[0]+"&endTime="+w[1])).then(function(r){
       if(!r.ok) throw new Error("HTTP "+r.status);
       return r.json();
     });
@@ -6038,7 +6039,7 @@ function chartTab(){
   var tf=State.chart_interval||"1h";
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
-  var monthlyOk=eodOnly||sym==="CL"||sym==="DXY"; // 1M / 1Y exist on US10Y, Oil and DXY only
+  var monthlyOk=eodOnly||sym==="CL"||sym==="DXY"||sym==="BTC"; // 1M / 1Y exist on US10Y, Oil, DXY and BTC only
   if(!monthlyOk&&(tf==="1m"||tf==="1y")) tf="1d";
   var TF_LBL=function(t){return t==="1d"?"D":t==="1w"?"W":t==="1m"?"M":t==="1y"?"Y":t;}; // day / week / month / year shown as a single capital letter
   // Intraday mode: tight zoom on the latest candles + prev day/week/month level tags. Works on 2m/5m/30m/1h only (not 4h and up).
@@ -6083,7 +6084,7 @@ function chartTab(){
   var TFS=eodOnly?["1d","1w","1m","1y"]:(monthlyOk?["2m","5m","30m","1h","4h","8h","1d","1w","1m","1y"]:["2m","5m","30m","1h","4h","8h","1d","1w"]);
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
-    var tfBase=((sym==="DXY"||sym==="CL")&&(t==="1m"||t==="1y"))?"#a855f7":"var(--red)"; // DXY / Oil: monthly + yearly base color purple
+    var tfBase=((sym==="DXY"||sym==="CL"||sym==="BTC")&&(t==="1m"||t==="1y"))?"#a855f7":"var(--red)"; // DXY / Oil: monthly + yearly base color purple
     b.style.cssText=tf===t
       ? "border-color:#00e676;color:#00e676;padding:6px 10px;"
       : "border-color:"+tfBase+";color:"+tfBase+";padding:6px 10px;";
@@ -10634,7 +10635,7 @@ function fetchLongMonthly(sym){
   var m=_longMonMem[sym];
   if(m&&Date.now()-m.t<6*60*60*1000) return Promise.resolve(m.rows);
   var keep=function(rows){_longMonMem[sym]={t:Date.now(),rows:rows};return rows;};
-  var nm=sym==="DXY"?"dxy":"cl",ysym=sym==="DXY"?"DX-Y.NYB":"CL%3DF";
+  var nm=sym==="DXY"?"dxy":sym==="BTC"?"btc":"cl",ysym=sym==="DXY"?"DX-Y.NYB":sym==="BTC"?"BTC-USD":"CL%3DF";
   return fetch("data/"+nm+"_monthly.json?_="+Date.now(),{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
