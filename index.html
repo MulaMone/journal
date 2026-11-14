@@ -7883,36 +7883,66 @@ function chartTab(){
             j=k<0?-1:((b[k].t+sp.per<=t)?k:k-1);
           } else j=lastIdx(b,t+periodSec,true); // same / lower: latest bar inside this candle, live one included
           if(j<0||sp.ema[j]==null) return null;
-          var p={time:t,value:sp.ema[j]};
-          if(sp.dir) p.color=(j>0&&sp.ema[j-1]!=null&&sp.ema[j]<sp.ema[j-1])?DN:UP;
-          return p;
+          return {time:t,value:sp.ema[j]};
         }
-        function draw(sp){
-          if(sp.s){try{chart.removeSeries(sp.s);}catch(e){}}
-          var step=sp.per>periodSec;
-          var o={color:sp.col,lineWidth:sp.w||2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
-          if(sp.dash) o.lineStyle=LS.Dashed;
-          sp.s=chart.addLineSeries(o);
-          var data=[];
-          function stepPt(t,v,j){var q={time:t,value:v};if(sp.dir) q.color=(j>0&&sp.ema[j-1]!=null&&v<sp.ema[j-1])?DN:UP;return q;}
-          if(step){ // one point per completed higher-timeframe bar, joined by a plain line (no stairs)
-            var c0=candles[0].time,seed=null,lastT=-1,B=sp.bars;
+        function buildPts(sp){ // [{time,value,ci}] at chart-candle times only (ci = candle index)
+          var pts=[],n=candles.length,i;
+          if(sp.per>periodSec){ // one point per completed higher-timeframe bar, joined by a plain line (no stairs)
+            var c0=candles[0].time,seed=null,lastCi=-1,B=sp.bars;
             for(var j=0;j+1<B.length;j++){
               if(sp.ema[j]==null) continue;
               var tc=B[j+1].t; // time this bar completed
               if(tc<=c0){seed=sp.ema[j];continue;}
-              var lo=0,hi=candles.length-1,ci=-1;
+              var lo=0,hi=n-1,ci=-1;
               while(lo<=hi){var m=(lo+hi)>>1;if(candles[m].time>=tc){ci=m;hi=m-1;}else lo=m+1;}
               if(ci<0) break;
-              if(seed!=null){data.push(stepPt(c0,seed,j-1));lastT=c0;seed=null;}
-              if(candles[ci].time>lastT){data.push(stepPt(candles[ci].time,sp.ema[j],j));lastT=candles[ci].time;}
+              if(seed!=null){pts.push({time:c0,value:seed,ci:0});lastCi=0;seed=null;}
+              if(ci>lastCi){pts.push({time:candles[ci].time,value:sp.ema[j],ci:ci});lastCi=ci;}
             }
-            var pe=ptAt(sp,candles[candles.length-1].time);
-            if(pe&&pe.time>lastT) data.push(pe);
-            else if(pe&&data.length) data[data.length-1].value=pe.value;
-          } else candles.forEach(function(c){var p=ptAt(sp,c.time);if(p) data.push(p);});
-          sp.s.setData(data);
-          if(sp.dir&&data.length) sp.s.applyOptions({priceLineColor:data[data.length-1].color});
+            var pe=ptAt(sp,candles[n-1].time);
+            if(pe){
+              if(pts.length&&pts[pts.length-1].ci===n-1) pts[pts.length-1].value=pe.value;
+              else pts.push({time:pe.time,value:pe.value,ci:n-1});
+            }
+          } else {
+            for(i=0;i<n;i++){var p=ptAt(sp,candles[i].time);if(p) pts.push({time:p.time,value:p.value,ci:i});}
+          }
+          return pts;
+        }
+        function plain(pts){return pts.map(function(p){return {time:p.time,value:p.value};});}
+        // Up / down coloring without per-point colors: a green series holds the rising segments, a red one the falling
+        // segments, with a whitespace point wherever a run breaks so the line never bridges across the other colour.
+        function dirData(pts){
+          var S={up:{a:[],open:false,last:-1},dn:{a:[],open:false,last:-1}};
+          for(var i=1;i<pts.length;i++){
+            var isUp=pts[i].value>=pts[i-1].value,T=isUp?S.up:S.dn,O=isUp?S.dn:S.up;
+            if(!T.open){
+              if(T.last>=0&&pts[i-1].ci>T.last+1&&candles[T.last+1]) T.a.push({time:candles[T.last+1].time});
+              if(pts[i-1].ci!==T.last) T.a.push({time:pts[i-1].time,value:pts[i-1].value});
+              T.open=true;
+            }
+            T.a.push({time:pts[i].time,value:pts[i].value});T.last=pts[i].ci;O.open=false;
+          }
+          return {up:S.up.a,dn:S.dn.a,lastUp:pts.length<2||pts[pts.length-1].value>=pts[pts.length-2].value};
+        }
+        function fillDir(sp,pts){
+          var d=dirData(pts),col=d.lastUp?UP:DN,l=pts[pts.length-1];
+          sp.sUp.setData(d.up);sp.sDn.setData(d.dn);
+          sp.sL.setData(l?[{time:l.time,value:l.value}]:[]); // one-point series that carries the tag + price line
+          sp.sL.applyOptions({color:col,priceLineColor:col});
+        }
+        function draw(sp){
+          [sp.s,sp.sUp,sp.sDn,sp.sL].forEach(function(x){if(x){try{chart.removeSeries(x);}catch(e){}}});
+          sp.s=sp.sUp=sp.sDn=sp.sL=null;
+          var step=sp.per>periodSec;
+          function mk(col,tag){
+            var o={color:col,lineWidth:sp.w||2,title:tag?sp.tf:"",lastValueVisible:!!tag,priceLineVisible:!!tag&&step,priceLineColor:col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
+            if(sp.dash) o.lineStyle=LS.Dashed;
+            return chart.addLineSeries(o);
+          }
+          var pts=buildPts(sp);
+          if(sp.dir){sp.sUp=mk(UP,false);sp.sDn=mk(DN,false);sp.sL=mk(UP,true);fillDir(sp,pts);}
+          else{sp.s=mk(sp.col,true);sp.s.setData(plain(pts));}
         }
         function load(sp){
           var c=store[sp.tf];
@@ -7936,7 +7966,7 @@ function chartTab(){
           try{if(localStorage.getItem("ema_nolive")){clearInterval(timer);return;}}catch(e){}
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
           SPECS.forEach(function(sp){
-            if(!sp.s) return;
+            if(!sp.s&&!sp.sL) return;
             chartFetchJson(urlFor(sp,3)).then(function(d){
               if(myLoadToken!==_chartLoadToken) return;
               var b=sp.bars;
@@ -7944,8 +7974,11 @@ function chartTab(){
               sp.ema=emaOf(b);
               var p=ptAt(sp,lastBarTime);
               if(!p) return;
-              try{sp.s.update(p);}catch(e){}
-              if(sp.dir) sp.s.applyOptions({priceLineColor:p.color});
+              if(sp.dir){
+                var pts=buildPts(sp);
+                if(lastBarTime>candles[candles.length-1].time) pts.push({time:lastBarTime,value:p.value,ci:candles.length});
+                fillDir(sp,pts);
+              } else {try{sp.s.update(p);}catch(e){}}
             }).catch(function(){});
           });
         },30000);
