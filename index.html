@@ -7314,7 +7314,7 @@ function chartTab(){
               bigOutline.forEach(function(b){
                 var L=me._lbl(sc,b);if(!L)return;
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
-                ctx.strokeRect(0.5,L.y0+0.5,sc.bitmapSize.width-1.5,L.hh-1);
+                var W=sc.bitmapSize.width;ctx.beginPath();ctx.moveTo(0,L.y0+0.5);ctx.lineTo(W-0.5,L.y0+0.5);ctx.lineTo(W-0.5,L.y0+L.hh-0.5);ctx.lineTo(0,L.y0+L.hh-0.5);ctx.stroke(); // open on the left: joins the tag
               });
             });
           }};}}]);},
@@ -7326,7 +7326,7 @@ function chartTab(){
               bigOutline.forEach(function(b){
                 var L=me._lbl(sc,b);if(!L)return;
                 var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr),x0=sc.bitmapSize.width-w;
-                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,w,L.hh,Math.round(2*hr));else ctx.rect(x0,L.y0,w,L.hh);ctx.fill();
+                var rr=Math.round(2*hr);ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,w,L.hh,[rr,0,0,rr]);else ctx.rect(x0,L.y0,w,L.hh);ctx.fill();
                 ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(b.title,x0+w/2,L.y0+L.hh/2+Math.round(0.5*vr));
               });
             });
