@@ -15,8 +15,8 @@
 <title>EDGE — Trading Terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://api-fxpractice.oanda.com">
-<link rel="preconnect" href="https://stream-fxpractice.oanda.com">
+<link rel="preconnect" href="https://api-fxpractice.oanda.com" crossorigin>
+<link rel="preconnect" href="https://stream-fxpractice.oanda.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com">
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Rye&display=swap" rel="stylesheet">
@@ -7884,7 +7884,7 @@ function chartTab(){
       // Builds the forming candle from live mid prices (bid+ask)/2 — same basis as price=M candles —
       // and pushes it with series.update(). The 15s poll below stays as fallback / gap repair.
       var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
-      if(!eodOnly&&sym!=="DXY"){
+      if(!eodOnly&&sym!=="DXY"&&!monthlyFetch){ // monthly bars: bar-end math is approximate, poll only
         var floorOk=(tf==="2m"||tf==="5m"||tf==="30m"||tf==="1h"); // bars aligned to plain epoch multiples
         var flushT=null,strFail=0;
         // Direct to OANDA first; if that fails before any tick (CORS / blocked), flip to the oanda-stream
@@ -7923,7 +7923,11 @@ function chartTab(){
                       :OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+oandaInst,
               {headers:strProxy?{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"x-oanda-token":tk}:{Authorization:"Bearer "+tk},signal:ac.signal});
           }).then(function(r){
-            if(!r.ok||!r.body) throw new Error("stream "+r.status);
+            if(!r.ok||!r.body){
+              // cached account id may belong to a previous token — drop it so it's re-fetched
+              if(r.status===401||r.status===403||r.status===404){try{localStorage.removeItem("edge_oanda_acct");}catch(e){}}
+              throw new Error("stream "+r.status);
+            }
             var rd=r.body.getReader(),dec=new TextDecoder(),buf="";
             var pump=function(){
               return rd.read().then(function(x){
@@ -7933,9 +7937,10 @@ function chartTab(){
                 lines.forEach(function(ln){
                   if(!ln) return;
                   var m;try{m=JSON.parse(ln);}catch(e){return;}
-                  if(m.type!=="PRICE"||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
+                  // any message (incl. the 5s HEARTBEAT, so this also works while the market is closed) proves the connection
                   strFail=0;
                   if(!gotTick){gotTick=true;try{localStorage.setItem("edge_oanda_stream_mode",JSON.stringify(strProxy?"proxy":"direct"));}catch(e){}}
+                  if(m.type!=="PRICE"||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
                   onTick((parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Math.floor(Date.parse(m.time.slice(0,19)+"Z")/1000));
                 });
                 return pump();
@@ -7949,14 +7954,15 @@ function chartTab(){
             setTimeout(connectStream,3000);
           });
         };
-        connectStream();
+        var startStream=connectStream; // started below, after any cache delta has been applied
       }
 
       // ── Delta refresh after a cache paint: fetch only candles since the cached last one ──
+      var deltaP=null;
       if(fromCache&&raw.length){
         var _lastRaw=raw[raw.length-1].time;
-        var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(_lastRaw)+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
-        chartFetchJson(dUrl).then(function(dd){
+        var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(new Date(_lastRaw).toISOString())+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+        deltaP=chartFetchJson(dUrl).then(function(dd){
           if(myLoadToken!==_chartLoadToken) return;
           var fc=(dd&&dd.candles)||[];
           if(!fc.length) return;
@@ -7974,6 +7980,9 @@ function chartTab(){
           _cc.t=Date.now();
         }).catch(function(){});
       }
+      // Stream starts only once the cache delta has landed — otherwise a tick could open a new bar first and
+      // the delta's older candles would be skipped, leaving a gap in the chart.
+      if(startStream) (deltaP||Promise.resolve()).then(startStream);
 
       console.log("[chart] "+sym+" "+tf+(fromCache?" (cache)":"")+": fetch "+Math.round(_tFetch-_tp0)+"ms, lib wait "+Math.round(_tLib-_tFetch)+"ms, build "+Math.round(performance.now()-_tLib)+"ms, total "+Math.round(performance.now()-_tp0)+"ms");
 
