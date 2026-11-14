@@ -7293,8 +7293,8 @@ function chartTab(){
         if(hi-lo>40000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
-          var bigLvl=(p%2500===0); // 20000 / 22500 / 25000... keep the line's own color, dark crimson digits on the axis label
-          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelTextColor:(bigLvl?"#7a0019":undefined),title:(m<100?"0":"")+m}));
+          var bigLvl=(p%2500===0); // 20000 / 22500 / 25000... keep the line's own color, inverted label (chart-bg box, line-colored digits)
+          numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,axisLabelColor:(bigLvl?"#040d1a":undefined),axisLabelTextColor:(bigLvl?(big?"#ffd24a":half?"#ff9f1a":"#22e5ff"):undefined),title:(m<100?"0":"")+m}));
         }
         applyNumVisibility=function(){numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});};
         applyNumVisibility();
