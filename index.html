@@ -7352,7 +7352,7 @@ function chartTab(){
         var STEP=2500,lo=Infinity,hi=-Infinity; // every 5000 plus the 2500s between them (22500, 27500...)
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
-        lo-=5000;hi+=5000;
+        lo-=2500;hi+=10000; // fewer levels below the lowest low, more above the highest high
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           if(p<=0) continue;
           series.createPriceLine({price:p,color:"#ffbf00",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lineVisible:true,axisLabelVisible:true,title:""});
