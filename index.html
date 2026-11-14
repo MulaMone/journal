@@ -7347,7 +7347,7 @@ function chartTab(){
         applyNumVisibility();
       })();
 
-      // ── NQ, all timeframes: big round numbers (every 5000: 20000 / 25000 / 30000 ...) as amber price-axis labels only, no line ──
+      // ── NQ, all timeframes: big round numbers (every 5000: 20000 / 25000 / 30000 ...) as amber price-axis labels + dashed amber line ──
       if(!intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
         var STEP=2500,lo=Infinity,hi=-Infinity; // every 5000 plus the 2500s between them (22500, 27500...)
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
@@ -7355,7 +7355,7 @@ function chartTab(){
         lo-=5000;hi+=5000;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           if(p<=0) continue;
-          series.createPriceLine({price:p,color:"#ffbf00",lineWidth:1,lineVisible:false,axisLabelVisible:true,title:""});
+          series.createPriceLine({price:p,color:"#ffbf00",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lineVisible:true,axisLabelVisible:true,title:""});
         }
       })();
 
