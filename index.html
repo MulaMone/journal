@@ -7878,7 +7878,14 @@ function chartTab(){
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
-        function toBars(d){return ((d&&d.candles)||[]).map(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);return {t:u-etOff(u),c:parseFloat(c.mid.c)};});}
+        function toBars(d){ // ET-shifted times; the fall-back hour repeats wall-clock times, so keep strictly ascending only (same rule as the candles)
+          var out=[];
+          ((d&&d.candles)||[]).forEach(function(c){
+            var u=Math.floor(new Date(c.time).getTime()/1000),t=u-etOff(u);
+            if(!out.length||t>out[out.length-1].t) out.push({t:t,c:parseFloat(c.mid.c)});
+          });
+          return out;
+        }
         function emaOf(b){
           var e=new Array(b.length),s=0,v=0;
           for(var i=0;i<b.length;i++){
