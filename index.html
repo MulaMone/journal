@@ -7980,6 +7980,10 @@ function chartTab(){
       // Builds the forming candle from live mid prices (bid+ask)/2 — same basis as price=M candles —
       // and pushes it with series.update(). The 15s poll below stays as fallback / gap repair.
       var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
+      // Poll cadence: with the tick stream running, the poll is only a backup/gap-repair, so tick it every 5s but
+      // skip while the stream is healthy (any message in the last 12s, heartbeats included) unless 30s have passed.
+      // Non-stream views (DXY, 10Y, monthly) keep their old 15s poll.
+      var streamMode=(!eodOnly&&sym!=="DXY"&&!monthlyFetch),lastMsgAt=0,lastPollAt=Date.now();
       if(!eodOnly&&sym!=="DXY"&&!monthlyFetch){ // monthly bars: bar-end math is approximate, poll only
         var floorOk=(tf==="2m"||tf==="5m"||tf==="30m"||tf==="1h"); // bars aligned to plain epoch multiples
         var flushT=null,strFail=0;
@@ -8033,6 +8037,7 @@ function chartTab(){
                 lines.forEach(function(ln){
                   if(!ln) return;
                   var m;try{m=JSON.parse(ln);}catch(e){return;}
+                  lastMsgAt=Date.now();
                   // any message (incl. the 5s HEARTBEAT, so this also works while the market is closed) proves the connection
                   strFail=0;
                   if(!gotTick){gotTick=true;try{localStorage.setItem("edge_oanda_stream_mode",JSON.stringify(strProxy?"proxy":"direct"));}catch(e){}}
@@ -8100,6 +8105,16 @@ function chartTab(){
       _chartLiveTimer=setInterval(function(){
         if(State.tab!=="chart"){clearInterval(_chartLiveTimer);if(_chartStreamAbort){try{_chartStreamAbort.abort();}catch(e){}_chartStreamAbort=null;}return;}
         if(eodOnly){if(_tnxSkip++%2===0) tnxTick();return;} // 15s tick -> quote every 30s
+        if(streamMode){
+          if(lastMsgAt&&Date.now()-lastMsgAt>20000&&typeof connectStream==="function"){
+            // stream went silent (sleep / wifi change leave a dead socket): drop it and reconnect
+            lastMsgAt=Date.now();
+            if(_chartStreamAbort){try{_chartStreamAbort.abort();}catch(e){}}
+            connectStream();
+          }
+          if(Date.now()-lastMsgAt<12000&&Date.now()-lastPollAt<30000) return; // stream healthy: poll only every 30s
+          lastPollAt=Date.now();
+        }
         var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:1)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
@@ -8126,7 +8141,7 @@ function chartTab(){
           renderCountdown();
         })
         .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
-      },15000);
+      },streamMode?5000:15000);
     })
     .catch(function(e){
       if(myLoadToken!==_chartLoadToken) return; // superseded by a newer load — don't show a stale error
