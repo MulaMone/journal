@@ -11093,8 +11093,14 @@ function buildFedFundsView(data,isM){
           var M=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"],p=iso.split("-");
           return parseInt(p[2],10)+" "+M[parseInt(p[1],10)-1]+" "+p[0];
         }
+        function fedBins(deltaBp){
+          var sg=deltaBp<0?-1:1,st=Math.abs(deltaBp)/25,lo=Math.floor(st),fr=st-lo,o={};
+          o[sg*lo*25]=(1-fr)*100;
+          if(fr>0.005) o[sg*(lo+1)*25]=fr*100;
+          return o;
+        }
         function histChip(label,fromRec,toMoveVal,daysBack){
-        var wrap=div();wrap.style.cssText="min-width:96px;";
+        var wrap=div();wrap.style.cssText="min-width:120px;";
         var lbl=div();lbl.style.cssText="font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:3px;";lbl.textContent=label;
         wrap.appendChild(lbl);
         var tgtISO=fromRec&&fromRec.dateISO;
@@ -11104,11 +11110,21 @@ function buildFedFundsView(data,isM){
           var na=div();na.style.cssText="font-size:13px;color:var(--text3);font-family:Courier New,monospace;";na.textContent="—";
           wrap.appendChild(na);
         } else {
-          var d=fmtFedDelta(fromRec.move,toMoveVal);
-          var val=div();val.style.cssText="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:"+d.col+";";val.textContent=d.txt;
-          wrap.appendChild(val);
-          var sub=div();sub.style.cssText="font-size:9px;color:var(--text3);margin-top:2px;font-family:Courier New,monospace;";sub.textContent=fromRec.move.toFixed(0)+"% → "+toMoveVal.toFixed(0)+"%";
-          wrap.appendChild(sub);
+          // Per target-range odds (HOLD / 25bp / 50bp) then vs now, like CME FedWatch's table.
+          // Rebuilt from the stored/derived deltaBp with the same 2-nearest-step split as computeFedProbability.
+          var fromB=fedBins(fromRec.deltaBp),toB=fedBins(prob.deltaBp);
+          var keys=Object.keys(fromB).concat(Object.keys(toB)).filter(function(k,i,a){return a.indexOf(k)===i;}).map(Number).sort(function(a,b){return a-b;});
+          keys.forEach(function(bp){
+            var f=fromB[bp]||0,t=toB[bp]||0;
+            if(f<0.5&&t<0.5) return;
+            var row=div();row.style.cssText="display:flex;gap:6px;align-items:baseline;font-family:Courier New,monospace;margin-top:2px;white-space:nowrap;";
+            var nm=document.createElement("span");nm.style.cssText="font-size:9px;color:var(--text3);min-width:56px;";
+            nm.textContent=bp===0?"HOLD":Math.abs(bp)+"bp "+(bp<0?"CUT":"HIKE");
+            var d=fmtFedDelta(f,t);
+            var v=document.createElement("span");v.style.cssText="font-size:12px;font-weight:700;color:"+d.col+";";
+            v.textContent=f.toFixed(0)+"% → "+t.toFixed(0)+"%";
+            row.appendChild(nm);row.appendChild(v);wrap.appendChild(row);
+          });
         }
         return wrap;
       }
