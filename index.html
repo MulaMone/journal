@@ -7844,6 +7844,95 @@ function chartTab(){
         }).catch(function(){});
       })();
 
+      // ── BTC only: 50 EMAs from 1w / 1d / 4h / 1h / 5m, drawn on every chart timeframe ──
+      // Each EMA(50) is built from Coinbase candles of ITS OWN timeframe. One higher than the chart waits for its
+      // bar to complete (step line, flat until the bar closes, with a price line); equal / lower ones track the live bar.
+      // The 1h EMA is green while rising and red while falling. The 5m EMA is dashed. Tag = timeframe, on the price axis.
+      if(sym==="BTC") (function(){
+        var LS=LightweightCharts.LineStyle,EMA_N=50,K=2/(EMA_N+1),UP="#22c55e",DN="#ef4444";
+        var SPECS=[
+          {tf:"5m",g:"M5",per:300,col:"#facc15",n:1200,dash:true},
+          {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true},
+          {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700},
+          {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260},
+          {tf:"4h",g:"H4",per:14400,col:"#fb923c",n:1000}
+        ];
+        var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
+        function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
+        function toBars(d){return ((d&&d.candles)||[]).map(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);return {t:u-etOff(u),c:parseFloat(c.mid.c)};});}
+        function emaOf(b){
+          var e=new Array(b.length),s=0,v=0;
+          for(var i=0;i<b.length;i++){
+            if(i<EMA_N-1){s+=b[i].c;e[i]=null;}
+            else if(i===EMA_N-1){s+=b[i].c;v=s/EMA_N;e[i]=v;}
+            else{v=b[i].c*K+v*(1-K);e[i]=v;}
+          }
+          return e;
+        }
+        function lastIdx(b,lim,strict){ // last i with b[i].t<=lim (or <lim), -1 if none
+          var lo=0,hi=b.length-1,r=-1;
+          while(lo<=hi){var m=(lo+hi)>>1;if(strict?b[m].t<lim:b[m].t<=lim){r=m;lo=m+1;}else hi=m-1;}
+          return r;
+        }
+        function ptAt(sp,t){ // EMA point for chart candle at time t
+          var b=sp.bars,j;
+          if(sp.per>periodSec){ // higher timeframe than the chart: last COMPLETED bar only
+            var k=lastIdx(b,t,false);
+            j=k<0?-1:((b[k].t+sp.per<=t)?k:k-1);
+          } else j=lastIdx(b,t+periodSec,true); // same / lower: latest bar inside this candle, live one included
+          if(j<0||sp.ema[j]==null) return null;
+          var p={time:t,value:sp.ema[j]};
+          if(sp.dir) p.color=(j>0&&sp.ema[j-1]!=null&&sp.ema[j]<sp.ema[j-1])?DN:UP;
+          return p;
+        }
+        function draw(sp){
+          if(sp.s){try{chart.removeSeries(sp.s);}catch(e){}}
+          var step=sp.per>periodSec;
+          var o={color:sp.col,lineWidth:sp.dash?1:2,title:sp.tf,lastValueVisible:true,priceLineVisible:step,priceLineColor:sp.col,priceLineStyle:sp.dash?LS.Dashed:LS.Dotted,priceLineWidth:1,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}};
+          if(sp.dash) o.lineStyle=LS.Dashed;
+          if(step&&LightweightCharts.LineType) o.lineType=LightweightCharts.LineType.WithSteps;
+          sp.s=chart.addLineSeries(o);
+          var data=[];
+          candles.forEach(function(c){var p=ptAt(sp,c.time);if(p) data.push(p);});
+          sp.s.setData(data);
+          if(sp.dir&&data.length) sp.s.applyOptions({priceLineColor:data[data.length-1].color});
+        }
+        function load(sp){
+          var c=store[sp.tf];
+          if(c&&Date.now()-c.at<300000) return Promise.resolve(c.bars);
+          return chartFetchJson(urlFor(sp,sp.n)).then(function(d){var b=toBars(d);store[sp.tf]={at:Date.now(),bars:b};return b;});
+        }
+        var chain=Promise.resolve();
+        SPECS.forEach(function(sp){ // one timeframe at a time (Coinbase rate limit), each line appears as it lands
+          chain=chain.then(function(){
+            if(myLoadToken!==_chartLoadToken) return;
+            return load(sp).then(function(b){
+              if(myLoadToken!==_chartLoadToken||b.length<=EMA_N) return;
+              sp.bars=b;sp.ema=emaOf(b);draw(sp);
+              if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
+            }).catch(function(){});
+          });
+        });
+        // Live: every 30s patch each timeframe's newest bars and push the latest chart candle's value.
+        // A higher-timeframe EMA only moves when its bar completes; same / lower ones move with the live bar.
+        var timer=setInterval(function(){
+          if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
+          SPECS.forEach(function(sp){
+            if(!sp.s) return;
+            chartFetchJson(urlFor(sp,3)).then(function(d){
+              if(myLoadToken!==_chartLoadToken) return;
+              var b=sp.bars;
+              toBars(d).forEach(function(x){var i=lastIdx(b,x.t,false);if(i>=0&&b[i].t===x.t) b[i]=x;else if(i===b.length-1) b.push(x);});
+              sp.ema=emaOf(b);
+              var p=ptAt(sp,lastBarTime);
+              if(!p) return;
+              try{sp.s.update(p);}catch(e){}
+              if(sp.dir) sp.s.applyOptions({priceLineColor:p.color});
+            }).catch(function(){});
+          });
+        },30000);
+      })();
+
       // ── Previous YEAR high / low (PYH / PYL): US10Y EOD (1d/1w) and every other symbol on 1w; 1w non-EOD also gets the close (PYC) ──
       // Same look as the 8h PMH / PML / PMC (lime / coral / violet dashed, tag on the price axis).
       // Built from the daily closes this chart is made of, grouped by calendar year.
