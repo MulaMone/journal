@@ -7319,7 +7319,8 @@ function chartTab(){
                 var txt;try{txt=series.priceFormatter().format(b.price);}catch(e){txt=b.price.toFixed(2);}
                 var xr=Math.min(W,Math.round((Math.ceil(ctx.measureText(txt).width/hr)+16)*hr)); // price box is left-aligned: text + 1 border + 5 + 5 padding + 5 tick
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
-                ctx.strokeRect(0.5,L.y0+0.5,xr-1,L.hh-1); // full box, left edge included
+                var xs=Math.round(4*hr); // library text starts 10px in but ends 6px from the right edge: start the outline 4px in so the inner padding is the same both sides
+                ctx.strokeRect(xs+0.5,L.y0+0.5,xr-xs-1,L.hh-1);
               });
             });
           }};}}]);},
