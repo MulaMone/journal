@@ -7303,7 +7303,7 @@ function chartTab(){
             target.useBitmapCoordinateSpace(function(sc){
               var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
               bigOutline.forEach(function(b){
-                var y=series.priceToCoordinate(b.price);if(y==null)return;
+                var y=series.priceToCoordinate(b.price);if(y==null)return;var H=sc.bitmapSize.height/vr;y=Math.min(Math.max(y,h/2),H-h/2); // library pins edge labels inside the scale
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
                 ctx.strokeRect(0.5,Math.round((y-h/2)*vr)+0.5,sc.bitmapSize.width-1.5,Math.round(h*vr)-1);
               });
@@ -7317,7 +7317,7 @@ function chartTab(){
               var ctx=sc.context,hr=sc.horizontalPixelRatio,vr=sc.verticalPixelRatio,fs=12,h=fs+2*(2.5/12*fs);
               ctx.font=Math.round(fs*vr)+"px "+chart.options().layout.fontFamily;
               bigOutline.forEach(function(b){
-                var y=series.priceToCoordinate(b.price);if(y==null)return;
+                var y=series.priceToCoordinate(b.price);if(y==null)return;var H=sc.bitmapSize.height/vr;y=Math.min(Math.max(y,h/2),H-h/2); // library pins edge labels inside the scale
                 var w=Math.ceil(ctx.measureText(b.title).width)+Math.round(10*hr);
                 ctx.strokeStyle=b.color;ctx.lineWidth=Math.max(1,Math.round(hr));
                 ctx.strokeRect(sc.bitmapSize.width-w+0.5,Math.round((y-h/2)*vr)+0.5,w-1.5,Math.round(h*vr)-1);
