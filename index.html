@@ -28,6 +28,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 #app{min-height:100vh;display:flex;flex-direction:column;padding-top:calc(100px + env(safe-area-inset-top))}
 /* TOPBAR */
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;padding-top:env(safe-area-inset-top);height:calc(54px + env(safe-area-inset-top));background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;position:fixed;top:0;left:0;right:0;z-index:201}
+.wheel-col,.wheel-col *,.wheel-wrap,.wheel-wrap *,.wheel-mirror,.wheel-mirror *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 #topbar,#topbar *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} /* stops Android's Google search sheet popping up when the header text gets selected */
 #topbar-left{display:flex;align-items:center;width:420px;flex-shrink:0}
 .logo{font-size:26px;font-weight:900;letter-spacing:3px;font-family:'Rye',serif;color:#baffff;text-shadow:0 1px 0 #007a7a,0 2px 0 #005f5f,0 3px 0 #004747,0 4px 6px rgba(0,0,0,0.7),0 0 10px #00d4d4,0 0 22px #00d4d480}
@@ -6209,7 +6210,7 @@ function chartTab(){
   if(useWheels){
     // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
     var WH=28,GREEN="#00e676",RED="#ff5252",wrap=div();
-    wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
+    wrap.className="wheel-wrap";wrap.addEventListener("contextmenu",function(e){e.preventDefault();});wrap.addEventListener("selectstart",function(e){e.preventDefault();});wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
     function mkPill(side,col){
       var d=div();
       d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;border:1px solid "+col+"88;background:"+col+"0d;box-shadow:0 0 10px "+col+"22,inset 0 0 8px "+col+"14;pointer-events:none;";
@@ -6315,7 +6316,7 @@ function chartTab(){
       var RH=46,ROWS=5;
       if(!mir){
         var back=div();
-        back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .15s;";
+        back.className="wheel-mirror";back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .15s;";
         var card=div();
         card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.5);-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
         var pill=div();
