@@ -2,7 +2,7 @@
 """Writes data/dxy_monthly.json and data/cl_monthly.json (monthly OHLC, full history).
 DXY: Yahoo DX-Y.NYB (back to 1971).  Oil: FRED DCOILWTICO daily spot (1986+) rolled to months,
 then Yahoo CL=F (2000+) wins for every month it covers."""
-import csv, datetime, io, json, os, sys, urllib.request
+import datetime, json, os, sys, time, urllib.request
 
 UA = {"User-Agent": "Mozilla/5.0"}
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
@@ -28,12 +28,33 @@ def yahoo_monthly(sym):
 
 
 def fred_monthly(series):
+    # fredgraph.csv sometimes stalls or refuses cloud runners: try a few URL forms, 3 attempts each
+    urls = [
+        "https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s&cosd=1986-01-01" % series,
+        "https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s" % series,
+        "https://fred.stlouisfed.org/data/%s.txt" % series,
+    ]
+    text, err = None, None
+    for u in urls:
+        for _ in range(3):
+            try:
+                text = get(u)
+                break
+            except Exception as e:
+                err = e
+                time.sleep(3)
+        if text:
+            break
+    if not text:
+        raise RuntimeError("all FRED URLs failed: %s" % err)
     rows = {}
-    for rec in csv.reader(io.StringIO(get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + series))):
+    for line in text.splitlines():
+        rec = line.replace(",", " ").split()
         try:
             day, val = rec[0], float(rec[1])
+            datetime.date.fromisoformat(day)
         except (ValueError, IndexError):
-            continue  # header row or '.' (no print)
+            continue  # header / notes / '.' (no print)
         d = day[:7] + "-01"
         m = rows.get(d)
         if m is None:
@@ -42,6 +63,8 @@ def fred_monthly(series):
             m["h"] = max(m["h"], val)
             m["l"] = min(m["l"], val)
             m["c"] = val
+    if not rows:
+        raise RuntimeError("FRED returned no rows")
     return rows
 
 
@@ -55,9 +78,12 @@ def write(name, rows):
 
 write("dxy_monthly.json", yahoo_monthly("DX-Y.NYB"))
 cl = {}
+fred_err = None
 try:
     cl.update(fred_monthly("DCOILWTICO"))
 except Exception as e:
-    print("FRED failed:", e, file=sys.stderr)
+    fred_err = e
 cl.update(yahoo_monthly("CL%3DF"))
 write("cl_monthly.json", cl)
+if fred_err:  # still commit what we have, but turn the run red so it is noticed
+    sys.exit("FRED failed, oil history starts at 2000: %s" % fred_err)
