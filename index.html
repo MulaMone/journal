@@ -7541,9 +7541,11 @@ function chartTab(){
             curG2.times.push(c.time);
           });
           if(groups.length){
-            pcSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
+            // draw the exact levels first, then drop the instant-paint ones, so the line never disappears between the two
+            var _oldPc=pcSeries;
             pcSeries=[];
             drawAll(groups);
+            _oldPc.forEach(function(x){try{chart.removeSeries(x);}catch(e){}});
             if(chart._pmRedraw) chart._pmRedraw(); // keep prev-month lines (8h) on top of the fresh weekly ones
             if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
