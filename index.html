@@ -7749,6 +7749,19 @@ function chartTab(){
         }
       })();
 
+      // ── BTC, all timeframes: big round numbers (every 5000: 80000 / 85000 ...) highlighted on the price axis only, no line ──
+      if(sym==="BTC"&&candles.length) (function(){
+        var STEP=5000,lo=Infinity,hi=-Infinity;
+        candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
+        if(!isFinite(lo)||!isFinite(hi)) return;
+        lo-=10000;hi+=10000; // pad so zooming out / scrolling still shows levels
+        if(hi-lo>400000) return;
+        for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
+          if(p<=0) continue;
+          series.createPriceLine({price:p,color:"#ffbf00",lineVisible:false,axisLabelVisible:true,axisLabelColor:"#ffbf00",axisLabelTextColor:"#040d1a",title:""});
+        }
+      })();
+
       // ── Intraday mode: previous YEAR high / low / close (PYH / PYL / PYC) as flat dashed lines, same colors as the 8h PMH / PML / PMC ──
       // One daily-candle request (~2.5 years); the prior calendar year's stats are drawn across the whole chart.
       if(intraday&&!eodOnly&&candles.length) (function(){
