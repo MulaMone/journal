@@ -6181,23 +6181,7 @@ function chartTab(){
       // If the user zoomed/panned, carry that time range into the new timeframe.
       _chartKeepView=null;
       if(INTRA_TFS.indexOf(t)<0) setIntraday(false); // 4h and up: intraday mode off
-      // Phone: every timeframe opens at its own default bar count (same as recenter). Carrying the old
-      // span across made e.g. 2m's 400 bars show up on 1h. Desktop keeps the same-candle-size carry-over.
-      if(!isMobile()&&!State.chart_intraday&&t!==tf&&_chartLive&&_chartLive.moved){
-        try{
-          var ts0=_chartLive.chart.timeScale(),vr=ts0.getVisibleRange(),lr=ts0.getVisibleLogicalRange();
-          if(vr&&vr.from&&vr.to&&lr){
-            // Keep the same zoom (bars on screen) and the same centre point in time.
-            var w0=ts0.width(),bs0=w0/(lr.to-lr.from),x0=ts0.timeToCoordinate(vr.to);
-            var rb=(x0==null)?0:Math.max(0,(w0-x0)/bs0);
-            // TradingView-style: at the live edge keep the right edge pinned (same gap after the last bar);
-            // when scrolled back into history keep the centre of what you were looking at. Same candle size either way.
-            var atLive=vr.to>=_chartLive.lastT-_chartLive.per;
-            _chartKeepView=atLive?{mode:"right",gapBars:rb,spanBars:lr.to-lr.from}
-                                 :{mode:"center",centerT:(vr.from+vr.to)/2,spanBars:lr.to-lr.from};
-          }
-        }catch(e){}
-      }
+      // Every timeframe opens at its own default bar count (ZOOM_BARS), same as recenter.
       State.chart_interval=t;render();
     });
     ctrlRow.appendChild(b);
@@ -7020,7 +7004,7 @@ function chartTab(){
       if(tf!=="1d") weekBoundaries.forEach(function(t){addMark(t,"WEEK","var(--accent)");});
       ethBoundaries.forEach(function(t){addMark(t,"ETH","#ffb020");});
       // BTC only: a line at every UTC day start (00:00 UTC = 7 PM ET winter / 8 PM summer). Weaker than WEEK/MONTH/QUARTER/YEAR, so those win where they coincide.
-      if(sym==="BTC"&&periodSec<86400){
+      if(sym==="BTC"&&periodSec<=1800){
         for(var dbi2=1;dbi2<candles.length;dbi2++){
           if(candles[dbi2].u!=null&&candles[dbi2-1].u!=null&&Math.floor(candles[dbi2].u/86400)!==Math.floor(candles[dbi2-1].u/86400)) addMark(candles[dbi2].time,"DAY","#6c8ebf");
         }
