@@ -6947,6 +6947,11 @@ function chartTab(){
       // whatever this feed actually returns rather than an assumed schedule.
       var weekBoundaries=[];
       for(var wbi=1;wbi<candles.length;wbi++){
+        if(sym==="BTC"&&candles[wbi].u!=null&&candles[wbi-1].u!=null){ // 24/7: no weekend gap, so break on the UTC week (Monday 00:00 UTC = Sunday 7 PM ET winter)
+          var _wk=function(u){return Math.floor((Math.floor(u/86400)+3)/7);};
+          if(periodSec<604800&&_wk(candles[wbi].u)!==_wk(candles[wbi-1].u)) weekBoundaries.push(candles[wbi].time);
+          continue;
+        }
         if(periodSec<604800&&candles[wbi].time-candles[wbi-1].time>2*24*3600) weekBoundaries.push(candles[wbi].time);
       }
       // Defined unconditionally (not just when boundaries exist) so the
