@@ -7019,6 +7019,12 @@ function chartTab(){
       quarterBoundaries.forEach(function(t){addMark(t,"QUARTER","#ffc83d");});
       if(tf!=="1d") weekBoundaries.forEach(function(t){addMark(t,"WEEK","var(--accent)");});
       ethBoundaries.forEach(function(t){addMark(t,"ETH","#ffb020");});
+      // BTC only: a line at every UTC day start (00:00 UTC = 7 PM ET winter / 8 PM summer). Weaker than WEEK/MONTH/QUARTER/YEAR, so those win where they coincide.
+      if(sym==="BTC"&&periodSec<86400){
+        for(var dbi2=1;dbi2<candles.length;dbi2++){
+          if(candles[dbi2].u!=null&&candles[dbi2-1].u!=null&&Math.floor(candles[dbi2].u/86400)!==Math.floor(candles[dbi2-1].u/86400)) addMark(candles[dbi2].time,"DAY","#6c8ebf");
+        }
+      }
       // Defined unconditionally (not just when boundaries exist) so the
       // ResizeObserver below can always call it safely — it no-ops when
       // there's nothing to draw.
@@ -7515,10 +7521,10 @@ function chartTab(){
         // in memory (same session-anchored day split as the day labels), so they show
         // with the chart. The first day on screen is partial, so its hi/lo is skipped.
         // The exact OANDA D-candle result below replaces these when it arrives.
-        if((pcGran==="D"||pcGran==="W")&&sym!=="BTC"){ // BTC days/weeks are UTC (Coinbase D/W candles), not the 17:00 ET session this instant pass uses: draw BTC only from the fetched candles
+        if(pcGran==="D"||pcGran==="W"){ // BTC groups on UTC days/weeks via dayT, so this matches the Coinbase fetch below
           var lg=[],g0=null,key0=null,prev0=null,dHi=-Infinity,dLo=Infinity,dCl=null,nDays=0;
           candles.forEach(function(c){
-            var k=Math.floor((c.time+anchorShift)/86400);
+            var k=Math.floor(dayT(c)/86400);
             if(pcGran==="W") k=Math.floor((k+3)/7); // Monday-start trading week (Sun open shifts into Monday)
             if(k!==key0){
               if(key0!==null) prev0={c:dCl,h:nDays<=1?null:dHi,l:nDays<=1?null:dLo};
