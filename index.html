@@ -14911,7 +14911,7 @@ function _resumeCatchUp(){ if(!document.hidden){ pollActiveAccount(); pollCloud(
 document.addEventListener("visibilitychange",_resumeCatchUp);
 window.addEventListener("pageshow",_resumeCatchUp); // iOS home-screen PWAs often skip visibilitychange
 window.addEventListener("focus",_resumeCatchUp);
-setInterval(pollActiveAccount,8000);
+setInterval(pollActiveAccount,15000);
 
 // Images change far less often than trades/notes, so this polls on a much
 // slower cadence and only pulls the (potentially large) image blob when
