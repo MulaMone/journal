@@ -7895,7 +7895,7 @@ function chartTab(){
           {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700,w:2},
           {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260,w:2},
           {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600,w:2},
-          {tf:"5m 200",g:"M5",per:300,col:"#3b82f6",n:1200,len:200,w:2}
+          {tf:"5m 200",g:"M5",per:300,col:"#3b82f6",n:1200,len:200,w:2,pl:true}
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n+"&bg=1";}
@@ -8000,7 +8000,7 @@ function chartTab(){
                         if(sp.dir&&li>0) col=lastV<pts[li-1].value?DN:UP;
                         ctx.setLineDash([]);
                         // higher-than-chart timeframe: price line across the whole chart at the current value
-                        if(sp.per>periodSec&&ys[li]>=0&&ys[li]<=H){
+                        if((sp.per>periodSec||sp.pl)&&ys[li]>=0&&ys[li]<=H){
                           ctx.globalAlpha=0.55;ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([2,3]);
                           ctx.beginPath();ctx.moveTo(0,ys[li]);ctx.lineTo(W,ys[li]);ctx.stroke();
                           ctx.setLineDash([]);ctx.globalAlpha=1;
