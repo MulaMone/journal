@@ -1132,13 +1132,14 @@ function chartPrefetchView(sym,tf){
       if(fs>=te) fs=te-ps;
       n=Math.min(5000,Math.max(50,Math.ceil((nowS-fs)/ps)+5));
     }
-    var slack=sym==="DXY"?20:0; // DXY keeps only candle times common to all six legs, so it can come back a few bars short
+    if(inst==="BTCUSD_CB"){var mb=btcMaxBars(gran);if(mb>0&&n>mb) n=mb;} // Coinbase page cap: never ask for (or demand) more bars than it can return
+    var slack=sym==="DXY"?20:(sym==="BTC"?5:0); // BTC: Coinbase omits candles with no trades, so allow a few missing bars // DXY keeps only candle times common to all six legs, so it can come back a few bars short
     var fresh=function(e){return !!(e&&e.data&&e.data.candles&&e.data.candles.length>=n-slack&&Date.now()-e.t<1800000);};
     if(fresh(_chartCache[key])) return Promise.resolve();
     return chartIdbGet(key).then(function(e){
       if(fresh(e)){_chartCache[key]=e;return;}
       var getJ=function(u){return fetch(u,{headers:{Authorization:"Bearer "+tok}}).then(function(r){return r.ok?r.json():null;});};
-      var src=inst==="BTCUSD_CB"?btcCandles(key+"&count="+n)
+      var src=inst==="BTCUSD_CB"?btcCandles(key+"&count="+n+"&bg=1")
         :sym==="DXY"?Promise.all(OANDA_DXY_PAIRS.map(function(p){return getJ(key.replace("/instruments/DXY/","/instruments/"+p.inst+"/")+"&count="+n);})).then(function(res){
             for(var i=0;i<res.length;i++) if(!res[i]||!res[i].candles) return null;
             return {candles:dxyCombineLegs(res)};})
@@ -6003,29 +6004,39 @@ function btcPool(jobs,limit){
 // Coinbase's public limit is ~10 req/s per IP. A 30m chart is rolled up from 15m rows (~30 pages), and the EMA overlay +
 // timeframe prefetch hit the same API at the same time, so bursts got 429'd (no CORS headers -> "Failed to fetch") and one
 // dead page failed the whole candle load. Every Coinbase request now goes through one shared gate (<=~8/s).
-var _btcGateAt=0;
-function btcGate(){
-  var now=Date.now(),at=Math.max(now,_btcGateAt);
-  _btcGateAt=at+120;
-  return new Promise(function(res){setTimeout(res,at-now);});
+// Two queues: foreground (the chart the user asked for) is always served before background (timeframe prefetch, EMA overlay),
+// so a click never waits behind a long prefetch. Background requests carry "&bg=1" in the OANDA-style URL.
+var _btcQ=[[],[]],_btcBusy=false;
+function btcPump(){
+  if(_btcBusy) return;
+  var q=_btcQ[0].length?_btcQ[0]:_btcQ[1];
+  if(!q.length) return;
+  _btcBusy=true;
+  q.shift()();
+  setTimeout(function(){_btcBusy=false;btcPump();},120);
 }
-function btcCbPage(g,s,e,n){ // rows [t(s),low,high,open,close,vol], newest first, <=300
+function btcGate(bg){
+  return new Promise(function(res){_btcQ[bg?1:0].push(res);btcPump();});
+}
+// Most bars a BTC view can return: btcCbRange caps at 40 pages x 300 rows, and some timeframes are rolled up from finer rows.
+function btcMaxBars(gran){var sp=BTC_IV[gran];return sp?Math.floor(12000/sp[1]):0;}
+function btcCbPage(g,s,e,n,bg){ // rows [t(s),low,high,open,close,vol], newest first, <=300
   n=n||0;
-  return btcGate().then(function(){
+  return btcGate(bg).then(function(){
     return fetch(BTC_CB+g+"&start="+encodeURIComponent(new Date(s).toISOString())+"&end="+encodeURIComponent(new Date(e).toISOString()));
   }).then(function(r){
     if(!r.ok) throw new Error("HTTP "+r.status);
     return r.json();
   }).catch(function(err){
     if(n>=6) throw err;
-    return new Promise(function(res){setTimeout(res,800*(n+1));}).then(function(){return btcCbPage(g,s,e,n+1);});
+    return new Promise(function(res){setTimeout(res,800*(n+1));}).then(function(){return btcCbPage(g,s,e,n+1,bg);});
   });
 }
-function btcCbRange(g,startMs,endMs,fromEnd){ // all Coinbase rows for [startMs,endMs], paged 300 at a time, max 40 pages
+function btcCbRange(g,startMs,endMs,fromEnd,bg){ // all Coinbase rows for [startMs,endMs], paged 300 at a time, max 40 pages
   var gms=g*1000,W=300*gms,wins=[];
   for(var s=Math.floor(startMs/gms)*gms;s<=endMs;s+=W) wins.push([s,Math.min(endMs,s+W-gms)]);
   if(wins.length>40) wins=fromEnd?wins.slice(-40):wins.slice(0,40);
-  return btcPool(wins.map(function(w){return function(){return btcCbPage(g,w[0],w[1]);};}),4).then(function(pages){
+  return btcPool(wins.map(function(w){return function(){return btcCbPage(g,w[0],w[1],0,bg);};}),4).then(function(pages){
     var seen={},rows=[];
     pages.forEach(function(pg){(pg||[]).forEach(function(r){if(!seen[r[0]]){seen[r[0]]=1;rows.push(r);}});});
     rows.sort(function(a,b){return a[0]-b[0];});
@@ -6041,14 +6052,14 @@ function btcMonthAgg(rows){ // daily rows -> ascending monthly {t,o,h,l,c} (UTC 
   });
   return out;
 }
-function btcMonthly(n){ // 1M: Coinbase daily bars rolled up by month, back to Jul 2015
+function btcMonthly(n,bg){ // 1M: Coinbase daily bars rolled up by month, back to Jul 2015
   var now=new Date(),cut=Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-3,1),LS="edge_btc_hist_v1";
   if(!_btcHistP||_btcHistP.cut!==cut){
     var cached=null;
     try{cached=JSON.parse(localStorage.getItem(LS)||"null");}catch(e){}
     var p;
     if(cached&&cached.cut===cut&&cached.rows&&cached.rows.length) p=Promise.resolve(cached.rows);
-    else p=btcCbRange(86400,Date.UTC(2015,6,1),cut-1,false).then(function(all){ // closed months before the cut: fetched once, kept in localStorage
+    else p=btcCbRange(86400,Date.UTC(2015,6,1),cut-1,false,bg).then(function(all){ // closed months before the cut: fetched once, kept in localStorage
       var rows=btcMonthAgg(all);
       try{localStorage.setItem(LS,JSON.stringify({t:Date.now(),cut:cut,rows:rows}));}catch(e){}
       return rows;
@@ -6057,7 +6068,7 @@ function btcMonthly(n){ // 1M: Coinbase daily bars rolled up by month, back to J
     p.catch(function(){if(_btcHistP&&_btcHistP.p===p)_btcHistP=null;});
   }
   return _btcHistP.p.then(function(hist){
-    return btcCbRange(86400,cut,Date.now(),false).then(function(rec){ // recent months, refreshed on every call (live poll too)
+    return btcCbRange(86400,cut,Date.now(),false,bg).then(function(rec){ // recent months, refreshed on every call (live poll too)
       var rows=hist.concat(btcMonthAgg(rec)),nw=new Date(),cm=Date.UTC(nw.getUTCFullYear(),nw.getUTCMonth(),1);
       if(rows.length>n) rows=rows.slice(-n);
       return {candles:rows.map(function(x){return {time:new Date(x.t).toISOString(),complete:x.t<cm,mid:{o:String(x.o),h:String(x.h),l:String(x.l),c:String(x.c)}};})};
@@ -6067,7 +6078,7 @@ function btcMonthly(n){ // 1M: Coinbase daily bars rolled up by month, back to J
 function btcCandles(u){
   var q={};
   (u.split("?")[1]||"").split("&").forEach(function(p){var i=p.indexOf("=");if(i>0) q[p.slice(0,i)]=decodeURIComponent(p.slice(i+1));});
-  if(q.granularity==="M") return btcMonthly(parseInt(q.count,10)||600);
+  if(q.granularity==="M") return btcMonthly(parseInt(q.count,10)||600,q.bg==="1");
   var spec=BTC_IV[q.granularity];
   if(!spec) return Promise.reject(new Error("HTTP 400: BTC timeframe not supported"));
   var g=spec[0],gms=g*1000,per=gms*spec[1],off=q.granularity==="W"?BTC_MON0:0,now=Date.now();
@@ -6076,7 +6087,7 @@ function btcCandles(u){
   var latest=!isFinite(fromMs);
   var endMs=isFinite(toMs)?toMs:now;
   var startMs=latest?bucket(now)-n*per:bucket(fromMs);
-  return btcCbRange(g,startMs,endMs,latest).then(function(rows){
+  return btcCbRange(g,startMs,endMs,latest,q.bg==="1").then(function(rows){
     var out=[],cur=null;
     rows.forEach(function(r){
       var t=bucket(r[0]*1000);
@@ -6793,6 +6804,8 @@ function chartTab(){
     var cacheable=!focusTs&&!eodOnly&&url.indexOf("&count=")>=0;
     var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
     var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
+    if(cacheable&&sym==="BTC"&&!monthlyFetch){var _mb=btcMaxBars(gran);if(_mb>0&&needN>_mb) needN=_mb;} // BTC can't return more than the Coinbase page cap, so don't demand it of the cache
+    if(cacheable&&sym==="BTC") needN=Math.max(0,needN-5); // a few bars may be missing (Coinbase skips no-trade candles)
     // Trade-anchored views ask for ~1 more bar per elapsed candle, which the delta refresh supplies — so count the
     // bars the entry will gain since it was saved when checking it's deep enough.
     var okEntry=function(e){
@@ -7884,7 +7897,7 @@ function chartTab(){
           {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600,w:2}
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
-        function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n;}
+        function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n+"&bg=1";}
         function toBars(d){ // ET-shifted times; the fall-back hour repeats wall-clock times, so keep strictly ascending only (same rule as the candles)
           var out=[];
           ((d&&d.candles)||[]).forEach(function(c){
@@ -8011,7 +8024,20 @@ function chartTab(){
         function load(sp){
           var c=store[sp.tf];
           if(c&&Date.now()-c.at<300000) return Promise.resolve(c.bars);
-          return chartFetchJson(urlFor(sp,sp.n)).then(function(d){var b=toBars(d);store[sp.tf]={at:Date.now(),bars:b};return b;});
+          // Persisted in IndexedDB (raw candles): after a refresh only the candles since the saved last one are fetched.
+          var ik="btcema|"+sp.tf;
+          return chartIdbGet(ik).then(function(e){
+            var raw=e&&e.data&&e.data.candles,fresh=raw&&raw.length>=Math.min(sp.n,btcMaxBars(sp.g))-5&&Date.now()-e.t<CHART_CACHE_TTL;
+            if(!fresh) return chartFetchJson(urlFor(sp,sp.n));
+            var last=raw[raw.length-1].time;
+            return chartFetchJson(urlFor(sp,5000)+"&from="+encodeURIComponent(last)).then(function(dd){
+              var fc=(dd&&dd.candles)||[];
+              return {candles:raw.filter(function(x){return x.time<last;}).concat(fc).slice(-Math.max(sp.n,raw.length))};
+            }).catch(function(){return {candles:raw};});
+          }).then(function(d){
+            if(d&&d.candles&&d.candles.length) chartIdbPut(ik,{t:Date.now(),n:sp.n,data:d});
+            var b=toBars(d);store[sp.tf]={at:Date.now(),bars:b};return b;
+          });
         }
         var chain=Promise.resolve();
         SPECS.forEach(function(sp){ // one timeframe at a time (Coinbase rate limit), each line appears as it lands
