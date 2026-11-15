@@ -6915,7 +6915,7 @@ function chartTab(){
         width:chartDiv.clientWidth,
         height:chartDiv.clientHeight,
         layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
-        grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260"}},
+        grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260",visible:sym!=="NQ"}},
         watermark:{visible:true,text:sym,fontSize:isMobile()?90:140,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
         crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
         rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
