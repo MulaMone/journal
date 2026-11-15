@@ -7982,6 +7982,7 @@ function chartTab(){
                       ctx.save();
                       ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
                       ctx.font="bold 10px 'Courier New',monospace";ctx.textBaseline="middle";
+                      var topN=0,botN=0; // off-screen tags stack instead of overlapping
                       SPECS.forEach(function(sp){
                         var pts=sp.pts;
                         if(!pts||!pts.length) return;
@@ -8022,7 +8023,7 @@ function chartTab(){
                         }
                         // tag at the end of the line (arrow + clamped to the edge when the line is off-screen)
                         var ty=ys[li],txt=sp.tf;
-                        if(ty<8){ty=8;txt="↑"+sp.tf;} else if(ty>H-8){ty=H-8;txt="↓"+sp.tf;}
+                        if(ty<8){ty=8+14*topN++;txt="↑"+sp.tf;} else if(ty>H-8){ty=H-8-14*botN++;txt="↓"+sp.tf;}
                         var tw=ctx.measureText(txt).width,tx=xs[li]+6;
                         if(tx+tw>W-2) tx=Math.max(2,W-tw-2);
                         ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(tx-2,ty-7,tw+4,14);
