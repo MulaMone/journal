@@ -7370,9 +7370,13 @@ function chartTab(){
         for(var izk in IZ) ZOOM_BARS[izk]=IZ[izk];
       }
       // BTC-only default zoom: BTC trades 24/7 and never closes, so it opens on fewer bars than the futures defaults.
-      // Sub-daily timeframes open with BTC_ZOOM_X times the usual bars (below 1 = fewer candles); 1d / 1w / 1m are left alone. Edit the number to taste.
-      var BTC_ZOOM_X=0.7;
-      if(sym==="BTC") ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
+      // Sub-daily timeframes open with BTC_ZOOM_X times the usual bars (below 1 = fewer candles); 1d / 1w / 1m use BTC_ZOOM_X_LONG. Edit the numbers to taste.
+      var BTC_ZOOM_X=0.7;      // 2m / 5m / 30m / 1h / 4h / 8h
+      var BTC_ZOOM_X_LONG=0.7; // 1d / 1w / 1m
+      if(sym==="BTC"){
+        ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
+        ["1d","1w","1m"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X_LONG);});
+      }
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
