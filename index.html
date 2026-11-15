@@ -8141,7 +8141,8 @@ function chartTab(){
 
       var last=candles[candles.length-1];
       var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
-      lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?last.close:"—")+'</span>';
+      function fmtPx(v){try{var n=Number(v);return isFinite(n)?series.priceFormatter().format(n):v;}catch(e){return v;}} // price-axis rounding: no float noise / long decimals
+      lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?fmtPx(last.close):"—")+'</span>';
       el.appendChild(lastEl);
 
       // ── Price tag with countdown baked in, replacing the native price-scale
@@ -8181,7 +8182,7 @@ function chartTab(){
           }
           timeLine='<div style="font-size:13px;font-weight:700;color:var(--accent);background:#040d1acc;border-radius:2px;padding:0 3px;margin-top:1px;display:inline-block;">'+cdTxt+"</div>";
         }
-        cdBadge.innerHTML="<div>"+currentPrice+"</div>"+timeLine;
+        cdBadge.innerHTML="<div>"+fmtPx(currentPrice)+"</div>"+timeLine;
         // Pin the badge to exactly the chart's own reserved price-scale
         // gutter width — not the text's natural width — so it can never
         // spill left over the candles the way a fit-content box can.
@@ -8251,7 +8252,7 @@ function chartTab(){
           }
           series.update(bar);
           currentPrice=v;currentIsUp=bar.close>=bar.open;
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+v+'</span>';
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(v)+'</span>';
           renderCountdown();
         }).catch(function(){});
       }
@@ -8321,8 +8322,7 @@ function chartTab(){
           if(window._xhairOff||!pm||!pm.point||pm.point.y==null){xhLbl.style.display="none";return;}
           var pr=series.coordinateToPrice(pm.point.y);
           if(pr==null){xhLbl.style.display="none";return;}
-          var dec=(typeof currentPrice==="number"||typeof currentPrice==="string")?((String(currentPrice).split(".")[1]||"").length):2;
-          xhLbl.textContent=pr.toFixed(dec);
+          xhLbl.textContent=fmtPx(pr);
           var w=chart.priceScale("right").width();
           if(w) xhLbl.style.width=w+"px";
           xhLbl.style.top=pm.point.y+"px";
@@ -8438,7 +8438,7 @@ function chartTab(){
           flushT=null;
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
           try{series.update(liveBar);}catch(e){return;}
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+liveBar.close+'</span>';
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
           renderCountdown();
         };
@@ -8540,7 +8540,7 @@ function chartTab(){
             lastBarTime=cs;liveBar=b;barEndTrue=cu+periodSec;
           });
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+liveBar.close+'</span>';
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
           renderCountdown();
           // don't trim the old end — trade-anchored views need their start bar; 5000 is just a safety cap
           _cc.data.candles=_cc.data.candles.filter(function(x){return x.time<_lastRaw;}).concat(fc).slice(-5000);
@@ -8597,7 +8597,7 @@ function chartTab(){
           if(cShift>lastBarTime) lastBarTime=cShift;
           liveBar={time:cShift,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
           series.update(liveBar);
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+parseFloat(c.mid.c)+'</span>';
+          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(parseFloat(c.mid.c))+'</span>';
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
           barEndTrue=Math.floor(new Date(c.time).getTime()/1000)+periodSec;
