@@ -7894,7 +7894,8 @@ function chartTab(){
           {tf:"1h",g:"H1",per:3600,col:UP,n:1200,dir:true,dash:true,w:2},
           {tf:"1d",g:"D",per:86400,col:"#38bdf8",n:700,w:2},
           {tf:"1w",g:"W",per:604800,col:"#e879f9",n:260,w:2},
-          {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600,w:2}
+          {tf:"8h",g:"H8",per:28800,col:"#fb923c",n:600,w:2},
+          {tf:"5m 200",g:"M5",per:300,col:"#3b82f6",n:1200,len:200,w:2}
         ];
         var store=window._btcEmaStore||(window._btcEmaStore={}); // fetched bars per timeframe, reused for 5 min across chart reloads
         function urlFor(sp,n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+sp.g+"&price=M&count="+n+"&bg=1";}
@@ -7906,12 +7907,13 @@ function chartTab(){
           });
           return out;
         }
-        function emaOf(b){
+        function emaOf(b,N){
+          N=N||EMA_N;var k=2/(N+1);
           var e=new Array(b.length),s=0,v=0;
           for(var i=0;i<b.length;i++){
-            if(i<EMA_N-1){s+=b[i].c;e[i]=null;}
-            else if(i===EMA_N-1){s+=b[i].c;v=s/EMA_N;e[i]=v;}
-            else{v=b[i].c*K+v*(1-K);e[i]=v;}
+            if(i<N-1){s+=b[i].c;e[i]=null;}
+            else if(i===N-1){s+=b[i].c;v=s/N;e[i]=v;}
+            else{v=b[i].c*k+v*(1-k);e[i]=v;}
           }
           return e;
         }
@@ -8022,10 +8024,10 @@ function chartTab(){
         series.attachPrimitive(emaPrimitive);
         function refresh(sp){sp.pts=buildPts(sp);if(_emaRepaint) _emaRepaint();}
         function load(sp){
-          var c=store[sp.tf];
+          var c=store[sp.g];
           if(c&&Date.now()-c.at<300000) return Promise.resolve(c.bars);
           // Persisted in IndexedDB (raw candles): after a refresh only the candles since the saved last one are fetched.
-          var ik="btcema|"+sp.tf;
+          var ik="btcema|"+sp.g;
           return chartIdbGet(ik).then(function(e){
             var raw=e&&e.data&&e.data.candles,fresh=raw&&raw.length>=Math.min(sp.n,btcMaxBars(sp.g))-5&&Date.now()-e.t<CHART_CACHE_TTL;
             if(!fresh) return chartFetchJson(urlFor(sp,sp.n));
@@ -8036,7 +8038,7 @@ function chartTab(){
             }).catch(function(){return {candles:raw};});
           }).then(function(d){
             if(d&&d.candles&&d.candles.length) chartIdbPut(ik,{t:Date.now(),n:sp.n,data:d});
-            var b=toBars(d);store[sp.tf]={at:Date.now(),bars:b};return b;
+            var b=toBars(d);store[sp.g]={at:Date.now(),bars:b};return b;
           });
         }
         var chain=Promise.resolve();
@@ -8044,8 +8046,8 @@ function chartTab(){
           chain=chain.then(function(){
             if(myLoadToken!==_chartLoadToken) return;
             return load(sp).then(function(b){
-              if(myLoadToken!==_chartLoadToken||b.length<=EMA_N) return;
-              sp.bars=b;sp.ema=emaOf(b);refresh(sp);
+              if(myLoadToken!==_chartLoadToken||b.length<=(sp.len||EMA_N)) return;
+              sp.bars=b;sp.ema=emaOf(b,sp.len);refresh(sp);
             }).catch(function(){});
           });
         });
@@ -8058,7 +8060,7 @@ function chartTab(){
               if(myLoadToken!==_chartLoadToken) return;
               var b=sp.bars;
               toBars(d).forEach(function(x){var i=lastIdx(b,x.t,false);if(i>=0&&b[i].t===x.t) b[i]=x;else if(i===b.length-1) b.push(x);});
-              sp.ema=emaOf(b);refresh(sp);
+              sp.ema=emaOf(b,sp.len);refresh(sp);
             }).catch(function(){});
           });
         },30000);
