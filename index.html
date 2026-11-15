@@ -7749,12 +7749,12 @@ function chartTab(){
         }
       })();
 
-      // ── BTC, all timeframes: big round numbers (every 5000: 80000 / 85000 ...) highlighted on the price axis only, no line ──
+      // ── BTC, all timeframes: big round numbers (every 5000; 1w every 10000; 1m every 20000) highlighted on the price axis only, no line ──
       if(sym==="BTC"&&candles.length) (function(){
-        var STEP=5000,lo=Infinity,hi=-Infinity;
+        var STEP=periodSec>=2592000?20000:periodSec>=604800?10000:5000,lo=Infinity,hi=-Infinity; // 1m: 20000, 1w: 10000, else 5000
         candles.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
         if(!isFinite(lo)||!isFinite(hi)) return;
-        lo-=10000;hi+=10000; // pad so zooming out / scrolling still shows levels
+        lo-=2*STEP;hi+=2*STEP; // pad so zooming out / scrolling still shows levels
         if(hi-lo>400000) return;
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           if(p<=0) continue;
