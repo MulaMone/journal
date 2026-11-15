@@ -8304,8 +8304,27 @@ function chartTab(){
       // Mouse: it follows the pointer as usual; click hides / shows the lines (double-click recenter = no change).
       (function(){
         function setXhair(on){
-          try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:on}}});}catch(e){}
+          try{chart.applyOptions({crosshair:{vertLine:{visible:on,labelVisible:on},horzLine:{visible:on,labelVisible:false}}});}catch(e){}
+          if(!on&&xhLbl) xhLbl.style.display="none";
         }
+        // Price selector label as a DOM tag (z-index above the live-price badge) so it draws OVER the current
+        // price instead of under it — the native canvas label can't be layered above DOM overlays.
+        document.querySelectorAll(".xh-price-lbl").forEach(function(n){n.remove();});
+        var xhLbl=div();
+        xhLbl.className="xh-price-lbl";
+        xhLbl.style.cssText="position:absolute;right:0;top:0;display:none;text-align:center;border-radius:2px;padding:2px 4px;font-size:12px;font-weight:700;color:#fff;background:#4c525e;font-family:'Courier New',monospace;z-index:8;transform:translateY(-50%);white-space:nowrap;line-height:1.3;pointer-events:none;box-sizing:border-box;";
+        chartDiv.appendChild(xhLbl);
+        chart.subscribeCrosshairMove(function(pm){
+          if(window._xhairOff||!pm||!pm.point||pm.point.y==null){xhLbl.style.display="none";return;}
+          var pr=series.coordinateToPrice(pm.point.y);
+          if(pr==null){xhLbl.style.display="none";return;}
+          var dec=(typeof currentPrice==="number"||typeof currentPrice==="string")?((String(currentPrice).split(".")[1]||"").length):2;
+          xhLbl.textContent=pr.toFixed(dec);
+          var w=chart.priceScale("right").width();
+          if(w) xhLbl.style.width=w+"px";
+          xhLbl.style.top=pm.point.y+"px";
+          xhLbl.style.display="";
+        });
         if(window._xhairOff) setXhair(false);
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
         var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
