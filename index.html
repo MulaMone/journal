@@ -7369,6 +7369,10 @@ function chartTab(){
         var IZ=isMobile()?{"2m":70,"5m":60,"30m":30,"1h":20}:{"2m":120,"5m":96,"30m":48,"1h":32};
         for(var izk in IZ) ZOOM_BARS[izk]=IZ[izk];
       }
+      // BTC-only default zoom: BTC trades 24/7 (futures ~5 days a week), so the same bar count covers less calendar time.
+      // Sub-daily timeframes open with BTC_ZOOM_X times the usual bars; 1d / 1w / 1m are left alone. Edit the number to taste.
+      var BTC_ZOOM_X=1.4;
+      if(sym==="BTC") ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
