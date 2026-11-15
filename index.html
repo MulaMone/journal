@@ -6879,7 +6879,7 @@ function chartTab(){
       // reflects live price action up to the moment of the request.
       var candles=raw.map(function(c){
         var _u=Math.floor(new Date(c.time).getTime()/1000);
-        return {time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+        return {u:_u,time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
       });
 
       if(sym==="BTC"){ // 24/7 market: the fall-back hour maps two candles to the same ET time — keep times strictly ascending
@@ -6970,8 +6970,10 @@ function chartTab(){
       // the next trading day/month/year.
       var monthBoundaries=[],yearBoundaries=[];
       var anchorShift=(24-dailyAlign)*3600;
+      // Day/month grouping time: BTC runs on UTC days (00:00 UTC = 7 PM ET winter / 8 PM summer), everything else on the 17:00/18:00 ET session anchor.
+      var dayT=function(c){return (sym==="BTC"&&c.u!=null)?c.u:c.time+anchorShift;};
       for(var mi=1;mi<candles.length&&tf!=="1w"&&tf!=="1m"&&tf!=="1y";mi++){
-        var dm=new Date((candles[mi].time+anchorShift)*1000),dp=new Date((candles[mi-1].time+anchorShift)*1000);
+        var dm=new Date(dayT(candles[mi])*1000),dp=new Date(dayT(candles[mi-1])*1000);
         if(dm.getUTCMonth()!==dp.getUTCMonth()){
           if(tf==="1d"&&dm.getUTCFullYear()!==dp.getUTCFullYear()) yearBoundaries.push(candles[mi].time);
           else monthBoundaries.push(candles[mi].time);
@@ -7028,7 +7030,7 @@ function chartTab(){
         var DAY_ABBR=["SUN","MON","TUE","WED","THU","FRI","SAT"],lastDayKey=null,curDay=null;
         candles.forEach(function(c){
           if(c.time<wkStart) return;
-          var st=c.time+anchorShift,dk=Math.floor(st/86400);
+          var st=dayT(c),dk=Math.floor(st/86400);
           if(dk!==lastDayKey){lastDayKey=dk;curDay={t0:c.time,t1:c.time,name:DAY_ABBR[new Date(st*1000).getUTCDay()]};dayLabels.push(curDay);}
           curDay.t1=c.time;
         });
@@ -7038,9 +7040,9 @@ function chartTab(){
       // The Wednesday that is still being traded is NOT shaded until its session closes (it keeps its plain day label).
       var wedBands=[],liveWedT0=null;
       if(tf==="30m"){
-        var lastWk=null,curW=null,nowDk=Math.floor((candles[candles.length-1].time+anchorShift)/86400);
+        var lastWk=null,curW=null,nowDk=Math.floor(dayT(candles[candles.length-1])/86400);
         candles.forEach(function(c){
-          var st=c.time+anchorShift,dk=Math.floor(st/86400);
+          var st=dayT(c),dk=Math.floor(st/86400);
           if(new Date(st*1000).getUTCDay()!==3){lastWk=null;return;}
           if(dk!==lastWk){lastWk=dk;curW={t0:c.time,t1:c.time,dk:dk};wedBands.push(curW);}
           curW.t1=c.time;
