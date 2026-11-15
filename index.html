@@ -7992,9 +7992,11 @@ function chartTab(){
                         }
                         ctx.lineWidth=sp.w;ctx.lineJoin="round";ctx.setLineDash(sp.dash?[6,4]:[]);
                         if(sp.dir){ // 1h: each segment green if rising, red if falling
+                          var segCol=UP;
                           for(i=1;i<pts.length;i++){
+                            if(pts[i].value!==pts[i-1].value) segCol=pts[i].value<pts[i-1].value?DN:UP; // flat segment keeps the prior direction
                             if(xs[i]==null||ys[i]==null||xs[i-1]==null||ys[i-1]==null) continue;
-                            ctx.strokeStyle=pts[i].value<pts[i-1].value?DN:UP;
+                            ctx.strokeStyle=segCol;
                             ctx.beginPath();ctx.moveTo(xs[i-1],ys[i-1]);ctx.lineTo(xs[i],ys[i]);ctx.stroke();
                           }
                         } else {
@@ -8010,7 +8012,7 @@ function chartTab(){
                         while(li>=0&&(xs[li]==null||ys[li]==null)) li--;
                         if(li<0) return;
                         var lastV=pts[li].value,col=sp.col;
-                        if(sp.dir&&li>0) col=lastV<pts[li-1].value?DN:UP;
+                        if(sp.dir&&li>0){var pj=li-1;while(pj>0&&pts[pj].value===lastV) pj--;col=lastV<pts[pj].value?DN:UP;} // skip flat tail (live point repeats the last completed value)
                         ctx.setLineDash([]);
                         // higher-than-chart timeframe: price line across the whole chart at the current value
                         if((sp.per>periodSec||sp.pl)&&ys[li]>=0&&ys[li]<=H){
