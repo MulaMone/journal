@@ -6099,6 +6099,67 @@ function btcCandles(u){
   });
 }
 
+// ── BTC background feed ──
+// One Coinbase ticker socket for the whole app session (opened by the first BTC chart view, never closed by a timeframe switch
+// or by leaving the Chart tab). Every tick also updates the newest candle of EVERY cached BTC timeframe (and opens the next bar
+// when one starts), so coming back to a timeframe paints the live candles instead of an old snapshot that gets re-fetched and
+// redrawn. Chart views subscribe to this same socket via _btcFeed.subs.
+var _btcFeed={ws:null,subs:[],lastMsg:0,wd:null,savedAt:0,fixAt:{},fixing:{}};
+function btcFeedOpen(){
+  var f=_btcFeed;
+  if(!f.wd) f.wd=setInterval(function(){ // silent socket (sleep / wifi change): drop and reconnect
+    if(f.ws&&Date.now()-f.lastMsg>20000){var w=f.ws;f.ws=null;try{w.close();}catch(e){}btcFeedOpen();}
+  },10000);
+  if(f.ws) return;
+  var ws;
+  try{ws=new WebSocket(BTC_WS);}catch(e){return;}
+  f.ws=ws;f.lastMsg=Date.now();
+  ws.onopen=function(){ws.send(JSON.stringify({type:"subscribe",product_ids:["BTC-USD"],channels:["ticker","heartbeat"]}));};
+  ws.onmessage=function(ev){
+    var m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(!m) return;
+    f.lastMsg=Date.now();
+    if(m.type==="ticker"&&m.price) btcCacheTick(parseFloat(m.price),m.time?Date.parse(m.time):Date.now());
+    f.subs.slice().forEach(function(fn){try{fn(m);}catch(e){}});
+  };
+  ws.onclose=ws.onerror=function(){
+    if(f.ws!==ws) return;
+    f.ws=null;
+    setTimeout(btcFeedOpen,3000);
+  };
+}
+function btcCacheTick(px,ms){
+  if(!isFinite(px)||!isFinite(ms)) return;
+  var now=Date.now(),f=_btcFeed,save=now-f.savedAt>15000;
+  if(save) f.savedAt=now;
+  Object.keys(_chartCache).forEach(function(k){
+    if(k.indexOf("/instruments/BTCUSD_CB/")<0||f.fixing[k]) return;
+    var e=_chartCache[k],cs=e&&e.data&&e.data.candles,g=k.match(/granularity=([A-Z0-9]+)/),spec=g&&BTC_IV[g[1]];
+    if(!cs||!cs.length||!spec) return; // monthly views are rebuilt whole, never patched
+    var per=spec[0]*spec[1]*1000,off=g[1]==="W"?BTC_MON0:0;
+    var b=Math.floor((ms-off)/per)*per+off,last=cs[cs.length-1],lt=Date.parse(last.time);
+    if(b<lt) return;
+    if(b===lt){
+      var x=last.mid;
+      if(px>parseFloat(x.h)) x.h=String(px);
+      if(px<parseFloat(x.l)) x.l=String(px);
+      x.c=String(px);
+    } else if(b-lt===per){ // next bar just opened
+      last.complete=true;
+      var p=String(px);
+      e.data={candles:cs.concat([{time:new Date(b).toISOString(),complete:false,mid:{o:p,h:p,l:p,c:p}}]).slice(-5000)};
+    } else if(now-(f.fixAt[k]||0)>30000){ // ticks were missed (sleep / dropped socket): refill from the last bar on
+      f.fixAt[k]=now;f.fixing[k]=true;
+      btcCandles(k+"&count=5000&from="+encodeURIComponent(last.time)+"&bg=1").then(function(d){
+        var fc=(d&&d.candles)||[];
+        if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<last.time;}).concat(fc).slice(-5000)};
+      }).catch(function(){}).then(function(){f.fixing[k]=false;});
+      return;
+    } else return;
+    if(save){e.t=now;chartIdbPut(k,e);}
+  });
+}
+
 // Account id is needed for the pricing stream URL; fetched once with the token and cached.
 function oandaAcct(token){
   var a=ls("oanda_acct","");
@@ -8461,22 +8522,16 @@ function chartTab(){
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart"||strFail>5) return;
           if(sym==="BTC"){ // BTC: Coinbase ticker websocket (24/7) instead of the OANDA pricing stream
             try{
-              var ws=new WebSocket(BTC_WS),wsDone=false;
-              _chartStreamAbort={abort:function(){wsDone=true;try{ws.close();}catch(e){}}};
-              ws.onopen=function(){ws.send(JSON.stringify({type:"subscribe",product_ids:["BTC-USD"],channels:["ticker","heartbeat"]}));};
-              ws.onmessage=function(ev){
-                var m;try{m=JSON.parse(ev.data);}catch(e){return;}
-                if(!m) return;
+              // Shared app-wide socket (btcFeedOpen): it outlives this view, so every cached BTC timeframe keeps printing live.
+              btcFeedOpen();
+              var btcSub=function(m){
                 if(m.type==="heartbeat"){lastMsgAt=Date.now();strFail=0;return;} // 1/s: keeps the silent-stream watchdog quiet
                 if(m.type!=="ticker"||!m.price) return;
                 lastMsgAt=Date.now();strFail=0;
                 onTick(parseFloat(m.price),Math.floor((m.time?Date.parse(m.time):Date.now())/1000));
               };
-              ws.onclose=ws.onerror=function(){
-                if(wsDone) return;
-                wsDone=true;strFail++;
-                setTimeout(connectStream,3000);
-              };
+              _btcFeed.subs.push(btcSub);
+              _chartStreamAbort={abort:function(){var i=_btcFeed.subs.indexOf(btcSub);if(i>-1)_btcFeed.subs.splice(i,1);}};
             }catch(e){}
             return;
           }
