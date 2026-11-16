@@ -10046,47 +10046,7 @@ function notesTab(){
   return el;
 }
 
-// ─── FEED FRESHNESS ───────────────────────────────────────────────
-// Last good fetch / last failed fetch per data feed, shown as a small badge on
-// each Analyst section so a feed that is quietly serving cached data stands out.
-var _feed=(function(){try{return JSON.parse(localStorage.getItem("edge_feed"))||{};}catch(e){return {};}})();
-function feedMark(key,ok,err){
-  var f=_feed[key]||(_feed[key]={});
-  if(ok){f.ok=Date.now();f.err=0;f.msg="";}
-  else{f.err=Date.now();f.msg=String((err&&err.message)||err||"").slice(0,80);}
-  try{localStorage.setItem("edge_feed",JSON.stringify(_feed));}catch(e){_dbg(e);}
-  feedPaint();
-}
-function _feedAgo(ts){
-  var m=Math.round((Date.now()-ts)/60000);
-  if(m<1) return "just now";
-  if(m<60) return m+"m ago";
-  if(m<48*60) return Math.round(m/60)+"h ago";
-  return Math.round(m/1440)+"d ago";
-}
-function feedPaint(){
-  var els=document.querySelectorAll("[data-feed]");
-  for(var i=0;i<els.length;i++){
-    var el=els[i],f=_feed[el.getAttribute("data-feed")]||{};
-    if(f.err&&f.err>(f.ok||0)){
-      el.style.color="var(--red)";
-      el.textContent="⚠ fetch failed "+_feedAgo(f.err)+(f.ok?" · showing data from "+_feedAgo(f.ok):" · no data");
-      el.title=f.msg||"";
-    } else if(f.ok){
-      el.style.color="var(--text3)";el.textContent="fetched "+_feedAgo(f.ok);el.title="";
-    } else { el.textContent=""; }
-  }
-}
-function feedBadge(key){
-  var b=document.createElement("span");b.setAttribute("data-feed",key);
-  b.style.cssText="float:right;font-family:'Courier New',monospace;font-size:9px;letter-spacing:.5px;text-transform:none;font-weight:400;color:var(--text3);margin-left:10px;line-height:1.9;";
-  setTimeout(feedPaint,0);
-  return b;
-}
-setInterval(function(){if(!document.hidden&&document.querySelector("[data-feed]")) feedPaint();},30000);
-
-// ─── ANALYST TAB (CFTC COT + Open Interest) ───
-// (feedMark success hooks are attached to the cache setters at the end of this script.)─────────────────────────
+// ─── ANALYST TAB (CFTC COT + Open Interest) ────────────────────────────
 // Data source: CFTC Traders in Financial Futures (TFF), Futures-Only report,
 // via the CFTC's public Socrata Open Data API (free, no key required).
 // Dataset: publicreporting.cftc.gov, resource id gpe5-46if.
@@ -10775,7 +10735,7 @@ function loadCmeDailyOI2(sym,force,statusCb){
     // to fetch/parse the bulletin itself.
     syncMktToCloud();
     return folded;
-  }).catch(function(err){feedMark("cme",false,err);
+  }).catch(function(err){
     if(cached){var c2=JSON.parse(JSON.stringify(cached));c2._err=(err&&err.message)?err.message:String(err);return c2;}
     throw err;
   });
@@ -11022,7 +10982,7 @@ function loadYieldCurveData(force){
     if(!merged.rows.length) throw new Error("both yield-curve sources failed");
     _ycMemCache=merged;ycCacheSet(merged);
     return merged;
-  }).catch(function(err){feedMark("yc",false,err);
+  }).catch(function(err){
     if(cached){_ycMemCache=cached;return cached;}
     throw err;
   });
@@ -11067,7 +11027,7 @@ function loadLiquidityData(force){
     var obj={rows:json.rows,sourceFetchedAt:json.fetchedAt,fetchedAt:Date.now()};
     _liqMemCache=obj;liqCacheSet(obj);
     return obj;
-  }).catch(function(err){feedMark("liq",false,err);
+  }).catch(function(err){
     if(cached){_liqMemCache=cached;return cached;}
     throw err;
   });
@@ -12001,7 +11961,7 @@ function loadFedFundsData2(force){
   var cached=fedFundsCacheGet();
   var stale=!cached||!cached.fetchedAt||(Date.now()-cached.fetchedAt)>6*60*60*1000||cached.fetchedAt<cmeLastBoundaryMs();
   if(cached&&!force&&!stale) return Promise.resolve(cached);
-  return fetchFedFundsData().then(function(data){fedFundsCacheSet(data);syncMktToCloud();return data;}).catch(function(err){feedMark("fed",false,err);
+  return fetchFedFundsData().then(function(data){fedFundsCacheSet(data);syncMktToCloud();return data;}).catch(function(err){
     if(cached){
       // keep showing the last good curve, but flag it so a frozen card is never mistaken for a fresh one
       var c2={};for(var k in cached) c2[k]=cached[k];
@@ -12719,7 +12679,7 @@ function loadDxyData(force){
     };
     _dxyMemCache=obj;dxyCacheSet(obj);
     return obj;
-  }).catch(function(err){feedMark("dxy",false,err);
+  }).catch(function(err){
     if(cached){_dxyMemCache=cached;return cached;}
     throw err;
   });
@@ -12979,7 +12939,7 @@ function analystTab(){
   // ── Intermarket & Cross-Asset Correlations — DXY + 10Y side by side ──
   var dxyHeadRow=div();dxyHeadRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   var dxyHead=div();dxyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;flex:1;min-width:0;";
-  dxyHead.textContent="Intermarket & Cross-Asset Correlations";dxyHead.appendChild(feedBadge("dxy"));
+  dxyHead.textContent="Intermarket & Cross-Asset Correlations";
   dxyHeadRow.appendChild(dxyHead);
   var rbtn=h("button",{className:"btn"});
   rbtn.textContent="↻";
@@ -13007,7 +12967,7 @@ function analystTab(){
 
   // ── Yield Curve Spreads — separate section, own data source ──
   var ycHead=div();ycHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  ycHead.textContent="Yield Curve Spreads";ycHead.appendChild(feedBadge("yc"));
+  ycHead.textContent="Yield Curve Spreads";
   el.appendChild(ycHead);
 
   var ycSpread=State.analyst_yc_spread||"2s10s";
@@ -13051,7 +13011,7 @@ function analystTab(){
 
   // ── GEXBot gamma levels (ES / NQ) ──
   var gexHead=div();gexHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  gexHead.textContent="Gamma Levels";gexHead.appendChild(feedBadge("gex"));
+  gexHead.textContent="Gamma Levels";
   el.appendChild(gexHead);
   var gexBody=div();gexBody.id="gex-body";el.appendChild(gexBody);
 
@@ -13059,13 +13019,12 @@ function analystTab(){
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   fedHead.innerHTML=assetLabelHTML("Fed Rate Probabilities").replace(/<\/span><\/span>$/,"</span><span style='font-size:16px;letter-spacing:0;line-height:1;'>"+ASSET_ICONS["Fed Rate Probabilities"].e+"</span></span>");
   el.appendChild(fedHead);
-  var fedFresh=div();fedFresh.style.cssText="overflow:hidden;margin-top:6px;";fedFresh.appendChild(feedBadge("fed"));el.appendChild(fedFresh);
   var fedBody=div();fedBody.id="fed-body";el.appendChild(fedBody);
   fedBody.style.transition="opacity .15s";
 
   // ── Liquidity & Fed Balance Sheet Metrics ──
   var liqHead=div();liqHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";liqHead.appendChild(feedBadge("liq"));
+  liqHead.textContent="Liquidity & Fed Balance Sheet Metrics";
   el.appendChild(liqHead);
   var liqBody=div();liqBody.id="liq-body";el.appendChild(liqBody);
   liqBody.style.transition="opacity .15s";
@@ -13074,7 +13033,7 @@ function analystTab(){
   // ── Legacy report — separate section, rendered above TFF ──
   var sym=State.analyst_symbol||"ES";
   var cotHead=div();cotHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
-  cotHead.textContent="Market Structure & Positioning";cotHead.appendChild(feedBadge("cme"));
+  cotHead.textContent="Market Structure & Positioning";
   el.appendChild(cotHead);
   var ctrlRow=div("row gap8");ctrlRow.style.cssText="flex-wrap:wrap;flex-shrink:0;";
   var symBtns=[];
@@ -13244,7 +13203,7 @@ function analystTab(){
   // line = OI (our own capture only — no free OI history exists). ──
   var voiHeadRow=div();voiHeadRow.style.cssText="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
   var voiHead=div();voiHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;";
-  voiHead.textContent="Daily Volume & Open Interest";voiHead.appendChild(feedBadge("cme"));
+  voiHead.textContent="Daily Volume & Open Interest";
   voiHeadRow.appendChild(voiHead);
   var voiLinksRow=div();voiLinksRow.style.cssText="display:flex;align-items:center;gap:14px;";
   if(!isM){
@@ -13614,10 +13573,9 @@ function analystTab(){
         if(myToken!==_gexToken||State.tab!=="analyst") return;
         if(d.error) throw new Error(d.error);
         try{d.ES&&(d.ES._cat=cat);d.NQ&&(d.NQ._cat=cat);localStorage.setItem("edge_gex_cache",JSON.stringify({t:Date.now(),c:cat,d:d}));}catch(e){_dbg(e);}
-        feedMark("gex",true);
         renderGex(d);
       }).catch(function(err){
-        feedMark("gex",false,err);
+        
         if(myToken!==_gexToken) return;
         gexBody.innerHTML='<div style="padding:20px;text-align:center;color:var(--red);font-family:Courier New,monospace;font-size:12px;">FAILED TO LOAD GAMMA LEVELS — '+(err&&err.message?err.message:"network error")+'</div>';
       });
@@ -15369,12 +15327,6 @@ function energyTab(){
 }
 
 
-// Feed freshness: a cache write means fresh data just arrived.
-cmeOiCacheSet=(function(fn){return function(){feedMark("cme",true);return fn.apply(this,arguments);};})(cmeOiCacheSet);
-ycCacheSet=(function(fn){return function(){feedMark("yc",true);return fn.apply(this,arguments);};})(ycCacheSet);
-liqCacheSet=(function(fn){return function(){feedMark("liq",true);return fn.apply(this,arguments);};})(liqCacheSet);
-fedFundsCacheSet=(function(fn){return function(){feedMark("fed",true);return fn.apply(this,arguments);};})(fedFundsCacheSet);
-dxyCacheSet=(function(fn){return function(){feedMark("dxy",true);return fn.apply(this,arguments);};})(dxyCacheSet);
 var VIEWS={energy:energyTab,home:homeTab,prep:prepTab,log:logTab,playbook:playbookTab,analytics:analyticsTab,import:importTab,notes:notesTab,chart:chartTab,openanalysis:openAnalysisTab,accounts:accountsTab,analyst:analystTab,news:newsFeedTab,settings:settingsTab};
 
 // Prevent browser restoring scroll position on refresh
