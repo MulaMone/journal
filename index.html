@@ -564,7 +564,6 @@ var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
 // Key stored in parts to avoid plain-text exposure in source
 var _KP=["sb_publishable_iT3naKNfV","fmGAii0LGgMHA_qfV9LR6P"];
 var SUPA_KEY=_KP[0]+_KP[1];
-var SYNC_ID_KEY="edge_sync_id";
 var supaClient=true; // flag — using direct REST, no client needed
 
 function initSupabase(){ /* no-op — using direct fetch */ }
@@ -2557,7 +2556,6 @@ function openSettings(){
   }));
 
 
-
   // ── SECURITY ──
   body.appendChild(sectionLabel("Security"));
 
@@ -2746,99 +2744,6 @@ function mobileEquitySVG(trades){
   return wrap;
 }
 
-// Build mobile bar chart for a data array [{l, v}]
-function mobileBarChart(data){
-  var wrap=document.createElement("div");
-  var maxAbs=data.map(function(d){return Math.abs(d.v)||1;}).reduce(function(a,b){return a>b?a:b;},0);
-  data.forEach(function(d){
-    var row=document.createElement("div");row.className="m-bar-row";
-    var nm=document.createElement("div");nm.className="m-bar-name";nm.textContent=d.l;
-    var track=document.createElement("div");track.className="m-bar-track";
-    var fill=document.createElement("div");
-    fill.className=d.v>=0?"m-bar-fill-g":"m-bar-fill-r";
-    fill.style.width=(Math.abs(d.v)/maxAbs*100).toFixed(1)+"%";
-    track.appendChild(fill);
-    var val=document.createElement("div");val.className="m-bar-val "+(d.v>=0?"g":"r");
-    val.textContent=dol(d.v);
-    row.appendChild(nm);row.appendChild(track);row.appendChild(val);
-    wrap.appendChild(row);
-  });
-  return wrap;
-}
-
-// Build P&L heatmap for a month
-function mobilePnlHeatmap(trades){
-  var now=new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"})); // New York calendar date
-  var yr=now.getFullYear(),mo=now.getMonth();
-  // Map trades by date key MM/DD (current month only)
-  var byDate={};
-  trades.forEach(function(t){
-    if(!t.date) return;
-    var td=tradingDay(t);
-    var p=td.split("/");if(p.length!==3)return;
-    if(parseInt(p[0])-1!==mo||2000+parseInt(p[2])!==yr) return;
-    var key=p[0]+"/"+p[1];
-    byDate[key]=(byDate[key]||0)+t.d;
-  });
-  var maxAbs=0;
-  Object.keys(byDate).forEach(function(k){var v=byDate[k];if(Math.abs(v)>maxAbs) maxAbs=Math.abs(v);});
-
-  var wrap=document.createElement("div");
-
-  // 6 columns: Sun Mon Tue Wed Thu Fri  (Saturday removed — market closed)
-  var hdrs=document.createElement("div");
-  hdrs.className="m-hm-hdrs";
-  ["Su","Mo","Tu","We","Th","Fr"].forEach(function(d){
-    var c=document.createElement("div");c.className="m-hm-hdr";c.textContent=d;hdrs.appendChild(c);
-  });
-  wrap.appendChild(hdrs);
-
-  var grid=document.createElement("div");
-  grid.className="m-hm-grid";
-
-  var dim=new Date(yr,mo+1,0).getDate();
-  var today=now.getDate();
-  var mo2=mo+1;
-
-  // Find what day-of-week the 1st falls on (0=Sun...6=Sat)
-  // Sun=col 0, Mon=col 1 ... Fri=col 5, Sat=skipped
-  var firstDow=new Date(yr,mo,1).getDay(); // 0=Sun
-  // If month starts on Saturday (6), first visible col is Sunday of next week → offset=0 but skip day 1
-  // Offset = firstDow if 0-5, or 0 if Saturday (day 1 gets pushed to Sunday slot next row)
-  var offset=firstDow<=5?firstDow:0;
-
-  // Pad empty cells before the 1st
-  for(var e=0;e<offset;e++){
-    var ec=document.createElement("div");ec.className="m-hm-cell hm-empty";grid.appendChild(ec);
-  }
-
-  for(var d=1;d<=dim;d++){
-    var dow=new Date(yr,mo,d).getDay(); // 0=Sun...6=Sat
-    // Skip Saturdays entirely — no cell added, no column shift
-    if(dow===6) continue;
-
-    var cell=document.createElement("div");
-    var key2=(mo2<10?"0":"")+mo2+"/"+(d<10?"0":"")+d;
-    var val=byDate[key2];
-    var cls="hm-empty";
-    if(val===undefined){cls=d<=today?"hm-zero":"hm-empty";}
-    else if(val===0){cls="hm-zero";}
-    else if(val>0){
-      var ratio=maxAbs>0?val/maxAbs:0;
-      cls=ratio>0.66?"hm-g3":ratio>0.33?"hm-g2":"hm-g1";
-    } else {
-      var ratio2=maxAbs>0?Math.abs(val)/maxAbs:0;
-      cls=ratio2>0.66?"hm-r3":ratio2>0.33?"hm-r2":"hm-r1";
-    }
-    cell.className="m-hm-cell "+cls;
-    if(val!==undefined){cell.title=dol(val);}
-    if(d===today){cell.style.outline="1.5px solid #ff8c00";cell.style.outlineOffset="-1px";}
-    (function(day,v){cell.addEventListener("click",function(){if(v!==undefined) alert(new Date(yr,mo,day).toDateString()+" : "+dol(v));});})(d,val);
-    grid.appendChild(cell);
-  }
-  wrap.appendChild(grid);
-  return wrap;
-}
 
 // Streak dots (last N trades)
 function mobileStreakDots(trades,n){
@@ -4566,7 +4471,6 @@ function playbookTab(){
   var editingIdx=State.pb_editing!==undefined?State.pb_editing:null;
   var addingNew=State.pb_adding||false;
 
-  function saveCustom(arr){customEntries=arr;ss("playbook_custom",arr);syncToCloud();}
 
   // All entries: built-in SETUPS + custom, starred sorted to top
   // Group Tape Read sub-types into one parent card
@@ -8668,9 +8572,6 @@ function chartTab(){
       if(!eodOnly&&sym!=="DXY"&&!monthlyFetch){ // monthly bars: bar-end math is approximate, poll only
         var floorOk=(tf==="2m"||tf==="5m"||tf==="30m"||tf==="1h"); // bars aligned to plain epoch multiples
         var flushT=null,strFail=0;
-        // Direct to OANDA first; if that fails before any tick (CORS / blocked), flip to the oanda-stream
-        // Supabase function and back. The mode that delivers a tick is remembered.
-        var strProxy=ls("oanda_stream_mode","")==="proxy",gotTick=false;
         var flushTick=function(){
           flushT=null;
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
@@ -8843,7 +8744,6 @@ function chartTab(){
 
   return el;
 }
-
 
 
 // ─── MOBILE HOME TAB ─────────────────────────────────────────────────
@@ -9870,7 +9770,6 @@ function fmtCotChg(n){
 // where browsers refuse to instantiate Workers), pdf.js automatically falls
 // back to a "fake worker" that runs the same parsing on the main thread —
 // so file:// alone should not be a blocker here.
-var CME_BULLETIN_URL="https://www.cmegroup.com/daily_bulletin/current/Section11_Equity_And_Index_Futures.pdf";
 var CME_ROW_PATTERNS={
   ES:{label:"EMINI S&P FUT",name:"E-mini S&P 500"},
   NQ:{label:"EMINI NASD FUT",name:"E-mini Nasdaq-100"}
@@ -10158,7 +10057,6 @@ function extractFrontMonthOI(fullText,sym){
   var candidateLines=afterHeader.split("\n").slice(0,20); // contract-month rows always immediately follow; 20 is generous headroom
   var MONTH_ROW_RE=/^[A-Z]{3}\d{2}\s/;
   var rows=[];
-  var errors=[];
   candidateLines.forEach(function(line,li){
     line=line.trim();
     if(!MONTH_ROW_RE.test(line)) return; // stops matching once we've run past the contract rows (TOTAL line, next header, etc.)
@@ -13545,8 +13443,6 @@ function accountsTab(){
   }
   binfo.appendChild(blbl);binfo.appendChild(bname);if(active)binfo.appendChild(bmeta);
   banner.appendChild(bdot);banner.appendChild(binfo);
-  if(active){
-  }
   el.appendChild(banner);
 
   // ── Account cards ─────────────────────────────────────────────────────
@@ -14584,7 +14480,6 @@ var EN_NTYPE={"OFO":"var(--red)","Force Majeure":"var(--red)","Pressure":"var(--
 function enHubName(c){for(var i=0;i<EN_HUBS.length;i++)if(EN_HUBS[i][0]===c)return EN_HUBS[i][1];return c;}
 function enNum(v){var n=parseFloat(v);return isNaN(n)?null:n;}
 function enInp(id,val,ph,w,step){return "<input data-id='"+id+"' type='number' inputmode='decimal' step='"+(step||"0.01")+"' value='"+(val==null?"":val)+"' placeholder='"+(ph||"")+"' style='width:"+(w||66)+"px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:monospace;font-size:12px;padding:5px 6px;border-radius:3px;box-sizing:border-box'>";}
-function enMonthCode(m){return "FGHJKMNQUVXZ".charAt(m);}
 function enStatusCol(s){return s==="ACTIVE"?"var(--green)":s==="WATCH"?"var(--amber)":"var(--text3)";}
 function enRigCard(D){
   var RW=D.rigsWeekly||{},rw="";
@@ -15136,7 +15031,6 @@ window.addEventListener("resize",function(){
   var nowMobile=isMobile();
   if(nowMobile!==_lastMobile){_lastMobile=nowMobile;render();}
 });
-
 
 
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
