@@ -428,6 +428,14 @@ function _dbgShow(){
   ov.appendChild(x);ov.appendChild(pre);document.body.appendChild(ov);
 }
 
+// ─── ONE-TIME MIGRATIONS ──────────────────────────────────────────
+// Renames of old setup / week-level names used to re-run on every load and every
+// cloud poll. They now run once per device per version. To ship a new rename or a
+// new builtin default, add it to the migration blocks and bump _MIG_V by one.
+var _MIG_V=1;
+function _migDone(k){try{return parseInt(localStorage.getItem("edge_mig_"+k)||"0",10)>=_MIG_V;}catch(e){return false;}}
+function _migMark(k){try{localStorage.setItem("edge_mig_"+k,String(_MIG_V));}catch(e){_dbg(e);}}
+
 // ─── UNDO TOAST ───────────────────────────────────────────────────
 var _undoTimer=null;
 function undoToast(msg,restore){
@@ -617,9 +625,7 @@ var SUPA_URL="https://uljrymfrvqosqtkevvwp.supabase.co";
 // Key stored in parts to avoid plain-text exposure in source
 var _KP=["sb_publishable_iT3naKNfV","fmGAii0LGgMHA_qfV9LR6P"];
 var SUPA_KEY=_KP[0]+_KP[1];
-var supaClient=true; // flag — using direct REST, no client needed
 
-function initSupabase(){ /* no-op — using direct fetch */ }
 
 function supaFetch(method,path,body){
   var headers={
@@ -848,17 +854,18 @@ function loadFromCloud(syncId,callback){
         }
       });
     }
-    // Migrate renamed setups in cloud-loaded trades
-    if(State.trades&&State.trades.forEach){
+    // Migrate renamed setups in cloud-loaded trades (once per device — see _MIG_V)
+    var _runCloudMig=!_migDone("cloud");
+    if(_runCloudMig&&State.trades&&State.trades.forEach){
       var RN={"Mean Reversion — VWAP Fade":"VWAP Fade","Mean Reversion — Extension Fade":"Extension Fade","Volume Profile — VAH/VAL":"VAH/VAL","Volume Profile — POC":"POC","Momentum — Trend Continuation":"Trend Continuation","Failed Auction":"Tape Read — Failed Auction","Momentum Shift":"Tape Read — Momentum Shift","Stop Run":"Tape Read — Stop Run","Naked POC Magnet":"Live Read — Naked POC Magnet","HTF Level Reaction":"Live Read — HTF Level Reaction","Trend Exhaustion":"Live Read — Trend Exhaustion"};
       State.trades.forEach(function(t){
         if(t.setup&&RN[t.setup]) t.setup=RN[t.setup];
         if(Array.isArray(t.setups)) t.setups=t.setups.map(function(s){return RN[s]||s;});
       });
     }
-    // Re-apply migration after cloud load
+    // Week-level renames / default importance (once), then make sure the builtin exists (every load)
     if(State.weekLevels&&State.weekLevels.forEach){
-      State.weekLevels.forEach(function(l){
+      if(_runCloudMig) State.weekLevels.forEach(function(l){
         if(l.l==="Weekly VWAP") l.imp="medium";
         if(l.l==="Daily Naked POC") l.imp="medium";
         if(l.l==="4hr Naked POC"){l.l="HTF Gaps";l.imp="low";}
@@ -874,6 +881,7 @@ function loadFromCloud(syncId,callback){
       }
       ss("weekLevels",State.weekLevels);
     }
+    if(_runCloudMig) _migMark("cloud");
     if(d.settings){
       var s=d.settings;
       // Use !== undefined so empty strings sync correctly (user intentionally cleared a field)
@@ -1012,7 +1020,6 @@ function _setActiveLocal(id,at){
   try{localStorage.setItem("edge_activeAccount",JSON.stringify(id));localStorage.setItem("edge_activeAccountAt",JSON.stringify(at));}catch(e){_dbg(e);}
 }
 function syncActiveAccountToCloud(){
-  if(!supaClient) return Promise.resolve();
   _activePushing=true;
   var at=ls("activeAccountAt",0)||0;
   var payload={user_id:getActiveSyncId(),trades:[],levels:[],week_levels:[],
@@ -1024,7 +1031,7 @@ function setActiveAccount(id){
   syncActiveAccountToCloud();
 }
 function pullActiveAccount(cb){
-  if(!supaClient||_activePushing){if(cb)cb(false);return;}
+  if(_activePushing){if(cb)cb(false);return;}
   supaFetch("GET","edge_data?user_id=eq."+encodeURIComponent(getActiveSyncId())+"&select=settings")
   .then(function(r){return r.json();})
   .then(function(rows){
@@ -1593,8 +1600,8 @@ var State={
   ss("levels",State.levels);
   // Mark builtin week levels
   var WK_BUILTIN=["Weekly VAH/VAL/POC","8Hours Structure","CALL/PUT Wall Weekly Exp","Weekly VWAP","Weekly Naked POC","Daily Naked POC","HTF Gaps"];
-  var wkChanged=false;
-  State.weekLevels.forEach(function(l){
+  var wkChanged=false,_runLocalMig=!_migDone("local");
+  if(_runLocalMig) State.weekLevels.forEach(function(l){
     if(l.l==="4hr Naked POC"){l.l="HTF Gaps";wkChanged=true;}
     if(l.l==="GEX GAMMA Weekly Exp"){l.l="CALL/PUT Wall Weekly Exp";wkChanged=true;}
     if(l.l==="Weekly Open"){l.l="8Hours Structure";wkChanged=true;}
@@ -1621,8 +1628,8 @@ var State={
     if(pbCustom.length!==beforeLen) ss("playbook_custom",pbCustom);
   } catch(e){_dbg(e);}
 
-  // Migrate setup name renames in existing trades
-  (function(){
+  // Migrate setup name renames in existing trades (once per device — see _MIG_V)
+  if(_runLocalMig) (function(){
     var RENAMES={
       "Mean Reversion — VWAP Fade":"VWAP Fade",
       "Mean Reversion — Extension Fade":"Extension Fade",
@@ -1648,7 +1655,10 @@ var State={
       pb.forEach(function(e){if(RENAMES[e.name]){e.name=RENAMES[e.name];pbChanged=true;}});
       if(pbChanged) ss("playbook_custom",pb);
     } catch(e){_dbg(e);}
+    // Leftovers from before sync was hard-wired to one row — nothing reads these any more
+    ["edge_sync_id","supabase_url","supabase_key"].forEach(function(k){try{localStorage.removeItem(k);}catch(e){_dbg(e);}});
   })();
+  if(_runLocalMig) _migMark("local");
 })();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────
@@ -2793,7 +2803,7 @@ function openSettings(){
   }));
   body.appendChild(actionRow("Clear Local Cache","Wipe localStorage & reload from cloud","CLEAR","var(--red)",function(){
     if(confirm("Clear all local cache? Data will reload from Supabase.")){
-      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize","edge_fedprob_hist_v1"];
+      var keep=["edge_mobile_mode","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize","edge_fedprob_hist_v1"];
       Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
       localStorage.setItem("edge_tab",JSON.stringify("home"));
       closeSettings();window.location.reload();
@@ -4812,7 +4822,6 @@ function logTab(){
   return el;
 }
 
-// ─── OPPS TAB ─────────────────────────────────────────────────────────
 // ─── PLAYBOOK TAB ─────────────────────────────────────────────────────
 function playbookTab(){
   // Load custom playbook entries from localStorage, merge with built-in
@@ -14362,7 +14371,7 @@ function settingsTab(){
   clearBtn.style.cssText="background:none;border:1px solid var(--red);color:var(--red);font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;padding:7px 14px;border-radius:4px;flex-shrink:0;";
   clearBtn.addEventListener("click",function(){
     if(confirm("Clear all local cache? Data will reload from Supabase.")){
-      var keep=["edge_mobile_mode","edge_sync_id","supabase_url","supabase_key","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize","edge_fedprob_hist_v1"];
+      var keep=["edge_mobile_mode","edge_max_loss","edge_lk_pin","edge_lk_timeout","edge_lk_trust","edge_lk_trust_exp","edge_logPageSize","edge_fedprob_hist_v1"];
       Object.keys(localStorage).forEach(function(k){if(!keep.some(function(p){return k.startsWith(p)||k===p;}))localStorage.removeItem(k);});
       localStorage.setItem("edge_tab",JSON.stringify("home"));
       window.location.reload();
@@ -15448,7 +15457,6 @@ scrollLockCheck();
     localStorage.setItem("edge_mobile_mode", (phone||isPWA)?"1":"0");
   }
 })();
-initSupabase();
 initAutoSync();
 
 // On load: show a loading screen, fetch cloud data, THEN render.
@@ -15506,25 +15514,18 @@ initAutoSync();
     syncToCloud();
   }
 
-  if(supaClient){
-    loadFromCloud(currentId,function(ok){
-      clearTimeout(loadTimer);
-      dismissLoader();
-      if(!ok&&_cloudLoadErr){ render(); } // load failed (offline/error): never upload local state over cloud
-      else if(!ok) ensureDefaultAccount(); // only create default account when cloud load failed
-      else recoverOrphanedTrades();   // on successful load, reassign trades with unknown accountId
-      if(ok) render();
-      else if(!_cloudLoadErr){ syncToCloud(); render(); }
-      pullActiveAccount(function(ch){ if(ch) renderSoft(); });
-      loadFedProbFromCloud();
-      loadImagesFromCloud(function(imgOk){ if(imgOk) renderSoft(); }); // separate row, own timing — doesn't block the main load above
-    });
-  } else {
+  loadFromCloud(currentId,function(ok){
     clearTimeout(loadTimer);
     dismissLoader();
-    ensureDefaultAccount();
-    render();
-  }
+    if(!ok&&_cloudLoadErr){ render(); } // load failed (offline/error): never upload local state over cloud
+    else if(!ok) ensureDefaultAccount(); // only create default account when cloud load failed
+    else recoverOrphanedTrades();   // on successful load, reassign trades with unknown accountId
+    if(ok) render();
+    else if(!_cloudLoadErr){ syncToCloud(); render(); }
+    pullActiveAccount(function(ch){ if(ch) renderSoft(); });
+    loadFedProbFromCloud();
+    loadImagesFromCloud(function(imgOk){ if(imgOk) renderSoft(); }); // separate row, own timing — doesn't block the main load above
+  });
 })();
 
 // Poll edge_data every 10 seconds to stay in sync across computers
