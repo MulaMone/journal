@@ -3398,8 +3398,7 @@ function isFedSpeakerTitle(t){
   return /\b(fomc|fed|federal reserve)\b/.test(s)&&/(speak|speech|testif|testimony|remarks)/.test(s);
 }
 // Events for ET day `etDay` that belong in the Today flags: High-impact USD (calendar.json) plus
-// Fed speakers at ANY impact, read from calendar.json AND the News tab's calendar (Medium/Low
-// speakers often only exist there). Returns calendar.json-shaped rows, de-duplicated, time-sorted.
+// Fed speakers (High impact only), read from calendar.json AND the News tab's calendar. Returns calendar.json-shaped rows, de-duplicated, time-sorted.
 function todayNewsRows(etDay,rows){
   var out=[],seen={};
   function add(r){var k=String(r.title||"").toLowerCase().trim()+"|"+Math.round(new Date(r.date).getTime()/60000);if(seen[k])return;seen[k]=1;out.push(r);}
@@ -3408,7 +3407,7 @@ function todayNewsRows(etDay,rows){
   var nfCal=(typeof _nf!=="undefined"&&_nf.cal&&_nf.cal.length)?_nf.cal:(((typeof _nfLsGet==="function"&&_nfLsGet("cache"))||{}).cal||[]);
   var extra=(rows||[]).filter(function(ev){return ev.date&&ev.country==="USD"&&etD(ev.date)===etDay;})
     .concat(nfCal.filter(function(e){return e&&e.ts&&e.ccy==="USD"&&etD(e.ts)===etDay;}).map(function(e){return {date:new Date(e.ts).toISOString(),country:"USD",impact:e.impact,title:e.title};}));
-  extra.forEach(function(ev){if(isFedSpeakerTitle(ev.title)) add(ev);});
+  extra.forEach(function(ev){if(String(ev.impact||"").toLowerCase()==="high"&&isFedSpeakerTitle(ev.title)) add(ev);});
   return out.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
 }
 function matchNewsLabels(events){
@@ -3549,7 +3548,7 @@ function prepTab(){
         var row=div("row gap8");row.style.cssText="padding:6px 10px;align-items:center;border-bottom:1px solid var(--border);";
         var t=span("xs m");t.style.cssText="width:66px;flex-shrink:0;font-family:Courier New,monospace;";t.textContent=ev.time;row.appendChild(t);
         var lbl=span("sm");lbl.style.cssText="flex:1;color:var(--text2);";lbl.textContent=ev.title;row.appendChild(lbl);
-        var badge=h("span",{className:"badge "+(ev.impact==="High"?"imp-high":"imp-med")});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent=ev.impact==="High"?"HIGH":(ev.impact==="Low"?"LOW":"MED");row.appendChild(badge);
+        var badge=h("span",{className:"badge "+(ev.impact==="High"?"imp-high":"imp-med")});badge.style.cssText="font-size:9px;font-weight:700;flex-shrink:0;";badge.textContent=ev.impact==="High"?"HIGH":"MED";row.appendChild(badge);
         liveNewsBody.appendChild(row);
       });
     }
@@ -3574,7 +3573,7 @@ function prepTab(){
     var wkRows=data.rows.concat(nfCal.filter(function(e){return e&&e.ts;}).map(function(e){return {date:new Date(e.ts).toISOString(),country:e.ccy,impact:e.impact,title:e.title};}));
     wkRows.forEach(function(ev){
       var d=null;if(ev.date){var dt=new Date(ev.date);d=isNaN(dt)?String(ev.date).slice(0,10):dt.toLocaleDateString("en-CA",{timeZone:"America/New_York"});}
-      if(!d||String(ev.country||ev.currency||"").toUpperCase()!=="USD"||(String(ev.impact||"").toLowerCase()!=="high"&&!isFedSpeakerTitle(ev.title))||d<wkStart||d>wkEnd) return;
+      if(!d||String(ev.country||ev.currency||"").toUpperCase()!=="USD"||String(ev.impact||"").toLowerCase()!=="high"||d<wkStart||d>wkEnd) return;
       var l=matchNewsLabels([{title:ev.title}]).matched[0];if(!l) return;
       var key=null;
       NEWS_EVENTS.forEach(function(e,i){if(e.l===l)key="news_"+i;});
