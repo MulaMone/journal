@@ -7487,16 +7487,16 @@ function chartTab(){
             var isCur=gi===groups.length-1;
             var data=g.times.map(function(t){return {time:t,value:g[fld]};});
             if(!isCur) data.push({time:groups[gi+1].times[0],value:g[fld]});
-            var ps=chart.addLineSeries({color:color,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(tag&&isCur)?pcLbl:"",lastValueVisible:!!(tag&&isCur),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            var ps=chart.addLineSeries({color:color,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(tag&&isCur)?tag:"",lastValueVisible:!!(tag&&isCur),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             ps.setData(data);
             pcSeries.push(ps);
           });
         }
         // prior-period close (silver, tagged) + high (green) + low (red), lines only
         function drawAll(groups){
-          drawGroups(groups,"c","#b8c4d9",true);
-          drawGroups(groups,"h","#00b862",false);
-          drawGroups(groups,"l","#ff4444",false);
+          drawGroups(groups,"c","#b8c4d9",pcLbl);
+          drawGroups(groups,"h","#00b862",pcLbl.slice(0,2)+"H");
+          drawGroups(groups,"l","#ff4444",pcLbl.slice(0,2)+"L");
         }
         if(tf==="1d"){
           // Daily: split months exactly where the MONTH lines are drawn (same session
@@ -7824,7 +7824,7 @@ function chartTab(){
               if(g[f]==null||!isFinite(g[f])) return;
               var data=g.times.map(function(t){return {time:t,value:g[f]};});
               if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f==="c")?PQ_TAG[f]:"",lastValueVisible:(isCur&&f==="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
               ps.setData(data);
             });
           });
