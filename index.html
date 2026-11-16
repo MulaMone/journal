@@ -8231,6 +8231,7 @@ function chartTab(){
               bigOutline.forEach(function(b){
                 var L=me._lbl(sc,b);if(!L)return;
                 var wc=Math.ceil(ctx.measureText(b.title).width/hr)+11,xr=W-Math.round(hr),x0=xr-Math.round(wc*hr),rr=Math.round(2*hr),t=Math.max(1,Math.round(hr)); // tag = text + 1 + 5 + 5, 1px seam at its right (gap between tag and price box)
+                ctx.fillStyle="#040d1a";ctx.fillRect(xr,L.y0,W-xr,L.hh); // blank the seam so the level line doesn't run through the gap between tag and price box
                 // inverted + outlined: coloured outer shape, dark inner shape one border-width in on every side
                 ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,xr-x0,L.hh,[rr,0,0,rr]);else ctx.rect(x0,L.y0,xr-x0,L.hh);ctx.fill();
                 ctx.fillStyle="#040d1a";ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0+t,L.y0+t,xr-x0-2*t,L.hh-2*t,[Math.max(0,rr-t),0,0,Math.max(0,rr-t)]);else ctx.rect(x0+t,L.y0+t,xr-x0-2*t,L.hh-2*t);ctx.fill();
