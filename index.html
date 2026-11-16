@@ -10165,7 +10165,7 @@ function loadCOTData(sym,force){
       _cotMemCache[sym]=obj;cotCacheSet(sym,obj);
       return obj;
     });
-  }).catch(function(err){feedMark("cot",false,err);
+  }).catch(function(err){
     if(cached){console.warn("COT (TFF) fetch failed, using cache:",err&&err.message);_cotMemCache[sym]=cached;return cached;}
     throw err;
   });
@@ -10192,7 +10192,7 @@ function loadCOTLegacyData(sym,force){
       _cotLegacyMemCache[sym]=obj;cotLegacyCacheSet(sym,obj);
       return obj;
     });
-  }).catch(function(err){feedMark("cotl",false,err);
+  }).catch(function(err){
     if(cached){console.warn("COT (Legacy) fetch failed, using cache:",err&&err.message);_cotLegacyMemCache[sym]=cached;return cached;}
     throw err;
   });
@@ -13284,7 +13284,7 @@ function analystTab(){
   loadVoiChart(false);
 
   var legacyHead=div();legacyHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  legacyHead.textContent="Legacy Report — Non-Comm / Comm / Non-Rept";legacyHead.appendChild(feedBadge("cotl"));
+  legacyHead.textContent="Legacy Report — Non-Comm / Comm / Non-Rept";
   el.appendChild(legacyHead);
 
   var legacyBody=div();legacyBody.id="cot-legacy-body";el.appendChild(legacyBody);
@@ -13314,7 +13314,7 @@ function analystTab(){
 
   // ── TFF report — separate section, rendered below Legacy ──
   var tffHead=div();tffHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--accent);";
-  tffHead.textContent="TFF Report — Dealer / Asset Mgr / Lev Funds / Other";tffHead.appendChild(feedBadge("cot"));
+  tffHead.textContent="TFF Report — Dealer / Asset Mgr / Lev Funds / Other";
   el.appendChild(tffHead);
 
   var body=div();body.id="cot-body";el.appendChild(body);
@@ -15370,8 +15370,6 @@ function energyTab(){
 
 
 // Feed freshness: a cache write means fresh data just arrived.
-cotCacheSet=(function(fn){return function(){feedMark("cot",true);return fn.apply(this,arguments);};})(cotCacheSet);
-cotLegacyCacheSet=(function(fn){return function(){feedMark("cotl",true);return fn.apply(this,arguments);};})(cotLegacyCacheSet);
 cmeOiCacheSet=(function(fn){return function(){feedMark("cme",true);return fn.apply(this,arguments);};})(cmeOiCacheSet);
 ycCacheSet=(function(fn){return function(){feedMark("yc",true);return fn.apply(this,arguments);};})(ycCacheSet);
 liqCacheSet=(function(fn){return function(){feedMark("liq",true);return fn.apply(this,arguments);};})(liqCacheSet);
