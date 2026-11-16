@@ -6072,7 +6072,7 @@ function btcCacheTick(px,ms){
 var OANDA_FEED_INSTS=["SPX500_USD","NAS100_USD","WTICO_USD","XAU_USD","NATGAS_USD","EUR_USD","USD_JPY","GBP_USD","USD_CAD","USD_SEK","USD_CHF"];
 var OANDA_PER={M2:120,M5:300,M30:1800,H1:3600,H4:14400,H8:28800,D:86400,W:604800};
 var OANDA_FLOOR={M2:1,M5:1,M30:1,H1:1}; // bars aligned to plain epoch multiples; H4 and up sit on the 17/18:00 ET anchor, so a new bar is fetched, not guessed
-var _oFeed={ac:null,subs:[],lastMsg:0,fail:0,proxy:null,got:false,wd:null,savedAt:0,mids:{},fixAt:{},fixing:{}};
+var _oFeed={ac:null,subs:[],lastMsg:0,fail:0,proxy:null,got:false,wd:null,savedAt:0,mids:{},fixAt:{},fixing:{},prov:{}};
 function oandaFeedOpen(){
   var f=_oFeed;
   if(!f.wd) f.wd=setInterval(function(){ // silent stream (sleep / wifi change): drop and reconnect
@@ -6145,6 +6145,14 @@ function oandaCacheTick(inst,px,ms){
   if(inst!=="EUR_USD"&&inst!=="USD_JPY"&&inst!=="GBP_USD"&&inst!=="USD_CAD"&&inst!=="USD_SEK"&&inst!=="USD_CHF") oandaPatchViews(inst,px,ms,now,save);
   if(save) f.savedAt=now;
 }
+// Replace the newest cached candle(s) of one view with the feed's own (true open/high/low) instead of the tick-built ones.
+function oandaFixView(k,e,last,now){
+  var f=_oFeed;f.fixAt[k]=now;f.fixing[k]=true;
+  oandaFetchSince(k,last.time).then(function(d){
+    var fc=(d&&d.candles)||[];
+    if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<last.time;}).concat(fc).slice(-5000)};
+  }).catch(function(){}).then(function(){f.fixing[k]=false;});
+}
 function oandaPatchViews(inst,px,ms,now,save){
   var f=_oFeed;
   Object.keys(_chartCache).forEach(function(k){
@@ -6156,6 +6164,7 @@ function oandaPatchViews(inst,px,ms,now,save){
     var last=cs[cs.length-1],lt=Date.parse(last.time);
     if(ms<lt) return;
     if(ms<lt+per){ // forming bar
+      if(f.prov[k]&&now-f.prov[k]>1500){f.prov[k]=0;oandaFixView(k,e,last,now);return;} // bar opened on a tick: swap in the feed's real candle
       var x=last.mid;
       if(px>parseFloat(x.h)) x.h=String(px);
       if(px<parseFloat(x.l)) x.l=String(px);
@@ -6164,12 +6173,9 @@ function oandaPatchViews(inst,px,ms,now,save){
       last.complete=true;
       var p=String(px);
       e.data={candles:cs.concat([{time:new Date(Math.floor(ms/per)*per).toISOString().slice(0,19)+".000000000Z",complete:false,mid:{o:p,h:p,l:p,c:p}}]).slice(-5000)};
+      f.prov[k]=now; // tick-built open is provisional
     } else if(now-(f.fixAt[k]||0)>30000){ // new bar after a closure / missed ticks / anchored timeframe: take the real candles
-      f.fixAt[k]=now;f.fixing[k]=true;
-      oandaFetchSince(k,last.time).then(function(d){
-        var fc=(d&&d.candles)||[];
-        if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<last.time;}).concat(fc).slice(-5000)};
-      }).catch(function(){}).then(function(){f.fixing[k]=false;});
+      oandaFixView(k,e,last,now);
       return;
     } else return;
     if(save){e.t=now;chartIdbPut(k,e);}
@@ -8585,10 +8591,9 @@ function chartTab(){
             if(!floorOk) return; // other timeframes: the poll starts the new bar
             var ns=Math.floor(t/periodSec)*periodSec;
             barEndTrue=ns+periodSec;
-            var nt=ns-etOff(ns),op=(liveBar&&nt-liveBar.time===periodSec)?liveBar.close:px; // open = previous close, not the first tick this device received (phone waking from sleep sees a late first tick -> fake gap)
-            liveBar={time:nt,open:op,high:Math.max(op,px),low:Math.min(op,px),close:px};
+            liveBar={time:ns-etOff(ns),open:px,high:px,low:px,close:px};
             lastBarTime=liveBar.time;
-            lastPollAt=0; // force the next poll (<=5s) to pull OANDA's own candle for this bar and overwrite any local guess
+            lastPollAt=0; // tick-built open is only provisional: force the next poll (<=5s) to replace this bar with OANDA's own candle (true open/high/low)
           } else if(t<barEndTrue-periodSec) return;
           else {
             if(px>liveBar.high) liveBar.high=px;
@@ -8712,6 +8717,11 @@ function chartTab(){
         })
         .catch(function(){}); // a failed poll tick just tries again next interval — no error banner
       },streamMode?5000:15000);
+      // Device wake / tab refocus: ticks missed while asleep leave the forming bar with a wrong open/high/low, and the stream may be dead.
+      // Mark the stream stale and the poll due so the next 5s tick reconnects and replaces the bar with the feed's own candle.
+      if(window._chartWake){document.removeEventListener("visibilitychange",window._chartWake);window.removeEventListener("pageshow",window._chartWake);window.removeEventListener("focus",window._chartWake);}
+      window._chartWake=function(){if(document.hidden||State.tab!=="chart"||myLoadToken!==_chartLoadToken) return;lastPollAt=0;lastMsgAt=1;};
+      document.addEventListener("visibilitychange",window._chartWake);window.addEventListener("pageshow",window._chartWake);window.addEventListener("focus",window._chartWake);
     })
     .catch(function(e){
       if(myLoadToken!==_chartLoadToken) return; // superseded by a newer load — don't show a stale error
