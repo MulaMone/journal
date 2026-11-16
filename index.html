@@ -12735,11 +12735,52 @@ function loadDxyData(force){
 // DXY badge every 30s poll. DXY needs all 6 legs to compute; Gold/Oil each
 // only need themselves, which is why they were staying live while DXY froze.
 var _dxyLiveLastGood={};
+// ── Real-time path: the shared OANDA pricing stream (oandaFeedOpen) feeds the same
+// badges. A leg/instrument is "fresh" if the stream ticked it in the last 60 s; the
+// 30 s REST poll below then only fetches the ones that are not (stream down, market
+// closed for that instrument, token problem), so it doubles as the fallback.
+var _dxyStreamSub=null,_dxyTickAt={},_dxyPaintTimer=null;
+function _dxyFresh(inst){return _dxyTickAt[inst]&&Date.now()-_dxyTickAt[inst]<60000&&_oFeed.mids[inst]!=null;}
+function _dxyBadgeValues(get){
+  var dxy=null,closesByPair={};
+  OANDA_DXY_PAIRS.forEach(function(p){var v=get(p.inst);if(v!=null) closesByPair[p.inst]=v;});
+  if(Object.keys(closesByPair).length===OANDA_DXY_PAIRS.length){
+    dxy=50.14348112;
+    OANDA_DXY_PAIRS.forEach(function(p){dxy*=Math.pow(closesByPair[p.inst],p.weight);});
+  }
+  return {gold:get("XAU_USD"),oil:get("WTICO_USD"),dxy:dxy};
+}
+function _dxyPaintFromStream(){
+  if(!_dxyLiveBaselines) return;
+  var v=_dxyBadgeValues(function(i){return _dxyFresh(i)?_oFeed.mids[i]:null;});
+  paintLiveBadge("live-gold",v.gold,_dxyLiveBaselines.gold,2);
+  paintLiveBadge("live-oil",v.oil,_dxyLiveBaselines.oil,2);
+  paintLiveBadge("live-dxy",v.dxy,_dxyLiveBaselines.dxy,2);
+}
+function dxyStreamStop(){
+  if(_dxyStreamSub){var i=_oFeed.subs.indexOf(_dxyStreamSub);if(i>-1) _oFeed.subs.splice(i,1);_dxyStreamSub=null;}
+  clearTimeout(_dxyPaintTimer);_dxyPaintTimer=null;
+}
+function dxyStreamStart(){
+  dxyStreamStop();
+  if(!ls("oanda_token","")) return;
+  var want={XAU_USD:1,WTICO_USD:1};
+  OANDA_DXY_PAIRS.forEach(function(p){want[p.inst]=1;});
+  _dxyStreamSub=function(m){
+    if(State.tab!=="analyst"){dxyStreamStop();return;} // left the tab — unhook
+    if(m.type!=="PRICE"||m.tradeable===false||!want[m.instrument]) return;
+    _dxyTickAt[m.instrument]=Date.now();
+    if(!_dxyPaintTimer) _dxyPaintTimer=setTimeout(function(){_dxyPaintTimer=null;_dxyPaintFromStream();},400); // at most ~2 repaints/sec
+  };
+  _oFeed.subs.push(_dxyStreamSub);
+  oandaFeedOpen();
+}
 function updateDxyLiveBadges(){
   var tok=ls("oanda_token","");
   if(!tok||!_dxyLiveBaselines) return;
   var insts=OANDA_DXY_PAIRS.map(function(p){return p.inst;}).concat(["XAU_USD","WTICO_USD"]);
   Promise.all(insts.map(function(inst){
+    if(_dxyFresh(inst)){_dxyLiveLastGood[inst]=_oFeed.mids[inst];return Promise.resolve(_oFeed.mids[inst]);} // streaming — no request needed
     var url=OANDA_ENV_BASE+"/v3/instruments/"+inst+"/candles?granularity=D&price=M&count=1";
     return fetchWithTimeout(url,{headers:{Authorization:"Bearer "+tok}},6000)
       .then(function(r){return r.ok?r.json():null;})
@@ -13470,6 +13511,7 @@ function analystTab(){
       oil:oilRows.length?oilRows[oilRows.length-1].c:null
     };
     updateDxyLiveBadges();
+    dxyStreamStart();
   }
   function loadDxy(force){
     clearInterval(_dxyLiveTimer);
