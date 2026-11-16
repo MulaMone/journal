@@ -8290,19 +8290,43 @@ function chartTab(){
       // ── Intraday mode: the latest 9:30 ET open — sky-blue dotted vertical line + white dashed line at that candle's open, from 9:30 to 18:00 ET that day ──
       // Only the most recent 9:30 is drawn, so it replaces the previous day's as soon as a new 9:30 candle prints. It stays on its own day's chart
       // after the close (ends at 18:00, does not run into the next session). No price tag.
+      // On 1h the bar holding 9:30 starts at 9:00, so its open is not the 9:30 open: fetch the real 9:30 candle (M5, then M30 / M15 as fallbacks,
+      // cached) and draw the open line once it arrives. If every fetch fails the open line is left off rather than drawn at the wrong price.
       if(intraday&&!eodOnly&&candles.length) (function(){
-        var oi=-1;
+        var oi=-1,sod0=0;
         for(var i=candles.length-1;i>=0;i--){
           var sod=candles[i].time%86400; // ET seconds into the day (chart times are ET-shifted)
-          if(sod<=34200&&sod+periodSec>34200){oi=i;break;}
+          if(sod<=34200&&sod+periodSec>34200){oi=i;sod0=sod;break;}
         }
         if(oi<0) return;
-        var t0=candles[oi].time,px=candles[oi].open,dayEnd=t0-t0%86400+64800; // 18:00 ET that day
+        var t0=candles[oi].time,px=sod0===34200?candles[oi].open:null,_rp=null,dayEnd=t0-t0%86400+64800; // 18:00 ET that day
         var ei=oi;
         while(ei+1<candles.length&&candles[ei+1].time<dayEnd) ei++;
         var live=ei===candles.length-1&&candles[ei].time+periodSec<=dayEnd; // today's session still running: line runs to the right edge
         var tEnd=candles[ei].time;
+        if(px==null&&candles[oi].u!=null){
+          var utc930=candles[oi].u+(34200-sod0),ck=oandaInst+"|"+utc930,nyc=window.__nyoCache||(window.__nyoCache={});
+          if(nyc[ck]!=null) px=nyc[ck];
+          else{
+            var gr=["M5","M30","M15"];
+            var tryFetch=function(k){
+              if(k>=gr.length) return Promise.resolve(null);
+              var u2=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gr[k]+"&price=M&from="+encodeURIComponent(new Date(utc930*1000).toISOString())+"&count=1";
+              return chartFetchJson(u2).then(function(d){
+                var c=d&&d.candles&&d.candles[0];
+                if(c&&c.mid&&Math.floor(new Date(c.time).getTime()/1000)===utc930){var v=parseFloat(c.mid.o);if(isFinite(v)) return v;}
+                return tryFetch(k+1);
+              }).catch(function(){return tryFetch(k+1);});
+            };
+            tryFetch(0).then(function(v){
+              if(v==null||myLoadToken!==_chartLoadToken) return;
+              nyc[ck]=v;px=v;if(_rp) _rp();
+            }).catch(_dbg);
+          }
+        }
         series.attachPrimitive({
+          attached:function(param){_rp=param.requestUpdate;},
+          detached:function(){_rp=null;},
           paneViews:function(){
             return [{
               zOrder:function(){return "normal";},
@@ -8321,7 +8345,7 @@ function chartTab(){
                         ctx.strokeStyle="#4aa3ff";ctx.globalAlpha=0.9;ctx.setLineDash([2,4]);
                         ctx.beginPath();ctx.moveTo(Math.round(x)+0.5,0);ctx.lineTo(Math.round(x)+0.5,H);ctx.stroke();
                       }
-                      var y=series.priceToCoordinate(px);
+                      var y=px==null?null:series.priceToCoordinate(px);
                       if(y!=null&&x<=W&&x1>=0){
                         ctx.strokeStyle="#e8f0ff";ctx.globalAlpha=0.9;ctx.setLineDash([6,4]);
                         ctx.beginPath();ctx.moveTo(Math.max(x,0),Math.round(y)+0.5);ctx.lineTo(Math.min(x1,W),Math.round(y)+0.5);ctx.stroke();
