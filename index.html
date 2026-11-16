@@ -6708,7 +6708,7 @@ function chartTab(){
     idToggle=function(){
       _chartKeepView=null;
       if(intraday){setIntraday(false);State.chart_interval="1h";}
-      else{setIntraday(true);State.chart_interval="30m";}
+      else{setIntraday(true);State.chart_interval=(tf==="2m"||tf==="5m")?tf:"30m";}
       render();
     };
     idBtn.addEventListener("click",idToggle);
