@@ -8641,19 +8641,31 @@ function chartTab(){
       // ── Delta refresh after a cache paint: fetch only candles since the cached last one ──
       var deltaP=null;
       if(fromCache&&raw.length&&!monthlyFetch){ // monthly cache entries are merged / rolled up: never append raw candles to them
-        var _lastRaw=raw[raw.length-1].time;
+        var _lastRaw=raw.length>1?raw[raw.length-2].time:raw[raw.length-1].time; // start one bar back: the just-closed bar may hold tick-built values from the cache
         var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(new Date(_lastRaw).toISOString())+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         deltaP=chartFetchJson(dUrl).then(function(dd){
           if(myLoadToken!==_chartLoadToken) return;
           var fc=(dd&&dd.candles)||[];
           if(!fc.length) return;
+          var dfix=false;
           fc.forEach(function(c){
             var cu=Math.floor(new Date(c.time).getTime()/1000),cs=cu-etOff(cu);
-            if(cs<lastBarTime) return;
+            if(cs<lastBarTime){ // an already-plotted closed bar: correct it in place to the feed's final values
+              for(var qi=candles.length-1;qi>=0&&qi>=candles.length-4;qi--){
+                var qb=candles[qi];
+                if(qb.time===cs){
+                  var po=parseFloat(c.mid.o),ph=parseFloat(c.mid.h),pl=parseFloat(c.mid.l),pcl=parseFloat(c.mid.c);
+                  if(qb.open!==po||qb.high!==ph||qb.low!==pl||qb.close!==pcl){qb.open=po;qb.high=ph;qb.low=pl;qb.close=pcl;dfix=true;}
+                  break;
+                }
+              }
+              return;
+            }
             var b={time:cs,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
             try{series.update(b);}catch(e){return;}
-            lastBarTime=cs;liveBar=b;barEndTrue=cu+periodSec;
+            lastBarTime=cs;liveBar=b;barEndTrue=cu+periodSec;keepBar(b);
           });
+          if(dfix){try{series.setData(candles);}catch(e){}}
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
           renderCountdown();
