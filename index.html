@@ -8287,19 +8287,21 @@ function chartTab(){
         }).catch(_dbg);
       })();
 
-      // ── Intraday mode: today's 9:30 ET open — pink dotted vertical line + white dashed line at that candle's open, from 9:30 to the right edge (end of day) ──
-      // Today only (the latest trading day on the chart); nothing is drawn before 9:30 has printed. No price tag.
+      // ── Intraday mode: the latest 9:30 ET open — sky-blue dotted vertical line + white dashed line at that candle's open, from 9:30 to 18:00 ET that day ──
+      // Only the most recent 9:30 is drawn, so it replaces the previous day's as soon as a new 9:30 candle prints. It stays on its own day's chart
+      // after the close (ends at 18:00, does not run into the next session). No price tag.
       if(intraday&&!eodOnly&&candles.length) (function(){
-        var dk=function(t){return Math.floor((t+anchorShift)/86400);};
-        var tk=dk(candles[candles.length-1].time),oc=null;
-        for(var oi=candles.length-1;oi>=0;oi--){
-          var cc=candles[oi];
-          if(dk(cc.time)<tk) break;
-          var sod=cc.time%86400; // ET seconds into the day (chart times are ET-shifted)
-          if(sod<=34200&&sod+periodSec>34200){oc=cc;break;}
+        var oi=-1;
+        for(var i=candles.length-1;i>=0;i--){
+          var sod=candles[i].time%86400; // ET seconds into the day (chart times are ET-shifted)
+          if(sod<=34200&&sod+periodSec>34200){oi=i;break;}
         }
-        if(!oc) return;
-        var t0=oc.time,px=oc.open;
+        if(oi<0) return;
+        var t0=candles[oi].time,px=candles[oi].open,dayEnd=t0-t0%86400+64800; // 18:00 ET that day
+        var ei=oi;
+        while(ei+1<candles.length&&candles[ei+1].time<dayEnd) ei++;
+        var live=ei===candles.length-1&&candles[ei].time+periodSec<=dayEnd; // today's session still running: line runs to the right edge
+        var tEnd=candles[ei].time;
         series.attachPrimitive({
           paneViews:function(){
             return [{
@@ -8310,18 +8312,21 @@ function chartTab(){
                   drawBackground:function(target){
                     target.useMediaCoordinateSpace(function(scope){
                       var ctx=scope.context,W=scope.mediaSize.width,H=scope.mediaSize.height;
-                      var x=chart.timeScale().timeToCoordinate(t0);
-                      if(x==null) return;
+                      var ts=chart.timeScale(),x=ts.timeToCoordinate(t0),x1=live?W:ts.timeToCoordinate(tEnd);
+                      if(x==null||x1==null) return;
+                      if(!live) x1+=ts.options().barSpacing;
                       ctx.save();
                       ctx.lineWidth=1;
                       if(x>=0&&x<=W){
-                        ctx.strokeStyle="#ff4fa3";ctx.globalAlpha=0.9;ctx.setLineDash([2,4]);
+                        ctx.strokeStyle="#4aa3ff";ctx.globalAlpha=0.9;ctx.setLineDash([2,4]);
                         ctx.beginPath();ctx.moveTo(Math.round(x)+0.5,0);ctx.lineTo(Math.round(x)+0.5,H);ctx.stroke();
                       }
                       var y=series.priceToCoordinate(px);
-                      if(y!=null&&x<=W){
+                      if(y!=null&&x<=W&&x1>=0){
                         ctx.strokeStyle="#e8f0ff";ctx.globalAlpha=0.9;ctx.setLineDash([6,4]);
-                        ctx.beginPath();ctx.moveTo(Math.max(x,0),Math.round(y)+0.5);ctx.lineTo(W,Math.round(y)+0.5);ctx.stroke();
+                        ctx.beginPath();ctx.moveTo(Math.max(x,0),Math.round(y)+0.5);ctx.lineTo(Math.min(x1,W),Math.round(y)+0.5);ctx.stroke();
+                        ctx.setLineDash([]);ctx.font="10px 'Courier New',monospace";ctx.textBaseline="bottom";ctx.fillStyle="#e8f0ff";ctx.globalAlpha=0.9;
+                        ctx.fillText("O 9:30",Math.max(x,0)+4,Math.round(y)-3);
                       }
                       ctx.restore();
                     });
