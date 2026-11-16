@@ -8704,6 +8704,7 @@ function chartTab(){
           if(cShift-lastBarTime>3*periodSec&&Date.now()-_chartGapReloadAt>60000){
             _chartGapReloadAt=Date.now();render();return; // chart data is stale (e.g. tab left open) — fetch it fresh
           }
+          if(cShift<lastBarTime) return; // poll answered with the PREVIOUS bar (new bar not published yet): ignore it, or liveBar gets pinned to the old bar and ticks stop drawing
           if(cShift>lastBarTime) lastBarTime=cShift;
           liveBar={time:cShift,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
           series.update(liveBar);
