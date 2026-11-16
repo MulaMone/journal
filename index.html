@@ -6160,6 +6160,117 @@ function btcCacheTick(px,ms){
   });
 }
 
+// ── OANDA background feed ──
+// One pricing stream for every charted OANDA instrument (+ the six DXY legs), opened by the first OANDA chart view and kept for the
+// whole app session. Each tick updates the newest candle of every cached timeframe of that instrument (DXY: recombined from the legs),
+// so switching timeframes paints live candles instead of an old snapshot that is re-fetched and redrawn. Chart views subscribe via _oFeed.subs.
+var OANDA_FEED_INSTS=["SPX500_USD","NAS100_USD","WTICO_USD","XAU_USD","NATGAS_USD","EUR_USD","USD_JPY","GBP_USD","USD_CAD","USD_SEK","USD_CHF"];
+var OANDA_PER={M2:120,M5:300,M30:1800,H1:3600,H4:14400,H8:28800,D:86400,W:604800};
+var OANDA_FLOOR={M2:1,M5:1,M30:1,H1:1}; // bars aligned to plain epoch multiples; H4 and up sit on the 17/18:00 ET anchor, so a new bar is fetched, not guessed
+var _oFeed={ac:null,subs:[],lastMsg:0,fail:0,proxy:null,got:false,wd:null,savedAt:0,mids:{},fixAt:{},fixing:{}};
+function oandaFeedOpen(){
+  var f=_oFeed;
+  if(!f.wd) f.wd=setInterval(function(){ // silent stream (sleep / wifi change): drop and reconnect
+    if(f.ac&&Date.now()-f.lastMsg>20000){var a=f.ac;f.ac=null;try{a.abort();}catch(e){}oandaFeedOpen();}
+  },10000);
+  if(f.ac||f.fail>5) return;
+  var tk=ls("oanda_token","");
+  if(!tk||navigator.onLine===false) return;
+  if(f.proxy===null) f.proxy=ls("oanda_stream_mode","")==="proxy";
+  var ac=new AbortController(),insts=OANDA_FEED_INSTS.join(",");
+  f.ac=ac;f.lastMsg=Date.now();
+  oandaAcct(tk).then(function(acct){
+    return fetch(
+      f.proxy?SUPA_URL+"/functions/v1/oanda-stream?account="+acct+"&instruments="+insts
+             :OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+insts,
+      {headers:f.proxy?{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"x-oanda-token":tk}:{Authorization:"Bearer "+tk},signal:ac.signal});
+  }).then(function(r){
+    if(!r.ok||!r.body){
+      if(r.status===401||r.status===403||r.status===404){try{localStorage.removeItem("edge_oanda_acct");}catch(e){}}
+      throw new Error("stream "+r.status);
+    }
+    var rd=r.body.getReader(),dec=new TextDecoder(),buf="";
+    var pump=function(){
+      return rd.read().then(function(x){
+        if(x.done) throw new Error("closed");
+        buf+=dec.decode(x.value,{stream:true});
+        var lines=buf.split("\n");buf=lines.pop();
+        lines.forEach(function(ln){
+          if(!ln) return;
+          var m;try{m=JSON.parse(ln);}catch(e){return;}
+          f.lastMsg=Date.now();f.fail=0;
+          if(!f.got){f.got=true;try{localStorage.setItem("edge_oanda_stream_mode",JSON.stringify(f.proxy?"proxy":"direct"));}catch(e){}}
+          if(m.type==="PRICE"&&m.tradeable!==false&&m.bids&&m.asks&&m.bids.length&&m.asks.length&&m.time)
+            oandaCacheTick(m.instrument,(parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Date.parse(m.time.slice(0,19)+"Z"));
+          f.subs.slice().forEach(function(fn){try{fn(m);}catch(e){}});
+        });
+        return pump();
+      });
+    };
+    return pump();
+  }).catch(function(){
+    if(ac.signal.aborted||f.ac!==ac) return;
+    f.ac=null;
+    if(!f.got) f.proxy=!f.proxy;
+    f.fail++;
+    setTimeout(oandaFeedOpen,3000);
+  });
+}
+// Candles since `from` for one cached view key (DXY: all six legs, recombined).
+function oandaFetchSince(k,from){
+  var tk=ls("oanda_token","");
+  if(!tk) return Promise.resolve(null);
+  var u=k+"&from="+encodeURIComponent(from)+"&count=5000";
+  var getJ=function(x){return fetch(x,{headers:{Authorization:"Bearer "+tk}}).then(function(r){return r.ok?r.json():null;});};
+  if(k.indexOf("/instruments/DXY/")>-1) return Promise.all(OANDA_DXY_PAIRS.map(function(p){return getJ(u.replace("/instruments/DXY/","/instruments/"+p.inst+"/"));})).then(function(res){
+    for(var i=0;i<res.length;i++) if(!res[i]||!res[i].candles) return null;
+    return {candles:dxyCombineLegs(res)};
+  });
+  return getJ(u);
+}
+function oandaCacheTick(inst,px,ms){
+  if(!isFinite(px)||!isFinite(ms)) return;
+  var f=_oFeed,now=Date.now(),save=now-f.savedAt>15000;
+  f.mids[inst]=px;
+  if(OANDA_DXY_PAIRS.some(function(p){return p.inst===inst;})){ // DXY = ICE formula over the latest mid of each leg
+    var v=50.14348112,ok=true;
+    OANDA_DXY_PAIRS.forEach(function(p){var m=f.mids[p.inst];if(m==null) ok=false;else v*=Math.pow(m,p.weight);});
+    if(ok){oandaPatchViews("DXY",v,ms,now,save);}
+  }
+  if(inst!=="EUR_USD"&&inst!=="USD_JPY"&&inst!=="GBP_USD"&&inst!=="USD_CAD"&&inst!=="USD_SEK"&&inst!=="USD_CHF") oandaPatchViews(inst,px,ms,now,save);
+  if(save) f.savedAt=now;
+}
+function oandaPatchViews(inst,px,ms,now,save){
+  var f=_oFeed;
+  Object.keys(_chartCache).forEach(function(k){
+    if(k.indexOf("/instruments/"+inst+"/candles?")<0||f.fixing[k]) return;
+    var g=k.match(/granularity=([A-Z0-9]+)/),per=g&&OANDA_PER[g[1]];
+    var e=_chartCache[k],cs=e&&e.data&&e.data.candles;
+    if(!per||!cs||!cs.length) return; // monthly views are rebuilt whole, never patched
+    per*=1000;
+    var last=cs[cs.length-1],lt=Date.parse(last.time);
+    if(ms<lt) return;
+    if(ms<lt+per){ // forming bar
+      var x=last.mid;
+      if(px>parseFloat(x.h)) x.h=String(px);
+      if(px<parseFloat(x.l)) x.l=String(px);
+      x.c=String(px);
+    } else if(OANDA_FLOOR[g[1]]&&Math.floor(ms/per)*per-lt===per){ // next bar just opened
+      last.complete=true;
+      var p=String(px);
+      e.data={candles:cs.concat([{time:new Date(Math.floor(ms/per)*per).toISOString().slice(0,19)+".000000000Z",complete:false,mid:{o:p,h:p,l:p,c:p}}]).slice(-5000)};
+    } else if(now-(f.fixAt[k]||0)>30000){ // new bar after a closure / missed ticks / anchored timeframe: take the real candles
+      f.fixAt[k]=now;f.fixing[k]=true;
+      oandaFetchSince(k,last.time).then(function(d){
+        var fc=(d&&d.candles)||[];
+        if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<last.time;}).concat(fc).slice(-5000)};
+      }).catch(function(){}).then(function(){f.fixing[k]=false;});
+      return;
+    } else return;
+    if(save){e.t=now;chartIdbPut(k,e);}
+  });
+}
+
 // Account id is needed for the pricing stream URL; fetched once with the token and cached.
 function oandaAcct(token){
   var a=ls("oanda_acct","");
@@ -8535,45 +8646,15 @@ function chartTab(){
             }catch(e){}
             return;
           }
-          var ac=new AbortController();_chartStreamAbort=ac;
-          var tk=ls("oanda_token","")||tok;
-          oandaAcct(tk).then(function(acct){
-            return fetch(
-              strProxy?SUPA_URL+"/functions/v1/oanda-stream?account="+acct+"&instruments="+oandaInst
-                      :OANDA_ENV_BASE.replace("//api-","//stream-")+"/v3/accounts/"+acct+"/pricing/stream?instruments="+oandaInst,
-              {headers:strProxy?{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"x-oanda-token":tk}:{Authorization:"Bearer "+tk},signal:ac.signal});
-          }).then(function(r){
-            if(!r.ok||!r.body){
-              // cached account id may belong to a previous token — drop it so it's re-fetched
-              if(r.status===401||r.status===403||r.status===404){try{localStorage.removeItem("edge_oanda_acct");}catch(e){}}
-              throw new Error("stream "+r.status);
-            }
-            var rd=r.body.getReader(),dec=new TextDecoder(),buf="";
-            var pump=function(){
-              return rd.read().then(function(x){
-                if(x.done) throw new Error("closed");
-                buf+=dec.decode(x.value,{stream:true});
-                var lines=buf.split("\n");buf=lines.pop();
-                lines.forEach(function(ln){
-                  if(!ln) return;
-                  var m;try{m=JSON.parse(ln);}catch(e){return;}
-                  lastMsgAt=Date.now();
-                  // any message (incl. the 5s HEARTBEAT, so this also works while the market is closed) proves the connection
-                  strFail=0;
-                  if(!gotTick){gotTick=true;try{localStorage.setItem("edge_oanda_stream_mode",JSON.stringify(strProxy?"proxy":"direct"));}catch(e){}}
-                  if(m.type!=="PRICE"||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
-                  onTick((parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Math.floor(Date.parse(m.time.slice(0,19)+"Z")/1000));
-                });
-                return pump();
-              });
-            };
-            return pump();
-          }).catch(function(){
-            if(ac.signal.aborted) return;
-            if(!gotTick) strProxy=!strProxy;
-            strFail++;
-            setTimeout(connectStream,3000);
-          });
+          // Shared app-wide OANDA pricing stream (oandaFeedOpen): outlives this view, so every cached timeframe keeps printing live.
+          oandaFeedOpen();
+          var oSub=function(m){
+            lastMsgAt=Date.now();strFail=0; // any message (incl. the 5s HEARTBEAT, so this also works while the market is closed) proves the connection
+            if(m.type!=="PRICE"||m.instrument!==oandaInst||m.tradeable===false||!m.bids||!m.asks||!m.bids.length||!m.asks.length) return;
+            onTick((parseFloat(m.bids[0].price)+parseFloat(m.asks[0].price))/2,Math.floor(Date.parse(m.time.slice(0,19)+"Z")/1000));
+          };
+          _oFeed.subs.push(oSub);
+          _chartStreamAbort={abort:function(){var i=_oFeed.subs.indexOf(oSub);if(i>-1)_oFeed.subs.splice(i,1);}};
         };
         var startStream=connectStream; // started below, after any cache delta has been applied
       }
@@ -8605,6 +8686,7 @@ function chartTab(){
       }
       // Stream starts only once the cache delta has landed — otherwise a tick could open a new bar first and
       // the delta's older candles would be skipped, leaving a gap in the chart.
+      if(!eodOnly&&sym!=="BTC") oandaFeedOpen(); // DXY has no view stream, but its cache is rebuilt from the leg ticks
       if(startStream) (deltaP||Promise.resolve()).then(startStream);
 
       // Once this view is up, quietly pre-load the other timeframes (one at a time) so switching to them is instant.
