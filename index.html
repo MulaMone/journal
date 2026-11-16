@@ -1085,6 +1085,7 @@ function chartIdbPut(key,val){ // fire and forget
 // Background pre-load of one chart view into the cache (memory + IndexedDB) so the first open of it is instant.
 // Mirrors how chartTab builds its plain "latest N candles" request (URL, alignment, trade-anchored count); if this
 // ever drifts from chartTab the only effect is a cache miss and a normal fetch. Never throws, never blocks.
+var _etFmtChart=null,_etCacheChart={}; // New York UTC-offset lookup shared by every chart build
 var CHART_PERIOD_SEC={"2m":120,"5m":300,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800};
 // ICE USDX formula over the six OANDA legs; res = array of {candles} in OANDA_DXY_PAIRS order. Only candle times present in every leg are kept.
 function dxyCombineLegs(res){
@@ -6869,6 +6870,9 @@ function chartTab(){
   } else {
     url+="&count="+LOOKBACK_BARS;
   }
+  // Scroll-back asked for more history on this view (see "Scroll-back" below): never request fewer bars than that.
+  var _bx=State.chart_extra;
+  if(_bx&&_bx.k===sym+"|"+tf&&!focusTs&&!monthlyFetch) url=url.replace(/&count=(\d+)/,function(m,c){return "&count="+Math.max(parseInt(c,10),_bx.n);});
 
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
   // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
@@ -7029,8 +7033,8 @@ function chartTab(){
       // 2nd-Sun-Mar / 1st-Sun-Nov changeovers), so a window spanning a DST change
       // shows 18:00 ET opens at 18:00 on both sides. Futures/forex are closed over
       // the changeover weekend, so shifted times stay strictly ascending.
-      var _etFmt=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hourCycle:"h23",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",second:"numeric"});
-      var _etCache={};
+      var _etFmt=_etFmtChart||(_etFmtChart=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hourCycle:"h23",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",second:"numeric"})); // kept across builds: creating it and refilling the per-hour table on every timeframe switch cost ~25ms
+      var _etCache=_etCacheChart;
       function etOff(sec){
         var hk=Math.floor(sec/3600);
         if(_etCache[hk]!==undefined) return _etCache[hk];
@@ -8584,6 +8588,46 @@ function chartTab(){
       })();
 
 
+      // ── Scroll-back: pan (or zoom out) near the oldest loaded candle and 1000 more bars are fetched ──
+      // The fetch lands in the chart cache first, then the view is rebuilt on the same moment / zoom, so the swap is a cache hit.
+      // Stops at OANDA's 5000-bar request cap (Coinbase page cap for BTC) or when a request comes back short (start of history).
+      (function(){
+        if(focusTs||monthlyFetch||!cacheable||eodOnly) return;
+        var key=sym+"|"+tf,pressed=false,busy=false,timer=null,loaded=candles.length;
+        var capBars=sym==="BTC"?btcMaxBars(gran):5000;
+        var stale=function(){return myLoadToken!==_chartLoadToken||State.tab!=="chart"||!_chartLive||_chartLive.chart!==chart;};
+        var check=function(){
+          timer=null;
+          if(busy||pressed||stale()||!_chartLive.moved) return;
+          var r;try{r=chart.timeScale().getVisibleLogicalRange();}catch(e){return;}
+          if(!r||r.from>60) return; // still more than 60 bars of history to the left
+          var ex=State.chart_extra;
+          if(ex&&ex.k===key&&loaded<ex.n-5) return; // the last request came back short: this is the start of history
+          if(loaded>=capBars-5) return;
+          var target=Math.min(capBars,loaded+1000),mid=Math.max(0,Math.min(loaded-1,Math.round((r.from+r.to)/2)));
+          var kv={mode:"center",centerT:candles[mid].time,spanBars:r.to-r.from};
+          busy=true;
+          chartFetchJson(url.replace(/&count=\d+/,"&count="+target),false).then(function(d){
+            if(stale()) return;
+            State.chart_extra={k:key,n:target};
+            if(!d||!d.candles||d.candles.length<=loaded){busy=false;return;} // nothing older exists
+            var ent={t:Date.now(),n:target,data:d};
+            _chartCache[ckey]=ent;chartIdbPut(ckey,ent);
+            _chartKeepView=kv;
+            render();
+          }).catch(function(){busy=false;});
+        };
+        var kick=function(d){if(!timer) timer=setTimeout(check,d||250);};
+        chart.timeScale().subscribeVisibleLogicalRangeChange(function(){kick();});
+        chartDiv.addEventListener("pointerdown",function(){pressed=true;},{capture:true,passive:true});
+        var up=function(){
+          pressed=false;
+          if(stale()){window.removeEventListener("pointerup",up);window.removeEventListener("pointercancel",up);return;}
+          kick(150);
+        };
+        window.addEventListener("pointerup",up);window.addEventListener("pointercancel",up);
+      })();
+
       // ── Live updates without a manual Refresh ──────────────────
       // Poll for just the newest few bars and push them into the existing
       // series via update() (which appends a new bar or overwrites the
@@ -8691,10 +8735,10 @@ function chartTab(){
 
       // Once this view is up, quietly pre-load the other timeframes (one at a time) so switching to them is instant.
       if(cacheable&&!monthlyFetch) setTimeout(function(){ // intraday views only; monthly views are cached on open, never prefetched
-        var p=Promise.resolve();
-        ["2m","5m","30m","1h","4h","8h","1d","1w"].forEach(function(t){
-          if(t===tf) return;
-          p=p.then(function(){
+        var lanes=sym==="BTC"?1:2,lane=[]; // OANDA: two timeframes at a time; Coinbase is rate-limited, so BTC stays on one lane
+        for(var li=0;li<lanes;li++) lane.push(Promise.resolve());
+        ["2m","5m","30m","1h","4h","8h","1d","1w"].filter(function(t){return t!==tf;}).forEach(function(t,i){
+          lane[i%lanes]=lane[i%lanes].then(function(){
             if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return; // navigated away / switched view: stop
             return chartPrefetchView(sym,t);
           });
@@ -15079,6 +15123,18 @@ if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab
 // First render is now triggered by the cloud loader above
 // Warm the chart cache for the default chart view (NQ 1h) so the first Chart tab open is instant.
 setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_interval||"1h");},1000);
+// Then warm ES / NQ / BTC across the main timeframes (one lane per symbol, in parallel) and start the live feeds, so the candles are
+// already cached and moving before the Chart tab is ever opened. Entries under 30 min old are skipped; BTC stays on one lane (Coinbase rate limit).
+setTimeout(function(){
+  if(!ls("oanda_token","")||navigator.onLine===false) return;
+  var tfs=["5m","1h","30m","4h","1d","2m","8h","1w"],syms=["ES","NQ","BTC"],cur=State.chart_symbol;
+  if(cur&&cur!=="US10Y"&&syms.indexOf(cur)<0) syms.unshift(cur);
+  btcFeedOpen();oandaFeedOpen();
+  syms.forEach(function(sy){
+    var p=Promise.resolve();
+    tfs.forEach(function(t){p=p.then(function(){return chartPrefetchView(sy,t);});});
+  });
+},3500);
 
 
 </script>
