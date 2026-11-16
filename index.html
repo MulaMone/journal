@@ -8585,8 +8585,10 @@ function chartTab(){
             if(!floorOk) return; // other timeframes: the poll starts the new bar
             var ns=Math.floor(t/periodSec)*periodSec;
             barEndTrue=ns+periodSec;
-            liveBar={time:ns-etOff(ns),open:px,high:px,low:px,close:px};
+            var nt=ns-etOff(ns),op=(liveBar&&nt-liveBar.time===periodSec)?liveBar.close:px; // open = previous close, not the first tick this device received (phone waking from sleep sees a late first tick -> fake gap)
+            liveBar={time:nt,open:op,high:Math.max(op,px),low:Math.min(op,px),close:px};
             lastBarTime=liveBar.time;
+            lastPollAt=0; // force the next poll (<=5s) to pull OANDA's own candle for this bar and overwrite any local guess
           } else if(t<barEndTrue-periodSec) return;
           else {
             if(px>liveBar.high) liveBar.high=px;
