@@ -6147,10 +6147,11 @@ function oandaCacheTick(inst,px,ms){
 }
 // Replace the newest cached candle(s) of one view with the feed's own (true open/high/low) instead of the tick-built ones.
 function oandaFixView(k,e,last,now){
-  var f=_oFeed;f.fixAt[k]=now;f.fixing[k]=true;
-  oandaFetchSince(k,last.time).then(function(d){
+  var f=_oFeed,cs0=e.data.candles,pv=cs0.length>1?cs0[cs0.length-2]:null,from=(pv&&pv.time<last.time)?pv:last; // start one bar back: the just-closed bar also holds tick-built values
+  f.fixAt[k]=now;f.fixing[k]=true;
+  oandaFetchSince(k,from.time).then(function(d){
     var fc=(d&&d.candles)||[];
-    if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<last.time;}).concat(fc).slice(-5000)};
+    if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<from.time;}).concat(fc).slice(-5000)};
   }).catch(function(){}).then(function(){f.fixing[k]=false;});
 }
 function oandaPatchViews(inst,px,ms,now,save){
@@ -8571,6 +8572,10 @@ function chartTab(){
       // Builds the forming candle from live mid prices (bid+ask)/2 — same basis as price=M candles —
       // and pushes it with series.update(). The 15s poll below stays as fallback / gap repair.
       var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
+      // `candles` must follow the forming bar, so a CLOSED bar can later be corrected to the feed's final values and redrawn.
+      function keepBar(b){var n=candles.length,l=n?candles[n-1]:null;if(!l) return;
+        if(b.time>l.time) candles.push({u:b.time+(l.u-l.time),time:b.time,open:b.open,high:b.high,low:b.low,close:b.close});
+        else if(b.time===l.time){l.open=b.open;l.high=b.high;l.low=b.low;l.close=b.close;}}
       // Poll cadence: with the tick stream running, the poll is only a backup/gap-repair, so tick it every 5s but
       // skip while the stream is healthy (any message in the last 12s, heartbeats included) unless 30s have passed.
       // Non-stream views (DXY, 10Y, monthly) keep their old 15s poll.
@@ -8582,6 +8587,7 @@ function chartTab(){
           flushT=null;
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
           try{series.update(liveBar);}catch(e){return;}
+          keepBar(liveBar);
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
           renderCountdown();
@@ -8690,7 +8696,7 @@ function chartTab(){
           if(Date.now()-lastMsgAt<12000&&Date.now()-lastPollAt<30000) return; // stream healthy: poll only every 30s
           lastPollAt=Date.now();
         }
-        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:1)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:2)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
@@ -8708,6 +8714,23 @@ function chartTab(){
           if(cShift>lastBarTime) lastBarTime=cShift;
           liveBar={time:cShift,open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
           series.update(liveBar);
+          keepBar(liveBar);
+          // The bar that just CLOSED only ever saw this device's own ticks (a sleeping phone misses some), so its close/high/low can differ from the feed's.
+          // Overwrite it with the feed's final candle and redraw once, so every device shows the same closed bar.
+          if(!monthlyFetch&&freshCandles.length>1){
+            var pc=freshCandles[freshCandles.length-2],pu=Math.floor(new Date(pc.time).getTime()/1000),pt=pu-etOff(pu),pfix=false;
+            if(pc.complete!==false&&pt<cShift){
+              for(var qi=candles.length-2;qi>=0&&qi>=candles.length-4;qi--){
+                var qb=candles[qi];
+                if(qb.time===pt){
+                  var po=parseFloat(pc.mid.o),ph=parseFloat(pc.mid.h),pl=parseFloat(pc.mid.l),pcl=parseFloat(pc.mid.c);
+                  if(qb.open!==po||qb.high!==ph||qb.low!==pl||qb.close!==pcl){qb.open=po;qb.high=ph;qb.low=pl;qb.close=pcl;pfix=true;}
+                  break;
+                }
+              }
+            }
+            if(pfix){try{series.setData(candles);}catch(e){}}
+          }
           lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(parseFloat(c.mid.c))+'</span>';
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
