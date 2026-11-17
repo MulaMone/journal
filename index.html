@@ -7317,6 +7317,8 @@ function chartTab(){
       // possible on that, so they just expire (same TTL as intraday) and refetch whole. The 15s live poll refreshes the last bar
       // and appends a new month's bar, so a cached entry is never stale. Their length is also unrelated to the count asked for.
       if(monthlyFetch) return age<CHART_CACHE_TTL;
+      if(sym==="BTC"){var _cs=e.data.candles,_pm=periodSec*1000*1.5; // a cached hole is never repaired by the delta refresh (it only appends after the last bar): drop the entry so it refetches whole
+        for(var _hi=Math.max(1,_cs.length-1000);_hi<_cs.length;_hi++){if(Date.parse(_cs[_hi].time)-Date.parse(_cs[_hi-1].time)>_pm) return false;}}
       return age<CHART_CACHE_TTL&&e.data.candles.length+Math.ceil(age/1000/periodSec)+2>=needN;
     };
     var _cc=cacheable?_chartCache[ckey]:null;
