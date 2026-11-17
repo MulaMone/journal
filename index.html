@@ -7420,6 +7420,19 @@ function chartTab(){
         else {o.hour12=false;o.hour="2-digit";o.minute="2-digit";if(type===4) o.second="2-digit";}
         return u.toLocaleString(locale,o);
       }
+      // Crosshair time label (bottom axis) with abbreviated weekday, e.g. "Mon 16 Nov '26  14:30".
+      function fmtXhairTime(time){
+        var d;
+        if(typeof time==="number") d=new Date(time*1000);
+        else if(time&&typeof time==="object"&&time.timestamp!=null) d=new Date(time.timestamp*1000);
+        else if(time&&typeof time==="object"&&time.year) d=new Date(Date.UTC(time.year,time.month-1,time.day));
+        else return String(time);
+        var DY=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        function z(n){return (n<10?"0":"")+n;}
+        var out=DY[d.getUTCDay()]+" "+d.getUTCDate()+" "+MO[d.getUTCMonth()]+" '"+z(d.getUTCFullYear()%100);
+        if(typeof time==="number"&&!monthlyFetch) out+="  "+z(d.getUTCHours())+":"+z(d.getUTCMinutes());
+        return out;
+      }
       var chart=LightweightCharts.createChart(chartDiv,{
         width:chartDiv.clientWidth,
         height:chartDiv.clientHeight,
@@ -7431,6 +7444,7 @@ function chartTab(){
         trackingMode:{exitMode:LightweightCharts.TrackingModeExitMode.OnTouchEnd}, // default is OnNextTap: a long-press would lock panning until the next tap
         handleScale:{axisDoubleClickReset:{time:false,price:false}}, // library's axis double-tap reset is flaky on touch; recenter() below replaces it
         timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:!monthlyFetch,secondsVisible:false,tickMarkFormatter:fmtTick},
+        localization:{timeFormatter:fmtXhairTime},
       });
 
       _chartLive={chart:chart,moved:false,lastIdx:candles.length-1,lastT:candles[candles.length-1].time,per:periodSec};
