@@ -8297,6 +8297,14 @@ function chartTab(){
         }
         function build(){
           SP.forEach(function(sp){sp.ema=emaOf(bars,sp.len);sp.pts=[];});
+          if(periodSec<PER){ // sub-5m chart: no steps. Same 5m smoothing, applied every candle (per-candle alpha with the same decay per unit of time), seeded from the real 5m EMA
+            SP.forEach(function(sp){
+              var a=1-Math.pow(1-2/(sp.len+1),periodSec/PER),j0=lastIdx(candles[0].time+1),e=(j0>=0&&sp.ema[j0]!=null)?sp.ema[j0]:candles[0].close;
+              for(var i=0;i<candles.length;i++){e+=a*(candles[i].close-e);sp.pts.push({time:candles[i].time,value:e});}
+            });
+            if(repaint) repaint();
+            return;
+          }
           for(var i=0;i<candles.length;i++){
             var j=lastIdx(periodSec<PER?candles[i].time+1:candles[i].time+periodSec); // sub-5m chart: the 5m bar this candle sits in (no look-ahead); 5m+ chart: newest 5m bar inside the candle (live bar included)
             if(j<0||bars[j].t<candles[i].time-PER) continue;
@@ -8319,7 +8327,7 @@ function chartTab(){
                 for(i=0;i<pts.length;i++){
                   x=ts.timeToCoordinate(pts[i].time);y=series.priceToCoordinate(pts[i].value);
                   if(x==null||y==null){pen=false;continue;}
-                  if(pen){if(periodSec<PER) ctx.lineTo(x,ly);ctx.lineTo(x,y);} else {ctx.moveTo(x,y);pen=true;} // sub-5m chart: horizontal step, then jump at the 5m boundary
+                  if(pen) ctx.lineTo(x,y); else {ctx.moveTo(x,y);pen=true;}
                   lx=x;ly=y;
                 }
                 ctx.stroke();ctx.setLineDash([]);
