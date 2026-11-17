@@ -435,22 +435,27 @@ def weather():
     nm = norms()
     res = []
     for name, (la, lo) in CITIES.items():
-        r = rget("https://api.open-meteo.com/v1/forecast", params={
-            "latitude": la, "longitude": lo, "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit",
-            "forecast_days": 7, "timezone": "auto"}, timeout=30)
-        r.raise_for_status()
-        dd = r.json()["daily"]
-        days = []
-        for d, t in zip(dd["time"], dd["temperature_2m_mean"]):
-            n = nm["cities"][name].get(d[5:])
-            if t is None or n is None:
-                continue
-            cdd, hdd = max(t - 65, 0), max(65 - t, 0)
-            ncdd, nhdd = max(n - 65, 0), max(65 - n, 0)
-            days.append({"d": d, "t": round(t, 1), "norm": n, "cdd": round(cdd, 1), "hdd": round(hdd, 1),
-                         "cddA": round(cdd - ncdd, 1), "hddA": round(hdd - nhdd, 1)})
-        res.append({"city": name, "days": days,
-                    "cddA7": round(sum(x["cddA"] for x in days), 1), "hddA7": round(sum(x["hddA"] for x in days), 1)})
+        try:  # one slow city shouldn't drop the whole section
+            r = rget("https://api.open-meteo.com/v1/forecast", params={
+                "latitude": la, "longitude": lo, "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit",
+                "forecast_days": 7, "timezone": "auto"}, timeout=60)
+            r.raise_for_status()
+            dd = r.json()["daily"]
+            days = []
+            for d, t in zip(dd["time"], dd["temperature_2m_mean"]):
+                n = nm["cities"][name].get(d[5:])
+                if t is None or n is None:
+                    continue
+                cdd, hdd = max(t - 65, 0), max(65 - t, 0)
+                ncdd, nhdd = max(n - 65, 0), max(65 - n, 0)
+                days.append({"d": d, "t": round(t, 1), "norm": n, "cdd": round(cdd, 1), "hdd": round(hdd, 1),
+                             "cddA": round(cdd - ncdd, 1), "hddA": round(hdd - nhdd, 1)})
+            res.append({"city": name, "days": days,
+                        "cddA7": round(sum(x["cddA"] for x in days), 1), "hddA7": round(sum(x["hddA"] for x in days), 1)})
+        except Exception as e:
+            out["errors"][f"weather_{name}"] = f"{type(e).__name__}: {e}"[:200]
+    if not res:
+        raise RuntimeError("no weather cities returned")
     out["weather"] = res
 
 
