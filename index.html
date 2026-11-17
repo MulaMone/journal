@@ -8266,10 +8266,11 @@ function chartTab(){
         applyNumVisibility();
       })();
 
-      // ── Intraday mode, NQ only: 5m EMA(20), blue. Built from OANDA M5 candles whatever the chart timeframe (2m / 5m / 30m / 1h). ──
+      // ── Intraday mode, NQ only: 5m EMA(20) solid + 5m EMA(50) dashed burnt orange. Built from OANDA M5 candles whatever the chart timeframe (2m / 5m / 30m / 1h). ──
       // Canvas overlay on the candle series (same mechanism as the BTC EMAs), so it never touches the chart's data / time scale.
       if(intraday&&!eodOnly&&sym==="NQ"&&candles.length) (function(){
-        var LEN=20,COL="#3b82f6",PER=300,bars=[],ema=[],pts=[],repaint=null;
+        var COL="#1d4ed8",PER=300,bars=[],repaint=null;
+        var SP=[{len:20,tag:"5m 20",col:COL,tcol:"#3b6fe0",dash:false,ema:[],pts:[]},{len:50,tag:"5m 50",col:"#ce4b05",tcol:"#ee6a1f",dash:true,ema:[],pts:[]}];
         var url=function(n){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=M5&price=M&count="+n;};
         function toBars(d){
           var out=[];
@@ -8280,7 +8281,7 @@ function chartTab(){
           });
           return out;
         }
-        function emaOf(b){
+        function emaOf(b,LEN){
           var k=2/(LEN+1),e=new Array(b.length),s=0,v=0;
           for(var i=0;i<b.length;i++){
             if(i<LEN-1){s+=b[i].c;e[i]=null;}
@@ -8295,10 +8296,11 @@ function chartTab(){
           return r;
         }
         function build(){
-          pts=[];
+          SP.forEach(function(sp){sp.ema=emaOf(bars,sp.len);sp.pts=[];});
           for(var i=0;i<candles.length;i++){
             var j=lastIdx(candles[i].time+Math.max(periodSec,PER)); // newest 5m bar inside this candle (live bar included)
-            if(j>=0&&bars[j].t>=candles[i].time-PER&&ema[j]!=null) pts.push({time:candles[i].time,value:ema[j]});
+            if(j<0||bars[j].t<candles[i].time-PER) continue;
+            SP.forEach(function(sp){if(sp.ema[j]!=null) sp.pts.push({time:candles[i].time,value:sp.ema[j]});});
           }
           if(repaint) repaint();
         }
@@ -8306,24 +8308,27 @@ function chartTab(){
           attached:function(param){repaint=param.requestUpdate;},
           detached:function(){repaint=null;},
           paneViews:function(){return [{zOrder:function(){return "normal";},renderer:function(){return {draw:function(target){
-            if(pts.length<2) return;
             target.useMediaCoordinateSpace(function(scope){
-              var ctx=scope.context,W=scope.mediaSize.width,H=scope.mediaSize.height,ts=chart.timeScale(),pen=false,lx=null,ly=null,i,x,y;
+              var ctx=scope.context,W=scope.mediaSize.width,H=scope.mediaSize.height,ts=chart.timeScale();
               ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
-              ctx.strokeStyle=COL;ctx.lineWidth=2;ctx.lineJoin="round";ctx.beginPath();
-              for(i=0;i<pts.length;i++){
-                x=ts.timeToCoordinate(pts[i].time);y=series.priceToCoordinate(pts[i].value);
-                if(x==null||y==null){pen=false;continue;}
-                if(pen) ctx.lineTo(x,y); else {ctx.moveTo(x,y);pen=true;}
-                lx=x;ly=y;
-              }
-              ctx.stroke();
-              if(lx!=null&&ly>=8&&ly<=H-8){ // tag at the end of the line
-                var txt="5m 20";ctx.font="bold 10px 'Courier New',monospace";ctx.textBaseline="middle";
-                var tw=ctx.measureText(txt).width,tx=lx+6;if(tx+tw>W-2) tx=Math.max(2,W-tw-2);
-                ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(tx-2,ly-7,tw+4,14);
-                ctx.fillStyle=COL;ctx.fillText(txt,tx,ly);
-              }
+              ctx.font="bold 10px 'Courier New',monospace";ctx.textBaseline="middle";
+              SP.forEach(function(sp){
+                var pts=sp.pts,pen=false,lx=null,ly=null,i,x,y;
+                if(pts.length<2) return;
+                ctx.strokeStyle=sp.col;ctx.lineWidth=2;ctx.lineJoin="round";ctx.setLineDash(sp.dash?[6,4]:[]);ctx.beginPath();
+                for(i=0;i<pts.length;i++){
+                  x=ts.timeToCoordinate(pts[i].time);y=series.priceToCoordinate(pts[i].value);
+                  if(x==null||y==null){pen=false;continue;}
+                  if(pen) ctx.lineTo(x,y); else {ctx.moveTo(x,y);pen=true;}
+                  lx=x;ly=y;
+                }
+                ctx.stroke();ctx.setLineDash([]);
+                if(lx!=null&&ly>=8&&ly<=H-8){ // tag at the end of the line
+                  var tw=ctx.measureText(sp.tag).width,tx=lx+6;if(tx+tw>W-2) tx=Math.max(2,W-tw-2);
+                  ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(tx-2,ly-7,tw+4,14);
+                  ctx.fillStyle=sp.tcol;ctx.fillText(sp.tag,tx,ly); // 20 tag text a touch lighter than its line so it reads on the dark box
+                }
+              });
               ctx.restore();
             });
           }};}}];},
@@ -8331,8 +8336,8 @@ function chartTab(){
         });
         chartFetchJson(url(3000)).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
-          bars=toBars(d);if(bars.length<=LEN) return;
-          ema=emaOf(bars);build();
+          bars=toBars(d);if(bars.length<=50) return;
+          build();
           var timer=setInterval(function(){ // live: every 30s patch the newest bars
             if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
             chartFetchJson(url(3)).then(function(dd){
@@ -8341,7 +8346,7 @@ function chartTab(){
                 var i=lastIdx(x.t+1);
                 if(i>=0&&bars[i].t===x.t) bars[i]=x; else if(i===bars.length-1) bars.push(x);
               });
-              ema=emaOf(bars);build();
+              build();
             }).catch(_dbg);
           },30000);
         }).catch(_dbg);
