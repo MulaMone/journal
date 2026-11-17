@@ -8368,6 +8368,41 @@ function chartTab(){
         });
       })();
 
+      // ── Non-intraday mode, 30m and under: the 9:30 ET open vertical line (same sky-blue dotted style) on every past day ──
+      // Vertical line only (no open-price line / label). Intraday mode keeps its own latest-only line + open line above.
+      if(!intraday&&!eodOnly&&candles.length&&periodSec<=1800) (function(){
+        var ts930=[];
+        for(var i=0;i<candles.length;i++){ if(candles[i].time%86400===34200) ts930.push(candles[i].time); } // chart times are ET-shifted
+        if(!ts930.length) return;
+        series.attachPrimitive({
+          paneViews:function(){
+            return [{
+              zOrder:function(){return "normal";},
+              renderer:function(){
+                return {
+                  draw:function(){},
+                  drawBackground:function(target){
+                    target.useMediaCoordinateSpace(function(scope){
+                      var ctx=scope.context,W=scope.mediaSize.width,H=scope.mediaSize.height,ts=chart.timeScale();
+                      ctx.save();
+                      ctx.lineWidth=1;ctx.strokeStyle="#4aa3ff";ctx.globalAlpha=0.9;ctx.setLineDash([2,4]);
+                      ctx.beginPath();
+                      for(var k=0;k<ts930.length;k++){
+                        var x=ts.timeToCoordinate(ts930[k]);
+                        if(x==null||x<0||x>W) continue;
+                        ctx.moveTo(Math.round(x)+0.5,0);ctx.lineTo(Math.round(x)+0.5,H);
+                      }
+                      ctx.stroke();
+                      ctx.restore();
+                    });
+                  }
+                };
+              }
+            }];
+          }
+        });
+      })();
+
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
       // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
       // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
