@@ -8298,7 +8298,7 @@ function chartTab(){
         function build(){
           SP.forEach(function(sp){sp.ema=emaOf(bars,sp.len);sp.pts=[];});
           for(var i=0;i<candles.length;i++){
-            var j=lastIdx(candles[i].time+Math.max(periodSec,PER)); // newest 5m bar inside this candle (live bar included)
+            var j=lastIdx(periodSec<PER?candles[i].time+1:candles[i].time+periodSec); // sub-5m chart: the 5m bar this candle sits in (no look-ahead); 5m+ chart: newest 5m bar inside the candle (live bar included)
             if(j<0||bars[j].t<candles[i].time-PER) continue;
             SP.forEach(function(sp){if(sp.ema[j]!=null) sp.pts.push({time:candles[i].time,value:sp.ema[j]});});
           }
@@ -8319,7 +8319,7 @@ function chartTab(){
                 for(i=0;i<pts.length;i++){
                   x=ts.timeToCoordinate(pts[i].time);y=series.priceToCoordinate(pts[i].value);
                   if(x==null||y==null){pen=false;continue;}
-                  if(pen) ctx.lineTo(x,y); else {ctx.moveTo(x,y);pen=true;}
+                  if(pen){if(periodSec<PER) ctx.lineTo(x,ly);ctx.lineTo(x,y);} else {ctx.moveTo(x,y);pen=true;} // sub-5m chart: horizontal step, then jump at the 5m boundary
                   lx=x;ly=y;
                 }
                 ctx.stroke();ctx.setLineDash([]);
