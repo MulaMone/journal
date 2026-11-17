@@ -1233,7 +1233,7 @@ function chartDb(){
   if(_chartDbP) return _chartDbP;
   _chartDbP=new Promise(function(res){
     try{
-      var rq=indexedDB.open("edge_chart_cache",1);
+      var rq=indexedDB.open("edge_chart_cache2",1);
       rq.onupgradeneeded=function(){rq.result.createObjectStore("c");};
       rq.onsuccess=function(){res(rq.result);};
       rq.onerror=rq.onblocked=function(){res(null);};
@@ -6468,6 +6468,13 @@ function btcCacheTick(px,ms){
       last.complete=true;
       var p=String(px);
       e.data={candles:cs.concat([{time:new Date(b).toISOString(),complete:false,mid:{o:p,h:p,l:p,c:p}}]).slice(-5000)};
+      if(now-(f.fixAt[k]||0)>30000){ // the bar that just closed was built from ticks (open = first tick seen, wick/close only as complete as the ticks received): swap in Coinbase's real candle
+        f.fixAt[k]=now;f.fixing[k]=true;var clt=last.time;
+        btcCandles(k+"&count=5000&from="+encodeURIComponent(clt)+"&bg=1").then(function(d){
+          var fc=(d&&d.candles)||[];
+          if(fc.length) e.data={candles:e.data.candles.filter(function(c){return c.time<clt;}).concat(fc).slice(-5000)};
+        }).catch(_dbg).then(function(){f.fixing[k]=false;});
+      }
     } else if(now-(f.fixAt[k]||0)>30000){ // ticks were missed (sleep / dropped socket): refill from the last bar on
       f.fixAt[k]=now;f.fixing[k]=true;
       btcCandles(k+"&count=5000&from="+encodeURIComponent(last.time)+"&bg=1").then(function(d){
@@ -7317,8 +7324,6 @@ function chartTab(){
       // possible on that, so they just expire (same TTL as intraday) and refetch whole. The 15s live poll refreshes the last bar
       // and appends a new month's bar, so a cached entry is never stale. Their length is also unrelated to the count asked for.
       if(monthlyFetch) return age<CHART_CACHE_TTL;
-      if(sym==="BTC"){var _cs=e.data.candles,_pm=periodSec*1000*1.5; // a cached hole is never repaired by the delta refresh (it only appends after the last bar): drop the entry so it refetches whole
-        for(var _hi=Math.max(1,_cs.length-1000);_hi<_cs.length;_hi++){if(Date.parse(_cs[_hi].time)-Date.parse(_cs[_hi-1].time)>_pm) return false;}}
       return age<CHART_CACHE_TTL&&e.data.candles.length+Math.ceil(age/1000/periodSec)+2>=needN;
     };
     var _cc=cacheable?_chartCache[ckey]:null;
