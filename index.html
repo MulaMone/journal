@@ -125,7 +125,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Co
 .tbl tr.exp-open td{background:var(--panel2)}
 /* SECTION HEADER */
 .sh{font-size:13px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.sh:before{content:'';width:3px;height:13px;background:var(--ca);display:inline-block}
+.sh:before{content:'';width:3px;height:13px;background:var(--ca);display:inline-block}.sh.nobar:before{display:none}
 /* LEVEL ROW */
 .lvrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
 .lvrow.checked .lv-label{text-decoration:line-through;opacity:0.38}
@@ -6677,7 +6677,7 @@ function chartTab(){
   // ── Header ────────────────────────────────────────────────
   var hrow=div("rjb mb12");
   hrow.style.flexWrap="wrap";
-  var sh=div("sh");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
+  var sh=div("sh nobar");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
   var shText=span();
   var shTail=focusTs
     ? " — "+TF_LBL(tf)+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
