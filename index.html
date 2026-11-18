@@ -7073,7 +7073,6 @@ function chartTab(){
   var note=div("xs m mt8");
   note.style.cssText="text-align:right;color:var(--text3);font-size:11px;";
   note.textContent=(sym==="BTC"?"Chart data via Coinbase BTC-USD":"Chart data via OANDA")+" (times shown in ET) — markers show trade entries from your log";
-  el.appendChild(note);
 
   var oandaInst=OANDA_SYMS[sym]||"SPX500_USD";
   var gran=OANDA_GRAN[tf]||"H1";
@@ -7882,8 +7881,6 @@ function chartTab(){
           listWrap.appendChild(row);
         });
         el.appendChild(listWrap);
-      } else {
-        note.textContent="OANDA • no logged trades for "+sym+" • "+new Date().toLocaleTimeString();
       }
 
       // Auto spacing: fitContent() shows everything at its normal zoom; the right gap is set BEFORE
