@@ -6634,6 +6634,25 @@ function tradeExitTs(t){
   return new Date(yr,mo,dy,hh,mm);
 }
 
+// Chart header: the ticker text is swapped for its icon. The ticker stays in the layout (hidden) and the icon is
+// drawn over it, so the header's width and height are exactly what they were with plain text.
+var CHART_SYM_ICONS={
+  "ES":{n:"E-mini S&amp;P 500",vb:"4800 -1430 3360 1450",g:"<path fill=\"#C8202F\" d=\"M5862 -469Q5862 -245 5722.5 -112.5Q5583 20 5340 20Q5128 20 5000.5 -75.5Q4873 -171 4843 -352L5124 -375Q5146 -285 5202.0 -244.0Q5258 -203 5343 -203Q5448 -203 5510.5 -270.0Q5573 -337 5573 -463Q5573 -574 5514.0 -640.5Q5455 -707 5349 -707Q5232 -707 5158 -616H4884L4933 -1409H5780V-1200H5188L5165 -844Q5267 -934 5420 -934Q5621 -934 5741.5 -809.0Q5862 -684 5862 -469Z M6974 -705Q6974 -348 6851.5 -164.0Q6729 20 6484 20Q6000 20 6000 -705Q6000 -958 6053.0 -1118.0Q6106 -1278 6212.0 -1354.0Q6318 -1430 6492 -1430Q6742 -1430 6858.0 -1249.0Q6974 -1068 6974 -705ZM6692 -705Q6692 -900 6673.0 -1008.0Q6654 -1116 6612.0 -1163.0Q6570 -1210 6490 -1210Q6405 -1210 6361.5 -1162.5Q6318 -1115 6299.5 -1007.5Q6281 -900 6281 -705Q6281 -512 6300.5 -403.5Q6320 -295 6362.5 -248.0Q6405 -201 6486 -201Q6566 -201 6609.5 -250.5Q6653 -300 6672.5 -409.0Q6692 -518 6692 -705Z M8113 -705Q8113 -348 7990.5 -164.0Q7868 20 7623 20Q7139 20 7139 -705Q7139 -958 7192.0 -1118.0Q7245 -1278 7351.0 -1354.0Q7457 -1430 7631 -1430Q7881 -1430 7997.0 -1249.0Q8113 -1068 8113 -705ZM7831 -705Q7831 -900 7812.0 -1008.0Q7793 -1116 7751.0 -1163.0Q7709 -1210 7629 -1210Q7544 -1210 7500.5 -1162.5Q7457 -1115 7438.5 -1007.5Q7420 -900 7420 -705Q7420 -512 7439.5 -403.5Q7459 -295 7501.5 -248.0Q7544 -201 7625 -201Q7705 -201 7748.5 -250.5Q7792 -300 7811.5 -409.0Q7831 -518 7831 -705Z\"/>"},
+  "NQ":{n:"E-mini Nasdaq",vb:"0 0 52 44",g:"<g fill=\"#0996C7\"><path transform=\"translate(25)\" d=\"M14.012.016L2.594 31.386a2.19 2.19 0 0 1-1.836 1.427v.015h12.07c.945 0 1.754-.601 2.055-1.441L26.305.016H14.012z\"/><path d=\"M24.773 32.352c.7 0 1.313-.348 1.688-.875.039-.055.176-.247.273-.508l4.188-11.512-2.45-6.723a2.07 2.07 0 0 0-3.597-.398c-.04.055-.203.3-.273.508l-4.188 11.508 2.461 6.75a2.067 2.067 0 0 0 1.898 1.25\"/><path transform=\"translate(-1 10)\" d=\"M26.668.984H14.465c-.945 0-1.754.598-2.059 1.442L.988 33.796h12.293L24.7 2.427A2.187 2.187 0 0 1 26.668.988V.984z\"/></g>"},
+  "DXY":{n:"US Dollar Index",vb:"0 0 24 24",g:"<g fill=\"none\" stroke=\"#00e676\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M14.8 9a2 2 0 0 0-1.8-1h-2a2 2 0 1 0 0 4h2a2 2 0 1 1 0 4h-2a2 2 0 0 1-1.8-1\"/><path d=\"M12 7v10\"/></g>"},
+  "CL":{n:"Crude Oil",vb:"0 0 24 24",g:"<g fill=\"none\" stroke=\"#a855f7\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7.5 19.4c2.6 2.1 6.4 2.1 9 0 2.6-2.1 3.3-5.7 1.6-8.5l-4.9-7.3c-.4-.6-1.3-.8-1.9-.4-.2.1-.3.2-.4.4l-4.9 7.3c-1.7 2.8-1 6.4 1.5 8.5z\"/></g>"},
+  "GC":{n:"Gold",vb:"0 0 24 24",g:"<g fill=\"none\" stroke=\"#ffab00\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9.5 3h5l1.5 5H8z\"/><path d=\"M4 11h5l1.5 5h-8z\"/><path d=\"M14.5 11h5l1.5 5h-8z\"/></g>"},
+  "NG":{n:"Natural Gas",vb:"0 0 24 24",g:"<g fill=\"none\" stroke=\"#f97316\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 12c2-2.96 0-7-1-8 0 3.038-1.773 4.741-3 6-1.226 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.532-1.056-3.94-2-5-1.786 3-2.791 3-4 2z\"/></g>"},
+  "BTC":{n:"Bitcoin",vb:"0 0 32 32",g:"<circle cx=\"16\" cy=\"16\" r=\"16\" fill=\"#f7931a\"/><path fill=\"#fff\" d=\"M22.3 13.9c.3-2.1-1.3-3.2-3.5-4l.7-2.9-1.7-.4-.7 2.8-1.4-.3.7-2.8-1.7-.4-.7 2.9-1.1-.3-2.4-.6-.5 1.9s1.3.3 1.2.3c.7.2.8.6.8 1l-.8 3.3c0 .1.1.1.2.1h-.2l-1.2 4.6c-.1.2-.3.5-.8.4 0 0-1.2-.3-1.2-.3l-.8 2 2.3.6 1.3.3-.7 3 1.7.4.7-2.9 1.4.4-.7 2.9 1.7.4.7-3c3 .6 5.2.3 6.1-2.4.8-2.1 0-3.4-1.6-4.2 1.1-.3 2-1 2.2-2.6zm-4 5.6c-.5 2.2-4.3 1-5.5.7l1-3.9c1.2.3 5.1.9 4.5 3.2zm.6-5.7c-.5 2-3.6 1-4.6.7l.9-3.5c1 .3 4.3.7 3.7 2.8z\"/>"},
+  "US10Y":{n:"10-Year Treasury Yield",vb:"0 0 24 24",g:"<g fill=\"none\" stroke=\"#378ADD\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0\"/><path d=\"M13 17.5v4.5l2-1.5l2 1.5v-4.5\"/><path d=\"M10 19h-5a2 2 0 0 1-2-2v-10c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-1 1.73\"/><path d=\"M6 9h12\"/><path d=\"M6 12h3\"/><path d=\"M6 15h2\"/></g>"}
+};
+function chartSymHTML(sym){
+  var a=CHART_SYM_ICONS[sym];
+  if(!a) return "";
+  return "<span role='img' aria-label='"+a.n+"' title='"+a.n+"' style='position:relative;display:inline-block;'>"
+    +"<span style='visibility:hidden;'>"+sym+"</span>"
+    +"<svg viewBox='"+a.vb+"' preserveAspectRatio='xMidYMid meet' aria-hidden='true' style='position:absolute;left:0;top:0;width:100%;height:100%;'>"+a.g+"</svg></span>";
+}
 function chartTab(){
   var el=div();
   el.style.padding="16px";
@@ -6658,9 +6677,13 @@ function chartTab(){
   var hrow=div("rjb mb12");
   hrow.style.flexWrap="wrap";
   var sh=div("sh");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
-  var shText=span();shText.textContent=focusTs
-    ? sym+" — "+TF_LBL(tf)+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
-    : sym+" — "+TF_LBL(tf);
+  var shText=span();
+  var shTail=focusTs
+    ? " — "+TF_LBL(tf)+" (focused on "+new Date(focusTs*1000).toLocaleString()+")"
+    : " — "+TF_LBL(tf);
+  var shIcon=chartSymHTML(sym);
+  if(shIcon){shText.innerHTML=shIcon;shText.appendChild(document.createTextNode(shTail));}
+  else shText.textContent=sym+shTail;
   sh.appendChild(shText);
   if(eodOnly){var liveTag=span("xs");liveTag.style.cssText="color:#00e676;letter-spacing:1px;";liveTag.innerHTML="EOD";sh.appendChild(liveTag);} // "● LIVE" removed (was static, never updated); 10Y keeps EOD
   hrow.appendChild(sh);
