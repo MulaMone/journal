@@ -6792,6 +6792,30 @@ function chartTab(){
     }
   }
 
+  // FVG toggle (3-candle fair value gaps) + prev/next open gap. Overlay on the chart, like "#".
+  var showFvg=State.chart_show_fvg===true;
+  var applyFvg=null,fvgJump=null;
+  var fvgBox=div();fvgBox.style.cssText="position:absolute;left:"+(useWheels?146:48)+"px;top:8px;z-index:6;display:flex;align-items:center;gap:4px;";
+  var fvgBtn=h("button",{className:"btn"}),fvgPrev=h("button",{className:"btn"}),fvgNext=h("button",{className:"btn"}),fvgCnt=h("span");
+  fvgBtn.textContent="FVG";fvgPrev.textContent="\u2039";fvgNext.textContent="\u203A";
+  fvgBtn.title="Show open 3-candle fair value gaps";fvgPrev.title="Previous open FVG";fvgNext.title="Next open FVG";
+  fvgCnt.style.cssText="font-size:11px;color:var(--text3);margin:0 4px;white-space:nowrap;";
+  var styleFvg=function(){
+    var on=showFvg,bs="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;";
+    fvgBtn.style.cssText=bs+(on?"border-color:#ffb020;color:#ffb020;background:#ffb02018;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+    [fvgPrev,fvgNext].forEach(function(b){b.style.cssText=bs+"border-color:var(--border2);color:var(--text3);background:#040d1acc;display:"+(on?"block":"none")+";";});
+    fvgCnt.style.display=on?"inline":"none";
+  };
+  styleFvg();
+  fvgBtn.addEventListener("click",function(){showFvg=!showFvg;State.chart_show_fvg=showFvg;styleFvg();if(applyFvg)applyFvg();});
+  fvgPrev.addEventListener("click",function(){if(fvgJump)fvgJump(-1);});
+  fvgNext.addEventListener("click",function(){if(fvgJump)fvgJump(1);});
+  [fvgBox].concat([fvgBtn,fvgPrev,fvgNext]).forEach(function(n){
+    n.addEventListener("click",function(e){e.stopPropagation();});
+    ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
+  });
+  fvgBox.appendChild(fvgBtn);fvgBox.appendChild(fvgPrev);fvgBox.appendChild(fvgCnt);fvgBox.appendChild(fvgNext);
+
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
     clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
@@ -6845,6 +6869,7 @@ function chartTab(){
     chartDiv.appendChild(idMob);
   }
   if(numBtnMobile) chartDiv.appendChild(numBtnMobile);
+  chartDiv.appendChild(fvgBox);
 
   // Double-click / double-tap anywhere on the chart RECENTERS the view (price
   // autoscale + latest bars at default zoom) — it does not reload data.
@@ -7694,6 +7719,65 @@ function chartTab(){
         }
       };
       series.attachPrimitive(sessionPrimitive);
+
+      // ── FVG: 3-candle fair value gaps (open ones only) ──────────────
+      // Bullish: candle 3 low > candle 1 high. Bearish: candle 3 high < candle 1 low.
+      // The zone shrinks as price trades back into it and is dropped once fully closed.
+      try{(function(){
+        var zones=[];
+        for(var fi=2;fi<candles.length;fi++){
+          var fa=candles[fi-2],fc=candles[fi],flo,fhi,fup;
+          if(fc.low>fa.high){flo=fa.high;fhi=fc.low;fup=true;}
+          else if(fc.high<fa.low){flo=fc.high;fhi=fa.low;fup=false;}
+          else continue;
+          var closed=false;
+          for(var fj=fi+1;fj<candles.length;fj++){
+            var fk=candles[fj];
+            if(fup){if(fk.low<=flo){closed=true;break;} if(fk.low<fhi) fhi=fk.low;}
+            else{if(fk.high>=fhi){closed=true;break;} if(fk.high>flo) flo=fk.high;}
+          }
+          if(!closed) zones.push({t0:fa.time,i0:fi-2,lo:flo,hi:fhi});
+        }
+        var fvgRepaint=null;
+        series.attachPrimitive({
+          attached:function(param){fvgRepaint=param.requestUpdate;},
+          detached:function(){fvgRepaint=null;},
+          paneViews:function(){return [{
+            zOrder:function(){return "normal";},
+            renderer:function(){return {
+              draw:function(){},
+              drawBackground:function(target){
+                if(!showFvg) return;
+                target.useMediaCoordinateSpace(function(scope){
+                  var ctx=scope.context,W=scope.mediaSize.width,ts=chart.timeScale();
+                  ctx.save();
+                  zones.forEach(function(z){
+                    var x0=ts.timeToCoordinate(z.t0),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
+                    if(x0==null||y1==null||y2==null||x0>W||y2-y1<2) return;
+                    x0=Math.max(x0,0);
+                    ctx.globalAlpha=0.2;ctx.fillStyle="#ffb020";ctx.fillRect(x0,y1,W-x0,y2-y1);
+                    ctx.globalAlpha=0.8;ctx.fillStyle="#ffb020";ctx.fillRect(x0,y1,W-x0,1);
+                    for(var dx=x0;dx<W;dx+=6) ctx.fillRect(dx,y2-1,3,1);
+                  });
+                  ctx.restore();
+                });
+              }
+            };}
+          }];},
+          updateAllViews:function(){}
+        });
+        fvgCnt.textContent=zones.length+" open";
+        applyFvg=function(){if(fvgRepaint) fvgRepaint();};
+        fvgJump=function(dir){
+          var r=chart.timeScale().getVisibleLogicalRange();if(!r||!zones.length) return;
+          var mid=(r.from+r.to)/2,w=r.to-r.from,pick=null;
+          if(dir>0){for(var a1=0;a1<zones.length;a1++){if(zones[a1].i0+1>mid+0.5){pick=zones[a1];break;}}}
+          else{for(var a2=zones.length-1;a2>=0;a2--){if(zones[a2].i0+1<mid-0.5){pick=zones[a2];break;}}}
+          if(!pick) return;
+          if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}
+          chart.timeScale().setVisibleLogicalRange({from:pick.i0+1-w/2,to:pick.i0+1+w/2});
+        };
+      })();}catch(e){_dbg(e);}
 
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
