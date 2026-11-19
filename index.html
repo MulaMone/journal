@@ -6796,14 +6796,12 @@ function chartTab(){
   var showFvg=State.chart_show_fvg===true;
   var applyFvg=null;
   var fvgBox=div();fvgBox.style.cssText="position:absolute;left:"+(useWheels?146:48)+"px;top:8px;z-index:6;display:flex;align-items:center;gap:4px;";
-  var fvgBtn=h("button",{className:"btn"}),fvgCnt=h("span");
+  var fvgBtn=h("button",{className:"btn"});
   fvgBtn.textContent="FVG";
   fvgBtn.title="Show open 3-candle fair value gaps";
-  fvgCnt.style.cssText="font-size:11px;color:var(--text3);margin:0 4px;white-space:nowrap;";
   var styleFvg=function(){
     var on=showFvg,bs="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;";
     fvgBtn.style.cssText=bs+(on?"border-color:#ffb020;color:#ffb020;background:#ffb02018;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
-    fvgCnt.style.display=on?"inline":"none";
   };
   styleFvg();
   fvgBtn.addEventListener("click",function(){showFvg=!showFvg;State.chart_show_fvg=showFvg;styleFvg();if(applyFvg)applyFvg();});
@@ -6811,7 +6809,7 @@ function chartTab(){
     n.addEventListener("click",function(e){e.stopPropagation();});
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
-  fvgBox.appendChild(fvgBtn);fvgBox.appendChild(fvgCnt);
+  fvgBox.appendChild(fvgBtn);
 
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
@@ -7721,20 +7719,23 @@ function chartTab(){
       // Bullish: candle 3 low > candle 1 high. Bearish: candle 3 high < candle 1 low.
       // The zone shrinks as price trades back into it and is dropped once fully closed.
       try{(function(){
-        var zones=[];
+        var zones=[],doneZ=[];
         for(var fi=2;fi<candles.length;fi++){
           var fa=candles[fi-2],fc=candles[fi],flo,fhi,fup;
           if(fc.low>fa.high){flo=fa.high;fhi=fc.low;fup=true;}
           else if(fc.high<fa.low){flo=fc.high;fhi=fa.low;fup=false;}
           else continue;
-          var closed=false;
-          for(var fj=fi+1;fj<candles.length;fj++){
+          var lo0=flo,hi0=fhi,closed=false,fj;
+          for(fj=fi+1;fj<candles.length;fj++){
             var fk=candles[fj];
             if(fup){if(fk.low<=flo){closed=true;break;} if(fk.low<fhi) fhi=fk.low;}
             else{if(fk.high>=fhi){closed=true;break;} if(fk.high>flo) flo=fk.high;}
           }
           if(!closed) zones.push({t0:fa.time,i0:fi-2,lo:flo,hi:fhi});
+          else doneZ.push({t0:fa.time,t1:candles[fj].time,end:fj,lo:lo0,hi:hi0});
         }
+        doneZ.sort(function(p,q){return p.end-q.end;});
+        doneZ=doneZ.slice(-5); // the 5 most recently filled
         var fvgRepaint=null;
         series.attachPrimitive({
           attached:function(param){fvgRepaint=param.requestUpdate;},
@@ -7748,6 +7749,15 @@ function chartTab(){
                 target.useMediaCoordinateSpace(function(scope){
                   var ctx=scope.context,W=scope.mediaSize.width,ts=chart.timeScale();
                   ctx.save();
+                  ctx.font="9px 'Courier New',monospace";ctx.textBaseline="bottom";
+                  doneZ.forEach(function(z){
+                    var x0=ts.timeToCoordinate(z.t0),x1=ts.timeToCoordinate(z.t1),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
+                    if(x0==null||x1==null||y1==null||y2==null||x1<0||x0>W||y2-y1<2) return;
+                    x0=Math.max(x0,0);
+                    ctx.globalAlpha=0.16;ctx.fillStyle="#888780";ctx.fillRect(x0,y1,x1-x0,y2-y1);
+                    ctx.globalAlpha=0.6;ctx.fillRect(x0,y1,x1-x0,1);ctx.fillRect(x0,y2-1,x1-x0,1);ctx.fillRect(x1,y1,1,y2-y1);
+                    ctx.globalAlpha=0.8;ctx.fillStyle="#a8b4cc";ctx.fillText("filled",x0+3,y1-2);
+                  });
                   zones.forEach(function(z){
                     var x0=ts.timeToCoordinate(z.t0),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
                     if(x0==null||y1==null||y2==null||x0>W||y2-y1<2) return;
@@ -7763,7 +7773,6 @@ function chartTab(){
           }];},
           updateAllViews:function(){}
         });
-        fvgCnt.textContent=zones.length+" open";
         applyFvg=function(){if(fvgRepaint) fvgRepaint();};
       })();}catch(e){_dbg(e);}
 
