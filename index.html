@@ -6854,7 +6854,9 @@ function chartTab(){
   // events in the capture phase instead, so the chart can't swallow them.
   // dblclick stays for mouse; _dtFire de-dupes if both ever fire.
   var _dtLast=0;
+  function _onZoomBar(e){return !!(e&&e.target&&e.target.closest&&e.target.closest(".zoom-bar"));}
   function _dtFire(e){
+    if(_onZoomBar(e)) return; // rapid +/- clicks are a double-click: must not recenter
     var n=performance.now();
     if(n-_dtLast<600) return;
     _dtLast=n;
@@ -6864,7 +6866,7 @@ function chartTab(){
   chartDiv.addEventListener("dblclick",_dtFire);
   var _tapT=0,_tapX=0,_tapY=0,_dnX=0,_dnY=0,_dnT=0,_dnOk=false;
   chartDiv.addEventListener("pointerdown",function(e){
-    if(e.pointerType==="mouse"||!e.isPrimary){_dnOk=false;return;}
+    if(e.pointerType==="mouse"||!e.isPrimary||_onZoomBar(e)){_dnOk=false;_tapT=0;return;}
     _dnOk=true;_dnX=e.clientX;_dnY=e.clientY;_dnT=performance.now();
   },{capture:true,passive:true});
   chartDiv.addEventListener("pointerup",function(e){
@@ -9028,6 +9030,7 @@ function chartTab(){
       // Wheel / pinch still work; these zoom about the centre of the visible range.
       (function(){
         var bar=div(),mob=isMobile(),sz=mob?40:30;
+        bar.className="zoom-bar";
         bar.style.cssText="position:absolute;left:8px;bottom:34px;display:flex;flex-direction:column;gap:4px;z-index:6;";
         function zb(txt,title,fn){
           var b=h("button",{className:"btn"});
