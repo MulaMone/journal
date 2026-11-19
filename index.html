@@ -8166,11 +8166,55 @@ function chartTab(){
           if(di>=1) add(1,"PD",ds[di-1],DAYC);
           if(!lv.length) return;
           lv.sort(function(a,b){return b.rank-a.rank;}); // highest timeframe first (stable: H, L, C within a rank)
-          // Native price-line labels (price box on the axis + tag), same as the round-number levels:
-          // always glued to their line on pan/zoom, price shown, and the library resolves overlaps.
+          var layer=div();
+          layer.style.cssText="position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:4;overflow:hidden;";
+          chartDiv.appendChild(layer);
+          var TAGH=14;
           lv.forEach(function(L){
-            series.createPriceLine({price:L.price,color:L.col,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:L.k});
+            series.createPriceLine({price:L.price,color:L.col,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:false,title:""});
+            var el2=div();
+            var rgb=parseInt(L.col.slice(1),16),lum=0.299*(rgb>>16)+0.587*((rgb>>8)&255)+0.114*(rgb&255);
+            el2.textContent=L.k;
+            el2.style.cssText="position:absolute;height:"+TAGH+"px;line-height:"+TAGH+"px;padding:0 4px;box-sizing:border-box;border-radius:2px;font:700 10px 'Courier New',monospace;white-space:nowrap;background:"+L.col+";color:"+(lum>150?"#041018":"#fff")+";display:none;transform:translateY(-50%);";
+            layer.appendChild(el2);
+            L.el=el2;
           });
+          lvlTagsPos=function(){
+            try{
+              var sw=chart.priceScale("right").width()||76;
+              var plotR=chartDiv.clientWidth-sw-4;
+              var paneH=chartDiv.clientHeight-((chart.timeScale().height&&chart.timeScale().height())||26);
+              var items=[];
+              lv.forEach(function(L){
+                var y=series.priceToCoordinate(L.price);
+                if(y==null||y<TAGH/2||y>paneH-TAGH/2){L.el.style.display="none";return;} // off the visible price range
+                items.push({L:L,y:y});
+              });
+              items.sort(function(a,b){return a.y-b.y;});
+              var rows=[],cur=null;
+              items.forEach(function(it){
+                if(cur&&it.y-cur.y0<TAGH){cur.items.push(it);cur.sum+=it.y;}
+                else{cur={y0:it.y,sum:it.y,items:[it]};rows.push(cur);}
+              });
+              var prevY=-1e9;
+              rows.forEach(function(r){
+                var y=r.sum/r.items.length;
+                if(y<prevY+TAGH) y=prevY+TAGH; // never let two rows overlap vertically
+                prevY=y;
+                // side by side, flush with the right edge; highest timeframe leftmost
+                r.items.sort(function(a,b){return b.L.rank-a.L.rank;});
+                var widths=r.items.map(function(it){it.L.el.style.display="";return it.L.el.offsetWidth;});
+                var x=plotR-widths.reduce(function(a,b){return a+b+2;},-2);
+                r.items.forEach(function(it,i){
+                  it.L.el.style.left=x+"px";it.L.el.style.top=y+"px";
+                  x+=widths[i]+2;
+                });
+              });
+            }catch(e){_dbg(e);}
+          };
+          lvlTagsPos();
+          requestAnimationFrame(lvlTagsPos);
+          [150,500,1200].forEach(function(ms){setTimeout(function(){if(myLoadToken===_chartLoadToken&&lvlTagsPos)lvlTagsPos();},ms);});
         }).catch(_dbg);
       })();
 
