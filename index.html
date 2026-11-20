@@ -7722,6 +7722,7 @@ function chartTab(){
         var zones=[],doneZ=[];
         var fvgCalc=function(){
         zones=[];doneZ=[];var fN=candles.length;
+        if(fN>0&&candles[fN-1].complete!==true) fN--; // live ticks push bars with no complete flag: the newest bar is always the forming one
         while(fN>0&&candles[fN-1].complete===false) fN--; // gaps only from completed candles: the forming bar is ignored
         for(var fi=2;fi<fN;fi++){
           var fa=candles[fi-2],fc=candles[fi],flo,fhi,fup;
