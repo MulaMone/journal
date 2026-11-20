@@ -7430,7 +7430,7 @@ function chartTab(){
       // reflects live price action up to the moment of the request.
       var candles=raw.map(function(c){
         var _u=Math.floor(new Date(c.time).getTime()/1000);
-        return {u:_u,time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c)};
+        return {u:_u,time:_u-etOff(_u)+(monthlyFetch?(24-dailyAlign)*3600:0),open:parseFloat(c.mid.o),high:parseFloat(c.mid.h),low:parseFloat(c.mid.l),close:parseFloat(c.mid.c),complete:c.complete!==false};
       });
 
       if(sym==="BTC"){ // 24/7 market: the fall-back hour maps two candles to the same ET time — keep times strictly ascending
@@ -7719,8 +7719,9 @@ function chartTab(){
       // Bullish: candle 3 low > candle 1 high. Bearish: candle 3 high < candle 1 low.
       // The zone shrinks as price trades back into it and is dropped once fully closed.
       try{(function(){
-        var zones=[],doneZ=[];
-        for(var fi=2;fi<candles.length;fi++){
+        var zones=[],doneZ=[],fN=candles.length;
+        while(fN>0&&candles[fN-1].complete===false) fN--; // gaps only from completed candles: the forming bar is ignored
+        for(var fi=2;fi<fN;fi++){
           var fa=candles[fi-2],fc=candles[fi],flo,fhi,fup;
           if(fc.low>fa.high){flo=fa.high;fhi=fc.low;fup=true;}
           else if(fc.high<fa.low){flo=fc.high;fhi=fa.low;fup=false;}
