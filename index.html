@@ -6801,7 +6801,7 @@ function chartTab(){
   fvgBtn.title="Show open 3-candle fair value gaps";
   var styleFvg=function(){
     var on=showFvg,bs="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;";
-    fvgBtn.style.cssText=bs+(on?"border-color:#ffb020;color:#ffb020;background:#ffb02018;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+    fvgBtn.style.cssText=bs+(on?"border-color:#ff2bd6;color:#ff2bd6;background:#ff2bd618;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
   };
   styleFvg();
   fvgBtn.addEventListener("click",function(){showFvg=!showFvg;State.chart_show_fvg=showFvg;styleFvg();if(applyFvg)applyFvg();});
@@ -7760,7 +7760,7 @@ function chartTab(){
                     var x0=ts.timeToCoordinate(z.t0),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
                     if(x0==null||y1==null||y2==null||x0>W) return;
                     x0=Math.max(x0,0);
-                    ctx.globalAlpha=0.2;ctx.fillStyle="#ffb020";ctx.fillRect(x0,y1,W-x0,y2-y1);
+                    ctx.globalAlpha=0.2;ctx.fillStyle="#ff2bd6";ctx.fillRect(x0,y1,W-x0,y2-y1);
                     ctx.globalAlpha=0.8;ctx.fillRect(x0,y1,W-x0,1);ctx.fillRect(x0,y2-1,W-x0,1);
                   });
                   ctx.restore();
