@@ -6702,7 +6702,7 @@ function chartTab(){
     if(s.l==="DXY"){var spP=h("span");spP.style.cssText="width:2px;background:#a855f7;margin:0 6px;align-self:stretch;border-radius:1px;";ctrlRow.appendChild(spP);}
     var b=h("button",{className:"btn"});
     if(sym===s.l) b.style.cssText="--caglow:#ffffff25;border-color:#ffffff;color:#ffffff;font-weight:700;"; // selected symbol: white
-    else if(s.l!=="BTC"){var symCol=({GC:"#fbbf24",DXY:"#22c55e"})[s.l]||"#3b82f6";b.style.cssText="--ca:"+symCol+";--caglow:"+symCol+"25;";} // symbol buttons: GC gold, DXY green, rest blue; BTC keeps the default orange
+    else{var symCol=({ES:"#C8202F",NQ:"#0996C7",GC:"#fbbf24",DXY:"#22c55e",BTC:"#f7931a"})[s.l]||"#3b82f6";b.style.cssText="--ca:"+symCol+";--caglow:"+symCol+"25;";} // symbol buttons: ES/NQ/BTC match their logo colors, GC gold, DXY green, rest blue
     b.textContent=s.l; b.title=s.n;
     b.addEventListener("click",function(){_chartKeepView=null;State.chart_symbol=s.l;render();});
     ctrlRow.appendChild(b);
