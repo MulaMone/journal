@@ -9332,7 +9332,7 @@ function chartTab(){
       var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
       // `candles` must follow the forming bar, so a CLOSED bar can later be corrected to the feed's final values and redrawn.
       function keepBar(b){var n=candles.length,l=n?candles[n-1]:null;if(!l) return;
-        if(b.time>l.time) candles.push({u:b.time+(l.u-l.time),time:b.time,open:b.open,high:b.high,low:b.low,close:b.close});
+        if(b.time>l.time){l.complete=true;candles.push({u:b.time+(l.u-l.time),time:b.time,open:b.open,high:b.high,low:b.low,close:b.close});}
         else if(b.time===l.time){l.open=b.open;l.high=b.high;l.low=b.low;l.close=b.close;}
         if(fvgLive&&showFvg) fvgLive();}
       // Poll cadence: with the tick stream running, the poll is only a backup/gap-repair, so tick it every 5s but
