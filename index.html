@@ -6794,7 +6794,7 @@ function chartTab(){
 
   // FVG toggle (3-candle fair value gaps) + prev/next open gap. Overlay on the chart, like "#".
   var showFvg=State.chart_show_fvg===true;
-  var applyFvg=null;
+  var applyFvg=null,fvgLive=null;
   var fvgBox=div();fvgBox.style.cssText="position:absolute;left:"+(useWheels?146:48)+"px;top:8px;z-index:6;display:flex;align-items:center;gap:4px;";
   var fvgBtn=h("button",{className:"btn"});
   fvgBtn.textContent="FVG";
@@ -7719,7 +7719,9 @@ function chartTab(){
       // Bullish: candle 3 low > candle 1 high. Bearish: candle 3 high < candle 1 low.
       // The zone shrinks as price trades back into it and is dropped once fully closed.
       try{(function(){
-        var zones=[],doneZ=[],fN=candles.length;
+        var zones=[],doneZ=[];
+        var fvgCalc=function(){
+        zones=[];doneZ=[];var fN=candles.length;
         while(fN>0&&candles[fN-1].complete===false) fN--; // gaps only from completed candles: the forming bar is ignored
         for(var fi=2;fi<fN;fi++){
           var fa=candles[fi-2],fc=candles[fi],flo,fhi,fup;
@@ -7737,7 +7739,9 @@ function chartTab(){
         }
         doneZ.sort(function(p,q){return p.end-q.end;});
         doneZ=doneZ.slice(-5); // the 5 most recently filled
-        var fvgRepaint=null;
+        };
+        fvgCalc();
+        var fvgRepaint=null,fvgAt=0;
         series.attachPrimitive({
           attached:function(param){fvgRepaint=param.requestUpdate;},
           detached:function(){fvgRepaint=null;},
@@ -7772,6 +7776,10 @@ function chartTab(){
           updateAllViews:function(){}
         });
         applyFvg=function(){if(fvgRepaint) fvgRepaint();};
+        fvgLive=function(){ // live ticks: re-run fill/close on the zones (throttled), then repaint
+          var now=Date.now();if(now-fvgAt<400) return;fvgAt=now;
+          try{fvgCalc();if(fvgRepaint) fvgRepaint();}catch(e){_dbg(e);}
+        };
       })();}catch(e){_dbg(e);}
 
       // ── Trade entry markers ────────────────────────────────
@@ -9324,7 +9332,8 @@ function chartTab(){
       // `candles` must follow the forming bar, so a CLOSED bar can later be corrected to the feed's final values and redrawn.
       function keepBar(b){var n=candles.length,l=n?candles[n-1]:null;if(!l) return;
         if(b.time>l.time) candles.push({u:b.time+(l.u-l.time),time:b.time,open:b.open,high:b.high,low:b.low,close:b.close});
-        else if(b.time===l.time){l.open=b.open;l.high=b.high;l.low=b.low;l.close=b.close;}}
+        else if(b.time===l.time){l.open=b.open;l.high=b.high;l.low=b.low;l.close=b.close;}
+        if(fvgLive&&showFvg) fvgLive();}
       // Poll cadence: with the tick stream running, the poll is only a backup/gap-repair, so tick it every 5s but
       // skip while the stream is healthy (any message in the last 12s, heartbeats included) unless 30s have passed.
       // Non-stream views (DXY, 10Y, monthly) keep their old 15s poll.
