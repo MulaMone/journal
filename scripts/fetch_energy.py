@@ -229,24 +229,36 @@ def pjm():
     import gridstatus
     from gridstatus import Markets
     p = gridstatus.PJM(api_key=key)
-    rt = p.get_lmp("today", market=Markets.REAL_TIME_5_MIN, locations="hubs")
-    da = p.get_lmp("today", market=Markets.DAY_AHEAD_HOURLY, locations="hubs")
-    LC = "Location Name" if "Location Name" in rt.columns else "Location"
-    res = []
-    for loc, g in rt.groupby(LC):
-        g = g.sort_values("Interval Start")
-        last = g.iloc[-1]
-        dsub = da[da[LC] == loc].set_index("Interval Start")["LMP"]
-        dav = num(dsub.get(pd.Timestamp(last["Interval Start"]).floor("1h"), dsub.iloc[-1] if len(dsub) else None))
-        rtv = num(last["LMP"])
-        res.append({
-            "iso": "PJM", "name": str(loc).title(), "id": str(loc),
-            "rt": rtv, "da": dav, "spread": None if rtv is None or dav is None else round(dav - rtv, 2),
-            "energy": num(last.get("Energy")), "mcc": num(last.get("Congestion")),
-            "mlc": num(last.get("Loss")), "mccProxy": False, "t": iso(last["Interval Start"]),
-            "series": [num(v) for v in g.set_index("Interval Start")["LMP"].resample("1h").mean().dropna().tolist()][-24:],
-        })
-    out["hubs"] = out.get("hubs", []) + res
+
+    @guard("pjm_hubs")  # hub LMPs failing must not take down PJM load/fuel/capacity/reserves
+    def hubs_lmp():
+        try:
+            rt = p.get_lmp("today", market=Markets.REAL_TIME_5_MIN, locations="hubs")
+        except Exception as e:  # rt_unverified_fivemin_lmps is slow/flaky on full-day pulls; retry with last 6h only
+            out["errors"]["pjm_rt_full"] = f"{type(e).__name__}: {e}"[:200]
+            now = pd.Timestamp.now(tz="US/Eastern")
+            rt = p.get_lmp(now - pd.Timedelta(hours=6), end=now, market=Markets.REAL_TIME_5_MIN, locations="hubs")
+            out["errors"].pop("pjm_rt_full", None)
+            out["errors"]["pjm_rt_partial"] = "full-day 5-min LMP failed; used last 6h (short sparkline/trend)"
+        da = p.get_lmp("today", market=Markets.DAY_AHEAD_HOURLY, locations="hubs")
+        LC = "Location Name" if "Location Name" in rt.columns else "Location"
+        res = []
+        for loc, g in rt.groupby(LC):
+            g = g.sort_values("Interval Start")
+            last = g.iloc[-1]
+            dsub = da[da[LC] == loc].set_index("Interval Start")["LMP"]
+            dav = num(dsub.get(pd.Timestamp(last["Interval Start"]).floor("1h"), dsub.iloc[-1] if len(dsub) else None))
+            rtv = num(last["LMP"])
+            res.append({
+                "iso": "PJM", "name": str(loc).title(), "id": str(loc),
+                "rt": rtv, "da": dav, "spread": None if rtv is None or dav is None else round(dav - rtv, 2),
+                "energy": num(last.get("Energy")), "mcc": num(last.get("Congestion")),
+                "mlc": num(last.get("Loss")), "mccProxy": False, "t": iso(last["Interval Start"]),
+                "series": [num(v) for v in g.set_index("Interval Start")["LMP"].resample("1h").mean().dropna().tolist()][-24:],
+            })
+        out["hubs"] = out.get("hubs", []) + res
+
+    hubs_lmp()
     try:
         L = p.get_load("today")
         F = p.get_load_forecast("today")
@@ -433,29 +445,40 @@ def norms():
 @guard("weather")
 def weather():
     nm = norms()
-    res = []
-    for name, (la, lo) in CITIES.items():
-        try:  # one slow city shouldn't drop the whole section
-            r = rget("https://api.open-meteo.com/v1/forecast", params={
-                "latitude": la, "longitude": lo, "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit",
-                "forecast_days": 7, "timezone": "auto"}, timeout=60)
-            r.raise_for_status()
-            dd = r.json()["daily"]
-            days = []
-            for d, t in zip(dd["time"], dd["temperature_2m_mean"]):
-                n = nm["cities"][name].get(d[5:])
-                if t is None or n is None:
-                    continue
-                cdd, hdd = max(t - 65, 0), max(65 - t, 0)
-                ncdd, nhdd = max(n - 65, 0), max(65 - n, 0)
-                days.append({"d": d, "t": round(t, 1), "norm": n, "cdd": round(cdd, 1), "hdd": round(hdd, 1),
-                             "cddA": round(cdd - ncdd, 1), "hddA": round(hdd - nhdd, 1)})
-            res.append({"city": name, "days": days,
-                        "cddA7": round(sum(x["cddA"] for x in days), 1), "hddA7": round(sum(x["hddA"] for x in days), 1)})
-        except Exception as e:
-            out["errors"][f"weather_{name}"] = f"{type(e).__name__}: {e}"[:200]
+    res, pending = [], list(CITIES.items())
+    for attempt in (1, 2):  # 2nd pass retries cities that timed out, after a pause
+        failed = []
+        for name, (la, lo) in pending:
+            try:  # one slow city shouldn't drop the whole section
+                r = rget("https://api.open-meteo.com/v1/forecast", params={
+                    "latitude": la, "longitude": lo, "daily": "temperature_2m_mean", "temperature_unit": "fahrenheit",
+                    "forecast_days": 7, "timezone": "auto"}, timeout=60)
+                r.raise_for_status()
+                dd = r.json()["daily"]
+                days = []
+                for d, t in zip(dd["time"], dd["temperature_2m_mean"]):
+                    n = nm["cities"][name].get(d[5:])
+                    if t is None or n is None:
+                        continue
+                    cdd, hdd = max(t - 65, 0), max(65 - t, 0)
+                    ncdd, nhdd = max(n - 65, 0), max(65 - n, 0)
+                    days.append({"d": d, "t": round(t, 1), "norm": n, "cdd": round(cdd, 1), "hdd": round(hdd, 1),
+                                 "cddA": round(cdd - ncdd, 1), "hddA": round(hdd - nhdd, 1)})
+                res.append({"city": name, "days": days,
+                            "cddA7": round(sum(x["cddA"] for x in days), 1), "hddA7": round(sum(x["hddA"] for x in days), 1)})
+                out["errors"].pop(f"weather_{name}", None)
+            except Exception as e:
+                failed.append((name, (la, lo)))
+                out["errors"][f"weather_{name}"] = f"{type(e).__name__}: {e}"[:200]
+        pending = failed
+        if not pending:
+            break
+        if attempt == 1:
+            time.sleep(10)
     if not res:
         raise RuntimeError("no weather cities returned")
+    order = list(CITIES)
+    res.sort(key=lambda x: order.index(x["city"]))
     out["weather"] = res
 
 
