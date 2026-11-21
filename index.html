@@ -8309,7 +8309,55 @@ function chartTab(){
       })();
 
       // ── 30m only (not intraday mode): previous WEEK close / high / low, one line series per week, toggled by the PW button (off by default) ──
+      // Instant paint: lines are drawn at once from the in-memory candles (or the last exact OANDA result for this symbol), then swapped for the exact OANDA weekly levels.
       if(tf==="30m"&&!intraday&&!eodOnly&&candles.length) (function(){
+        window._pwMem=window._pwMem||{};
+        var memKey=oandaInst+"|"+dailyAlign;
+        function drawPw(groups){
+          if(!groups||!groups.length) return;
+          var old=pwSeries;pwSeries=[];
+          [["c","#8a3ffc","PWC"],["h","#a3e635","PWH"],["l","#ff7a59","PWL"]].forEach(function(f){
+            groups.forEach(function(g,gi){
+              if(g[f[0]]==null||!isFinite(g[f[0]])) return;
+              var isCur=gi===groups.length-1;
+              var data=g.times.map(function(t){return {time:t,value:g[f[0]]};});
+              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f[0]]});
+              var ps=chart.addLineSeries({color:f[1],lineWidth:2,visible:showPw,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f[0]!=="c")?f[2]:"",lastValueVisible:(isCur&&f[0]!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              ps.setData(data);pwSeries.push(ps);
+            });
+          });
+          old.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
+        }
+        function fromHs(hs){
+          var groups=[],hi=0,curG=null,curHi=-1;
+          candles.forEach(function(c){
+            while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
+            if(c.time<hs[0].t||hi<1) return;
+            if(hi!==curHi){curG={c:hs[hi-1].c,h:hs[hi-1].h,l:hs[hi-1].l,times:[]};groups.push(curG);curHi=hi;}
+            curG.times.push(c.time);
+          });
+          return groups;
+        }
+        // 1) instant: exact levels from the last fetch if we have them, else built from the loaded candles
+        if(window._pwMem[memKey]&&window._pwMem[memKey].length>=2) drawPw(fromHs(window._pwMem[memKey]));
+        else{
+          var lg=[],g0=null,key0=null,prev0=null,wHi=-Infinity,wLo=Infinity,wCl=null,nWk=0;
+          candles.forEach(function(c){
+            var k=Math.floor((Math.floor(dayT(c)/86400)+3)/7);
+            if(k!==key0){
+              if(key0!==null) prev0={c:wCl,h:nWk<=1?null:wHi,l:nWk<=1?null:wLo}; // first week on screen is partial: no trusted hi/lo
+              key0=k;nWk++;wHi=-Infinity;wLo=Infinity;
+              g0=prev0?{c:prev0.c,h:prev0.h,l:prev0.l,times:[]}:null;
+              if(g0) lg.push(g0);
+            }
+            if(c.high>wHi) wHi=c.high;
+            if(c.low<wLo) wLo=c.low;
+            wCl=c.close;
+            if(g0) g0.times.push(c.time);
+          });
+          drawPw(lg);
+        }
+        // 2) exact: OANDA weekly candles replace the instant lines and are remembered for the next timeframe switch
         var n=Math.min(5000,Math.ceil((candles[candles.length-1].time-candles[0].time)/604800)+4);
         var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=W&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         chartFetchJson(url).then(function(d){
@@ -8319,26 +8367,8 @@ function chartTab(){
             return {t:_pu-etOff(_pu),c:parseFloat(c.mid.c),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
           });
           if(hs.length<2) return;
-          var groups=[],hi=0,curG=null,curHi=-1;
-          candles.forEach(function(c){
-            while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
-            if(c.time<hs[0].t||hi<1) return;
-            if(hi!==curHi){curG={c:hs[hi-1].c,h:hs[hi-1].h,l:hs[hi-1].l,times:[]};groups.push(curG);curHi=hi;}
-            curG.times.push(c.time);
-          });
-          if(!groups.length) return;
-          pwSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
-          pwSeries=[];
-          [["c","#8a3ffc","PWC"],["h","#a3e635","PWH"],["l","#ff7a59","PWL"]].forEach(function(f){
-            groups.forEach(function(g,gi){
-              if(g[f[0]]==null||!isFinite(g[f[0]])) return;
-              var isCur=gi===groups.length-1;
-              var data=g.times.map(function(t){return {time:t,value:g[f[0]]};});
-              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f[0]]});
-              pwSeries.push(chart.addLineSeries({color:f[1],lineWidth:2,visible:showPw,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f[0]!=="c")?f[2]:"",lastValueVisible:(isCur&&f[0]!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}));
-              pwSeries[pwSeries.length-1].setData(data);
-            });
-          });
+          window._pwMem[memKey]=hs;
+          drawPw(fromHs(hs));
         }).catch(_dbg);
       })();
 
