@@ -8167,6 +8167,9 @@ function chartTab(){
         });
       }
 
+      // Warm the cache on every chart load (first time per symbol only; afterwards it's a no-op) so the next timeframe switch paints its levels with no wait.
+      if(!eodOnly&&sym!=="US10Y") dailyLv(2000).catch(_dbg);
+
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
       // shows the prior week's close (PWC) · 1d → each month shows the prior
