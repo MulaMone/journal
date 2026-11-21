@@ -8403,7 +8403,7 @@ function chartTab(){
           var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500);
           var bigLvl=(p%2500===0),lc=big?"#ffd24a":half?"#ff9f1a":"#22e5ff"; // 20000 / 22500 / 25000...: price box AND tag inverted + outlined, painted by the primitive below; the other levels keep the library's filled label
           if(bigLvl) bigOutline.push({price:p,color:lc,title:(m<100?"0":"")+m});
-          var pl=series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:LightweightCharts.LineStyle.Dotted,axisLabelVisible:!bigLvl,title:bigLvl?"":(m<100?"0":"")+m}); // big levels: library label/tag off, the primitive paints both (no ghost when the library nudges a label away from the live-price box)
+          var pl=series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:half?LightweightCharts.LineStyle.LargeDashed:LightweightCharts.LineStyle.Dotted,axisLabelVisible:!bigLvl,title:bigLvl?"":(m<100?"0":"")+m}); // big levels: library label/tag off, the primitive paints both (no ghost when the library nudges a label away from the live-price box)
           pl._big=bigLvl;numLines.push(pl);
         }
         // The library has no label border option, so the big levels' price box and tag are drawn here (inverted: dark fill, coloured text + outline).
