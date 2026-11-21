@@ -9172,7 +9172,7 @@ function chartTab(){
         var _lk=document.getElementById("edge-lock");if(_lk&&_lk.style.display!=="none"&&getComputedStyle(_lk).display!=="none") return;
         try{
           var ts=chart.timeScale();
-          var step=(e.shiftKey?5:1)*(e.key==="ArrowLeft"?1:-1); // scrollToPosition: + = further back in time; keeps bar spacing (no zoom drift)
+          var step=(e.shiftKey?5:1)*(e.key==="ArrowLeft"?-1:1); // keeps bar spacing (no zoom drift)
           if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;} // same as mouse/touch: stops the auto re-anchor timers snapping the view back
           ts.scrollToPosition(ts.scrollPosition()+step,false);
           _cdKick();
