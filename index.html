@@ -6913,14 +6913,18 @@ function chartTab(){
   // desktop app and a taller/shorter browser window alike. The chart's
   // ResizeObserver handles the redraw.
   var tradeListEls=[];
-  var layoutTrades=function(){
+  var layoutTrades=function(tries){
     tradeListEls.forEach(function(x){x.style.display=showTrades?"":"none";});
     if(isMobile()) return;
-    if(showTrades){chartDiv.style.height="calc(100vh - 260px)";}
-    else{
-      var top=chartDiv.getBoundingClientRect().top+window.scrollY;
-      chartDiv.style.height=Math.max(500,window.innerHeight-top-14)+"px";
+    if(showTrades){chartDiv.style.height="calc(100vh - 260px)";return;}
+    // render() builds the page detached, so the chart has no position yet —
+    // wait until it's in the document before measuring.
+    if(!chartDiv.isConnected){
+      if((tries||0)<30) requestAnimationFrame(function(){layoutTrades((tries||0)+1);});
+      return;
     }
+    var top=chartDiv.getBoundingClientRect().top+window.scrollY;
+    chartDiv.style.height=Math.max(500,window.innerHeight-top-14)+"px";
   };
   layoutTrades();
   var _lt=function(){if(!chartDiv.isConnected){window.removeEventListener("resize",_lt);return;}layoutTrades();};
