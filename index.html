@@ -6810,6 +6810,24 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
+  // PQ toggle (daily only): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
+  var showPq=State.chart_show_pq!==false,pqSeries=[];
+  if(tf==="1d"&&!eodOnly){
+    var pqBtn=h("button",{className:"btn"});
+    pqBtn.textContent="PQ";
+    pqBtn.title="Show previous quarter high / low / close";
+    var stylePq=function(){
+      var on=showPq,bs="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;";
+      pqBtn.style.cssText=bs+(on?"border-color:#a3e635;color:#a3e635;background:#a3e63518;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+    };
+    stylePq();
+    pqBtn.addEventListener("click",function(){
+      showPq=!showPq;State.chart_show_pq=showPq;stylePq();
+      pqSeries.forEach(function(x){try{x.applyOptions({visible:showPq});}catch(e){_dbg(e);}});
+    });
+    ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){pqBtn.addEventListener(ev,function(e){e.stopPropagation();});});
+    fvgBox.appendChild(pqBtn);
+  }
 
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
@@ -8651,6 +8669,38 @@ function chartTab(){
           });
           if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
         }).catch(_dbg);
+      })();
+
+      // ── 1d only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
+      // Same look as the 8h PMH / PML / PMC (lime / coral / violet dashed), 2px. Built from the daily candles
+      // already on the chart, grouped by calendar quarter with the same session-anchor shift as the MONTH / QUARTER lines.
+      // One line series per quarter; the PQ button toggles them via pqSeries.
+      if(tf==="1d"&&!eodOnly) (function(){
+        var PQ_COL={h:"#a3e635",l:"#ff7a59",c:"#8a3ffc"},PQ_TAG={h:"PQH",l:"PQL",c:"PQC"};
+        var qKey=function(t){var q=new Date((t+anchorShift)*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
+        var qs=[],qCur=null,qK=null;
+        candles.forEach(function(c){
+          var k=qKey(c.time);
+          if(k!==qK){qK=k;qCur={key:k,h:-Infinity,l:Infinity,c:null,times:[]};qs.push(qCur);}
+          if(c.high>qCur.h) qCur.h=c.high;
+          if(c.low<qCur.l) qCur.l=c.low;
+          qCur.c=c.close;
+          qCur.times.push(c.time);
+        });
+        // a quarter's lines come from the quarter before it; the first quarter on screen may be partial, so it is never a source
+        var groups=[];
+        for(var qi=2;qi<qs.length;qi++){ if(qs[qi-1].key===qs[qi].key-1) groups.push({h:qs[qi-1].h,l:qs[qi-1].l,c:qs[qi-1].c,times:qs[qi].times}); }
+        ["h","l","c"].forEach(function(f){ // close drawn last so it stays on top
+          groups.forEach(function(g,gi){
+            var isCur=gi===groups.length-1;
+            if(g[f]==null||!isFinite(g[f])) return;
+            var data=g.times.map(function(t){return {time:t,value:g[f]};});
+            if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+            var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:2,lineStyle:LightweightCharts.LineStyle.Dashed,visible:showPq,title:(isCur&&f!=="c")?PQ_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            ps.setData(data);
+            pqSeries.push(ps);
+          });
+        });
       })();
 
       // ── 8h only: previous MONTH high / low / close ──────────────
