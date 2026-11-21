@@ -6763,6 +6763,7 @@ function chartTab(){
     eyeBtn.innerHTML=showTrades?EYE_OPEN:EYE_OFF;
     eyeBtn.title=showTrades?"Hide trade markers":"Show trade markers";
     if(applyTradeVisibility)applyTradeVisibility();
+    if(layoutTrades)layoutTrades();
   });
   ctrlRow.appendChild(eyeBtn);
 
@@ -6907,6 +6908,23 @@ function chartTab(){
   // over whatever is scrolled underneath it.
   chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:500px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;scroll-margin-top:calc(52px + env(safe-area-inset-top) + 10px);";
   el.appendChild(chartDiv);
+  // Trade list is only shown while the eye is ON. With it OFF (desktop), the
+  // chart is stretched to the bottom of the actual window, so it fills the
+  // desktop app and a taller/shorter browser window alike. The chart's
+  // ResizeObserver handles the redraw.
+  var tradeListEls=[];
+  var layoutTrades=function(){
+    tradeListEls.forEach(function(x){x.style.display=showTrades?"":"none";});
+    if(isMobile()) return;
+    if(showTrades){chartDiv.style.height="calc(100vh - 260px)";}
+    else{
+      var top=chartDiv.getBoundingClientRect().top+window.scrollY;
+      chartDiv.style.height=Math.max(500,window.innerHeight-top-14)+"px";
+    }
+  };
+  layoutTrades();
+  var _lt=function(){if(!chartDiv.isConnected){window.removeEventListener("resize",_lt);return;}layoutTrades();};
+  window.addEventListener("resize",_lt);
   if(useWheels&&idToggle){
     var idMob=h("button",{className:"btn"});
     idMob.textContent="INTRADAY";
@@ -8004,7 +8022,7 @@ function chartTab(){
           var clrSel=h("button",{className:"btn"});clrSel.style.cssText="font-size:11px;padding:3px 8px;";clrSel.textContent="Clear selection";
           clrSel.addEventListener("click",function(){State.chart_selected_ids=[];render();});
           selRow.appendChild(clrSel);
-          el.appendChild(selRow);
+          el.appendChild(selRow);tradeListEls.push(selRow);
         }
         var listWrap=div();
         listWrap.style.cssText="margin-top:"+(selectedIds.length?"4px":"10px")+";max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;";
@@ -8049,7 +8067,8 @@ function chartTab(){
           row.appendChild(pnlEl);
           listWrap.appendChild(row);
         });
-        el.appendChild(listWrap);
+        el.appendChild(listWrap);tradeListEls.push(listWrap);
+        layoutTrades();
       }
 
       // Auto spacing: fitContent() shows everything at its normal zoom; the right gap is set BEFORE
