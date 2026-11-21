@@ -8579,7 +8579,7 @@ function chartTab(){
         for(var p=Math.ceil(lo/STEP)*STEP;p<=hi;p+=STEP){
           if(p<=0) continue;
           var mid=fine&&p%2500!==0,lc=mid?"#22e5ff":(fine&&p%5000!==0)?"#ff9f1a":"#ffbf00";
-          series.createPriceLine({price:p,color:lc,lineWidth:1,lineStyle:mid?LightweightCharts.LineStyle.Dotted:LightweightCharts.LineStyle.Dashed,lineVisible:!!intraday,axisLabelVisible:true,axisLabelColor:lc,axisLabelTextColor:"#040d1a",title:""});
+          series.createPriceLine({price:p,color:lc,lineWidth:1,lineStyle:mid?LightweightCharts.LineStyle.Dotted:LightweightCharts.LineStyle.LargeDashed,lineVisible:!!intraday,axisLabelVisible:true,axisLabelColor:lc,axisLabelTextColor:"#040d1a",title:""});
         }
       })();
 
