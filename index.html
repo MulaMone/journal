@@ -8343,7 +8343,7 @@ function chartTab(){
         function drawPw(groups){
           if(!groups||!groups.length) return;
           var old=pwSeries;pwSeries=[];
-          [["c","#8a3ffc","PWC"],["h","#a3e635","PWH"],["l","#ff7a59","PWL"]].forEach(function(f){
+          [["c","#b8c4d9","PWC"],["h","#00b862","PWH"],["l","#ff4444","PWL"]].forEach(function(f){
             groups.forEach(function(g,gi){
               if(g[f[0]]==null||!isFinite(g[f[0]])) return;
               var isCur=gi===groups.length-1;
