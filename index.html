@@ -6843,6 +6843,25 @@ function chartTab(){
     fvgBox.appendChild(b);
   });
 
+  // PW toggle (30m, non-intraday): show / hide the previous-week H / L / C lines. Off by default. Series collected in pwSeries by the PW block below.
+  var showPw=State.chart_show_pw===true,pwSeries=[];
+  if(tf==="30m"&&!intraday&&!eodOnly){
+    var pwBtn=h("button",{className:"btn"});
+    pwBtn.textContent="PW";
+    pwBtn.title="Show previous week high / low / close";
+    var stylePw=function(){
+      var bs="padding:12px 24px;font-size:22px;font-weight:700;touch-action:manipulation;";
+      pwBtn.style.cssText=bs+(showPw?"border-color:#a3e635;color:#a3e635;background:#a3e63518;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+    };
+    stylePw();
+    pwBtn.addEventListener("click",function(){
+      showPw=!showPw;State.chart_show_pw=showPw;stylePw();
+      pwSeries.forEach(function(x){try{x.applyOptions({visible:showPw});}catch(e){_dbg(e);}});
+    });
+    ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){pwBtn.addEventListener(ev,function(e){e.stopPropagation();});});
+    fvgBox.appendChild(pwBtn);
+  }
+
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
     clearBtn.style.cssText="border-color:var(--accent);color:var(--accent);";
@@ -8286,6 +8305,40 @@ function chartTab(){
             if(chart._pmRedraw) chart._pmRedraw(); // keep prev-month lines (8h) on top of the fresh weekly ones
             if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
           }
+        }).catch(_dbg);
+      })();
+
+      // ── 30m only (not intraday mode): previous WEEK close / high / low, one line series per week, toggled by the PW button (off by default) ──
+      if(tf==="30m"&&!intraday&&!eodOnly&&candles.length) (function(){
+        var n=Math.min(5000,Math.ceil((candles[candles.length-1].time-candles[0].time)/604800)+4);
+        var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=W&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        chartFetchJson(url).then(function(d){
+          if(myLoadToken!==_chartLoadToken) return;
+          var hs=((d&&d.candles)||[]).map(function(c){
+            var _pu=Math.floor(new Date(c.time).getTime()/1000);
+            return {t:_pu-etOff(_pu),c:parseFloat(c.mid.c),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l)};
+          });
+          if(hs.length<2) return;
+          var groups=[],hi=0,curG=null,curHi=-1;
+          candles.forEach(function(c){
+            while(hi+1<hs.length&&hs[hi+1].t<=c.time) hi++;
+            if(c.time<hs[0].t||hi<1) return;
+            if(hi!==curHi){curG={c:hs[hi-1].c,h:hs[hi-1].h,l:hs[hi-1].l,times:[]};groups.push(curG);curHi=hi;}
+            curG.times.push(c.time);
+          });
+          if(!groups.length) return;
+          pwSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
+          pwSeries=[];
+          [["c","#b8c4d9","PWC"],["h","#00b862","PWH"],["l","#ff4444","PWL"]].forEach(function(f){
+            groups.forEach(function(g,gi){
+              if(g[f[0]]==null||!isFinite(g[f[0]])) return;
+              var isCur=gi===groups.length-1;
+              var data=g.times.map(function(t){return {time:t,value:g[f[0]]};});
+              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f[0]]});
+              pwSeries.push(chart.addLineSeries({color:f[1],lineWidth:1,visible:showPw,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?f[2]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}));
+              pwSeries[pwSeries.length-1].setData(data);
+            });
+          });
         }).catch(_dbg);
       })();
 
