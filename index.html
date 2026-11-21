@@ -6810,9 +6810,9 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
-  // PQ toggle (daily only): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
+  // PQ toggle (daily and weekly): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
   var showPq=State.chart_show_pq!==false,pqSeries=[];
-  if(tf==="1d"&&!eodOnly){
+  if((tf==="1d"||tf==="1w")&&!eodOnly){
     var pqBtn=h("button",{className:"btn"});
     pqBtn.textContent="PQ";
     pqBtn.title="Show previous quarter high / low / close";
@@ -8673,13 +8673,47 @@ function chartTab(){
       })();
 
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
-      // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis). Built from OANDA daily
-      // candles grouped by calendar quarter; each weekly bar takes the quarter before its own.
+      // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis); the PQ button toggles them.
+      // Paints instantly from the weekly candles already on the chart (like PYH / PYL), then swaps to exact levels built from the
+      // cached daily candles (dailyLv) so a week straddling a quarter boundary doesn't skew the high / low.
       if(tf==="1w"&&!eodOnly) (function(){
         var PQ_COL={h:"#00b862",l:"#ff4444",c:"#b8c4d9"},PQ_TAG={h:"PQH",l:"PQL",c:"PQC"}; // close = standard silver
+        var qKey=function(t){var q=new Date(t*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
+        var qSeries=[];
+        function drawQ(groups){
+          ["h","l","c"].forEach(function(f){ // close drawn last so it stays on top
+            groups.forEach(function(g,gi){
+              var isCur=gi===groups.length-1;
+              if(g[f]==null||!isFinite(g[f])) return;
+              var data=g.times.map(function(t){return {time:t,value:g[f]};});
+              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
+              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,visible:showPq,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              ps.setData(data);
+              qSeries.push(ps);pqSeries.push(ps);
+            });
+          });
+        }
+        function clearQ(){
+          qSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
+          pqSeries=pqSeries.filter(function(x){return qSeries.indexOf(x)<0;});
+          qSeries=[];
+        }
+        // instant: group the weekly candles by quarter (a week belongs to the quarter of its Tuesday); the first quarter on screen may be partial, so it is never a source
+        var qs=[],qCur=null,qK=null;
+        candles.forEach(function(c){
+          var k=qKey(c.time+anchorShift+2*86400);
+          if(k!==qK){qK=k;qCur={key:k,h:-Infinity,l:Infinity,c:null,times:[]};qs.push(qCur);}
+          if(c.high>qCur.h) qCur.h=c.high;
+          if(c.low<qCur.l) qCur.l=c.low;
+          qCur.c=c.close;
+          qCur.times.push(c.time);
+        });
+        var g0=[];
+        for(var qi=2;qi<qs.length;qi++){ if(qs[qi-1].key===qs[qi].key-1) g0.push({h:qs[qi-1].h,l:qs[qi-1].l,c:qs[qi-1].c,times:qs[qi].times}); }
+        drawQ(g0);
+        // exact: from the cached daily candles
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/86400)+100); // +100d so the quarter before the first visible one is complete
-        var qKey=function(t){var q=new Date(t*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
         dailyLv(n).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
@@ -8687,9 +8721,9 @@ function chartTab(){
             return {t:_pu-etOff(_pu),h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),c:parseFloat(c.mid.c)};
           });
           if(ds.length<2) return;
-          var qs={},firstKey=qKey(ds[0].t+anchorShift);
+          var qm={},firstKey=qKey(ds[0].t+anchorShift);
           ds.forEach(function(x){
-            var k=qKey(x.t+anchorShift),q=qs[k]||(qs[k]={h:-Infinity,l:Infinity,c:null});
+            var k=qKey(x.t+anchorShift),q=qm[k]||(qm[k]={h:-Infinity,l:Infinity,c:null});
             q.c=x.c; // last daily close of the quarter
             if(x.h>q.h) q.h=x.h;
             if(x.l<q.l) q.l=x.l;
@@ -8699,21 +8733,14 @@ function chartTab(){
             var k=qKey(c.time+anchorShift+2*86400);
             if(k!==gKey){
               gKey=k;gCur=null;
-              var pq=qs[k-1];
+              var pq=qm[k-1];
               if(pq&&k-1!==firstKey){gCur={h:pq.h,l:pq.l,c:pq.c,times:[]};groups.push(gCur);} // skip if prior quarter is the (partial) first fetched one
             }
             if(gCur) gCur.times.push(c.time);
           });
-          ["h","l","c"].forEach(function(f){ // close drawn last so it stays on top
-            groups.forEach(function(g,gi){
-              var isCur=gi===groups.length-1;
-              if(g[f]==null||!isFinite(g[f])) return;
-              var data=g.times.map(function(t){return {time:t,value:g[f]};});
-              if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-              ps.setData(data);
-            });
-          });
+          if(!groups.length) return;
+          clearQ(); // draw the exact levels only after the fetch lands, so the instant ones are never missing in between
+          drawQ(groups);
           if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
         }).catch(_dbg);
       })();
