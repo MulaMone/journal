@@ -6850,8 +6850,8 @@ function chartTab(){
     pwBtn.textContent="PW";
     pwBtn.title="Show previous week high / low / close";
     var stylePw=function(){
-      var bs="padding:12px 24px;font-size:22px;font-weight:700;touch-action:manipulation;";
-      pwBtn.style.cssText=bs+(showPw?"border-color:#a3e635;color:#a3e635;background:#a3e63518;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+      var bs="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;";
+      pwBtn.style.cssText=bs+(showPw?"border-color:#00b862;color:#00b862;background:#00b86218;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
     };
     stylePw();
     pwBtn.addEventListener("click",function(){
@@ -8329,13 +8329,13 @@ function chartTab(){
           if(!groups.length) return;
           pwSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
           pwSeries=[];
-          [["c","#b8c4d9","PWC"],["h","#00b862","PWH"],["l","#ff4444","PWL"]].forEach(function(f){
+          [["c","#8a3ffc","PWC"],["h","#a3e635","PWH"],["l","#ff7a59","PWL"]].forEach(function(f){
             groups.forEach(function(g,gi){
               if(g[f[0]]==null||!isFinite(g[f[0]])) return;
               var isCur=gi===groups.length-1;
               var data=g.times.map(function(t){return {time:t,value:g[f[0]]};});
               if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f[0]]});
-              pwSeries.push(chart.addLineSeries({color:f[1],lineWidth:1,visible:showPw,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?f[2]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}));
+              pwSeries.push(chart.addLineSeries({color:f[1],lineWidth:2,visible:showPw,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f[0]!=="c")?f[2]:"",lastValueVisible:(isCur&&f[0]!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}));
               pwSeries[pwSeries.length-1].setData(data);
             });
           });
