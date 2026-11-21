@@ -8702,6 +8702,7 @@ function chartTab(){
         var oi=-1,sod0=0;
         for(var i=candles.length-1;i>=0;i--){
           var sod=candles[i].time%86400; // ET seconds into the day (chart times are ET-shifted)
+          var _dw=(Math.floor(candles[i].time/86400)+4)%7; if(_dw===0||_dw===6) continue; // no NY open on Sat/Sun
           if(sod<=34200&&sod+periodSec>34200){oi=i;sod0=sod;break;}
         }
         if(oi<0) return;
@@ -8772,7 +8773,7 @@ function chartTab(){
       // Vertical line only (no open-price line / label). Intraday mode keeps its own latest-only line + open line above.
       if(!intraday&&!eodOnly&&candles.length&&periodSec<=1800) (function(){
         var ts930=[];
-        for(var i=0;i<candles.length;i++){ if(candles[i].time%86400===34200) ts930.push(candles[i].time); } // chart times are ET-shifted
+        for(var i=0;i<candles.length;i++){ if(candles[i].time%86400===34200){var _dw=(Math.floor(candles[i].time/86400)+4)%7; if(_dw!==0&&_dw!==6) ts930.push(candles[i].time);} } // chart times are ET-shifted
         if(!ts930.length) return;
         series.attachPrimitive({
           paneViews:function(){
