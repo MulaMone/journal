@@ -9171,10 +9171,11 @@ function chartTab(){
         if(tn==="INPUT"||tn==="TEXTAREA"||tn==="SELECT"||(t&&t.isContentEditable)) return;
         var _lk=document.getElementById("edge-lock");if(_lk&&_lk.style.display!=="none"&&getComputedStyle(_lk).display!=="none") return;
         try{
-          var ts=chart.timeScale(),r=ts.getVisibleLogicalRange();
-          if(!r) return;
-          var step=(e.shiftKey?5:1)*(e.key==="ArrowLeft"?-1:1);
-          ts.setVisibleLogicalRange({from:r.from+step,to:r.to+step});
+          var ts=chart.timeScale();
+          var step=(e.shiftKey?5:1)*(e.key==="ArrowLeft"?1:-1); // scrollToPosition: + = further back in time; keeps bar spacing (no zoom drift)
+          if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;} // same as mouse/touch: stops the auto re-anchor timers snapping the view back
+          ts.scrollToPosition(ts.scrollPosition()+step,false);
+          _cdKick();
           e.preventDefault();
         }catch(err){_dbg(err);}
       }
