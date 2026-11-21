@@ -8514,7 +8514,7 @@ function chartTab(){
           ds.forEach(function(x){if(x.y!==py)return;if(x.h>st.h)st.h=x.h;if(x.l<st.l)st.l=x.l;st.c=x.c;});
           if(st.c==null) return;
           ["h","l","c"].forEach(function(f){
-            series.createPriceLine({price:st[f],color:PY_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:PY_TAG[f]});
+            series.createPriceLine({price:st[f],color:PY_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:""});
           });
         }).catch(_dbg);
       })();
