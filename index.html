@@ -8136,27 +8136,42 @@ function chartTab(){
       // One daily series per symbol, kept in memory + IndexedDB. Prev-period levels only change when a new trading day
       // starts, so while the newest cached bar is today's the levels paint with no network at all. After a rollover only the
       // missing days are pulled. A deeper request than what is cached refetches once, then is served from cache.
-      var _dlvMem=window._dlvMem||(window._dlvMem={});
+      var _dlvMem=window._dlvMem||(window._dlvMem={}),_dlvInfl=window._dlvInfl||(window._dlvInfl={});
       function dailyLv(n){
         n=Math.min(5000,Math.max(n,60));
         var key="dailylv|"+oandaInst+"|"+dailyAlign;
-        var base=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var base=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(sym==="BTC"?"&bg=1":""); // BTC: bg=1 = low-priority Coinbase paging
         var secOf=function(c){return Math.floor(new Date(c.time).getTime()/1000);};
         var store=function(cs,m){var e=_dlvMem[key]={t:Date.now(),n:m,candles:cs};chartIdbPut(key,e);return {candles:cs};};
-        var full=function(m){return chartFetchJson(base+"&count="+Math.max(n,m||0)).then(function(d){
+        // one request per kind in flight at a time (the warm-up and a level block can ask together on a cold cache)
+        var once=function(kind,want,fn){
+          var f=_dlvInfl[key+kind];
+          if(f&&f.n>=want) return f.p;
+          var p=fn().then(function(r){if(_dlvInfl[key+kind]&&_dlvInfl[key+kind].p===p) delete _dlvInfl[key+kind];return r;},function(err){if(_dlvInfl[key+kind]&&_dlvInfl[key+kind].p===p) delete _dlvInfl[key+kind];throw err;});
+          _dlvInfl[key+kind]={n:want,p:p};
+          return p;
+        };
+        var full=function(m){var want=Math.max(n,m||0);return once("F",want,function(){return chartFetchJson(base+"&count="+want).then(function(d){
           var cs=(d&&d.candles)||[];
-          return cs.length?store(cs,Math.max(n,m||0)):{candles:cs};
-        });};
-        var useEntry=function(e){
-          var cs=e.candles,last=secOf(cs[cs.length-1]),nowS=Date.now()/1000;
-          if(nowS<last+86400+300) return Promise.resolve({candles:cs}); // newest bar is today's: prev levels can't have changed
-          if(e.t/1000>last+86400&&Date.now()-e.t<3600000) return Promise.resolve({candles:cs}); // weekend / holiday: checked within the hour
-          if(nowS-last>400*86400) return full(e.n);
+          return cs.length?store(cs,want):{candles:cs};
+        });});};
+        var delta=function(e){return once("D",0,function(){
+          var cs=e.candles,last=secOf(cs[cs.length-1]);
           return chartFetchJson(base+"&count=500&from="+encodeURIComponent(cs[cs.length-1].time)).then(function(d){
             var add=(d&&d.candles)||[];
             if(!add.length) return store(cs,e.n);
             return store(cs.filter(function(c){return secOf(c)<last;}).concat(add),e.n);
-          }).catch(function(){return {candles:cs};});
+          });
+        });};
+        var useEntry=function(e){
+          var cs=e.candles,last=secOf(cs[cs.length-1]),nowS=Date.now()/1000;
+          if(nowS<last+86400+300){ // newest bar is today's: prev levels can't have changed, serve now; refresh the stored bar in the background
+            if(Date.now()-e.t>300000) delta(e).catch(_dbg);
+            return Promise.resolve({candles:cs});
+          }
+          if(e.t/1000>last+86400&&Date.now()-e.t<3600000) return Promise.resolve({candles:cs}); // weekend / holiday: checked within the hour
+          if(nowS-last>400*86400) return full(e.n);
+          return delta(e).catch(function(){return {candles:cs};});
         };
         var ok=function(e){return e&&e.candles&&e.candles.length>=2&&e.n>=n;};
         var m=_dlvMem[key];
@@ -8168,7 +8183,7 @@ function chartTab(){
       }
 
       // Warm the cache on every chart load (first time per symbol only; afterwards it's a no-op) so the next timeframe switch paints its levels with no wait.
-      if(!eodOnly&&sym!=="US10Y") dailyLv(2000).catch(_dbg);
+      if(!eodOnly&&sym!=="US10Y"&&tf!=="1y") dailyLv(2000).catch(_dbg); // not on 1y: chartFetchJson rolls daily candles up to years there
 
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
