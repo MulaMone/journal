@@ -6828,6 +6828,20 @@ function chartTab(){
     ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){pqBtn.addEventListener(ev,function(e){e.stopPropagation();});});
     fvgBox.appendChild(pqBtn);
   }
+  // PM (8h) / PY (1w) toggles: show / hide the previous-month (8h) or previous-year (weekly) lines. Series register via pmApply / pyApply / pySeries below.
+  var showPm=State.chart_show_pm!==false,showPy=State.chart_show_py!==false,pmApply=null,pySeries=[];
+  [{tg:"PM",on:function(){return showPm;},flip:function(){showPm=!showPm;State.chart_show_pm=showPm;if(pmApply)pmApply();},tf:"8h",tip:"Show previous month high / low / close",col:"#a3e635"},
+   {tg:"PY",on:function(){return showPy;},flip:function(){showPy=!showPy;State.chart_show_py=showPy;pySeries.forEach(function(x){try{x.applyOptions({visible:showPy});}catch(e){_dbg(e);}});},tf:"1w",tip:"Show previous year high / low / close",col:"#a3e635"}
+  ].forEach(function(o){
+    if(tf!==o.tf||eodOnly) return;
+    var b=h("button",{className:"btn"});
+    b.textContent=o.tg;b.title=o.tip;
+    var st=function(){b.style.cssText="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(o.on()?"border-color:"+o.col+";color:"+o.col+";background:"+o.col+"18;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");};
+    st();
+    b.addEventListener("click",function(){o.flip();st();});
+    ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){b.addEventListener(ev,function(e){e.stopPropagation();});});
+    fvgBox.appendChild(b);
+  });
 
   if(focusTs){
     var clearBtn=h("button",{className:"btn"});
@@ -8753,13 +8767,14 @@ function chartTab(){
                 if(g[f]==null||!isFinite(g[f])) return;
                 var data=g.times.map(function(t){return {time:t,value:g[f]};});
                 if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-                var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f!=="c")?PM_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+                var ps=chart.addLineSeries({color:PM_COL[f],lineWidth:2,visible:showPm,lineStyle:LightweightCharts.LineStyle.Dashed,title:(isCur&&f!=="c")?PM_TAG[f]:"",lastValueVisible:(isCur&&f!=="c"),priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
                 ps.setData(data);
                 pmSeries.push(ps);
               });
             });
           }
           chart._pmRedraw=pmDraw;
+          pmApply=function(){pmSeries.forEach(function(x){try{x.applyOptions({visible:showPm});}catch(e){_dbg(e);}});};
           pmDraw();
           if(_chartLive&&_chartLive.chart===chart&&_chartLive.reapply) _chartLive.reapply();
         }).catch(_dbg);
@@ -8976,8 +8991,9 @@ function chartTab(){
             var isCur=gi===groups.length-1;
             var data=g.times.map(function(t){return {time:t,value:g[f]};});
             if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-            var ps=chart.addLineSeries({color:PY_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PY_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            var ps=chart.addLineSeries({color:PY_COL[f],lineWidth:tf==="1w"?2:1,visible:tf==="1w"?showPy:true,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PY_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             ps.setData(data);
+            if(tf==="1w") pySeries.push(ps);
           });
         });
       })();
