@@ -6810,6 +6810,9 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
+  // Mobile: prev-level toggles (PQ / PM / PY / PW) sit in the "#" slot next to INTRADAY (left:100px) — that slot is empty outside NQ intraday mode.
+  var prevWrap=div();prevWrap.style.cssText="position:absolute;left:100px;top:8px;z-index:6;display:flex;gap:4px;";
+  var addPrevBtn=function(b){(useWheels?prevWrap:fvgBox).appendChild(b);};
   // PQ toggle (daily only): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
   var showPq=State.chart_show_pq!==false,pqSeries=[];
   if(tf==="1d"&&!eodOnly){
@@ -6826,7 +6829,7 @@ function chartTab(){
       pqSeries.forEach(function(x){try{x.applyOptions({visible:showPq});}catch(e){_dbg(e);}});
     });
     ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){pqBtn.addEventListener(ev,function(e){e.stopPropagation();});});
-    fvgBox.appendChild(pqBtn);
+    addPrevBtn(pqBtn);
   }
   // PM (8h) / PY (1w) toggles: show / hide the previous-month (8h) or previous-year (weekly) lines. Series register via pmApply / pyApply / pySeries below.
   var showPm=State.chart_show_pm!==false,showPy=State.chart_show_py!==false,pmApply=null,pySeries=[];
@@ -6840,7 +6843,7 @@ function chartTab(){
     st();
     b.addEventListener("click",function(){o.flip();st();});
     ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){b.addEventListener(ev,function(e){e.stopPropagation();});});
-    fvgBox.appendChild(b);
+    addPrevBtn(b);
   });
 
   // PW toggle (30m, non-intraday): show / hide the previous-week H / L / C lines. Off by default. Series collected in pwSeries by the PW block below.
@@ -6859,7 +6862,7 @@ function chartTab(){
       pwSeries.forEach(function(x){try{x.applyOptions({visible:showPw});}catch(e){_dbg(e);}});
     });
     ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){pwBtn.addEventListener(ev,function(e){e.stopPropagation();});});
-    fvgBox.appendChild(pwBtn);
+    addPrevBtn(pwBtn);
   }
 
   if(focusTs){
@@ -6915,6 +6918,7 @@ function chartTab(){
     chartDiv.appendChild(idMob);
   }
   if(numBtnMobile) chartDiv.appendChild(numBtnMobile);
+  if(useWheels&&prevWrap.childNodes.length) chartDiv.appendChild(prevWrap);
   chartDiv.appendChild(fvgBox);
 
   // Double-click / double-tap anywhere on the chart RECENTERS the view (price
