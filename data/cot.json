@@ -1,55 +1,55 @@
 {
  "legacy": {
   "ES": {
-   "report_date_as_yyyy_mm_dd": "2026-11-03",
-   "open_interest_all": 1986532,
-   "change_in_open_interest_all": 30821,
-   "noncomm_positions_long_all": 229322,
-   "noncomm_positions_short_all": 358736,
-   "comm_positions_long_all": 1444052,
-   "comm_positions_short_all": 1438857,
-   "nonrept_positions_long_all": 260152,
-   "nonrept_positions_short_all": 135933
+   "report_date_as_yyyy_mm_dd": "2026-11-17",
+   "open_interest_all": 2096958,
+   "change_in_open_interest_all": 79271,
+   "noncomm_positions_long_all": 241667,
+   "noncomm_positions_short_all": 335633,
+   "comm_positions_long_all": 1520500,
+   "comm_positions_short_all": 1554012,
+   "nonrept_positions_long_all": 264857,
+   "nonrept_positions_short_all": 137379
   },
   "NQ": {
-   "report_date_as_yyyy_mm_dd": "2026-11-03",
-   "open_interest_all": 292587,
-   "change_in_open_interest_all": 24079,
-   "noncomm_positions_long_all": 88899,
-   "noncomm_positions_short_all": 46026,
-   "comm_positions_long_all": 150650,
-   "comm_positions_short_all": 213920,
-   "nonrept_positions_long_all": 48759,
-   "nonrept_positions_short_all": 28362
+   "report_date_as_yyyy_mm_dd": "2026-11-17",
+   "open_interest_all": 296423,
+   "change_in_open_interest_all": 7706,
+   "noncomm_positions_long_all": 73134,
+   "noncomm_positions_short_all": 68829,
+   "comm_positions_long_all": 164525,
+   "comm_positions_short_all": 195392,
+   "nonrept_positions_long_all": 52629,
+   "nonrept_positions_short_all": 26067
   }
  },
  "tff": {
   "ES": {
-   "report_date_as_yyyy_mm_dd": "2026-11-03",
-   "open_interest_all": 1986532,
-   "change_in_open_interest_all": 30821,
-   "dealer_positions_long_all": 182419,
-   "dealer_positions_short_all": 870993,
-   "asset_mgr_positions_long": 1111721,
-   "asset_mgr_positions_short": 183137,
-   "lev_money_positions_long": 125269,
-   "lev_money_positions_short": 497587,
-   "other_rept_positions_long": 70819,
-   "other_rept_positions_short": 62730
+   "report_date_as_yyyy_mm_dd": "2026-11-17",
+   "open_interest_all": 2096958,
+   "change_in_open_interest_all": 79271,
+   "dealer_positions_long_all": 189843,
+   "dealer_positions_short_all": 977219,
+   "asset_mgr_positions_long": 1122337,
+   "asset_mgr_positions_short": 227288,
+   "lev_money_positions_long": 197833,
+   "lev_money_positions_short": 432811,
+   "other_rept_positions_long": 70915,
+   "other_rept_positions_short": 71088
   },
   "NQ": {
-   "report_date_as_yyyy_mm_dd": "2026-11-03",
-   "open_interest_all": 292587,
-   "change_in_open_interest_all": 24079,
-   "dealer_positions_long_all": 39546,
-   "dealer_positions_short_all": 152075,
-   "asset_mgr_positions_long": 109642,
-   "asset_mgr_positions_short": 36505,
-   "lev_money_positions_long": 62698,
-   "lev_money_positions_short": 52625,
-   "other_rept_positions_long": 17469,
-   "other_rept_positions_short": 8547
+   "report_date_as_yyyy_mm_dd": "2026-11-17",
+   "open_interest_all": 296423,
+   "change_in_open_interest_all": 7706,
+   "dealer_positions_long_all": 46518,
+   "dealer_positions_short_all": 136196,
+   "asset_mgr_positions_long": 112461,
+   "asset_mgr_positions_short": 29561,
+   "lev_money_positions_long": 53394,
+   "lev_money_positions_short": 64322,
+   "other_rept_positions_long": 8528,
+   "other_rept_positions_short": 17384
   }
  },
- "fetchedAt": "2026-11-07T00:20:22.072276+00:00"
+ "fetchedAt": "2026-11-21T01:44:14.334610+00:00"
 }
