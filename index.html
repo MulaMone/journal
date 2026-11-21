@@ -8132,6 +8132,41 @@ function chartTab(){
         [300,900,2000].forEach(function(ms){setTimeout(applyKeep,ms);});
       }
 
+      // ── Shared daily-candle cache for the prev QUARTER / MONTH / intraday levels ──
+      // One daily series per symbol, kept in memory + IndexedDB. Prev-period levels only change when a new trading day
+      // starts, so while the newest cached bar is today's the levels paint with no network at all. After a rollover only the
+      // missing days are pulled. A deeper request than what is cached refetches once, then is served from cache.
+      var _dlvMem=window._dlvMem||(window._dlvMem={});
+      function dailyLv(n){
+        n=Math.min(5000,Math.max(n,60));
+        var key="dailylv|"+oandaInst+"|"+dailyAlign;
+        var base=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
+        var secOf=function(c){return Math.floor(new Date(c.time).getTime()/1000);};
+        var store=function(cs,m){var e=_dlvMem[key]={t:Date.now(),n:m,candles:cs};chartIdbPut(key,e);return {candles:cs};};
+        var full=function(m){return chartFetchJson(base+"&count="+Math.max(n,m||0)).then(function(d){
+          var cs=(d&&d.candles)||[];
+          return cs.length?store(cs,Math.max(n,m||0)):{candles:cs};
+        });};
+        var useEntry=function(e){
+          var cs=e.candles,last=secOf(cs[cs.length-1]),nowS=Date.now()/1000;
+          if(nowS<last+86400+300) return Promise.resolve({candles:cs}); // newest bar is today's: prev levels can't have changed
+          if(e.t/1000>last+86400&&Date.now()-e.t<3600000) return Promise.resolve({candles:cs}); // weekend / holiday: checked within the hour
+          if(nowS-last>400*86400) return full(e.n);
+          return chartFetchJson(base+"&count=500&from="+encodeURIComponent(cs[cs.length-1].time)).then(function(d){
+            var add=(d&&d.candles)||[];
+            if(!add.length) return store(cs,e.n);
+            return store(cs.filter(function(c){return secOf(c)<last;}).concat(add),e.n);
+          }).catch(function(){return {candles:cs};});
+        };
+        var ok=function(e){return e&&e.candles&&e.candles.length>=2&&e.n>=n;};
+        var m=_dlvMem[key];
+        if(ok(m)) return useEntry(m);
+        return chartIdbGet(key).then(function(e){
+          if(ok(e)){_dlvMem[key]=e;return useEntry(e);}
+          return full(e&&e.n);
+        });
+      }
+
       // ── Previous-close levels, one per period ───────────────────
       // ≤30m → each day shows the prior day's close (PDC) · 1h/4h/8h → each week
       // shows the prior week's close (PWC) · 1d → each month shows the prior
@@ -8242,8 +8277,7 @@ function chartTab(){
       // sit within a tag-height of each other share one row, side by side, highest timeframe first.
       var lvlTagsPos=null;
       if(intraday&&!eodOnly) (function(){
-        var lvUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count=800&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-        chartFetchJson(lvUrl).then(function(d){
+        dailyLv(800).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
@@ -8645,9 +8679,8 @@ function chartTab(){
         var PQ_COL={h:"#00b862",l:"#ff4444",c:"#b8c4d9"},PQ_TAG={h:"PQH",l:"PQL",c:"PQC"}; // close = standard silver
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/86400)+100); // +100d so the quarter before the first visible one is complete
-        var pqUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
         var qKey=function(t){var q=new Date(t*1000);return q.getUTCFullYear()*4+Math.floor(q.getUTCMonth()/3);};
-        chartFetchJson(pqUrl).then(function(d){
+        dailyLv(n).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
@@ -8725,8 +8758,7 @@ function chartTab(){
         var PM_TAG={h:"PMH",l:"PML",c:"PMC"};
         var span=candles[candles.length-1].time-candles[0].time;
         var n=Math.min(5000,Math.ceil(span/86400)+45); // +45d so the month before the first visible one is complete
-        var pmUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity=D&price=M&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");
-        chartFetchJson(pmUrl).then(function(d){
+        dailyLv(n).then(function(d){
           if(myLoadToken!==_chartLoadToken) return;
           var ds=((d&&d.candles)||[]).map(function(c){
             var _pu=Math.floor(new Date(c.time).getTime()/1000);
