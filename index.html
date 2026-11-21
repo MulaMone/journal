@@ -13469,6 +13469,8 @@ function analystTab(){
   gexHead.textContent="Gamma Levels";
   el.appendChild(gexHead);
   var gexBody=div();gexBody.id="gex-body";el.appendChild(gexBody);
+  var GEX_HIDDEN=true; // temporarily hidden — set false to restore
+  if(GEX_HIDDEN){gexHead.style.display="none";gexBody.style.display="none";}
 
   // ── Fed Rate Probabilities — own data source (CME ZQ futures) ──
   var fedHead=div();fedHead.style.cssText="font-size:13px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ca);";
@@ -14016,6 +14018,7 @@ function analystTab(){
     return (wk||mins>=960||mins<510)?"gex_one":"gex_zero";
   }
   function loadGex(force){
+    if(GEX_HIDDEN) return;
     var myToken=++_gexToken;
     var cached=null;
     var cat=gexCat();
