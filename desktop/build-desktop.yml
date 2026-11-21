@@ -1,0 +1,36 @@
+name: Build desktop app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Install CLI
+        working-directory: desktop
+        run: npm install
+      - name: Generate icons from site icon
+        working-directory: desktop
+        run: npx tauri icon ../images/icon-512.png
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: edge-desktop-v__VERSION__
+          releaseName: EDGE Desktop v__VERSION__
+          releaseBody: Windows installer for EDGE. Loads the live site, so site updates need no reinstall.
+          releaseDraft: false
+          prerelease: false
