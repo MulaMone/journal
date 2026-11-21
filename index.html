@@ -6810,9 +6810,9 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
-  // PQ toggle (daily and weekly): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
+  // PQ toggle (daily only): show / hide the previous-quarter H / L / C lines. Series are collected in pqSeries by the PQ block below.
   var showPq=State.chart_show_pq!==false,pqSeries=[];
-  if((tf==="1d"||tf==="1w")&&!eodOnly){
+  if(tf==="1d"&&!eodOnly){
     var pqBtn=h("button",{className:"btn"});
     pqBtn.textContent="PQ";
     pqBtn.title="Show previous quarter high / low / close";
@@ -8673,7 +8673,7 @@ function chartTab(){
       })();
 
       // ── 1w only: previous QUARTER high / low / close (PQH / PQL / PQC) ──────────
-      // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis); the PQ button toggles them.
+      // Same colors as the standard prev-period levels (green high / red low, dashed, tag on the price axis); no toggle button.
       // Paints instantly from the weekly candles already on the chart (like PYH / PYL), then swaps to exact levels built from the
       // cached daily candles (dailyLv) so a week straddling a quarter boundary doesn't skew the high / low.
       if(tf==="1w"&&!eodOnly) (function(){
@@ -8687,15 +8687,14 @@ function chartTab(){
               if(g[f]==null||!isFinite(g[f])) return;
               var data=g.times.map(function(t){return {time:t,value:g[f]};});
               if(!isCur) data.push({time:groups[gi+1].times[0],value:g[f]});
-              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,visible:showPq,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+              var ps=chart.addLineSeries({color:PQ_COL[f],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,title:isCur?PQ_TAG[f]:"",lastValueVisible:isCur,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
               ps.setData(data);
-              qSeries.push(ps);pqSeries.push(ps);
+              qSeries.push(ps);
             });
           });
         }
         function clearQ(){
           qSeries.forEach(function(x){try{chart.removeSeries(x);}catch(e){_dbg(e);}});
-          pqSeries=pqSeries.filter(function(x){return qSeries.indexOf(x)<0;});
           qSeries=[];
         }
         // instant: group the weekly candles by quarter (a week belongs to the quarter of its Tuesday); the first quarter on screen may be partial, so it is never a source
