@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 static CHILD_COUNT: AtomicUsize = AtomicUsize::new(0);
-const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true;";
+const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true; window.__EDGE_TB = true;";
 
 fn main() {
     tauri::Builder::default()
@@ -42,6 +42,7 @@ fn main() {
                             WebviewUrl::External(url),
                         )
                         .title(title)
+                        .decorations(false)
                         .inner_size(w, ht)
                         .initialization_script(DESKTOP_FLAG)
                         .build();
