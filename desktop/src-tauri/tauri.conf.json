@@ -1,13 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EDGE",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "identifier": "com.mulamone.edge",
   "build": { "frontendDist": "../dist" },
   "app": {
     "windows": [
       {
         "title": "EDGE — Trading Terminal",
+        "create": false,
         "width": 1500,
         "height": 950,
         "minWidth": 900,
