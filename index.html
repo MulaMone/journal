@@ -6678,10 +6678,10 @@ function edgeChartLink(chart,chartDiv,per,getC){
     }
     var ts=chart.timeScale(),muteUntil=0,pend=null,timer=0,userUntil=0,down=false;
     function touch(ms){userUntil=Date.now()+ms;}
-    ["wheel","touchstart","touchmove"].forEach(function(ev){chartDiv.addEventListener(ev,function(){touch(600);},{passive:true,capture:true});});
+    ["wheel","touchstart","touchmove"].forEach(function(ev){chartDiv.addEventListener(ev,function(){touch(900);},{passive:true,capture:true});});
     chartDiv.addEventListener("mousedown",function(){down=true;touch(600);},{passive:true,capture:true});
     document.addEventListener("mousemove",function(){if(down)touch(400);},{passive:true});
-    document.addEventListener("mouseup",function(){if(down){down=false;touch(600);}},{passive:true});
+    document.addEventListener("mouseup",function(){if(down){down=false;touch(1500);}},{passive:true});
     document.addEventListener("keydown",function(e){if(e.key==="ArrowLeft"||e.key==="ArrowRight")touch(600);},{passive:true});
     function grp(){return State.chart_link||null;}
     function linkOn(){return !!grp();}
@@ -6700,7 +6700,10 @@ function edgeChartLink(chart,chartDiv,per,getC){
       if(timer) return;
       timer=setTimeout(function(){timer=0;if(pend&&alive()&&linkOn()&&Date.now()>=muteUntil)send(pend);pend=null;},40);
     }
-    ts.subscribeVisibleTimeRangeChange(onChange);
+    ts.subscribeVisibleLogicalRangeChange(onChange);
+    var tail=0;function flush(){if(tail)clearTimeout(tail);tail=setTimeout(function(){tail=0;if(!alive()||!linkOn()||Date.now()<muteUntil)return;var r=cur();if(ok(r)){pend=null;send(r);}},180);}
+    ["wheel","touchend","touchcancel"].forEach(function(ev){chartDiv.addEventListener(ev,flush,{passive:true,capture:true});});
+    document.addEventListener("mouseup",function(){flush();},{passive:true});
     _edgeLinkCur={recv:function(m){
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
@@ -6710,7 +6713,7 @@ function edgeChartLink(chart,chartDiv,per,getC){
       if(ok(r0)){var tol=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tol&&Math.abs(r0.to-m.to)<=tol) return;}
       muteUntil=Date.now()+400;
       _chartLive.moved=true;_chartKeepView=null;
-      try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf)ts.setVisibleLogicalRange({from:lf,to:lto});}catch(e){_dbg(e);}
+      try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf){ts.setVisibleLogicalRange({from:lf,to:lto});[60,250].forEach(function(ms){setTimeout(function(){try{if(!alive()||Date.now()<userUntil)return;var q=ts.getVisibleLogicalRange();if(q&&(Math.abs(q.from-lf)>0.6||Math.abs(q.to-lto)>0.6)){muteUntil=Date.now()+400;ts.setVisibleLogicalRange({from:lf,to:lto});}}catch(e){_dbg(e);}},ms);});}}catch(e){_dbg(e);}
     },mute:function(ms){muteUntil=Date.now()+ms;},cur:cur};
     if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
     if(window._edgeDetached&&!_edgeAlive){
