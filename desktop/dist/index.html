@@ -1,1 +1,20 @@
-<!doctype html><meta charset="utf-8"><title>EDGE</title><body style="background:#040d1a;color:#8aa">Loading EDGE…</body>
+<!doctype html>
+<meta charset="utf-8">
+<title>EDGE — Trading Terminal</title>
+<style>
+  html,body{margin:0;height:100%;background:#040d1a;color:#c9a227;
+    font-family:Consolas,monospace;display:flex;align-items:center;justify-content:center;flex-direction:column}
+  h1{font-size:56px;letter-spacing:12px;margin:0;animation:p 1.4s ease-in-out infinite}
+  small{margin-top:14px;letter-spacing:6px;color:#4a6a8a}
+  @keyframes p{50%{opacity:.45}}
+</style>
+<h1>EDGE</h1><small id="s">LOADING</small>
+<script>
+  var URL_="https://mulamone.github.io/journal/";
+  function go(){
+    if(navigator.onLine){location.replace(URL_);}
+    else{document.getElementById("s").textContent="OFFLINE — WAITING FOR CONNECTION";}
+  }
+  addEventListener("online",go);
+  go();
+</script>
