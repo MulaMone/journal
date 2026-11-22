@@ -1,29 +1,49 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tauri::{webview::NewWindowResponse, WebviewUrl, WebviewWindowBuilder};
+use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-static LINK_COUNT: AtomicUsize = AtomicUsize::new(0);
+static CHILD_COUNT: AtomicUsize = AtomicUsize::new(0);
+const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true;";
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // closing the main EDGE window closes every child window and exits
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let WindowEvent::Destroyed = event {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             let cfg = app.config().app.windows[0].clone();
             WebviewWindowBuilder::from_config(app.handle(), &cfg)?
-                // target="_blank" links and window.open() open in their own EDGE window
+                .initialization_script(DESKTOP_FLAG)
+                // target="_blank", window.open(), Detach and New chart open in their own EDGE window
                 .on_new_window(move |url, _features| {
                     let h = handle.clone();
+                    let (title, w, ht) = match url.query() {
+                        Some(q) if q.contains("detached=1") && q.contains("tab=news") => {
+                            ("EDGE — News", 760.0, 920.0)
+                        }
+                        Some(q) if q.contains("detached=1") && q.contains("tab=chart") => {
+                            ("EDGE — Chart", 1300.0, 850.0)
+                        }
+                        _ => ("EDGE — Link", 1200.0, 850.0),
+                    };
                     std::thread::spawn(move || {
-                        let n = LINK_COUNT.fetch_add(1, Ordering::SeqCst);
+                        let n = CHILD_COUNT.fetch_add(1, Ordering::SeqCst);
                         let _ = WebviewWindowBuilder::new(
                             &h,
-                            format!("link-{n}"),
+                            format!("child-{n}"),
                             WebviewUrl::External(url),
                         )
-                        .title("EDGE — Link")
-                        .inner_size(1200.0, 850.0)
+                        .title(title)
+                        .inner_size(w, ht)
+                        .initialization_script(DESKTOP_FLAG)
                         .build();
                     });
                     NewWindowResponse::Deny
