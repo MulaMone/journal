@@ -6659,21 +6659,14 @@ function chartSymHTML(sym){
 var EDGE_LINK_COLORS=["#00d4d4","#00e676","#fbbf24","#ff4444","#a855f7"];
 var _edgePeers={},_edgeAlive=0;
 function edgePeerCount(){var n=0,now=Date.now();for(var k in _edgePeers){if(now-_edgePeers[k]<6000)n++;else delete _edgePeers[k];}return n;}
-function edgeLinkVis(){var b=window._edgeLkBtn;if(!b||!b.isConnected)return;b.style.display=(window._edgeDetached||edgePeerCount()>0)?"":"none";}
+function edgeLinkVis(){var b=window._edgeLkBtn;if(!b)return;b.style.display=(window._edgeDetached||edgePeerCount()>0)?"":"none";}
 var _edgeLinkBC=null,_edgeLinkId=Math.random().toString(36).slice(2),_edgeLinkCur=null;
-
 // Linked charts (desktop app): zoom/scroll in one chart window is mirrored to the others by visible TIME range.
-
 function edgeChartLink(chart,chartDiv,per){
-
   if(!(window._edgeDesktop||window._edgeDetached)||typeof BroadcastChannel==="undefined") return;
-
   try{
-
     if(!_edgeLinkBC){
-
       _edgeLinkBC=new BroadcastChannel("edge-chart-link");
-
       _edgeLinkBC.onmessage=function(ev){
         var m=ev.data||{};
         if(m.t==="alive"){_edgePeers[m.id]=Date.now();edgeLinkVis();return;}
@@ -6681,69 +6674,46 @@ function edgeChartLink(chart,chartDiv,per){
         if(_edgeLinkCur)_edgeLinkCur.recv(m);
       };
       setInterval(edgeLinkVis,3000);
-
     }
-
-    var ts=chart.timeScale(),muteUntil=0,pend=null,timer=0;
-
+    var ts=chart.timeScale(),muteUntil=0,pend=null,timer=0,userUntil=0,down=false;
+    function touch(ms){userUntil=Date.now()+ms;}
+    ["wheel","touchstart","touchmove"].forEach(function(ev){chartDiv.addEventListener(ev,function(){touch(600);},{passive:true,capture:true});});
+    chartDiv.addEventListener("mousedown",function(){down=true;touch(600);},{passive:true,capture:true});
+    document.addEventListener("mousemove",function(){if(down)touch(400);},{passive:true});
+    document.addEventListener("mouseup",function(){if(down){down=false;touch(600);}},{passive:true});
+    document.addEventListener("keydown",function(e){if(e.key==="ArrowLeft"||e.key==="ArrowRight")touch(600);},{passive:true});
     function grp(){return State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);}
     function linkOn(){return !!grp();}
-
     function alive(){return chartDiv.isConnected&&_chartLive&&_chartLive.chart===chart;}
-
     function cur(){try{return ts.getVisibleRange();}catch(e){return null;}}
-
     function ok(r){return !!r&&typeof r.from==="number"&&typeof r.to==="number"&&r.to>r.from;}
-
     function send(r){try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"range",from:r.from,to:r.to});}catch(e){_dbg(e);}}
-
     function onChange(){
-
-      if(!alive()||!linkOn()||Date.now()<muteUntil||!_chartLive.moved) return;
-
+      if(!alive()||!linkOn()||Date.now()<muteUntil||Date.now()>userUntil) return;
       var r=cur();if(!ok(r)) return;
-
       pend=r;
-
       if(timer) return;
-
       timer=setTimeout(function(){timer=0;if(pend&&alive()&&linkOn()&&Date.now()>=muteUntil)send(pend);pend=null;},40);
-
     }
-
     ts.subscribeVisibleTimeRangeChange(onChange);
-
     _edgeLinkCur={recv:function(m){
-
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
-
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
-
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
-
       var r0=cur();
-
       if(ok(r0)){var tl=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tl&&Math.abs(r0.to-m.to)<=tl) return;}
-
       muteUntil=Date.now()+400;
-
       _chartLive.moved=true;_chartKeepView=null;
-
       try{ts.setVisibleRange({from:m.from,to:m.to});}catch(e){_dbg(e);}
-
     }};
-
     if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
     if(window._edgeDetached&&!_edgeAlive){
       _edgeAlive=setInterval(function(){try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}},2000);
       try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}
       addEventListener("pagehide",function(){try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"bye"});}catch(e){}});
     }
-
   }catch(e){_dbg(e);}
-
 }
-
 function chartTab(){
   var el=div();
   el.style.padding="16px";
@@ -6972,10 +6942,9 @@ function chartTab(){
     ctrlRow.appendChild(ncBtn);
     }
     var lkBtn=h("button",{className:"btn",title:"Link zoom and scroll with the other chart windows","aria-label":"Link charts"});
-    var paintLk=function(){var g=State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);lkBtn.textContent=g?"\u26D3 LINK \u25CF":"\u26D3 LINK";lkBtn.style.cssText="padding:6px 10px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Unlinked. Click to link.";};
-    paintLk();
+    var paintLk=function(){var g=State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);lkBtn.textContent="\u26D3";lkBtn.style.cssText="padding:6px 10px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Unlinked. Click to link.";edgeLinkVis();};
+    window._edgeLkBtn=lkBtn;paintLk();
     lkBtn.addEventListener("click",function(){var g=State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);var i=g?EDGE_LINK_COLORS.indexOf(g):-1;State.chart_link=(i<0)?EDGE_LINK_COLORS[0]:(i+1<EDGE_LINK_COLORS.length?EDGE_LINK_COLORS[i+1]:false);paintLk();});
-    window._edgeLkBtn=lkBtn;edgeLinkVis();
     ctrlRow.appendChild(lkBtn);
   }
   hrow.appendChild(ctrlRow);
