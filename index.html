@@ -15184,7 +15184,7 @@ function _nfIn(ms){
   return "in "+Math.floor(hh/24)+"d";
 }
 function _nfPaintCal(){
-  var box=document.getElementById("nf-cal"); if(!box) return;
+  var box=document.getElementById("nf-cal"); if(!box) return; if(window._edgeDetached){box.innerHTML="";box.style.display="none";return;}
   box.innerHTML="";
   var now=Date.now();
   var _etD=function(t){return new Date(t).toLocaleDateString("en-CA",{timeZone:"America/New_York"});};
