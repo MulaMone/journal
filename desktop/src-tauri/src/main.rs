@@ -2,13 +2,19 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_window_state::StateFlags;
 
 static CHILD_COUNT: AtomicUsize = AtomicUsize::new(0);
 const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true; window.__EDGE_TB = true;";
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // never restore the old "native title bar on" setting
+                .with_state_flags(StateFlags::all() - StateFlags::DECORATIONS)
+                .build(),
+        )
         // closing the main EDGE window closes every child window and exits
         .on_window_event(|window, event| {
             if window.label() == "main" {
