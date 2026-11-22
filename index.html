@@ -6663,7 +6663,7 @@ function edgeLinkVis(){var b=window._edgeLkBtn;if(!b)return;b.style.display=(win
 var _edgeLinkBC=null,_edgeLinkId=Math.random().toString(36).slice(2),_edgeLinkCur=null;
 // Linked charts (desktop app): zoom/scroll in one chart window is mirrored to the others by visible TIME range.
 function edgeLinkRecenter(){try{if(_edgeLinkCur&&_edgeLinkBC&&State.chart_link){_edgeLinkCur.mute(900);_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"recenter"});}}catch(e){_dbg(e);}}
-function edgeChartLink(chart,chartDiv,per){
+function edgeChartLink(chart,chartDiv,per,getC){
   if(!(window._edgeDesktop||window._edgeDetached)||typeof BroadcastChannel==="undefined") return;
   try{
     if(!_edgeLinkBC){
@@ -6686,7 +6686,11 @@ function edgeChartLink(chart,chartDiv,per){
     function grp(){return State.chart_link||null;}
     function linkOn(){return !!grp();}
     function alive(){return chartDiv.isConnected&&_chartLive&&_chartLive.chart===chart;}
-    function cur(){try{return ts.getVisibleRange();}catch(e){return null;}}
+    // time <-> logical index through this chart's own candles, extrapolating past the first/last bar, so the empty
+    // space to the right of the latest candle is part of the shared view (the library's own time range can't express it)
+    function tl(t){var c=getC(),n=c.length;if(!n)return null;if(t<=c[0].time)return (t-c[0].time)/per;if(t>=c[n-1].time)return n-1+(t-c[n-1].time)/per;var lo=0,hi=n-1;while(hi-lo>1){var mid=(lo+hi)>>1;if(c[mid].time<=t)lo=mid;else hi=mid;}return lo+(t-c[lo].time)/(c[hi].time-c[lo].time);}
+    function lt(l){var c=getC(),n=c.length;if(!n)return null;if(l<=0)return c[0].time+l*per;if(l>=n-1)return c[n-1].time+(l-(n-1))*per;var i=Math.floor(l);return c[i].time+(l-i)*(c[i+1].time-c[i].time);}
+    function cur(){try{var lr=ts.getVisibleLogicalRange();if(!lr)return null;return {from:lt(lr.from),to:lt(lr.to)};}catch(e){return null;}}
     function ok(r){return !!r&&typeof r.from==="number"&&typeof r.to==="number"&&r.to>r.from;}
     function send(r){try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"range",from:r.from,to:r.to});}catch(e){_dbg(e);}}
     function onChange(){
@@ -6703,11 +6707,11 @@ function edgeChartLink(chart,chartDiv,per){
       if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       var r0=cur();
-      if(ok(r0)){var tl=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tl&&Math.abs(r0.to-m.to)<=tl) return;}
+      if(ok(r0)){var tol=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tol&&Math.abs(r0.to-m.to)<=tol) return;}
       muteUntil=Date.now()+400;
       _chartLive.moved=true;_chartKeepView=null;
-      try{ts.setVisibleRange({from:m.from,to:m.to});}catch(e){_dbg(e);}
-    },mute:function(ms){muteUntil=Date.now()+ms;}};
+      try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf)ts.setVisibleLogicalRange({from:lf,to:lto});}catch(e){_dbg(e);}
+    },mute:function(ms){muteUntil=Date.now()+ms;},cur:cur};
     if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
     if(window._edgeDetached&&!_edgeAlive){
       _edgeAlive=setInterval(function(){try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}},2000);
@@ -7650,7 +7654,7 @@ function chartTab(){
       ["wheel","mousedown","touchstart"].forEach(function(ev){
         chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true,capture:true});
       });
-      edgeChartLink(chart,chartDiv,periodSec);
+      edgeChartLink(chart,chartDiv,periodSec,function(){return candles;});
 
       var series=chart.addCandlestickSeries({
         upColor:"#00e676",downColor:"#ff4444",
