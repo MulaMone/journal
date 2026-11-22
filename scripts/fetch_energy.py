@@ -357,8 +357,20 @@ def outages():
 
 
 # ───────────────────────── Henry Hub ─────────────────────────
+YF = "https://query1.finance.yahoo.com/v8/finance/chart/NG%3DF"
+
+
+def yahoo_ng(rng, interval):
+    r = rget(YF, params={"range": rng, "interval": interval}, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+    r.raise_for_status()
+    res = r.json()["chart"]["result"][0]
+    return [(pd.Timestamp(t, unit="s", tz="UTC").tz_convert("US/Eastern"), c)
+            for t, c in zip(res["timestamp"], res["indicators"]["quote"][0]["close"]) if c is not None]
+
+
 @guard("gas")
 def gas():
+    g = None
     key = os.environ.get("FRED_API_KEY")
     if key:
         r = rget("https://api.stlouisfed.org/fred/series/observations",
@@ -366,15 +378,24 @@ def gas():
         r.raise_for_status()
         obs = [(o["date"], float(o["value"])) for o in r.json()["observations"] if o["value"] not in (".", "")]
         if obs:
-            out["gas"] = {"source": "FRED DHHNGSP (spot)", "price": obs[0][1], "asOf": obs[0][0], "series": [v for _, v in reversed(obs)][-20:]}
-            return
-    r = rget("https://query1.finance.yahoo.com/v8/finance/chart/NG%3DF", params={"range": "1mo", "interval": "1d"},
-                     headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
-    r.raise_for_status()
-    res = r.json()["chart"]["result"][0]
-    closes = [c for c in res["indicators"]["quote"][0]["close"] if c is not None]
-    out["gas"] = {"source": "Yahoo NG=F (front-month futures, FRED key not set)", "price": round(res["meta"].get("regularMarketPrice", closes[-1]), 3),
-                  "asOf": dt.date.today().isoformat(), "series": [round(c, 3) for c in closes][-20:]}
+            g = {"source": "FRED DHHNGSP (spot)", "price": obs[0][1], "asOf": obs[0][0], "series": [v for _, v in reversed(obs)][-20:]}
+    try:  # front-month futures: EOD close (last completed session) for spreads
+        bars = yahoo_ng("1mo", "1d")
+        now = pd.Timestamp.now(tz="US/Eastern")
+        if bars and bars[-1][0].date() == now.date() and now.hour < 17:
+            bars = bars[:-1]  # today's bar is still forming; EOD = last completed session
+        eod = {"price": round(bars[-1][1], 3), "asOf": bars[-1][0].date().isoformat(), "source": "NG=F front-month EOD close"}
+        if g is None:
+            g = {"source": "Yahoo NG=F (front-month futures, FRED key not set)", "price": eod["price"], "asOf": eod["asOf"],
+                 "series": [round(c, 3) for _, c in bars][-20:]}
+        g["eod"] = eod
+    except Exception as e:
+        if g is None:
+            raise
+        out["errors"]["gas_eod"] = f"{type(e).__name__}: {e}"[:200]
+    if g is None:
+        raise RuntimeError("no Henry Hub price")
+    out["gas"] = g
 
 
 @guard("spark")
@@ -382,7 +403,7 @@ def spark():
     g = out.get("gas")
     if not g:
         return
-    px = g["price"]
+    px = (g.get("eod") or {}).get("price") or g["price"]  # EOD futures close preferred for spreads
     res = []
     for h in out.get("hubs", []):
         if h.get("rt") is None:
@@ -401,7 +422,7 @@ def spark():
             else:
                 item[f"s{int(hr)}Trend"] = "n/a"
         res.append(item)
-    out["spark"] = {"gas": px, "hubs": res}
+    out["spark"] = {"gas": px, "gasSrc": "NG=F EOD close" if g.get("eod") else g["source"], "gasAsOf": (g.get("eod") or g)["asOf"], "hubs": res}
 
 
 # ───────────────────────── Weather ─────────────────────────
