@@ -15654,7 +15654,7 @@ function enRigCard(D){
 }
 function enSecGas(D,wrap){
   var gw=div();wrap.appendChild(gw);
-  function px(){var m=ls("en_hubpx",{}),b=ls("en_hubbasis",{}),md=ls("en_hubmode",{}),o={},auto=D.gas&&D.gas.price!=null?D.gas.price:null;
+  function px(){var m=ls("en_hubpx",{}),b=ls("en_hubbasis",{}),md=ls("en_hubmode",{}),o={},auto=D.gas?((D.gas.eod&&D.gas.eod.price!=null)?D.gas.eod.price:(D.gas.price!=null?D.gas.price:null)):null;
     o.HH=m.HH!=null?m.HH:auto;
     EN_HUBS.forEach(function(x){if(x[0]==="HH")return;o[x[0]]=md[x[0]]==="b"?(o.HH!=null&&b[x[0]]!=null?o.HH+b[x[0]]:null):(m[x[0]]!=null?m[x[0]]:null);});return o;}
   function spreads(){
@@ -15672,7 +15672,7 @@ function enSecGas(D,wrap){
     var cards="<div class='g3' style='margin-bottom:12px'>"+
       "<div class='card'><div class='cl'>Best net spread</div><div class='cv' style='color:"+(best&&best.net>0?"var(--green)":"var(--text3)")+"'>"+(best?enPx(best.net):"—")+"</div><div class='cs'>"+(best?enHubName(best.from)+" → "+enHubName(best.to):"enter hub prices")+"</div></div>"+
       "<div class='card'><div class='cl'>Profitable corridors</div><div class='cv'>"+live.filter(function(s){return s.net>0;}).length+" / "+live.length+"</div><div class='cs'>net of tariff + fuel</div></div>"+
-      "<div class='card'><div class='cl'>Henry Hub</div><div class='cv'>"+enPx(P.HH)+"</div><div class='cs'>"+(hubs.HH!=null?"manual override":(D.gas?D.gas.source:"enter price"))+"</div></div></div>";
+      "<div class='card'><div class='cl'>Henry Hub</div><div class='cv'>"+enPx(P.HH)+"</div><div class='cs'>"+(hubs.HH!=null?"manual override":(D.gas?((D.gas.eod?D.gas.eod.source+" · "+D.gas.eod.asOf:D.gas.source)):"enter price"))+"</div></div></div>";
     var bs=ls("en_hubbasis",{}),md=ls("en_hubmode",{});
     var pin="<div style='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end'>"+EN_HUBS.map(function(x){
       var isB=x[0]!=="HH"&&md[x[0]]==="b",tg=x[0]==="HH"?"":" <a href='#' data-mode='"+x[0]+"' style='color:var(--accent);text-decoration:none;font-size:10px;border:1px solid var(--border);border-radius:3px;padding:0 5px;margin-left:4px'>"+(isB?"basis":"$ outright")+"</a>";
