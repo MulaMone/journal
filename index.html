@@ -6662,6 +6662,7 @@ function edgePeerCount(){var n=0,now=Date.now();for(var k in _edgePeers){if(now-
 function edgeLinkVis(){var b=window._edgeLkBtn;if(!b)return;b.style.display=(window._edgeDetached||edgePeerCount()>0)?"":"none";}
 var _edgeLinkBC=null,_edgeLinkId=Math.random().toString(36).slice(2),_edgeLinkCur=null;
 // Linked charts (desktop app): zoom/scroll in one chart window is mirrored to the others by visible TIME range.
+function edgeLinkRecenter(){try{if(_edgeLinkCur&&_edgeLinkBC&&State.chart_link){_edgeLinkCur.mute(900);_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"recenter"});}}catch(e){_dbg(e);}}
 function edgeChartLink(chart,chartDiv,per){
   if(!(window._edgeDesktop||window._edgeDetached)||typeof BroadcastChannel==="undefined") return;
   try{
@@ -6682,7 +6683,7 @@ function edgeChartLink(chart,chartDiv,per){
     document.addEventListener("mousemove",function(){if(down)touch(400);},{passive:true});
     document.addEventListener("mouseup",function(){if(down){down=false;touch(600);}},{passive:true});
     document.addEventListener("keydown",function(e){if(e.key==="ArrowLeft"||e.key==="ArrowRight")touch(600);},{passive:true});
-    function grp(){return State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);}
+    function grp(){return State.chart_link||null;}
     function linkOn(){return !!grp();}
     function alive(){return chartDiv.isConnected&&_chartLive&&_chartLive.chart===chart;}
     function cur(){try{return ts.getVisibleRange();}catch(e){return null;}}
@@ -6699,13 +6700,14 @@ function edgeChartLink(chart,chartDiv,per){
     _edgeLinkCur={recv:function(m){
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
+      if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       var r0=cur();
       if(ok(r0)){var tl=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tl&&Math.abs(r0.to-m.to)<=tl) return;}
       muteUntil=Date.now()+400;
       _chartLive.moved=true;_chartKeepView=null;
       try{ts.setVisibleRange({from:m.from,to:m.to});}catch(e){_dbg(e);}
-    }};
+    },mute:function(ms){muteUntil=Date.now()+ms;}};
     if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
     if(window._edgeDetached&&!_edgeAlive){
       _edgeAlive=setInterval(function(){try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}},2000);
@@ -6755,6 +6757,7 @@ function chartTab(){
   // buttons physically present but impossible to reach. Let it wrap instead.
   ctrlRow.style.flexWrap="wrap";
   ctrlRow.style.rowGap="8px";
+  ctrlRow.style.marginLeft="auto";ctrlRow.style.justifyContent="flex-end"; // always flush right, whether or not M / Y buttons are showing
 
   var useWheels=isMobile(); // phone: symbol/timeframe wheels under the chart instead of button rows
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"},{l:"BTC",n:"Bitcoin"}];
@@ -6937,14 +6940,14 @@ function chartTab(){
   if((window._edgeDesktop||window._edgeDetached)&&!useWheels){
     if(!window._edgeDetached){
     var ncBtn=h("button",{className:"btn",title:"Open a new chart window","aria-label":"New chart window"});
-    ncBtn.textContent="\u29C9";ncBtn.style.cssText="padding:6px 10px;";
+    ncBtn.textContent="\u29C9";ncBtn.style.cssText="padding:6px 7px;";
     ncBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?detached=1&tab=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf),"_blank");});
     ctrlRow.appendChild(ncBtn);
     }
     var lkBtn=h("button",{className:"btn",title:"Link zoom and scroll with the other chart windows","aria-label":"Link charts"});
-    var paintLk=function(){var g=State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);lkBtn.textContent="\u26D3";lkBtn.style.cssText="padding:6px 10px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Unlinked. Click to link.";edgeLinkVis();};
+    var paintLk=function(){var g=State.chart_link||null;lkBtn.textContent="\u26D3";lkBtn.style.cssText="padding:6px 7px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Not linked. Click to link with the other charts.";edgeLinkVis();};
     window._edgeLkBtn=lkBtn;paintLk();
-    lkBtn.addEventListener("click",function(){var g=State.chart_link===false?null:(State.chart_link||EDGE_LINK_COLORS[0]);var i=g?EDGE_LINK_COLORS.indexOf(g):-1;State.chart_link=(i<0)?EDGE_LINK_COLORS[0]:(i+1<EDGE_LINK_COLORS.length?EDGE_LINK_COLORS[i+1]:false);paintLk();});
+    lkBtn.addEventListener("click",function(){var g=State.chart_link||null;var i=g?EDGE_LINK_COLORS.indexOf(g):-1;State.chart_link=(i<0)?EDGE_LINK_COLORS[0]:(i+1<EDGE_LINK_COLORS.length?EDGE_LINK_COLORS[i+1]:false);paintLk();});
     ctrlRow.appendChild(lkBtn);
   }
   hrow.appendChild(ctrlRow);
@@ -7031,6 +7034,7 @@ function chartTab(){
     if(n-_dtLast<600) return;
     _dtLast=n;
     if(e&&e.preventDefault) e.preventDefault();
+    if(typeof edgeLinkRecenter==="function") edgeLinkRecenter();
     if(_chartLive&&_chartLive.recenter) _chartLive.recenter();
   }
   chartDiv.addEventListener("dblclick",_dtFire);
