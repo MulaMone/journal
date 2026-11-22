@@ -15470,17 +15470,10 @@ function enSecLmp(D,wrap){
 function enSecSpark(D,wrap){
   wrap.appendChild(enHead("Spark Spreads & Fuel Margins",null,"en-sec-spark"));
   var g=D.gas,S=D.spark;
-  var mo=g&&g.monthly&&g.monthly.series&&g.monthly.series.length>1?g.monthly:null;
   var gh=g?"<div class='cv' style='font-size:26px;color:var(--ca)'>$"+g.price.toFixed(3)+" <span style='font-size:11px;color:var(--text3)'>/MMBtu</span></div><div class='cs'>"+g.source+" · "+g.asOf+" · Daily Settlement (prev close)</div>"+
     (g.eod?"<div class='cs' style='color:var(--accent)'>EOD "+g.eod.source+" · $"+g.eod.price.toFixed(3)+" · "+g.eod.asOf+" · used for spreads</div>":"")+
-    (mo?"<div id='en-ng-tf' style='display:flex;gap:6px;margin-top:8px'><span data-tf='d' style='cursor:pointer;font-size:10px;letter-spacing:1px;padding:2px 8px;border:1px solid var(--accent);color:var(--accent);border-radius:3px'>DAILY</span><span data-tf='m' style='cursor:pointer;font-size:10px;letter-spacing:1px;padding:2px 8px;border:1px solid var(--text3);color:var(--text3);border-radius:3px'>MONTHLY</span></div>":"")+
-    "<div id='en-ng-spk' style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div><div id='en-ng-rng' class='cs'></div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
+    "<div style='margin-top:6px'>"+enSpark(g.series,"#ff8c00",160,34)+"</div>":"<div style='color:var(--text3);font-size:11px'>Henry Hub unavailable.</div>";
   var top=div("chip");top.innerHTML="<div class='cl'>HENRY HUB</div>"+gh;top.style.marginBottom="12px";wrap.appendChild(top);
-  if(mo){var tf=top.querySelector("#en-ng-tf"),spk=top.querySelector("#en-ng-spk"),rng=top.querySelector("#en-ng-rng");
-    tf.addEventListener("click",function(e){var k=e.target.getAttribute&&e.target.getAttribute("data-tf");if(!k)return;
-      Array.prototype.forEach.call(tf.children,function(c){var on=c.getAttribute("data-tf")===k;c.style.borderColor=on?"var(--accent)":"var(--text3)";c.style.color=on?"var(--accent)":"var(--text3)";});
-      spk.innerHTML=enSpark(k==="m"?mo.series:g.series,"#ff8c00",160,34);
-      rng.textContent=k==="m"?"Monthly closes · "+mo.labels[0]+" → "+mo.labels[mo.labels.length-1]+" · last bar = current month (partial)":"";});}
   if(!S||!S.hubs||!S.hubs.length){wrap.appendChild(enCard("Spark Spreads","<div style='color:var(--text3);font-size:11px'>Needs gas price and hub LMPs.</div>"));return;}
   var grid=div("g2");
   S.hubs.forEach(function(x){
