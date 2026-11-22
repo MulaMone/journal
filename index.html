@@ -6701,7 +6701,7 @@ function edgeChartLink(chart,chartDiv,per,getC){
       timer=setTimeout(function(){timer=0;if(pend&&alive()&&linkOn()&&Date.now()>=muteUntil)send(pend);pend=null;},40);
     }
     ts.subscribeVisibleLogicalRangeChange(onChange);
-    var tail=0;function flush(){if(tail)clearTimeout(tail);tail=setTimeout(function(){tail=0;if(!alive()||!linkOn()||Date.now()<muteUntil)return;var r=cur();if(ok(r)){pend=null;send(r);}},180);}
+    var applyTok=0,tail=0;function flush(){if(tail)clearTimeout(tail);tail=setTimeout(function(){tail=0;if(!alive()||!linkOn()||Date.now()<muteUntil)return;var r=cur();if(ok(r)){pend=null;send(r);}},180);}
     ["wheel","touchend","touchcancel"].forEach(function(ev){chartDiv.addEventListener(ev,flush,{passive:true,capture:true});});
     document.addEventListener("mouseup",function(){flush();},{passive:true});
     _edgeLinkCur={recv:function(m){
@@ -6713,7 +6713,7 @@ function edgeChartLink(chart,chartDiv,per,getC){
       if(ok(r0)){var tol=Math.max((r0.to-r0.from)*0.005,per||0);if(Math.abs(r0.from-m.from)<=tol&&Math.abs(r0.to-m.to)<=tol) return;}
       muteUntil=Date.now()+400;
       _chartLive.moved=true;_chartKeepView=null;
-      try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf){ts.setVisibleLogicalRange({from:lf,to:lto});[60,250].forEach(function(ms){setTimeout(function(){try{if(!alive()||Date.now()<userUntil)return;var q=ts.getVisibleLogicalRange();if(q&&(Math.abs(q.from-lf)>0.6||Math.abs(q.to-lto)>0.6)){muteUntil=Date.now()+400;ts.setVisibleLogicalRange({from:lf,to:lto});}}catch(e){_dbg(e);}},ms);});}}catch(e){_dbg(e);}
+      try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf){ts.setVisibleLogicalRange({from:lf,to:lto});var tok=++applyTok;setTimeout(function(){try{if(tok!==applyTok||!alive())return;var q=ts.getVisibleLogicalRange();if(q&&(Math.abs(q.from-lf)>0.6||Math.abs(q.to-lto)>0.6)){muteUntil=Date.now()+400;ts.setVisibleLogicalRange({from:lf,to:lto});}}catch(e){_dbg(e);}},120);}}catch(e){_dbg(e);}
     },mute:function(ms){muteUntil=Date.now()+ms;},cur:cur};
     if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
     if(window._edgeDetached&&!_edgeAlive){
