@@ -49,7 +49,7 @@
     var q=new URLSearchParams(location.search),sub="";
     if(q.get("detached")==="1")sub=(q.get("tab")||"").toUpperCase();
     var bar=document.createElement("div");bar.id="edge-tb";
-    bar.innerHTML=(q.get("detached")==="1"?'<div class="tb-l"><span class="tb-logo">EDGE</span>'+(sub?'<span class="tb-sub">'+sub+'</span>':'')+'</div>':'')+
+    bar.innerHTML=(q.get("detached")==="1"?'<div class="tb-l"><span class="tb-logo">EDGE</span>'+'</div>':'')+
       '<div class="tb-mid"><div class="tb-trk">'+track()+'</div></div>'+
       '<div class="tb-btns"><div class="tb-b" data-a="min" title="Minimize"><svg viewBox="0 0 11 11"><path d="M0 5.5H11"/></svg></div>'+
       '<div class="tb-b" data-a="max" title="Maximize"><svg viewBox="0 0 11 11"><rect x=".6" y=".6" width="9.8" height="9.8"/></svg></div>'+
