@@ -344,6 +344,7 @@ svg text{font-family:'Courier New',monospace}
 #topbar-data-ind.play{animation:dataIndFade 3s ease-in-out 1 forwards}
 @keyframes dataIndFade{0%{opacity:0}18%{opacity:1}72%{opacity:1}100%{opacity:0}}
 @media(max-width:480px){#topbar-data-ind{width:14px;height:14px;margin-top:-7px}}
+html.edge-detached #topbar,html.edge-detached #tabs,html.edge-detached #m-bnav{display:none!important}html.edge-detached #app{padding-top:0}
 </style>
 </head>
 <body>
@@ -1484,10 +1485,11 @@ function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn
 var _syncDebounced=debounce(syncToCloud,2000);
 function setIntraday(v){State.chart_intraday=!!v;}
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
-var _isLocal=window.location.protocol==="file:";function ss(k,v){try{if(k==="trades"&&!_loadingFromCloud) _stampTrades(v);localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
+var _edgeQ=new URLSearchParams(location.search);window._edgeDetached=_edgeQ.get("detached")==="1";window._edgeDesktop=!!(window.__EDGE_DESKTOP||window.__TAURI_INTERNALS__||window.__TAURI__);if(window._edgeDetached)document.documentElement.classList.add("edge-detached");
+var _isLocal=window.location.protocol==="file:";function ss(k,v){if(window._edgeDetached)return;try{if(k==="trades"&&!_loadingFromCloud) _stampTrades(v);localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
 // On fresh launch (sessionStorage is empty), always start on home
-if(!sessionStorage.getItem('edge_session_active')){
+if(!window._edgeDetached&&!sessionStorage.getItem('edge_session_active')){
   sessionStorage.setItem('edge_session_active','1');
   localStorage.setItem('edge_tab',JSON.stringify('home'));
 }
@@ -6874,6 +6876,12 @@ function chartTab(){
     ctrlRow.appendChild(clearBtn);
   }
 
+  if(window._edgeDesktop&&!useWheels){
+    var ncBtn=h("button",{className:"btn",title:"Open a new chart window","aria-label":"New chart window"});
+    ncBtn.textContent="\u29C9";ncBtn.style.cssText="padding:6px 10px;";
+    ncBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?detached=1&tab=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf),"_blank");});
+    ctrlRow.appendChild(ncBtn);
+  }
   hrow.appendChild(ctrlRow);
   el.appendChild(hrow);
 
@@ -15217,6 +15225,12 @@ function newsFeedTab(){
   var wm=h("a",{className:"btn",href:"https://www.worldmonitor.app/dashboard?zoom=1.00&view=global&timeRange=7d&layers=iranAttacks%2Chotspots%2Cconflicts%2Cbases%2Cnuclear%2Cmilitary%2Cweather%2CcanadaAlerts%2Coutages%2Cnatural%2Cwaterways%2Ceconomic%2Csanctions",target:"_blank",rel:"noopener",title:"World Monitor","aria-label":"World Monitor"},["🌐"]);
   wm.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;flex-shrink:0;";
   var rt=div();rt.style.cssText="display:flex;gap:6px;align-items:center;flex-shrink:0;";rt.appendChild(wm);rt.appendChild(rb);
+  if(window._edgeDesktop&&!window._edgeDetached){
+    var dtb=h("button",{className:"btn",title:"Open News in its own window","aria-label":"Detach news"},["\u29C9"]);
+    dtb.style.cssText="min-height:40px;padding:0 14px;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;flex-shrink:0;";
+    dtb.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?detached=1&tab=news","_blank");});
+    rt.appendChild(dtb);
+  }
   hd.appendChild(l);hd.appendChild(rt);wrap.appendChild(hd);
   var chips=div();chips.style.cssText="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none;";
   function chip(label,active,fn,color){
@@ -16146,6 +16160,7 @@ window.addEventListener("resize",function(){
 
 var _reloadTab=sessionStorage.getItem('edge_reload_tab');
 if(_reloadTab){sessionStorage.removeItem('edge_reload_tab');State.tab=_reloadTab;}
+if(window._edgeDetached){var _dq=_edgeQ.get("tab");if(_dq&&VIEWS[_dq])State.tab=_dq;if(_edgeQ.get("sym"))State.chart_symbol=_edgeQ.get("sym");if(_edgeQ.get("tf"))State.chart_interval=_edgeQ.get("tf");}
 // First render is now triggered by the cloud loader above
 // Warm the chart cache for the default chart view (NQ 1h) so the first Chart tab open is instant.
 setTimeout(function(){chartPrefetchView(State.chart_symbol||"NQ",State.chart_interval||"1h");},1000);
