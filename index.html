@@ -1485,6 +1485,79 @@ function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn
 var _syncDebounced=debounce(syncToCloud,2000);
 function setIntraday(v){State.chart_intraday=!!v;}
 function ls(k,def){try{var v=localStorage.getItem("edge_"+k);return v?JSON.parse(v):def}catch(e){return def}}
+/* EDGE desktop title bar (custom, replaces the native Windows one) */
+(function(){
+  if(!window.__EDGE_TB||!window.__TAURI_INTERNALS__) return;
+  var I=window.__TAURI_INTERNALS__;
+  function lbl(){try{return I.metadata.currentWindow.label;}catch(e){return "main";}}
+  function inv(cmd,extra){try{var a={label:lbl()};if(extra)for(var k in extra)a[k]=extra[k];return I.invoke("plugin:window|"+cmd,a);}catch(e){return Promise.reject(e);}}
+  document.documentElement.classList.add("edge-tb");
+  var G="#e8b923",GD="#a67c00",GR="#00e676",CY="#00d4d4";
+  var ICO={
+    dollar:'<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.2" fill="none" stroke="'+GR+'" stroke-width="1.4"/><text x="10" y="14.2" text-anchor="middle" font-size="12" font-weight="700" font-family="Courier New,monospace" fill="'+GR+'">$</text></svg>',
+    bar:'<svg viewBox="0 0 28 20"><path d="M5 16 L8 7 H20 L23 16 Z" fill="'+G+'" stroke="'+GD+'" stroke-width="1"/><path d="M9 9 H19" stroke="#fff6c8" stroke-width="1.2" opacity=".7"/></svg>',
+    bars:'<svg viewBox="0 0 30 20"><path d="M2 16 L4.5 10 H13 L15.5 16 Z" fill="'+G+'" stroke="'+GD+'"/><path d="M14.5 16 L17 10 H25.5 L28 16 Z" fill="'+G+'" stroke="'+GD+'"/><path d="M8.2 10 L10.6 4 H19.2 L21.6 10 Z" fill="#ffd84d" stroke="'+GD+'"/></svg>',
+    gem:'<svg viewBox="0 0 22 20"><path d="M5 3 H17 L21 8 L11 18 L1 8 Z" fill="#37e6ff" fill-opacity=".85" stroke="#bff6ff" stroke-width="1"/><path d="M1 8 H21 M7.5 3 L11 8 L14.5 3 M11 8 V18" fill="none" stroke="#e8fcff" stroke-width=".9" opacity=".8"/></svg>',
+    candles:'<svg viewBox="0 0 28 20"><g stroke-width="1.2"><path d="M4 3 V17" stroke="#ff4d4d"/><rect x="2" y="6" width="4" height="7" fill="#ff4d4d" stroke="#ff4d4d"/><path d="M11 2 V15" stroke="'+GR+'"/><rect x="9" y="5" width="4" height="8" fill="'+GR+'" stroke="'+GR+'"/><path d="M18 5 V19" stroke="'+GR+'"/><rect x="16" y="8" width="4" height="8" fill="'+GR+'" stroke="'+GR+'"/><path d="M25 1 V13" stroke="'+GR+'"/><rect x="23" y="3" width="4" height="7" fill="'+GR+'" stroke="'+GR+'"/></g></svg>',
+    up:'<svg viewBox="0 0 26 20"><path d="M2 16 L9 9 L13 13 L23 3" fill="none" stroke="'+GR+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 3 H23 V9" fill="none" stroke="'+GR+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bull:'<svg viewBox="0 0 26 20"><path d="M2 3 Q5 9 9 8 H17 Q21 9 24 3 Q22 12 18 13 L19 18 H16 L15 14 H11 L10 18 H7 L8 13 Q3 12 2 3 Z" fill="'+G+'" stroke="'+GD+'" stroke-width=".8"/></svg>',
+    pct:'<svg viewBox="0 0 20 20"><text x="10" y="15" text-anchor="middle" font-size="15" font-weight="700" font-family="Courier New,monospace" fill="'+CY+'">%</text></svg>',
+    coin:'<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="'+G+'" stroke="'+GD+'" stroke-width="1.4"/><circle cx="10" cy="10" r="4.6" fill="none" stroke="'+GD+'" stroke-width="1"/></svg>'
+  };
+  var SEQ=["dollar","bar","gem","candles","dollar","up","bars","coin","dollar","bull","gem","pct","candles","bar","dollar","up","coin","gem"];
+  function track(){var h="";for(var k=0;k<2;k++)SEQ.forEach(function(n){h+='<i>'+ICO[n]+'</i>';});return h;}
+  var css=
+  "html.edge-tb #edge-tb{position:fixed;top:0;left:0;right:0;height:32px;z-index:100000;display:flex;align-items:stretch;background:linear-gradient(180deg,#0a1b38,#071428);border-bottom:1px solid #1a3260;font-family:'Courier New',monospace;-webkit-user-select:none;user-select:none;overflow:hidden}"+
+  "#edge-tb .tb-l{display:flex;align-items:center;gap:8px;padding:0 14px 0 12px;flex-shrink:0;position:relative;z-index:3;background:linear-gradient(90deg,#071428 70%,rgba(7,20,40,0))}"+
+  "#edge-tb .tb-logo{font-size:15px;font-weight:700;letter-spacing:4px;color:#baffff;text-shadow:0 0 6px #00d4d4}"+
+  "#edge-tb .tb-sub{font-size:10px;letter-spacing:2px;color:#ff8c00}"+
+  "#edge-tb .tb-mid{flex:1;position:relative;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);pointer-events:none}"+
+  "#edge-tb .tb-trk{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;gap:34px;white-space:nowrap;opacity:.7;animation:edgeTbScroll 80s linear infinite;will-change:transform}"+
+  "#edge-tb .tb-trk i{display:block;height:15px;flex-shrink:0}#edge-tb .tb-trk svg{height:15px;width:auto;display:block}"+
+  "@keyframes edgeTbScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}"+
+  "#edge-tb .tb-btns{display:flex;flex-shrink:0;position:relative;z-index:3;background:#071428}"+
+  "#edge-tb .tb-b{width:46px;height:100%;display:flex;align-items:center;justify-content:center;color:#9fb6d6;cursor:default;transition:background .12s}"+
+  "#edge-tb .tb-b:hover{background:#12305e;color:#fff}#edge-tb .tb-b.x:hover{background:#e81123;color:#fff}"+
+  "#edge-tb .tb-b svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.1}"+
+  "html.edge-tb #topbar{top:32px!important}"+
+  "html.edge-tb #tabs{top:calc(54px + env(safe-area-inset-top) + 32px)!important}"+
+  "html.edge-tb #app{padding-top:calc(100px + env(safe-area-inset-top) + 32px)!important}"+
+  "html.edge-tb.edge-detached #app{padding-top:32px!important}"+
+  "@media(prefers-reduced-motion:reduce){#edge-tb .tb-trk{animation:none}}";
+  var st=document.createElement("style");st.textContent=css;(document.head||document.documentElement).appendChild(st);
+  function build(){
+    if(document.getElementById("edge-tb")) return;
+    var q=new URLSearchParams(location.search),sub="";
+    if(q.get("detached")==="1")sub=(q.get("tab")||"").toUpperCase();
+    var bar=document.createElement("div");bar.id="edge-tb";
+    bar.innerHTML='<div class="tb-l"><span class="tb-logo">EDGE</span>'+(sub?'<span class="tb-sub">'+sub+'</span>':'')+'</div>'+
+      '<div class="tb-mid"><div class="tb-trk">'+track()+'</div></div>'+
+      '<div class="tb-btns"><div class="tb-b" data-a="min" title="Minimize"><svg viewBox="0 0 11 11"><path d="M0 5.5H11"/></svg></div>'+
+      '<div class="tb-b" data-a="max" title="Maximize"><svg viewBox="0 0 11 11"><rect x=".6" y=".6" width="9.8" height="9.8"/></svg></div>'+
+      '<div class="tb-b x" data-a="close" title="Close"><svg viewBox="0 0 11 11"><path d="M0 0L11 11M11 0L0 11"/></svg></div></div>';
+    document.body.appendChild(bar);
+    var maxB=bar.querySelector('[data-a="max"]');
+    function paintMax(){inv("is_maximized").then(function(m){maxB.innerHTML=m?'<svg viewBox="0 0 11 11"><rect x=".6" y="2.4" width="8" height="8"/><path d="M2.6 2.4V.6H10.4V8.4H8.6"/></svg>':'<svg viewBox="0 0 11 11"><rect x=".6" y=".6" width="9.8" height="9.8"/></svg>';}).catch(function(){});}
+    bar.addEventListener("mousedown",function(e){
+      if(e.button!==0)return;
+      var b=e.target.closest&&e.target.closest(".tb-b");
+      if(b)return;
+      if(e.detail===2){inv("toggle_maximize").then(paintMax);return;}
+      inv("start_dragging").catch(function(){});
+    });
+    bar.addEventListener("click",function(e){
+      var b=e.target.closest&&e.target.closest(".tb-b");if(!b)return;
+      var a=b.getAttribute("data-a");
+      if(a==="min")inv("minimize");
+      else if(a==="max")inv("toggle_maximize").then(function(){setTimeout(paintMax,150);});
+      else if(a==="close")inv("close");
+    });
+    window.addEventListener("resize",function(){clearTimeout(bar._t);bar._t=setTimeout(paintMax,150);});
+    paintMax();
+  }
+  if(document.body)build();else document.addEventListener("DOMContentLoaded",build);
+})();
+
 var _edgeQ=new URLSearchParams(location.search);window._edgeDetached=_edgeQ.get("detached")==="1";window._edgeDesktop=!!(window.__EDGE_DESKTOP||window.__TAURI_INTERNALS__||window.__TAURI__);if(window._edgeDetached)document.documentElement.classList.add("edge-detached");
 var _isLocal=window.location.protocol==="file:";function ss(k,v){if(window._edgeDetached)return;try{if(k==="trades"&&!_loadingFromCloud) _stampTrades(v);localStorage.setItem("edge_"+k,JSON.stringify(v));if(window._syncToCloud&&!_isLocal) window._syncToCloud();}catch(e){updateSyncStatus("error");var warn=document.getElementById("storage-warn");if(!warn){warn=document.createElement("div");warn.id="storage-warn";warn.style.cssText="position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff444420;border:1px solid #ff4444;color:#ff4444;font-family:monospace;font-size:11px;padding:8px 16px;border-radius:4px;z-index:9999;letter-spacing:1px;";warn.textContent="⚠ LOCAL STORAGE FULL — DATA NOT SAVED. Clear browser data or export trades.";document.body.appendChild(warn);}}}
 
