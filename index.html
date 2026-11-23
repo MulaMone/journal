@@ -6800,11 +6800,13 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
     }
     ts.subscribeVisibleLogicalRangeChange(onChange);
     // Shared crosshair
-    var hover=false,xhMute=0,xhPend=null,xhRaf=0,xhOn=false;
-    chartDiv.addEventListener("mouseenter",function(){hover=true;},{passive:true});
-    chartDiv.addEventListener("mouseleave",function(){hover=false;xhPend=null;if(xhOn){xhOn=false;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xhc"});}catch(e){}}},{passive:true});
+    var hover=false,lastLocal=0,xhMute=0,xhPend=null,xhRaf=0,xhOn=false;
+    
+    chartDiv.addEventListener("mouseleave",function(){hover=false;xhPend=null;lastLocal=0;if(xhOn){xhOn=false;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xhc"});}catch(e){}}},{passive:true});
     chart.subscribeCrosshairMove(function(p){
-      if(!hover||!alive()||!linkOn()||Date.now()<xhMute||!p||!p.point||p.time==null) return;
+      if(!alive()||!linkOn()||Date.now()<xhMute||!p||!p.point) return;
+      hover=true;lastLocal=Date.now(); // a real pointer move on THIS chart (our own setCrosshairPosition calls are muted above)
+      if(p.time==null) return;
       var S=getS&&getS(),pr=null;try{if(S)pr=S.coordinateToPrice(p.point.y);}catch(e){}
       xhPend={time:p.time,price:pr};
       if(xhRaf) return;
@@ -6817,14 +6819,14 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
       if(m.t==="xh"){
-        if(hover||!getS||typeof m.time!=="number") return;
+        if(Date.now()-lastLocal<250||!getS||typeof m.time!=="number") return;
         var S2=getS(),c2=getC();if(!S2||!c2.length) return;
-        var lg2=tl(m.time);if(lg2==null||lg2<0||lg2>c2.length-1) return;
-        var px=(m.sym===sym&&typeof m.price==="number")?m.price:c2[Math.round(lg2)].close;
-        xhMute=Date.now()+60;try{chart.setCrosshairPosition(px,m.time,S2);}catch(e){}
+        var tt=m.time,i0=0,i1=c2.length-1;if(tt<c2[0].time||tt>c2[i1].time+per) return;while(i1-i0>1){var md=(i0+i1)>>1;if(c2[md].time<=tt) i0=md;else i1=md;}var bt=(c2[i1].time<=tt)?c2[i1].time:c2[i0].time; // snap to the bar that contains that moment (the other window may be on another timeframe)
+        var px=(typeof m.price==="number")?m.price:c2[i0].close;
+        xhMute=Date.now()+80;try{chart.setCrosshairPosition(px,bt,S2);}catch(e){}
         return;
       }
-      if(m.t==="xhc"){if(hover) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
+      if(m.t==="xhc"){if(Date.now()-lastLocal<250) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
       if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       window._edgeLinkLast={g:grp(),from:m.from,to:m.to};var r0=cur();
