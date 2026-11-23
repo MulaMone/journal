@@ -6807,12 +6807,13 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
     function xhSend(){xhTrail=0;if(!xhPend||!alive()||!linkOn()) return;xhLast=Date.now();xhOn=true;window._edgeXhLast={time:xhPend.time,price:xhPend.price,sym:sym,at:xhLast};try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;}
     chart.subscribeCrosshairMove(function(p){
       // only a real pointer move on THIS chart counts (sourceEvent): our own setCrosshairPosition() calls carry none, so they can never echo back or block the next incoming position
-      if(!p||!p.sourceEvent||!p.point||!alive()||!linkOn()) return;
+      if(!p||!p.sourceEvent||!p.point||!alive()||!linkOn()||window._xhairOff) return;
       hover=true;lastLocal=Date.now();
       if(_chartLive&&_chartLive.xhHide&&_chartLive.chart===chart) _chartLive.xhHide(); // this chart is being hovered itself: drop the linked overlay
-      if(p.time==null) return;
+      var pt=p.time;if(pt==null&&typeof p.logical==="number") pt=lt(p.logical); // empty space right of the last candle has no bar time: use the extrapolated one, like the native crosshair
+      if(pt==null) return;
       var S=getS&&getS(),pr=null;try{if(S)pr=S.coordinateToPrice(p.point.y);}catch(e){}
-      xhPend={time:p.time,price:pr};
+      xhPend={time:pt,price:pr};
       var dt=Date.now()-xhLast;
       if(dt>=6) xhSend(); else if(!xhTrail) xhTrail=setTimeout(xhSend,6-dt); // send straight away (no frame wait), at most every ~6 ms, latest position always goes out
     });
@@ -9649,7 +9650,6 @@ function chartTab(){
         _chartLive.xhHide=function(){xhLbl.style.display="none";lkV.style.display="none";lkH.style.display="none";lkT.style.display="none";};
         _chartLive.xhLink=function(time,lg,pr){
           try{
-            if(window._xhairOff){_chartLive.xhHide();return;}
             var ts=chart.timeScale(),pw=ts.width(),ph=chartDiv.clientHeight-ts.height();
             var x=ts.logicalToCoordinate(lg);
             if(x==null||x<0||x>pw){lkV.style.display="none";lkT.style.display="none";}
