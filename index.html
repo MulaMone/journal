@@ -6761,7 +6761,7 @@ function edgeLinkVis(){var b=window._edgeLkBtn;if(!b)return;b.style.display=(win
 var _edgeLinkBC=null,_edgeLinkId=Math.random().toString(36).slice(2),_edgeLinkCur=null;
 // Linked charts (desktop app): zoom/scroll in one chart window is mirrored to the others by visible TIME range.
 function edgeLinkRecenter(){try{if(_edgeLinkCur&&_edgeLinkBC&&State.chart_link){_edgeLinkCur.mute(900);_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"recenter"});}}catch(e){_dbg(e);}}
-function edgeChartLink(chart,chartDiv,per,getC){
+function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
   if(!(window._edgeDesktop||window._edgeDetached)||typeof BroadcastChannel==="undefined") return;
   try{
     if(!_edgeLinkBC){
@@ -6799,12 +6799,32 @@ function edgeChartLink(chart,chartDiv,per,getC){
       timer=setTimeout(function(){timer=0;if(pend&&alive()&&linkOn()&&Date.now()>=muteUntil)send(pend);pend=null;},40);
     }
     ts.subscribeVisibleLogicalRangeChange(onChange);
+    // Shared crosshair
+    var hover=false,xhMute=0,xhPend=null,xhRaf=0,xhOn=false;
+    chartDiv.addEventListener("mouseenter",function(){hover=true;},{passive:true});
+    chartDiv.addEventListener("mouseleave",function(){hover=false;xhPend=null;if(xhOn){xhOn=false;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xhc"});}catch(e){}}},{passive:true});
+    chart.subscribeCrosshairMove(function(p){
+      if(!hover||!alive()||!linkOn()||Date.now()<xhMute||!p||!p.point||p.time==null) return;
+      var S=getS&&getS(),pr=null;try{if(S)pr=S.coordinateToPrice(p.point.y);}catch(e){}
+      xhPend={time:p.time,price:pr};
+      if(xhRaf) return;
+      xhRaf=requestAnimationFrame(function(){xhRaf=0;if(!xhPend||!hover||!alive()||!linkOn()) return;xhOn=true;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;});
+    });
     var applyTok=0,tail=0;function flush(){if(tail)clearTimeout(tail);tail=setTimeout(function(){tail=0;if(!alive()||!linkOn()||Date.now()<muteUntil)return;var r=cur();if(ok(r)){pend=null;send(r);}},180);}
     ["wheel","touchend","touchcancel"].forEach(function(ev){chartDiv.addEventListener(ev,flush,{passive:true,capture:true});});
     document.addEventListener("mouseup",function(){flush();},{passive:true});
     _edgeLinkCur={recv:function(m){
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
+      if(m.t==="xh"){
+        if(hover||!getS||typeof m.time!=="number") return;
+        var S2=getS(),c2=getC();if(!S2||!c2.length) return;
+        var lg2=tl(m.time);if(lg2==null||lg2<0||lg2>c2.length-1) return;
+        var px=(m.sym===sym&&typeof m.price==="number")?m.price:c2[Math.round(lg2)].close;
+        xhMute=Date.now()+60;try{chart.setCrosshairPosition(px,m.time,S2);}catch(e){}
+        return;
+      }
+      if(m.t==="xhc"){if(hover) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
       if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       var r0=cur();
@@ -6813,7 +6833,8 @@ function edgeChartLink(chart,chartDiv,per,getC){
       _chartLive.moved=true;_chartKeepView=null;
       try{var lf=tl(m.from),lto=tl(m.to);if(lf!=null&&lto!=null&&lto>lf){ts.setVisibleLogicalRange({from:lf,to:lto});var tok=++applyTok;setTimeout(function(){try{if(tok!==applyTok||!alive())return;var q=ts.getVisibleLogicalRange();if(q&&(Math.abs(q.from-lf)>0.6||Math.abs(q.to-lto)>0.6)){muteUntil=Date.now()+400;ts.setVisibleLogicalRange({from:lf,to:lto});}}catch(e){_dbg(e);}},120);}}catch(e){_dbg(e);}
     },mute:function(ms){muteUntil=Date.now()+ms;},cur:cur};
-    if(window._edgeDetached&&linkOn()) _edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});
+    if(!linkOn()) window._edgeHelloG=null;
+    else if(window._edgeDetached&&window._edgeHelloG!==grp()){window._edgeHelloG=grp();_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});} // once per link group, not on every chart rebuild
     if(window._edgeDetached&&!_edgeAlive){
       _edgeAlive=setInterval(function(){try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}},2000);
       try{_edgeLinkBC.postMessage({id:_edgeLinkId,t:"alive"});}catch(e){}
@@ -7755,7 +7776,7 @@ function chartTab(){
       ["wheel","mousedown","touchstart"].forEach(function(ev){
         chartDiv.addEventListener(ev,function(){if(_chartLive&&_chartLive.chart===chart){_chartLive.moved=true;_chartKeepView=null;}},{passive:true,capture:true});
       });
-      edgeChartLink(chart,chartDiv,periodSec,function(){return candles;});
+      edgeChartLink(chart,chartDiv,periodSec,function(){return candles;},sym,function(){return series;});
 
       var series=chart.addCandlestickSeries({
         upColor:"#00e676",downColor:"#ff4444",
