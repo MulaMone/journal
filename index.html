@@ -6809,6 +6809,7 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
       // only a real pointer move on THIS chart counts (sourceEvent): our own setCrosshairPosition() calls carry none, so they can never echo back or block the next incoming position
       if(!p||!p.sourceEvent||!p.point||!alive()||!linkOn()) return;
       hover=true;lastLocal=Date.now();
+      if(_chartLive&&_chartLive.xhHide&&_chartLive.chart===chart) _chartLive.xhHide(); // this chart is being hovered itself: drop the linked overlay
       if(p.time==null) return;
       var S=getS&&getS(),pr=null;try{if(S)pr=S.coordinateToPrice(p.point.y);}catch(e){}
       xhPend={time:p.time,price:pr};
@@ -6823,10 +6824,9 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
       if(m.t==="xh"){
         if(Date.now()-lastLocal<120||!getS||typeof m.time!=="number") return;
-        var S2=getS(),c2=getC();if(!S2||!c2.length) return;
-        var tt=m.time,i0=0,i1=c2.length-1;if(tt<c2[0].time||tt>c2[i1].time+per) return;while(i1-i0>1){var md=(i0+i1)>>1;if(c2[md].time<=tt) i0=md;else i1=md;}var bt=(c2[i1].time<=tt)?c2[i1].time:c2[i0].time; // snap to the bar that contains that moment (the other window may be on another timeframe)
-        var px=(typeof m.price==="number")?m.price:c2[i0].close;
-        xhMute=Date.now()+80;try{chart.setCrosshairPosition(px,bt,S2);if(_chartLive.xhShow) _chartLive.xhShow(px);}catch(e){}
+        var c2=getC();if(!c2.length||!_chartLive||!_chartLive.xhLink) return;
+        var lg2=tl(m.time);if(lg2==null) return;
+        _chartLive.xhLink(m.time,lg2,(typeof m.price==="number")?m.price:null);
         return;
       }
       if(m.t==="xhoff"){
@@ -9639,7 +9639,29 @@ function chartTab(){
           try{var y=series.coordinateToPrice?series.priceToCoordinate(pr):null;if(y==null||y<0||y>chartDiv.clientHeight-30||window._xhairOff){xhLbl.style.display="none";return;}
             xhLbl.textContent=fmtPx(pr);var w=chart.priceScale("right").width();if(w) xhLbl.style.width=w+"px";xhLbl.style.top=y+"px";xhLbl.style.display="";}catch(e){}
         };
-        _chartLive.xhHide=function(){xhLbl.style.display="none";};
+        // Linked crosshair drawn by us (not setCrosshairPosition): the library can only snap to a candle of THIS chart, so a 30m chart
+        // moved in 30-minute steps while the 5m chart was smooth. Here the line sits at the exact moment, so both move together.
+        var lkV=div(),lkH=div(),lkT=div();
+        lkV.style.cssText="position:absolute;top:0;left:0;width:0;border-left:1px dashed rgba(165,176,200,.65);display:none;pointer-events:none;z-index:7;";
+        lkH.style.cssText="position:absolute;left:0;top:0;height:0;border-top:1px dashed rgba(165,176,200,.65);display:none;pointer-events:none;z-index:7;";
+        lkT.style.cssText="position:absolute;top:0;left:0;display:none;transform:translateX(-50%);border-radius:2px;padding:2px 6px;font-size:12px;font-weight:700;color:#fff;background:#4c525e;font-family:'Courier New',monospace;white-space:nowrap;pointer-events:none;z-index:8;line-height:1.3;";
+        chartDiv.appendChild(lkV);chartDiv.appendChild(lkH);chartDiv.appendChild(lkT);
+        _chartLive.xhHide=function(){xhLbl.style.display="none";lkV.style.display="none";lkH.style.display="none";lkT.style.display="none";};
+        _chartLive.xhLink=function(time,lg,pr){
+          try{
+            if(window._xhairOff){_chartLive.xhHide();return;}
+            var ts=chart.timeScale(),pw=ts.width(),ph=chartDiv.clientHeight-ts.height();
+            var x=ts.logicalToCoordinate(lg);
+            if(x==null||x<0||x>pw){lkV.style.display="none";lkT.style.display="none";}
+            else{lkV.style.left=Math.round(x)+"px";lkV.style.height=ph+"px";lkV.style.display="";
+              lkT.textContent=fmtXhairTime(time);lkT.style.display="";lkT.style.top=ph+"px";
+              var tw=lkT.offsetWidth/2;lkT.style.left=Math.max(tw,Math.min(pw-tw,Math.round(x)))+"px";}
+            var y=(typeof pr==="number")?series.priceToCoordinate(pr):null;
+            if(y==null||y<0||y>ph){lkH.style.display="none";xhLbl.style.display="none";}
+            else{lkH.style.top=Math.round(y)+"px";lkH.style.width=pw+"px";lkH.style.display="";
+              xhLbl.textContent=fmtPx(pr);var w=chart.priceScale("right").width();if(w) xhLbl.style.width=w+"px";xhLbl.style.top=y+"px";xhLbl.style.display="";}
+          }catch(e){}
+        };
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
         var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
         // The shown crosshair is kept at a fixed SPOT ON THE SCREEN (like the mouse crosshair on desktop),
