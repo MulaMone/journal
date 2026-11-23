@@ -6760,7 +6760,7 @@ function edgePeerCount(){var n=0,now=Date.now();for(var k in _edgePeers){if(now-
 function edgeLinkVis(){var b=window._edgeLkBtn;if(!b)return;b.style.display=(window._edgeDetached||edgePeerCount()>0)?"":"none";}
 var _edgeLinkBC=null,_edgeLinkId=Math.random().toString(36).slice(2),_edgeLinkCur=null;
 // Linked charts (desktop app): zoom/scroll in one chart window is mirrored to the others by visible TIME range.
-function edgeLinkRecenter(){try{if(_edgeLinkCur&&_edgeLinkBC&&State.chart_link){_edgeLinkCur.mute(900);_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"recenter"});}}catch(e){_dbg(e);}}
+function edgeLinkRecenter(){window._edgeLinkLast=null;try{if(_edgeLinkCur&&_edgeLinkBC&&State.chart_link){_edgeLinkCur.mute(900);_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"recenter"});}}catch(e){_dbg(e);}}
 function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
   if(!(window._edgeDesktop||window._edgeDetached)||typeof BroadcastChannel==="undefined") return;
   try{
@@ -6846,6 +6846,17 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
         try{ts.setVisibleLogicalRange({from:lf,to:lto});}catch(e){}
       },d);});
     }
+    // Watchdog: whatever resets the view (live refresh, retry, re-anchor...), a linked chart that nobody is touching goes back to the shared range
+    chartDiv.addEventListener("click",function(){touch(1500);},{passive:true,capture:true}); // + / - buttons, recenter
+    var wd=setInterval(function(){
+      if(!alive()){clearInterval(wd);return;}
+      var L=window._edgeLinkLast;
+      if(!linkOn()||!L||L.g!==grp()||Date.now()<userUntil+150||Date.now()<muteUntil) return;
+      var lf=tl(L.from),lto=tl(L.to);if(lf==null||lto==null||!(lto>lf)) return;
+      var q=ts.getVisibleLogicalRange();if(!q||(Math.abs(q.from-lf)<0.6&&Math.abs(q.to-lto)<0.6)) return;
+      muteUntil=Date.now()+400;_chartLive.moved=true;_chartKeepView=null;
+      try{ts.setVisibleLogicalRange({from:lf,to:lto});}catch(e){}
+    },200);
     if(!linkOn()) window._edgeHelloG=null;
     else if(window._edgeDetached&&window._edgeHelloG!==grp()){window._edgeHelloG=grp();_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"hello"});} // once per link group, not on every chart rebuild
     if(window._edgeDetached&&!_edgeAlive){
