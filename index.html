@@ -6826,14 +6826,14 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
         var S2=getS(),c2=getC();if(!S2||!c2.length) return;
         var tt=m.time,i0=0,i1=c2.length-1;if(tt<c2[0].time||tt>c2[i1].time+per) return;while(i1-i0>1){var md=(i0+i1)>>1;if(c2[md].time<=tt) i0=md;else i1=md;}var bt=(c2[i1].time<=tt)?c2[i1].time:c2[i0].time; // snap to the bar that contains that moment (the other window may be on another timeframe)
         var px=(typeof m.price==="number")?m.price:c2[i0].close;
-        xhMute=Date.now()+80;try{chart.setCrosshairPosition(px,bt,S2);}catch(e){}
+        xhMute=Date.now()+80;try{chart.setCrosshairPosition(px,bt,S2);if(_chartLive.xhShow) _chartLive.xhShow(px);}catch(e){}
         return;
       }
       if(m.t==="xhoff"){
-        if(!!window._xhairOff!==!!m.off){window._xhairOff=!!m.off;try{if(_chartLive.setXhair) _chartLive.setXhair(!m.off);if(m.off) chart.clearCrosshairPosition();}catch(e){}}
+        if(!!window._xhairOff!==!!m.off){window._xhairOff=!!m.off;try{if(_chartLive.setXhair) _chartLive.setXhair(!m.off);if(m.off){chart.clearCrosshairPosition();if(_chartLive.xhHide) _chartLive.xhHide();}}catch(e){}}
         return;
       }
-      if(m.t==="xhc"){if(Date.now()-lastLocal<120) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
+      if(m.t==="xhc"){if(Date.now()-lastLocal<120) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();if(_chartLive.xhHide) _chartLive.xhHide();}catch(e){}return;}
       if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       window._edgeLinkLast={g:grp(),from:m.from,to:m.to};var r0=cur();
@@ -9635,6 +9635,11 @@ function chartTab(){
         });
         if(window._xhairOff) setXhair(false);
         _chartLive.setXhair=setXhair;
+        _chartLive.xhShow=function(pr){ // linked chart: put the price tag where the other window's pointer is (the library fires no move event for setCrosshairPosition)
+          try{var y=series.coordinateToPrice?series.priceToCoordinate(pr):null;if(y==null||y<0||y>chartDiv.clientHeight-30||window._xhairOff){xhLbl.style.display="none";return;}
+            xhLbl.textContent=fmtPx(pr);var w=chart.priceScale("right").width();if(w) xhLbl.style.width=w+"px";xhLbl.style.top=y+"px";xhLbl.style.display="";}catch(e){}
+        };
+        _chartLive.xhHide=function(){xhLbl.style.display="none";};
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
         var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
         // The shown crosshair is kept at a fixed SPOT ON THE SCREEN (like the mouse crosshair on desktop),
