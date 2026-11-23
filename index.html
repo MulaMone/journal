@@ -6803,14 +6803,17 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
     var hover=false,lastLocal=0,xhMute=0,xhPend=null,xhRaf=0,xhOn=false;
     
     chartDiv.addEventListener("mouseleave",function(){hover=false;xhPend=null;lastLocal=0;if(xhOn){xhOn=false;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xhc"});}catch(e){}}},{passive:true});
+    var xhLast=0,xhTrail=0;
+    function xhSend(){xhTrail=0;if(!xhPend||!alive()||!linkOn()) return;xhLast=Date.now();xhOn=true;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;}
     chart.subscribeCrosshairMove(function(p){
-      if(!alive()||!linkOn()||Date.now()<xhMute||!p||!p.point) return;
-      hover=true;lastLocal=Date.now(); // a real pointer move on THIS chart (our own setCrosshairPosition calls are muted above)
+      // only a real pointer move on THIS chart counts (sourceEvent): our own setCrosshairPosition() calls carry none, so they can never echo back or block the next incoming position
+      if(!p||!p.sourceEvent||!p.point||!alive()||!linkOn()) return;
+      hover=true;lastLocal=Date.now();
       if(p.time==null) return;
       var S=getS&&getS(),pr=null;try{if(S)pr=S.coordinateToPrice(p.point.y);}catch(e){}
       xhPend={time:p.time,price:pr};
-      if(xhRaf) return;
-      xhRaf=requestAnimationFrame(function(){xhRaf=0;if(!xhPend||!hover||!alive()||!linkOn()) return;xhOn=true;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;});
+      var dt=Date.now()-xhLast;
+      if(dt>=6) xhSend(); else if(!xhTrail) xhTrail=setTimeout(xhSend,6-dt); // send straight away (no frame wait), at most every ~6 ms, latest position always goes out
     });
     var applyTok=0,tail=0;function flush(){if(tail)clearTimeout(tail);tail=setTimeout(function(){tail=0;if(!alive()||!linkOn()||Date.now()<muteUntil)return;var r=cur();if(ok(r)){pend=null;send(r);}},180);}
     ["wheel","touchend","touchcancel"].forEach(function(ev){chartDiv.addEventListener(ev,flush,{passive:true,capture:true});});
@@ -6819,14 +6822,18 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
       if(!m||m.id===_edgeLinkId||!alive()||!linkOn()||m.g!==grp()) return;
       if(m.t==="hello"){var h=cur();if(ok(h)) send(h);return;}
       if(m.t==="xh"){
-        if(Date.now()-lastLocal<250||!getS||typeof m.time!=="number") return;
+        if(Date.now()-lastLocal<120||!getS||typeof m.time!=="number") return;
         var S2=getS(),c2=getC();if(!S2||!c2.length) return;
         var tt=m.time,i0=0,i1=c2.length-1;if(tt<c2[0].time||tt>c2[i1].time+per) return;while(i1-i0>1){var md=(i0+i1)>>1;if(c2[md].time<=tt) i0=md;else i1=md;}var bt=(c2[i1].time<=tt)?c2[i1].time:c2[i0].time; // snap to the bar that contains that moment (the other window may be on another timeframe)
         var px=(typeof m.price==="number")?m.price:c2[i0].close;
         xhMute=Date.now()+80;try{chart.setCrosshairPosition(px,bt,S2);}catch(e){}
         return;
       }
-      if(m.t==="xhc"){if(Date.now()-lastLocal<250) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
+      if(m.t==="xhoff"){
+        if(!!window._xhairOff!==!!m.off){window._xhairOff=!!m.off;try{if(_chartLive.setXhair) _chartLive.setXhair(!m.off);if(m.off) chart.clearCrosshairPosition();}catch(e){}}
+        return;
+      }
+      if(m.t==="xhc"){if(Date.now()-lastLocal<120) return;xhMute=Date.now()+60;try{chart.clearCrosshairPosition();}catch(e){}return;}
       if(m.t==="recenter"){muteUntil=Date.now()+900;if(_chartLive&&_chartLive.recenter)_chartLive.recenter();return;}
       if(m.t!=="range"||typeof m.from!=="number"||typeof m.to!=="number") return;
       window._edgeLinkLast={g:grp(),from:m.from,to:m.to};var r0=cur();
@@ -9627,6 +9634,7 @@ function chartTab(){
           xhLbl.style.display="";
         });
         if(window._xhairOff) setXhair(false);
+        _chartLive.setXhair=setXhair;
         var pin=null,trackStart=null,lastTrack=null,tracked=false;
         var dn=null,lastTap=0,down=0,multi=false,touching=false,raf=0,fx=0,fy=0;
         // The shown crosshair is kept at a fixed SPOT ON THE SCREEN (like the mouse crosshair on desktop),
@@ -9654,6 +9662,7 @@ function chartTab(){
         }
         function flipLines(){
           window._xhairOff=!window._xhairOff;
+          try{if(State.chart_link&&_edgeLinkBC) _edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"xhoff",off:!!window._xhairOff});}catch(e){} // linked windows turn the crosshair lines on/off together
           requestAnimationFrame(function(){
             setXhair(!window._xhairOff);
             if(window._xhairOff){try{chart.clearCrosshairPosition();}catch(e){_dbg(e);}}
