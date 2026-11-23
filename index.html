@@ -6804,7 +6804,7 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
     
     chartDiv.addEventListener("mouseleave",function(){hover=false;xhPend=null;lastLocal=0;if(xhOn){xhOn=false;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xhc"});}catch(e){}}},{passive:true});
     var xhLast=0,xhTrail=0;
-    function xhSend(){xhTrail=0;if(!xhPend||!alive()||!linkOn()) return;xhLast=Date.now();xhOn=true;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;}
+    function xhSend(){xhTrail=0;if(!xhPend||!alive()||!linkOn()) return;xhLast=Date.now();xhOn=true;window._edgeXhLast={time:xhPend.time,price:xhPend.price,sym:sym,at:xhLast};try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:grp(),t:"xh",time:xhPend.time,price:xhPend.price,sym:sym});}catch(e){}xhPend=null;}
     chart.subscribeCrosshairMove(function(p){
       // only a real pointer move on THIS chart counts (sourceEvent): our own setCrosshairPosition() calls carry none, so they can never echo back or block the next incoming position
       if(!p||!p.sourceEvent||!p.point||!alive()||!linkOn()) return;
@@ -9665,6 +9665,7 @@ function chartTab(){
           try{if(State.chart_link&&_edgeLinkBC) _edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"xhoff",off:!!window._xhairOff});}catch(e){} // linked windows turn the crosshair lines on/off together
           requestAnimationFrame(function(){
             setXhair(!window._xhairOff);
+            if(!window._xhairOff&&State.chart_link&&window._edgeXhLast&&Date.now()-window._edgeXhLast.at<5000){var X=window._edgeXhLast;try{_edgeLinkBC.postMessage({id:_edgeLinkId,g:State.chart_link,t:"xh",time:X.time,price:X.price,sym:X.sym});}catch(e){}} // lines back on: show the other chart's crosshair at the pointer now, no mouse move needed
             if(window._xhairOff){try{chart.clearCrosshairPosition();}catch(e){_dbg(e);}}
           });
         }
