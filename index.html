@@ -8225,7 +8225,7 @@ function chartTab(){
                   else if(z.up&&z.hi<z.hi0){bT=yT;bB=series.priceToCoordinate(z.hi);edge=bB;}
                   else if(!z.up&&z.lo>z.lo0){bT=series.priceToCoordinate(z.lo);bB=yB;edge=bT;}
                   if(bT!=null&&bB!=null){
-                    ctx.fillStyle="#8b9cff";ctx.globalAlpha=0.45;ctx.fillRect(x0,bT,x1-x0,bB-bT);
+                    ctx.fillStyle="#8b9cff";ctx.globalAlpha=0.2;ctx.fillRect(x0,bT,x1-x0,bB-bT);
                     if(edge!=null){ctx.globalAlpha=0.9;ctx.fillRect(x0,edge-(z.up?1:0),x1-x0,1);}
                   }
                   ctx.fillStyle="#ff7a1a";ctx.globalAlpha=0.85;
