@@ -1,11 +1,43 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{webview::NewWindowResponse, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 static CHILD_COUNT: AtomicUsize = AtomicUsize::new(0);
 const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true; window.__EDGE_TB = true;";
+
+/// Only letters/digits, so nothing odd can reach the child's command line.
+fn clean(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphanumeric()).take(8).collect()
+}
+
+/// The GPU chart button opens ?native=chart&sym=..&tf=..#t=<token>. Start edge-chart.exe (next to this exe),
+/// hand it the saved OANDA token through its environment, and report whether it started.
+/// The token only travels inside this app: the URL is never navigated to, and the fragment is never sent anywhere.
+fn launch_native_chart(url: &Url) -> bool {
+    let (mut sym, mut tf) = ("NQ".to_string(), "5m".to_string());
+    for (k, v) in url.query_pairs() {
+        match k.as_ref() {
+            "sym" => sym = clean(&v),
+            "tf" => tf = clean(&v),
+            _ => {}
+        }
+    }
+    let tok = url.fragment().and_then(|f| f.strip_prefix("t=")).unwrap_or("").to_string();
+    let exe = match std::env::current_exe() {
+        Ok(p) => p.with_file_name("edge-chart.exe"),
+        Err(_) => return false,
+    };
+    if !exe.exists() {
+        return false;
+    }
+    std::process::Command::new(exe)
+        .args(["--sym", &sym, "--tf", &tf])
+        .env("EDGE_OANDA_TOKEN", tok)
+        .spawn()
+        .is_ok()
+}
 
 fn main() {
     tauri::Builder::default()
@@ -31,6 +63,17 @@ fn main() {
                 // target="_blank", window.open(), Detach and New chart open in their own EDGE window
                 .on_new_window(move |url, _features| {
                     let h = handle.clone();
+                    let mut url = url;
+                    // GPU chart button: start the native chart program. If it isn't installed next to this exe,
+                    // fall back to the normal web chart window so the button is never dead.
+                    if url.query().map_or(false, |q| q.contains("native=chart")) {
+                        if launch_native_chart(&url) {
+                            return NewWindowResponse::Deny;
+                        }
+                        let q = url.query().unwrap_or("").replace("native=chart", "detached=1&tab=chart");
+                        url.set_query(Some(&q));
+                        url.set_fragment(None);
+                    }
                     let (title, w, ht) = match url.query() {
                         Some(q) if q.contains("detached=1") && q.contains("tab=news") => {
                             ("EDGE — News", 760.0, 920.0)
