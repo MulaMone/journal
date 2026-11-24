@@ -398,6 +398,9 @@ body.m-chart-full #content>div{padding:0 3px!important}
 body.m-chart-full #content>div>.rjb{padding:6px 10px 4px!important;margin:0!important;flex-wrap:nowrap!important;align-items:center}
 body.m-chart-full #chart-canvas-anchor{border:1px solid var(--border2)!important;border-radius:4px!important;box-shadow:none!important;scroll-margin-top:0!important}
 }
+body.d-chart #content{padding:6px 12px!important}
+body.d-chart #content>div{padding:0!important}
+body.d-chart #content>div>.rjb{margin-bottom:8px!important}
 @media(max-width:480px){input,select,textarea{font-size:16px!important}}
 @media(display-mode:standalone),(display-mode:fullscreen){input,select,textarea{font-size:16px!important}}
 @media(max-width:380px){
@@ -7168,6 +7171,7 @@ function chartTab(){
   // desktop app and a taller/shorter browser window alike. The chart's
   // ResizeObserver handles the redraw.
   var tradeListEls=[];
+  var _ohlcEl=null; // OHLC readout element (created once candles load); desktop chart height reserves room for it
   var layoutTrades=function(tries){
     tradeListEls.forEach(function(x){x.style.display=showTrades?"":"none";});
     if(isMobile()){
@@ -7190,7 +7194,7 @@ function chartTab(){
       return;
     }
     var top=chartDiv.getBoundingClientRect().top+window.scrollY;
-    var _minH=window.innerHeight<800?260:500;chartDiv.style.minHeight=_minH+"px";chartDiv.style.height=Math.max(_minH,window.innerHeight-top-14)+"px";
+    var _minH=window.innerHeight<800?260:500;chartDiv.style.minHeight=_minH+"px";var _res=(_ohlcEl&&_ohlcEl.offsetHeight?_ohlcEl.offsetHeight:14)+6+6;chartDiv.style.height=Math.max(_minH,window.innerHeight-top-_res)+"px";
   };
   layoutTrades();
   var _lt=function(){if(!chartDiv.isConnected){window.removeEventListener("resize",_lt);return;}layoutTrades();};
@@ -9485,7 +9489,7 @@ function chartTab(){
         if(key===_ohlcKey) return;
         _ohlcKey=key;_ohlcHov=b;ohlcRender();
       });
-      if(useWheels){ctrlRow.style.marginLeft="0";hrow.insertBefore(lastEl,ctrlRow);}else el.appendChild(lastEl);
+      _ohlcEl=lastEl;if(useWheels){ctrlRow.style.marginLeft="0";hrow.insertBefore(lastEl,ctrlRow);}else{el.appendChild(lastEl);if(layoutTrades)layoutTrades();}
 
       // ── Price tag with countdown baked in, replacing the native price-scale
       // label (TradingView-style: price on top, time-to-close underneath,
@@ -16271,7 +16275,7 @@ function render(){
   _lastTypeAt=0;clearTimeout(_softTimer);
   renderTabs();
   renderTopbar();
-  document.body.classList.toggle("m-chart-full",isMobile()&&State.tab==="chart");if(State.tab!=="chart")document.body.classList.remove("m-chart-trades");
+  document.body.classList.toggle("m-chart-full",isMobile()&&State.tab==="chart");document.body.classList.toggle("d-chart",!isMobile()&&State.tab==="chart");if(State.tab!=="chart")document.body.classList.remove("m-chart-trades");
   var content=document.getElementById("content");
   closeMoreDrawer();
 
