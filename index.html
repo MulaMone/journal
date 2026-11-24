@@ -7905,8 +7905,8 @@ function chartTab(){
       // (NinjaTrader / Sierra let you set both). This plugin repaints each candle over the built-in one with a thicker
       // wick and a dark outline, on exact device pixels. The built-in candles stay underneath, so autoscale, the price
       // label, price lines and trade markers are untouched; if anything throws, the plain candles simply show.
-      // Edit CANDLE_STYLE to taste. wick/border are in CSS px (wick min 2 device px).
-      var CANDLE_STYLE={wick:1.6,border:1,
+      // Edit CANDLE_STYLE to taste. wick/border are in CSS px (wick min 1 device px).
+      var CANDLE_STYLE={wick:1,border:1,
         upFill:"#00e676",upLine:"#04361f",upWick:"#00e676",
         dnFill:"#ff4444",dnLine:"#4a0a0a",dnWick:"#ff4444"};
       try{(function(){
@@ -7945,7 +7945,7 @@ function chartTab(){
             }
             var bw=bodyW(bs,hpr);
             if(bw>=2&&(Math.floor(hpr)%2)!==(bw%2)) bw--; // the library's own parity rule
-            var ww=Math.max(2,Math.round(S.wick*hpr)),bw2=bw;
+            var ww=Math.max(1,Math.round(S.wick*hpr)),bw2=bw;
             if(bw2%2!==ww%2) bw2++; // body and wick share a parity so the wick is centred
             var bd=Math.max(1,Math.round(S.border*hpr));
             for(var i=i0;i<=i1;i++){
@@ -8606,7 +8606,7 @@ function chartTab(){
         ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
         ["1d","1w","1m"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X_LONG);});
       }
-      var DESK_ZOOM_X=0.75; // desktop / TV: open on fewer, wider candles (1 = the old count; phones unchanged). Edit to taste.
+      var DESK_ZOOM_X=0.45; // desktop / TV: open on fewer, wider candles (1 = the old count; phones unchanged). Edit to taste.
       if(!isMobile()) Object.keys(ZOOM_BARS).forEach(function(k){ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*DESK_ZOOM_X);});
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
