@@ -9890,6 +9890,7 @@ function chartTab(){
       // Builds the forming candle from live mid prices (bid+ask)/2 — same basis as price=M candles —
       // and pushes it with series.update(). The 15s poll below stays as fallback / gap repair.
       var liveBar={time:last.time,open:last.open,high:last.high,low:last.low,close:last.close};
+      var healAt=Date.now(); // last time the closed bars were reconciled with OANDA's own candles (see the live poll); 0 = due now
       // `candles` must follow the forming bar, so a CLOSED bar can later be corrected to the feed's final values and redrawn.
       function keepBar(b){var n=candles.length,l=n?candles[n-1]:null;if(!l) return;
         if(b.time>l.time){l.complete=true;candles.push({u:b.time+(l.u-l.time),time:b.time,open:b.open,high:b.high,low:b.low,close:b.close});}
@@ -9960,7 +9961,7 @@ function chartTab(){
       // ── Delta refresh after a cache paint: fetch only candles since the cached last one ──
       var deltaP=null;
       if(fromCache&&raw.length&&!monthlyFetch){ // monthly cache entries are merged / rolled up: never append raw candles to them
-        var _lastRaw=raw.length>1?raw[raw.length-2].time:raw[raw.length-1].time; // start one bar back: the just-closed bar may hold tick-built values from the cache
+        var _lastRaw=raw.length>31?raw[raw.length-31].time:raw[0].time; // start ~30 bars back: any bar the cache holds from this device's own ticks (missed while asleep/backgrounded) gets replaced with the feed's candle
         var dUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&from="+encodeURIComponent(new Date(_lastRaw).toISOString())+"&count=5000&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         deltaP=chartFetchJson(dUrl).then(function(dd){
           if(myLoadToken!==_chartLoadToken) return;
@@ -9970,7 +9971,7 @@ function chartTab(){
           fc.forEach(function(c){
             var cu=Math.floor(new Date(c.time).getTime()/1000),cs=cu-etOff(cu);
             if(cs<lastBarTime){ // an already-plotted closed bar: correct it in place to the feed's final values
-              for(var qi=candles.length-1;qi>=0&&qi>=candles.length-4;qi--){
+              for(var qi=candles.length-1;qi>=0&&qi>=candles.length-64;qi--){
                 var qb=candles[qi];
                 if(qb.time===cs){
                   var po=parseFloat(c.mid.o),ph=parseFloat(c.mid.h),pl=parseFloat(c.mid.l),pcl=parseFloat(c.mid.c);
@@ -10027,7 +10028,8 @@ function chartTab(){
           if(Date.now()-lastMsgAt<12000&&Date.now()-lastPollAt<30000) return; // stream healthy: poll only every 30s
           lastPollAt=Date.now();
         }
-        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:2)+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
+        var healNow=!monthlyFetch&&Date.now()-healAt>60000; // reconcile the recent closed bars with OANDA's candles about once a minute
+        var liveUrl=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&count="+(tf==="1y"?12:(healNow?40:2))+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
         chartFetchJson(liveUrl).catch(function(){return null;})
         .then(function(freshData){
           var freshCandles=(freshData&&freshData.candles)||[];
@@ -10062,6 +10064,37 @@ function chartTab(){
             }
             if(pfix){try{series.setData(candles);}catch(e){_dbg(e);}}
           }
+          if(healNow&&freshCandles.length>2){
+            // Closed bars built from this device's own ticks can be wrong (ticks missed while the phone slept / was backgrounded) and the
+            // 2-bar check above never reaches them once they are older. Overwrite any recent closed bar that differs from OANDA's
+            // candle, and insert any that are missing. Never touches the forming bar.
+            var hch=false,hmap={},hins=[];
+            for(var hi=Math.max(0,candles.length-80);hi<candles.length;hi++) hmap[candles[hi].time]=hi;
+            freshCandles.forEach(function(fc){
+              if(fc.complete===false||!fc.mid) return;
+              var hu=Math.floor(new Date(fc.time).getTime()/1000),ht=hu-etOff(hu);
+              if(ht>=lastBarTime||ht<=candles[0].time) return;
+              var ho=parseFloat(fc.mid.o),hh=parseFloat(fc.mid.h),hl=parseFloat(fc.mid.l),hc=parseFloat(fc.mid.c),hx=hmap[ht];
+              if(hx!==undefined){
+                var hb=candles[hx];
+                if(hb.open!==ho||hb.high!==hh||hb.low!==hl||hb.close!==hc){hb.open=ho;hb.high=hh;hb.low=hl;hb.close=hc;hch=true;}
+              } else {hmap[ht]=-1;hins.push({u:hu,time:ht,open:ho,high:hh,low:hl,close:hc,complete:true});}
+            });
+            if(hins.length){
+              hins.forEach(function(b){candles.push(b);});
+              candles.sort(function(a,b){return a.time-b.time;});
+              for(var di=candles.length-1;di>0;di--) if(candles[di].time<=candles[di-1].time) candles.splice(di-1,1); // keep times strictly ascending
+              hch=true;
+            }
+            if(hch){try{series.setData(candles);}catch(e){_dbg(e);}}
+            healAt=Date.now();
+            var hce=_chartCache[ckey];
+            if(hce&&hce.data&&hce.data.candles){ // same correction in the cache, so a later paint from it is already right
+              var hf0=freshCandles[0].time;
+              hce.data={candles:hce.data.candles.filter(function(x){return x.time<hf0;}).concat(freshCandles).slice(-5000)};
+              hce.t=Date.now();chartIdbPut(ckey,hce);
+            }
+          }
           ohlcRender();
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
@@ -10075,7 +10108,7 @@ function chartTab(){
       // Device wake / tab refocus: ticks missed while asleep leave the forming bar with a wrong open/high/low, and the stream may be dead.
       // Mark the stream stale and the poll due so the next 5s tick reconnects and replaces the bar with the feed's own candle.
       if(window._chartWake){document.removeEventListener("visibilitychange",window._chartWake);window.removeEventListener("pageshow",window._chartWake);window.removeEventListener("focus",window._chartWake);}
-      window._chartWake=function(){if(document.hidden||State.tab!=="chart"||myLoadToken!==_chartLoadToken) return;lastPollAt=0;lastMsgAt=1;};
+      window._chartWake=function(){if(document.hidden||State.tab!=="chart"||myLoadToken!==_chartLoadToken) return;lastPollAt=0;lastMsgAt=1;healAt=0;};
       document.addEventListener("visibilitychange",window._chartWake);window.addEventListener("pageshow",window._chartWake);window.addEventListener("focus",window._chartWake);
     })
     .catch(function(e){
