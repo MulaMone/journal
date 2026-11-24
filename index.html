@@ -8189,9 +8189,7 @@ function chartTab(){
             }
             all.push(z);
           }
-          var open=all.filter(function(z){return z.tEnd==null;});
-          var shut=all.filter(function(z){return z.tEnd!=null;}).sort(function(p,q){return p.tEnd-q.tEnd;}).slice(-5); // the 5 most recently filled
-          zones=open.concat(shut);
+          zones=all.filter(function(z){return z.tEnd==null;}); // fully filled gaps are dropped; partly filled ones stay (filled part in periwinkle)
         }
         function firstIdx(t){ // first chart candle with time >= t
           var lo=0,hi=candles.length-1,r=-1;
