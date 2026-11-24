@@ -7056,22 +7056,22 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
-  // HTF FVG (desktop, intraday mode only): open fair value gaps from a higher timeframe in amber. Timeframe chips 1H / 4H / D, default 4H. Both choices are remembered.
+  // HTF FVG (desktop, intraday mode only): open fair value gaps from a higher timeframe in orange. Timeframe chips 1H / 4H / D, default 4H. Both choices are remembered.
   var htfOn=intraday&&!eodOnly&&!useWheels,showHtf=htfOn&&State.chart_show_htf_fvg===true,htfTf=(["1H","4H","D"].indexOf(State.chart_htf_fvg_tf)>-1)?State.chart_htf_fvg_tf:"4H";
   var applyHtf=null,htfEnsure=null;
   if(htfOn){
     var htfBtn=h("button",{className:"btn"}),htfChips=div();
-    htfBtn.textContent="HTF FVG";
-    htfBtn.title="Show open higher-timeframe fair value gaps (amber)";
+    htfBtn.textContent="HTF";
+    htfBtn.title="Show open higher-timeframe fair value gaps (orange)";
     htfChips.style.cssText="display:flex;gap:4px;";
     var styleHtf=function(){
-      htfBtn.style.cssText="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(showHtf?"border-color:#ffbf00;color:#ffbf00;background:#ffbf0018;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+      htfBtn.style.cssText="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(showHtf?"border-color:#ff7a1a;color:#ff7a1a;background:#ff7a1a18;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
       htfChips.style.display=showHtf?"flex":"none";
     };
     ["1H","4H","D"].forEach(function(v){
       var cb=h("button",{className:"btn"});
       cb.textContent=v;
-      cb.style.cssText="padding:6px 9px;font-size:11px;font-weight:700;touch-action:manipulation;"+(v===htfTf?"border-color:#ffbf00;color:#040d1a;background:#ffbf00;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+      cb.style.cssText="padding:6px 9px;font-size:11px;font-weight:700;touch-action:manipulation;"+(v===htfTf?"border-color:#ff7a1a;color:#040d1a;background:#ff7a1a;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
       cb.addEventListener("click",function(){State.chart_htf_fvg_tf=v;render();});
       htfChips.appendChild(cb);
     });
@@ -8208,11 +8208,11 @@ function chartTab(){
                   var ci=firstIdx(z.t0),x0=ci<0?null:(ci===0&&z.t0<candles[0].time?0:ts.timeToCoordinate(candles[ci].time)),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
                   if(x0==null||y1==null||y2==null||x0>W) return;
                   x0=Math.max(x0,0);
-                  ctx.globalAlpha=0.2;ctx.fillStyle="#ffbf00";ctx.fillRect(x0,y1,W-x0,y2-y1);
+                  ctx.globalAlpha=0.2;ctx.fillStyle="#ff7a1a";ctx.fillRect(x0,y1,W-x0,y2-y1);
                   ctx.globalAlpha=0.8;ctx.fillRect(x0,y1,W-x0,1);ctx.fillRect(x0,y2-1,W-x0,1);
                   var tag=htfTf+" FVG",tw=ctx.measureText(tag).width,ty=(y1+y2)/2;
                   ctx.globalAlpha=1;ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(W-tw-8,ty-7,tw+6,14);
-                  ctx.fillStyle="#ffbf00";ctx.fillText(tag,W-tw-5,ty);
+                  ctx.fillStyle="#ff7a1a";ctx.fillText(tag,W-tw-5,ty);
                 });
                 ctx.restore();
               });
