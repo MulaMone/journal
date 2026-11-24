@@ -110,7 +110,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIwIiBmaWxsPSIjMDQwZDFhIi8+CiAgPHBvbHlsaW5lIHBvaW50cz0iOCw3MiAyMiw3MiAzMCw1NSAzOCw2MiA0OCwzNSA1OCw0NSA2OCwyOCA3OCwzOCA5MiwyMCIKICAgIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwZDRkNCIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogIDxjaXJjbGUgY3g9IjkyIiBjeT0iMjAiIHI9IjUiIGZpbGw9IiMwMGU2NzYiLz4KICA8dGV4dCB4PSI1MCIgeT0iOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJDb3VyaWVyIE5ldywgbW9ub3NwYWNlIiBmb250LXNpemU9IjExIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjYzlhODRjIiBsZXR0ZXItc3BhY2luZz0iNCI+RURHRTwvdGV4dD4KICA8bGluZSB4MT0iOCIgeTE9Ijc4IiB4Mj0iOTIiIHkyPSI3OCIgc3Ryb2tlPSIjMWEzMjYwIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8L3N2Zz4=">
 <link rel="shortcut icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIwIiBmaWxsPSIjMDQwZDFhIi8+CiAgPHBvbHlsaW5lIHBvaW50cz0iOCw3MiAyMiw3MiAzMCw1NSAzOCw2MiA0OCwzNSA1OCw0NSA2OCwyOCA3OCwzOCA5MiwyMCIKICAgIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwZDRkNCIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgogIDxjaXJjbGUgY3g9IjkyIiBjeT0iMjAiIHI9IjUiIGZpbGw9IiMwMGU2NzYiLz4KICA8dGV4dCB4PSI1MCIgeT0iOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJDb3VyaWVyIE5ldywgbW9ub3NwYWNlIiBmb250LXNpemU9IjExIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjYzlhODRjIiBsZXR0ZXItc3BhY2luZz0iNCI+RURHRTwvdGV4dD4KICA8bGluZSB4MT0iOCIgeTE9Ijc4IiB4Mj0iOTIiIHkyPSI3OCIgc3Ryb2tlPSIjMWEzMjYwIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8L3N2Zz4=">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>EDGE — Trading Terminal</title>
+<title>EDGE — Trading Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://api-fxpractice.oanda.com" crossorigin>
@@ -460,7 +460,7 @@ html.edge-detached #topbar,html.edge-detached #tabs,html.edge-detached #m-bnav{d
 <!-- ── EDGE LOCK SCREEN ── -->
 <div id="edge-lock" style="display:none">
   <div class="lk-box">
-    <div class="lk-brand"><div class="lk-logo">EDGE</div><div class="lk-sub">TERMINAL // BILLION$</div></div>
+    <div class="lk-brand"><div class="lk-logo">EDGE</div><div class="lk-sub">CONSOLE // BILLION$</div></div>
     <div class="lk-icon">&#128274;</div>
     <div class="lk-prompt" id="lk-prompt">SESSION EXPIRED &mdash; ENTER PIN</div>
     <div class="lk-dots" id="lk-dots">
@@ -490,7 +490,7 @@ html.edge-detached #topbar,html.edge-detached #tabs,html.edge-detached #m-bnav{d
 </div>
 <div id="app">
   <div id="topbar">
-    <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">TERMINAL</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
+    <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">CONSOLE</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
     <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" oncontextmenu="return false" onselectstart="return false" style="cursor:pointer" title="Refresh">BILLION$</div>
     <span id="topbar-data-ind" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span>
     <div id="topbar-stats"></div>
@@ -2830,7 +2830,7 @@ function openSettings(){
   dmlRow.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;";
   var dmlInfo=document.createElement("div");dmlInfo.style.cssText="min-width:0;";
   var dmlLbl=document.createElement("div");dmlLbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";dmlLbl.textContent="Max Daily Loss ($)";
-  var dmlDesc=document.createElement("div");dmlDesc.style.cssText="font-size:10px;color:var(--text3);";dmlDesc.textContent="Displays remaining amount next to TERMINAL in header";
+  var dmlDesc=document.createElement("div");dmlDesc.style.cssText="font-size:10px;color:var(--text3);";dmlDesc.textContent="Displays remaining amount next to CONSOLE in header";
   dmlInfo.appendChild(dmlLbl);dmlInfo.appendChild(dmlDesc);
   var dmlRight=document.createElement("div");dmlRight.style.cssText="display:flex;align-items:center;gap:6px;flex-shrink:0;";
   var dmlInp=document.createElement("input");
@@ -3020,7 +3020,7 @@ function openSettings(){
   // Version
   var ver=document.createElement("div");
   ver.style.cssText="font-size:10px;color:var(--border2);text-align:right;padding-top:4px;";
-  ver.textContent="EDGE TERMINAL \u00b7 v1.0";
+  ver.textContent="EDGE CONSOLE \u00b7 v1.0";
   body.appendChild(ver);
   box.appendChild(body);
   overlay.appendChild(box);
@@ -15374,7 +15374,7 @@ function settingsTab(){
   el.appendChild(mSection("About"));
   var ver=document.createElement("div");
   ver.style.cssText="font-size:10px;color:#8fadd4;text-align:right;";
-  ver.textContent="EDGE Terminal · v1.0";
+  ver.textContent="EDGE Console · v1.0";
   el.appendChild(ver);
 
   return el;
