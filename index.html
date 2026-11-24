@@ -7547,6 +7547,28 @@ function chartTab(){
   // pair would "fix" the futures alignment while breaking the forex one.
   var FUTURES_ALIGN_SYMS=["ES","NQ","MES","MNQ","CL","GC","NG"];
   var dailyAlign=FUTURES_ALIGN_SYMS.indexOf(sym)>-1?18:17;
+  // HTF FVG candles: fetched in parallel with the chart (not after it) and kept in memory, so a rebuild (timeframe switch, chip click) paints at once and only catches up.
+  var htfP=null,htfLoad=null,htfGR=null,htfKey="",htfStore=(window._htfStore=window._htfStore||{});
+  var htfUrl=function(n,fromU){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+htfGR+"&price=M"+(fromU?"&from="+encodeURIComponent(new Date(fromU*1000).toISOString()):"")+"&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");};
+  if(htfOn){
+    htfGR={"1H":"H1","4H":"H4","D":"D"}[htfTf];htfKey=oandaInst+"|"+htfGR+"|"+dailyAlign;
+    htfLoad=function(){ // resolves {bars,cached} or null on failure
+      var st=htfStore[htfKey];
+      if(st&&Date.now()-st.at<3600000) return Promise.resolve({bars:st.bars.slice(),cached:true});
+      return chartFetchJson(htfUrl({"1H":1500,"4H":1000,"D":500}[htfTf])).then(function(d){
+        var out=[];
+        ((d&&d.candles)||[]).forEach(function(c){
+          if(!c.mid) return;
+          var u=Math.floor(new Date(c.time).getTime()/1000),t=u-etOffsetHoursAt(u*1000)*3600;
+          if(!out.length||t>out[out.length-1].t) out.push({t:t,u:u,h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),done:c.complete!==false});
+        });
+        if(out.length<3) return null;
+        htfStore[htfKey]={bars:out,at:Date.now()};
+        return {bars:out.slice(),cached:false};
+      }).catch(function(e){_dbg(e);return null;});
+    };
+    if(showHtf) htfP=htfLoad();
+  }
   var url=OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+gran+"&price=M&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York")+(tf==="1w"?"&weeklyAlignment=Sunday":"");
   var PERIOD_SEC={"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"4h":14400,"8h":28800,"1d":86400,"1w":604800,"1m":2592000,"1y":31536000};
   var periodSec=PERIOD_SEC[tf]||3600;
@@ -8159,15 +8181,14 @@ function chartTab(){
         };
       })();}catch(e){_dbg(e);}
 
-      // ── HTF FVG (intraday mode, desktop): open 3-candle gaps from 1H / 4H / D candles, amber, extended to the right edge, shrinking as price fills them ──
+      // ── HTF FVG (intraday mode, desktop): open 3-candle gaps from 1H / 4H / D candles, orange, extended to the right edge, filled part in periwinkle ──
       if(htfOn&&candles.length) (function(){
-        var GR={"1H":"H1","4H":"H4","D":"D"}[htfTf],CNT={"1H":1500,"4H":1000,"D":500}[htfTf],bars=[],zones=[],repaint=null,loaded=false,loading=false;
-        var url=function(n,fromU){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+GR+"&price=M"+(fromU?"&from="+encodeURIComponent(new Date(fromU*1000).toISOString()):"")+"&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");};
+        var bars=[],zones=[],repaint=null,loaded=false,loading=false;
         function toBars(d){
           var out=[];
           ((d&&d.candles)||[]).forEach(function(c){
             if(!c.mid) return;
-            var u=Math.floor(new Date(c.time).getTime()/1000),t=u-etOff(u);
+            var u=Math.floor(new Date(c.time).getTime()/1000),t=u-etOffsetHoursAt(u*1000)*3600;
             if(!out.length||t>out[out.length-1].t) out.push({t:t,u:u,h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),done:c.complete!==false});
           });
           return out;
@@ -8243,26 +8264,30 @@ function chartTab(){
           updateAllViews:function(){}
         });
         applyHtf=function(){if(repaint) repaint();};
+        function patch(){ // everything from the newest known bar on, so a sleep / hidden tab can never leave a hole (a hole would draw false gaps)
+          if(!bars.length) return;
+          chartFetchJson(htfUrl(500,bars[bars.length-1].u)).then(function(dd){
+            if(myLoadToken!==_chartLoadToken) return;
+            var nb=toBars(dd);if(!nb.length) return;
+            var i=bars.length-1;while(i>=0&&bars[i].t>=nb[0].t) i--;
+            bars=bars.slice(0,i+1).concat(nb);
+            htfStore[htfKey]={bars:bars.slice(),at:Date.now()};
+            calc();if(repaint) repaint();
+          }).catch(_dbg);
+        }
         htfEnsure=function(){
           if(loaded||loading) return;
           loading=true;
-          chartFetchJson(url(CNT)).then(function(d){
-            loading=false;
-            if(myLoadToken!==_chartLoadToken) return;
-            bars=toBars(d);if(bars.length<3) return;
-            loaded=true;calc();if(repaint) repaint();
-            var timer=setInterval(function(){ // live: every 30s patch the newest bars
+          (htfP||htfLoad()).then(function(r){
+            loading=false;htfP=null;
+            if(myLoadToken!==_chartLoadToken||!r) return;
+            bars=r.bars;loaded=true;calc();if(repaint) repaint();
+            if(r.cached) patch(); // cached bars paint now; catch up to the present right away
+            var timer=setInterval(function(){
               if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
-              var lastU=bars[bars.length-1].u; // everything from the newest known bar on, so a sleep / hidden tab can never leave a hole (a hole would draw false gaps)
-              chartFetchJson(url(500,lastU)).then(function(dd){
-                if(myLoadToken!==_chartLoadToken) return;
-                var nb=toBars(dd);if(!nb.length) return;
-                var i=bars.length-1;while(i>=0&&bars[i].t>=nb[0].t) i--;
-                bars=bars.slice(0,i+1).concat(nb);
-                calc();if(repaint) repaint();
-              }).catch(_dbg);
+              patch();
             },30000);
-          }).catch(function(e){loading=false;_dbg(e);});
+          });
         };
         if(showHtf) htfEnsure();
       })();
