@@ -9472,7 +9472,7 @@ function chartTab(){
           var L=function(t){return '<span style="color:var(--text3)">'+t+'</span> ';};
           if(b.open==null||b.close==null){lastEl.innerHTML=L("LAST PRICE")+'<span style="color:var(--accent)">'+fmtPx(b.value!=null?b.value:b.close)+'</span>';return;}
           var up=b.close>=b.open,cc=up?"#00e676":"#ff5252",ch=b.close-b.open,pc=b.open?ch/b.open*100:0;
-          var t=L("O")+fmtPx(b.open)+" "+L("H")+fmtPx(b.high)+(useWheels?"<br>":" ")+L("L")+fmtPx(b.low)+" "+L("C")+'<span style="color:'+cc+'">'+fmtPx(b.close)+'</span>';
+          var V=function(v){return '<span style="color:var(--accent)">'+fmtPx(v)+'</span>';};var t=L("O")+V(b.open)+" "+L("H")+V(b.high)+(useWheels?"<br>":" ")+L("L")+V(b.low)+" "+L("C")+'<span style="color:'+cc+'">'+fmtPx(b.close)+'</span>';
           if(!useWheels) t+=' <span style="color:'+cc+'">'+(ch>=0?"+":"")+fmtPx(ch)+" ("+(pc>=0?"+":"")+pc.toFixed(2)+"%)</span>";
           lastEl.innerHTML=t;
         }catch(e){_dbg(e);}
