@@ -9,7 +9,7 @@
   "app": {
     "windows": [
       {
-        "title": "EDGE \u2014 Trading Terminal",
+        "title": "EDGE \u2014 Trading Console",
         "create": false,
         "width": 1500,
         "height": 950,
