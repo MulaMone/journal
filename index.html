@@ -7152,6 +7152,11 @@ function chartTab(){
     ncBtn.textContent="\u29C9";ncBtn.style.cssText="padding:6px 7px;";
     ncBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?detached=1&tab=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf),"_blank");});
     ctrlRow.appendChild(ncBtn);
+    // Native (GPU) chart: the desktop shell launches edge-chart.exe and hands it your saved OANDA token via the URL fragment, which never leaves this machine.
+    var ntBtn=h("button",{className:"btn",title:"Open this chart in the native GPU chart window","aria-label":"Native chart"});
+    ntBtn.textContent="GPU";ntBtn.style.cssText="padding:6px 7px;font-size:10px;letter-spacing:1px;";
+    ntBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?native=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf)+"#t="+encodeURIComponent(ls("oanda_token","")),"_blank");});
+    ctrlRow.appendChild(ntBtn);
     }
     var lkBtn=h("button",{className:"btn",title:"Link zoom and scroll with the other chart windows","aria-label":"Link charts"});
     var paintLk=function(){var g=State.chart_link||null;lkBtn.textContent="\u26D3";lkBtn.style.cssText="padding:6px 7px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Not linked. Click to link with the other charts.";edgeLinkVis();};
@@ -7897,9 +7902,81 @@ function chartTab(){
 
       var series=chart.addCandlestickSeries({
         upColor:"#00e676",downColor:"#ff4444",
-        borderUpColor:"#00e676",borderDownColor:"#ff4444",
+        borderUpColor:"#04361f",borderDownColor:"#4a0a0a", // dark outline separates bodies, like NinjaTrader
         wickUpColor:"#00e676",wickDownColor:"#ff4444",
       });
+      // ── Thick-wick candles ───────────────────────────────────────────────
+      // The library draws candle wicks and outlines exactly 1 device pixel wide, which reads as a hairline on a TV
+      // (NinjaTrader / Sierra let you set both). This plugin repaints each candle over the built-in one with a thicker
+      // wick and a dark outline, on exact device pixels. The built-in candles stay underneath, so autoscale, the price
+      // label, price lines and trade markers are untouched; if anything throws, the plain candles simply show.
+      // Edit CANDLE_STYLE to taste. wick/border are in CSS px (wick min 1 device px).
+      var CANDLE_STYLE={wick:1,border:1,
+        upFill:"#00e676",upLine:"#04361f",upWick:"#00e676",
+        dnFill:"#ff4444",dnLine:"#4a0a0a",dnWick:"#ff4444"};
+      try{(function(){
+        var mir=[];
+        var _sd=series.setData.bind(series),_su=series.update.bind(series);
+        series.setData=function(d){mir=(d||[]).slice();return _sd(d);};
+        series.update=function(b){
+          if(b&&b.open!=null){
+            var l=mir.length?mir[mir.length-1]:null;
+            if(!l||b.time>l.time) mir.push(b); else if(b.time===l.time) mir[mir.length-1]=b;
+          }
+          return _su(b);
+        };
+        // same width the library uses for a candle body (lightweight-charts 4.1.x), so ours always covers it
+        function bodyW(bs,pr){
+          if(bs>=2.5&&bs<=4) return Math.floor(3*pr);
+          var c=1-0.2*Math.atan(Math.max(4,bs)-4)/(Math.PI*0.5);
+          return Math.max(Math.floor(pr),Math.min(Math.floor(bs*c*pr),Math.floor(bs*pr)));
+        }
+        var view={zOrder:function(){return "normal";},renderer:function(){return {draw:function(target){
+          target.useBitmapCoordinateSpace(function(sc){
+            var n=mir.length;if(!n) return;
+            var ts=chart.timeScale(),bs=ts.options().barSpacing,hpr=sc.horizontalPixelRatio,vpr=sc.verticalPixelRatio,ctx=sc.context;
+            if(bs*hpr<5) return; // too dense for outlines: leave the built-in candles
+            var S=CANDLE_STYLE,i0=0,i1=n-1,vr=ts.getVisibleLogicalRange();
+            if(vr){
+              var bi=series.barsInLogicalRange(vr);
+              if(bi&&typeof bi.from==="number"&&typeof bi.to==="number"){
+                var lo=0,hi=n-1,m;
+                while(lo<hi){m=(lo+hi)>>1;if(mir[m].time<bi.from)lo=m+1;else hi=m;}
+                i0=Math.max(0,lo-1);
+                lo=i0;hi=n-1;
+                while(lo<hi){m=(lo+hi+1)>>1;if(mir[m].time<=bi.to)lo=m;else hi=m-1;}
+                i1=Math.min(n-1,lo+1);
+              }
+            }
+            var bw=bodyW(bs,hpr);
+            if(bw>=2&&(Math.floor(hpr)%2)!==(bw%2)) bw--; // the library's own parity rule
+            var ww=Math.max(1,Math.round(S.wick*hpr)),bw2=bw;
+            if(bw2%2!==ww%2) bw2++; // body and wick share a parity so the wick is centred
+            var bd=Math.max(1,Math.round(S.border*hpr));
+            for(var i=i0;i<=i1;i++){
+              var b=mir[i];if(!b||b.open==null) continue;
+              var x=ts.timeToCoordinate(b.time);if(x==null) continue;
+              var yo=series.priceToCoordinate(b.open),yc=series.priceToCoordinate(b.close),
+                  yh=series.priceToCoordinate(b.high),yl=series.priceToCoordinate(b.low);
+              if(yo==null||yc==null||yh==null||yl==null) continue;
+              var cx=Math.round(x*hpr),
+                  top=Math.round(Math.min(yo,yc)*vpr),bot=Math.round(Math.max(yo,yc)*vpr),
+                  hh=Math.round(yh*vpr),ll=Math.round(yl*vpr),up=b.close>=b.open;
+              ctx.fillStyle=up?S.upWick:S.dnWick;
+              var wl=cx-(ww>>1);
+              if(top>hh) ctx.fillRect(wl,hh,ww,top-hh);
+              if(ll>bot) ctx.fillRect(wl,bot+1,ww,ll-bot);
+              var left=cx-(bw2>>1),h=bot-top+1;
+              if(h<=2*bd+1||bw2<=2*bd+1){ctx.fillStyle=up?S.upFill:S.dnFill;ctx.fillRect(left,top,bw2,h);}
+              else{
+                ctx.fillStyle=up?S.upLine:S.dnLine;ctx.fillRect(left,top,bw2,h);
+                ctx.fillStyle=up?S.upFill:S.dnFill;ctx.fillRect(left+bd,top+bd,bw2-2*bd,h-2*bd);
+              }
+            }
+          });
+        }};}};
+        series.attachPrimitive({paneViews:function(){return [view];},updateAllViews:function(){}});
+      })();}catch(e){_dbg(e);}
       series.setData(candles);
 
       // ── Week boundaries ───────────────────────────────────
@@ -8534,6 +8611,8 @@ function chartTab(){
         ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
         ["1d","1w","1m"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X_LONG);});
       }
+      var DESK_ZOOM_X=0.45; // desktop / TV: open on fewer, wider candles (1 = the old count; phones unchanged). Edit to taste.
+      if(!isMobile()) Object.keys(ZOOM_BARS).forEach(function(k){ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*DESK_ZOOM_X);});
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
