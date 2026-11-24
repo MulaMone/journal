@@ -7056,6 +7056,33 @@ function chartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
   });
   fvgBox.appendChild(fvgBtn);
+  // HTF FVG (desktop, intraday mode only): open fair value gaps from a higher timeframe in amber. Timeframe chips 1H / 4H / D, default 4H. Both choices are remembered.
+  var htfOn=intraday&&!eodOnly&&!useWheels,showHtf=htfOn&&State.chart_show_htf_fvg===true,htfTf=(["1H","4H","D"].indexOf(State.chart_htf_fvg_tf)>-1)?State.chart_htf_fvg_tf:"4H";
+  var applyHtf=null,htfEnsure=null;
+  if(htfOn){
+    var htfBtn=h("button",{className:"btn"}),htfChips=div();
+    htfBtn.textContent="HTF FVG";
+    htfBtn.title="Show open higher-timeframe fair value gaps (amber)";
+    htfChips.style.cssText="display:flex;gap:4px;";
+    var styleHtf=function(){
+      htfBtn.style.cssText="padding:6px 12px;font-size:11px;font-weight:700;touch-action:manipulation;"+(showHtf?"border-color:#ffbf00;color:#ffbf00;background:#ffbf0018;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+      htfChips.style.display=showHtf?"flex":"none";
+    };
+    ["1H","4H","D"].forEach(function(v){
+      var cb=h("button",{className:"btn"});
+      cb.textContent=v;
+      cb.style.cssText="padding:6px 9px;font-size:11px;font-weight:700;touch-action:manipulation;"+(v===htfTf?"border-color:#ffbf00;color:#040d1a;background:#ffbf00;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");
+      cb.addEventListener("click",function(){State.chart_htf_fvg_tf=v;render();});
+      htfChips.appendChild(cb);
+    });
+    styleHtf();
+    htfBtn.addEventListener("click",function(){showHtf=!showHtf;State.chart_show_htf_fvg=showHtf;styleHtf();if(showHtf&&htfEnsure)htfEnsure();if(applyHtf)applyHtf();});
+    [htfBtn,htfChips].forEach(function(n){
+      n.addEventListener("click",function(e){e.stopPropagation();});
+      ["pointerdown","touchstart","dblclick"].forEach(function(ev){n.addEventListener(ev,function(e){e.stopPropagation();},{capture:false});});
+    });
+    fvgBox.appendChild(htfBtn);fvgBox.appendChild(htfChips);
+  }
   // Mobile: prev-level toggles (PQ / PM / PY / PW) sit in the "#" slot next to INTRADAY (left:100px) — that slot is empty outside NQ intraday mode.
   var prevWrap=div();prevWrap.style.cssText="position:absolute;left:100px;top:8px;z-index:6;display:flex;gap:4px;";
   var addPrevBtn=function(b){(useWheels?prevWrap:fvgBox).appendChild(b);};
@@ -8131,6 +8158,92 @@ function chartTab(){
           try{fvgCalc();if(fvgRepaint) fvgRepaint();}catch(e){_dbg(e);}
         };
       })();}catch(e){_dbg(e);}
+
+      // ── HTF FVG (intraday mode, desktop): open 3-candle gaps from 1H / 4H / D candles, amber, extended to the right edge, shrinking as price fills them ──
+      if(htfOn&&candles.length) (function(){
+        var GR={"1H":"H1","4H":"H4","D":"D"}[htfTf],CNT={"1H":1500,"4H":1000,"D":500}[htfTf],bars=[],zones=[],repaint=null,loaded=false,loading=false;
+        var url=function(n,fromU){return OANDA_ENV_BASE+"/v3/instruments/"+oandaInst+"/candles?granularity="+GR+"&price=M"+(fromU?"&from="+encodeURIComponent(new Date(fromU*1000).toISOString()):"")+"&count="+n+"&dailyAlignment="+dailyAlign+"&alignmentTimezone="+encodeURIComponent("America/New_York");};
+        function toBars(d){
+          var out=[];
+          ((d&&d.candles)||[]).forEach(function(c){
+            if(!c.mid) return;
+            var u=Math.floor(new Date(c.time).getTime()/1000),t=u-etOff(u);
+            if(!out.length||t>out[out.length-1].t) out.push({t:t,u:u,h:parseFloat(c.mid.h),l:parseFloat(c.mid.l),done:c.complete!==false});
+          });
+          return out;
+        }
+        function calc(){
+          zones=[];var n=bars.length;
+          while(n>0&&!bars[n-1].done) n--; // gaps only from completed bars
+          for(var i=2;i<n;i++){
+            var a=bars[i-2],c=bars[i],lo,hi,up;
+            if(c.l>a.h){lo=a.h;hi=c.l;up=true;}
+            else if(c.h<a.l){lo=c.h;hi=a.l;up=false;}
+            else continue;
+            var closed=false;
+            for(var j=i+1;j<bars.length;j++){
+              var k=bars[j];
+              if(up){if(k.l<=lo){closed=true;break;} if(k.l<hi) hi=k.l;}
+              else{if(k.h>=hi){closed=true;break;} if(k.h>lo) lo=k.h;}
+            }
+            if(!closed) zones.push({t0:a.t,lo:lo,hi:hi});
+          }
+        }
+        function firstIdx(t){ // first chart candle with time >= t
+          var lo=0,hi=candles.length-1,r=-1;
+          while(lo<=hi){var m=(lo+hi)>>1;if(candles[m].time>=t){r=m;hi=m-1;}else lo=m+1;}
+          return r;
+        }
+        series.attachPrimitive({
+          attached:function(param){repaint=param.requestUpdate;},
+          detached:function(){repaint=null;},
+          paneViews:function(){return [{zOrder:function(){return "normal";},renderer:function(){return {
+            draw:function(){},
+            drawBackground:function(target){
+              if(!showHtf||!zones.length) return;
+              target.useMediaCoordinateSpace(function(scope){
+                var ctx=scope.context,W=scope.mediaSize.width,ts=chart.timeScale();
+                ctx.save();ctx.font="bold 10px 'Courier New',monospace";ctx.textBaseline="middle";
+                zones.forEach(function(z){
+                  var ci=firstIdx(z.t0),x0=ci<0?null:(ci===0&&z.t0<candles[0].time?0:ts.timeToCoordinate(candles[ci].time)),y1=series.priceToCoordinate(z.hi),y2=series.priceToCoordinate(z.lo);
+                  if(x0==null||y1==null||y2==null||x0>W) return;
+                  x0=Math.max(x0,0);
+                  ctx.globalAlpha=0.2;ctx.fillStyle="#ffbf00";ctx.fillRect(x0,y1,W-x0,y2-y1);
+                  ctx.globalAlpha=0.8;ctx.fillRect(x0,y1,W-x0,1);ctx.fillRect(x0,y2-1,W-x0,1);
+                  var tag=htfTf+" FVG",tw=ctx.measureText(tag).width,ty=(y1+y2)/2;
+                  ctx.globalAlpha=1;ctx.fillStyle="rgba(4,13,26,0.75)";ctx.fillRect(W-tw-8,ty-7,tw+6,14);
+                  ctx.fillStyle="#ffbf00";ctx.fillText(tag,W-tw-5,ty);
+                });
+                ctx.restore();
+              });
+            }
+          };}}];},
+          updateAllViews:function(){}
+        });
+        applyHtf=function(){if(repaint) repaint();};
+        htfEnsure=function(){
+          if(loaded||loading) return;
+          loading=true;
+          chartFetchJson(url(CNT)).then(function(d){
+            loading=false;
+            if(myLoadToken!==_chartLoadToken) return;
+            bars=toBars(d);if(bars.length<3) return;
+            loaded=true;calc();if(repaint) repaint();
+            var timer=setInterval(function(){ // live: every 30s patch the newest bars
+              if(myLoadToken!==_chartLoadToken||State.tab!=="chart"){clearInterval(timer);return;}
+              var lastU=bars[bars.length-1].u; // everything from the newest known bar on, so a sleep / hidden tab can never leave a hole (a hole would draw false gaps)
+              chartFetchJson(url(500,lastU)).then(function(dd){
+                if(myLoadToken!==_chartLoadToken) return;
+                var nb=toBars(dd);if(!nb.length) return;
+                var i=bars.length-1;while(i>=0&&bars[i].t>=nb[0].t) i--;
+                bars=bars.slice(0,i+1).concat(nb);
+                calc();if(repaint) repaint();
+              }).catch(_dbg);
+            },30000);
+          }).catch(function(e){loading=false;_dbg(e);});
+        };
+        if(showHtf) htfEnsure();
+      })();
 
       // ── Trade entry markers ────────────────────────────────
       // aboveBar/belowBar positions relative to the SERIES' OWN value at
