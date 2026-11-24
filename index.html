@@ -390,6 +390,16 @@ svg text{font-family:'Courier New',monospace}
   .tbl th,.tbl td{padding:6px 7px;font-size:11px}
 }
 @media(max-width:480px),(max-width:960px) and (display-mode:standalone){body.m-chart-full #m-bnav,body.m-chart-full #m-more-drawer,body.m-chart-full #m-more-bd{display:none!important}body.m-chart-full #app{padding-bottom:0!important}}
+@media(max-width:480px),(max-width:960px) and (display-mode:standalone){
+body.m-chart-full #topbar{top:auto!important;bottom:0;padding-top:0;padding-bottom:env(safe-area-inset-bottom);height:calc(52px + env(safe-area-inset-bottom));border-bottom:0;border-top:1px solid var(--border)}
+body.m-chart-full #app{padding-top:0!important;padding-bottom:calc(52px + env(safe-area-inset-bottom))!important}
+body.m-chart-full #content{padding:0!important}
+body.m-chart-full #content>div{padding:0!important}
+body.m-chart-full #content>div>.rjb{padding:6px 10px 4px!important;margin:0!important;flex-wrap:nowrap!important;align-items:center}
+body.m-chart-full #chart-canvas-anchor{border-left:0!important;border-right:0!important;border-radius:0!important;box-shadow:none!important;scroll-margin-top:0!important}
+body.m-chart-full.m-chart-trades #content>div{padding:0 3px!important}
+body.m-chart-full.m-chart-trades #chart-canvas-anchor{border:1px solid var(--border2)!important;border-radius:4px!important}
+}
 @media(max-width:480px){input,select,textarea{font-size:16px!important}}
 @media(display-mode:standalone){input,select,textarea{font-size:16px!important}}
 @media(max-width:380px){
@@ -7149,7 +7159,18 @@ function chartTab(){
   var tradeListEls=[];
   var layoutTrades=function(tries){
     tradeListEls.forEach(function(x){x.style.display=showTrades?"":"none";});
-    if(isMobile()) return;
+    if(isMobile()){
+      document.body.classList.toggle("m-chart-trades",showTrades);
+      if(!chartDiv.isConnected){
+        if((tries||0)<30) requestAnimationFrame(function(){layoutTrades((tries||0)+1);});
+        return;
+      }
+      var _tb=document.getElementById("topbar"),_tbH=_tb?_tb.getBoundingClientRect().height:52;
+      var _ct=chartDiv.getBoundingClientRect().top+window.scrollY;
+      chartDiv.style.minHeight="260px";
+      chartDiv.style.height=Math.max(260,Math.floor(window.innerHeight-_tbH-_ct-(19*3+4+2)-6))+"px";
+      return;
+    }
     if(showTrades){chartDiv.style.minHeight=(window.innerHeight<800?260:500)+"px";chartDiv.style.height="calc(100vh - 260px)";return;}
     // render() builds the page detached, so the chart has no position yet —
     // wait until it's in the document before measuring.
@@ -7218,8 +7239,8 @@ function chartTab(){
 
   if(useWheels){
     // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
-    var WH=28,GREEN="#00e676",RED="#ff5252",wrap=div();
-    wrap.className="wheel-wrap";wrap.addEventListener("contextmenu",function(e){e.preventDefault();});wrap.addEventListener("selectstart",function(e){e.preventDefault();});wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:8px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
+    var WH=19,GREEN="#00e676",RED="#ff5252",wrap=div();
+    wrap.className="wheel-wrap";wrap.addEventListener("contextmenu",function(e){e.preventDefault();});wrap.addEventListener("selectstart",function(e){e.preventDefault();});wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:4px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
     function mkPill(side,col){
       var d=div();
       d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;border:1px solid "+col+"88;background:"+col+"0d;box-shadow:0 0 10px "+col+"22,inset 0 0 8px "+col+"14;pointer-events:none;";
@@ -7274,7 +7295,7 @@ function chartTab(){
       var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
       list.forEach(function(t,i){
         var d=div();d.textContent=TF_LBL(t);
-        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:15px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
+        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:12px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
         d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
         w.appendChild(d);items.push(d);
       });
@@ -9428,10 +9449,32 @@ function chartTab(){
       })();
 
       var last=candles[candles.length-1];
-      var lastEl=div("xs m");lastEl.style.cssText="margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
+      var lastEl=div("xs m");lastEl.style.cssText=useWheels?"margin-left:auto;margin-right:8px;text-align:right;font-weight:700;font-size:10px;line-height:14px;white-space:nowrap;font-family:'Courier New',monospace;":"margin-top:6px;text-align:right;font-weight:700;font-size:12px;";
       function fmtPx(v){try{var n=Number(v);return isFinite(n)?series.priceFormatter().format(n):v;}catch(e){return v;}} // price-axis rounding: no float noise / long decimals
-      lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+(last?fmtPx(last.close):"—")+'</span>';
-      el.appendChild(lastEl);
+      // OHLC readout: the candle under the crosshair, else the latest candle. Desktop = under the chart (replaces LAST PRICE); phone = in the header next to the eye icon.
+      var _ohlcHov=null,_ohlcKey="";
+      function ohlcRender(){
+        try{
+          var b=_ohlcHov;
+          if(!b){var dd=series.data();b=dd&&dd.length?dd[dd.length-1]:null;}
+          if(!b){lastEl.innerHTML="";return;}
+          var L=function(t){return '<span style="color:var(--text3)">'+t+'</span> ';};
+          if(b.open==null||b.close==null){lastEl.innerHTML=L("LAST PRICE")+'<span style="color:var(--accent)">'+fmtPx(b.value!=null?b.value:b.close)+'</span>';return;}
+          var up=b.close>=b.open,cc=up?"#00e676":"#ff5252",ch=b.close-b.open,pc=b.open?ch/b.open*100:0;
+          var t=L("O")+fmtPx(b.open)+" "+L("H")+fmtPx(b.high)+(useWheels?"<br>":" ")+L("L")+fmtPx(b.low)+" "+L("C")+'<span style="color:'+cc+'">'+fmtPx(b.close)+'</span>';
+          if(!useWheels) t+=' <span style="color:'+cc+'">'+(ch>=0?"+":"")+fmtPx(ch)+" ("+(pc>=0?"+":"")+pc.toFixed(2)+"%)</span>";
+          lastEl.innerHTML=t;
+        }catch(e){_dbg(e);}
+      }
+      ohlcRender();
+      chart.subscribeCrosshairMove(function(pm){
+        var b=null;
+        try{if(pm&&pm.time!=null&&pm.seriesData){var sd=pm.seriesData.get(series);if(sd&&sd.open!=null)b=sd;}}catch(e){}
+        var key=b?b.time+"|"+b.open+"|"+b.high+"|"+b.low+"|"+b.close:"";
+        if(key===_ohlcKey) return;
+        _ohlcKey=key;_ohlcHov=b;ohlcRender();
+      });
+      if(useWheels){ctrlRow.style.marginLeft="0";hrow.insertBefore(lastEl,ctrlRow);}else el.appendChild(lastEl);
 
       // ── Price tag with countdown baked in, replacing the native price-scale
       // label (TradingView-style: price on top, time-to-close underneath,
@@ -9557,7 +9600,7 @@ function chartTab(){
           }
           series.update(bar);
           currentPrice=v;currentIsUp=bar.close>=bar.open;
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(v)+'</span>';
+          ohlcRender();
           renderCountdown();
         }).catch(_dbg);
       }
@@ -9849,7 +9892,7 @@ function chartTab(){
           if(myLoadToken!==_chartLoadToken||State.tab!=="chart") return;
           try{series.update(liveBar);}catch(e){return;}
           keepBar(liveBar);
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
+          ohlcRender();
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
           renderCountdown();
         };
@@ -9928,7 +9971,7 @@ function chartTab(){
           });
           if(dfix){try{series.setData(candles);}catch(e){_dbg(e);}}
           currentPrice=liveBar.close;currentIsUp=liveBar.close>=liveBar.open;
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(liveBar.close)+'</span>';
+          ohlcRender();
           renderCountdown();
           // don't trim the old end — trade-anchored views need their start bar; 5000 is just a safety cap
           _cc.data.candles=_cc.data.candles.filter(function(x){return x.time<_lastRaw;}).concat(fc).slice(-5000);
@@ -10004,7 +10047,7 @@ function chartTab(){
             }
             if(pfix){try{series.setData(candles);}catch(e){_dbg(e);}}
           }
-          lastEl.innerHTML='<span style="color:var(--text3)">LAST PRICE</span> <span style="color:var(--accent)">'+fmtPx(parseFloat(c.mid.c))+'</span>';
+          ohlcRender();
           // Recompute from this candle's own true (unshifted) start — covers
           // both the in-progress bar ticking down and a fresh bar starting.
           barEndTrue=Math.floor(new Date(c.time).getTime()/1000)+periodSec;
@@ -16217,7 +16260,7 @@ function render(){
   _lastTypeAt=0;clearTimeout(_softTimer);
   renderTabs();
   renderTopbar();
-  document.body.classList.toggle("m-chart-full",isMobile()&&State.tab==="chart");
+  document.body.classList.toggle("m-chart-full",isMobile()&&State.tab==="chart");if(State.tab!=="chart")document.body.classList.remove("m-chart-trades");
   var content=document.getElementById("content");
   closeMoreDrawer();
 
