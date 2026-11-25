@@ -8667,6 +8667,7 @@ function chartTab(){
           function makeMarkerSeries(){return chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});}
           var layers=[{s:makeMarkerSeries(),seen:{},data:[],markers:[]}];
           var markerSeries=layers[0].s;
+          var tradePairs={}; // trade id -> {entry,exit} plotted points (futures candles only)
           var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
           displayPoints.forEach(function(p){
             // Snap to the candle period the fill falls inside, rather than the raw
@@ -8715,12 +8716,28 @@ function chartTab(){
               // tell separate trades apart at a glance without opening the list.
               text:p.kind==="entry"?(p.isLong?"L":"S"):""
             });
+            // Futures candles: the fill price is real, so also drop a small dot exactly on it (the arrow only sits beside the level)
+            if(ntUsed&&!dayCandle){
+              var _dc=p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00";
+              layer.markers.push({time:t,position:"inBar",color:_dc,shape:"circle",size:0.5});
+              var _pr=tradePairs[p.id]||(tradePairs[p.id]={});
+              _pr[p.kind]={t:t,v:val,isLong:p.isLong,approx:!!p.approx};
+            }
+          });
+          // Entry -> exit connector per trade (futures candles only): a thin dashed line between the two exact fill prices, blue for longs, purple for shorts
+          var connectors=[];
+          Object.keys(tradePairs).forEach(function(id){
+            var pr=tradePairs[id];
+            if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.t>pr.entry.t)) return;
+            var cs2=chart.addLineSeries({color:pr.entry.isLong?"#3d8bff":"#b266ff",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+            cs2.setData([{time:pr.entry.t,value:pr.entry.v},{time:pr.exit.t,value:pr.exit.v}]);
+            connectors.push(cs2);
           });
           layers.forEach(function(l){l.s.setData(l.data);});
-          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});if(!showTrades)tip.style.display="none";};
+          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});connectors.forEach(function(c){c.applyOptions({visible:showTrades});});if(!showTrades)tip.style.display="none";};
           layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+(ntUsed?" • NinjaTrader futures candles":"")+" • "+new Date().toLocaleTimeString();
+          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+(ntUsed?" • NinjaTrader futures candles":" • OANDA CFD candles (futures feed not reached)")+" • "+new Date().toLocaleTimeString();
 
           // ── Hover tooltip ───────────────────────────────────
           // lightweight-charts has no built-in per-marker hover event, so we
@@ -10151,6 +10168,14 @@ function chartTab(){
         chartDiv.appendChild(bar);
       })();
 
+      // ── data source badge (top right of the plot): green when the candles come from the NinjaTrader futures feed, grey for OANDA CFD ──
+      (function(){
+        var sb=div();
+        sb.textContent=ntUsed?"NT FUTURES":"OANDA CFD";
+        sb.title=ntUsed?"Candles from NinjaTrader (EdgeFeed): fills plot at their exact price":"Candles from OANDA (CFD): futures feed not reached";
+        sb.style.cssText="position:absolute;right:86px;top:6px;z-index:6;font-size:10px;letter-spacing:1px;padding:2px 6px;border-radius:3px;pointer-events:none;background:#040d1a;border:1px solid "+(ntUsed?"#00e676":"#4a5a78")+";color:"+(ntUsed?"#00e676":"#8a9ab8")+";";
+        chartDiv.appendChild(sb);
+      })();
       // ── GPU chart button: sits in the empty bottom-right corner where the price scale meets the time scale (overlay, so the chart keeps its size) ──
       if(window._edgeDesktop&&!window._edgeDetached&&!isMobile()) (function(){
         var gb=h("button",{className:"btn",title:"Open this chart in the native GPU chart window","aria-label":"Native GPU chart"});
