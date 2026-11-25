@@ -913,7 +913,88 @@ fn ema_points(cs: &[Candle], m5: &[Candle], len: usize, per: i64) -> Vec<(usize,
     pts
 }
 
+// ── chart linking: native chart windows sharing the same colour group mirror zoom/scroll (by TIME) and the crosshair ──
+const LINK_COLORS: [(u8, u8, u8); 5] = [(0, 212, 212), (0, 230, 118), (251, 191, 36), (255, 68, 68), (168, 85, 247)];
+const LINK_PORT: u16 = 7879;
+
+// Tiny local hub: the first chart window to start owns 127.0.0.1:7879 and relays JSON lines between all windows.
+// If the hub window closes, the others reconnect and one of them takes over.
+fn link_thread(out_rx: mpsc::Receiver<String>, in_tx: mpsc::Sender<String>, ctx: egui::Context) {
+    use std::io::Write;
+    let port: u16 = std::env::var("EDGE_LINK_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(LINK_PORT);
+    loop {
+        if let Ok(l) = TcpListener::bind(("127.0.0.1", port)) {
+            let clients: Arc<Mutex<Vec<std::net::TcpStream>>> = Arc::new(Mutex::new(vec![]));
+            {
+                let (cl, tx, ctx) = (clients.clone(), in_tx.clone(), ctx.clone());
+                std::thread::spawn(move || {
+                    for st in l.incoming().flatten() {
+                        let _ = st.set_nodelay(true);
+                        if let Ok(w) = st.try_clone() {
+                            cl.lock().unwrap().push(w);
+                        }
+                        let (cl2, tx2, ctx2) = (cl.clone(), tx.clone(), ctx.clone());
+                        std::thread::spawn(move || {
+                            for line in BufReader::new(st).lines().map_while(Result::ok) {
+                                let msg = format!("{line}\n");
+                                cl2.lock().unwrap().retain_mut(|c| c.write_all(msg.as_bytes()).is_ok());
+                                let _ = tx2.send(line);
+                                ctx2.request_repaint();
+                            }
+                        });
+                    }
+                });
+            }
+            // hub's own messages go to every client and straight to the local window's inbox is not needed (own id is ignored)
+            while let Ok(m) = out_rx.recv() {
+                let msg = format!("{m}\n");
+                clients.lock().unwrap().retain_mut(|c| c.write_all(msg.as_bytes()).is_ok());
+            }
+            return;
+        }
+        match std::net::TcpStream::connect(("127.0.0.1", port)) {
+            Ok(mut w) => {
+                let _ = w.set_nodelay(true);
+                let Ok(r) = w.try_clone() else { continue };
+                let (tx, ctx2) = (in_tx.clone(), ctx.clone());
+                let reader = std::thread::spawn(move || {
+                    for line in BufReader::new(r).lines().map_while(Result::ok) {
+                        let _ = tx.send(line);
+                        ctx2.request_repaint();
+                    }
+                });
+                loop {
+                    match out_rx.recv_timeout(Duration::from_millis(500)) {
+                        Ok(m) => {
+                            if w.write_all(format!("{m}\n").as_bytes()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            if reader.is_finished() {
+                                break;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                }
+            }
+            Err(_) => std::thread::sleep(Duration::from_millis(400)),
+        }
+    }
+}
+
 struct App {
+    link_tx: mpsc::Sender<String>,
+    link_rx: mpsc::Receiver<String>,
+    link_id: String,
+    link_g: Option<usize>,          // colour group (None = unlinked)
+    link_peers: HashMap<String, std::time::Instant>,
+    link_last: Option<(i64, i64)>,  // last shared visible time range (unix secs)
+    link_sent: std::time::Instant,
+    link_xh_sent: bool,
+    link_xh: Option<(i64, f64, std::time::Instant)>, // other window's crosshair: time, price
+    bar_over: bool,
     bar_x: f32,
     sym: String,
     tf: String,
@@ -935,7 +1016,9 @@ struct App {
     show_pq: bool, // D: previous-quarter lines
     show_py: bool, // W: previous-year lines
     manual: Option<(f64, f64)>, // manual price range (after dragging the price axis / panning vertically); None = auto-fit
-    drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag
+    drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag, 3 = measure (shift + drag)
+    meas_p0: Option<Pos2>,      // where the measure drag started (screen)
+    meas: Option<(f32, f64, f32, f64)>, // measure: (bar idx, price) start and end
     vdrag: f32,
 }
 
@@ -955,7 +1038,24 @@ impl App {
             let tx3 = tx.clone();
             std::thread::spawn(move || worker(rx, tx3, sh, ctx, base, tok));
         }
+        let (link_tx, out_rx) = mpsc::channel();
+        let (in_tx, link_rx) = mpsc::channel();
+        {
+            let ctx = cc.egui_ctx.clone();
+            std::thread::spawn(move || link_thread(out_rx, in_tx, ctx));
+        }
+        let link_id = format!("{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0));
         let app = App {
+            link_tx,
+            link_rx,
+            link_id,
+            link_g: None,
+            link_peers: HashMap::new(),
+            link_last: None,
+            link_sent: std::time::Instant::now(),
+            link_xh: None,
+            link_xh_sent: false,
+            bar_over: false,
             sym,
             tf,
             shared,
@@ -978,6 +1078,8 @@ impl App {
             show_py: true,
             manual: None,
             drag_mode: 0,
+            meas_p0: None,
+            meas: None,
             vdrag: 0.0,
         };
         app.reload();
@@ -997,12 +1099,19 @@ impl eframe::App for App {
         egui::Panel::top("bar").show(ui, |ui| {
             let avail = ui.available_width();
             ui.horizontal(|ui| {
-                if ui.button("◀").clicked() {
+                let over = self.bar_over;
+                if over && ui.small_button("‹").clicked() {
                     self.bar_x = (self.bar_x - 300.0).max(0.0);
+                }
+                if over && ui.rect_contains_pointer(ui.max_rect()) {
+                    let d = ui.input(|i| i.smooth_scroll_delta.y);
+                    if d != 0.0 {
+                        self.bar_x = (self.bar_x - d).max(0.0); // plain mouse wheel over the toolbar scrolls it sideways
+                    }
                 }
                 let out = egui::ScrollArea::horizontal()
                     .id_salt("barscroll")
-                    .max_width((avail - 80.0).max(100.0))
+                    .max_width((avail - if over { 60.0 } else { 14.0 } - if self.link_g.is_some() || !self.link_peers.is_empty() { 52.0 } else { 0.0 }).max(100.0))
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                     .horizontal_scroll_offset(self.bar_x)
                     .show(ui, |ui| {
@@ -1031,6 +1140,7 @@ impl eframe::App for App {
                 ui.separator();
                 if INTRA_TFS.contains(&self.tf.as_str()) && ui.selectable_label(self.intraday, "INTRADAY").clicked() {
                     self.intraday = !self.intraday;
+                    self.seen_version = u64::MAX; // re-apply the default zoom for the new mode
                 }
                 if ui.selectable_label(self.show_fvg, "FVG").clicked() {
                     self.show_fvg = !self.show_fvg;
@@ -1087,8 +1197,23 @@ impl eframe::App for App {
                 });
                 self.bar_x = out.state.offset().x;
                 let max_x = (out.content_size.x - out.inner_rect.width()).max(0.0);
-                if ui.button("▶").clicked() {
+                self.bar_over = max_x > 2.0 || (over && out.content_size.x + 60.0 > avail);
+                if over && ui.small_button("›").clicked() {
                     self.bar_x = (self.bar_x + 300.0).min(max_x);
+                }
+                {
+                    let now = std::time::Instant::now();
+                    self.link_peers.retain(|_, t| now.duration_since(*t) < Duration::from_secs(6));
+                    if self.link_g.is_some() || !self.link_peers.is_empty() {
+                        ui.separator();
+                        let col = self.link_g.map(|g| LINK_COLORS[g]).map(|(r, g, b)| Color32::from_rgb(r, g, b));
+                        let txt = egui::RichText::new("LINK").color(col.unwrap_or(Color32::from_rgb(140, 150, 170)));
+                        if ui.selectable_label(col.is_some(), txt).on_hover_text("Link charts: windows with the same colour share zoom, scroll and crosshair").clicked() {
+                            self.link_g = match self.link_g { None => Some(0), Some(g) if g + 1 < LINK_COLORS.len() => Some(g + 1), _ => None };
+                            self.link_last = None;
+                            self.link_xh = None;
+                        }
+                    }
                 }
             });
         });
@@ -1124,33 +1249,121 @@ impl eframe::App for App {
                 return;
             }
             let n = cs.len();
-            // default zoom = the web chart's bars-per-timeframe
-            let default_spacing = |tf: &str| -> f32 {
-                let bars = match tf { "2m" => 250.0, "5m" => 200.0, "30m" => 250.0, "1h" => 300.0, "4h" => 200.0, "8h" => 150.0, "D" => 150.0, "W" => 75.0, _ => 250.0 };
-                (plot.width() / (bars + RIGHT_GAP_BARS)).clamp(3.0, 70.0)
+            // INTRADAY mode opens close up on the latest candles, like the web chart (desktop counts), with a ~150px gap for the price tags
+            let default_view = |tf: &str, intra: bool, sym: &str| -> (f32, f32) {
+                if intra {
+                    let base = match tf { "2m" => 54.0f32, "5m" => 43.0, "30m" => 14.0, "1h" => 14.0, _ => 0.0 };
+                    if base > 0.0 {
+                        let bars = if sym == "BTC" { (base * 0.7).round() } else { base };
+                        let sp = ((plot.width() - 150.0) / bars).clamp(3.0, 140.0);
+                        return (sp, 150.0 / sp);
+                    }
+                }
+                // same counts as the web chart on desktop (its bars-per-timeframe x 0.45; BTC x 0.7), ~58px kept free on the right
+                let base = match tf { "2m" => 112.0f32, "5m" => 90.0, "30m" => 112.0, "1h" => 135.0, "4h" => 90.0, "8h" => 68.0, "D" => 68.0, "W" => 34.0, _ => 112.0 };
+                let bars = if sym == "BTC" { (base * 0.7).round() } else { base };
+                let sp = ((plot.width() - 58.0) / bars).clamp(3.0, 140.0);
+                (sp, 58.0 / sp)
+            };
+            let psecs = TFS.iter().find(|t| t.0 == self.tf).map(|t| t.2).unwrap_or(300) as f64;
+            // time <-> fractional bar index through this chart's own bars (extrapolated past both ends)
+            let t_to_l = |t: f64| -> f64 {
+                let (f, l) = (cs[0].t as f64, cs[n - 1].t as f64);
+                if t <= f { return (t - f) / psecs; }
+                if t >= l { return (n - 1) as f64 + (t - l) / psecs; }
+                let i = cs.partition_point(|c| (c.t as f64) <= t).clamp(1, n - 1);
+                let (a, b) = (cs[i - 1].t as f64, cs[i].t as f64);
+                (i - 1) as f64 + if b > a { (t - a) / (b - a) } else { 0.0 }
+            };
+            let l_to_t = |l: f64| -> f64 {
+                if l <= 0.0 { return cs[0].t as f64 + l * psecs; }
+                if l >= (n - 1) as f64 { return cs[n - 1].t as f64 + (l - (n - 1) as f64) * psecs; }
+                let i = l.floor() as usize;
+                cs[i].t as f64 + (l - i as f64) * (cs[i + 1].t - cs[i].t) as f64
+            };
+            let mut apply_range = |app: &mut App, from: i64, to: i64| {
+                let (lf, lt) = (t_to_l(from as f64), t_to_l(to as f64));
+                if lt > lf + 0.5 {
+                    app.spacing = ((plot.width() as f64 / (lt - lf)) as f32).clamp(3.0, 140.0);
+                    app.right_idx = lt as f32;
+                }
             };
             if ver != self.seen_version {
                 self.seen_version = ver;
                 self.manual = None;
-                self.spacing = default_spacing(&self.tf);
-                self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
+                let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
+                self.spacing = sp0;
+                self.right_idx = (n - 1) as f32 + gap0;
+                if let (Some(_), Some((f, t))) = (self.link_g, self.link_last) {
+                    apply_range(self, f, t); // reload / timeframe switch keeps the shared view
+                }
             }
+            // incoming link messages
+            let mut got_range: Option<(i64, i64)> = None;
+            while let Ok(line) = self.link_rx.try_recv() {
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+                let id = v["id"].as_str().unwrap_or("").to_string();
+                if id == self.link_id { continue; }
+                match v["t"].as_str().unwrap_or("") {
+                    "alive" => { self.link_peers.insert(id, std::time::Instant::now()); }
+                    "bye" => { self.link_peers.remove(&id); }
+                    t => {
+                        if self.link_g.is_none() || v["g"].as_u64().map(|g| g as usize) != self.link_g { continue; }
+                        match t {
+                            "range" => {
+                                if let (Some(f), Some(to)) = (v["from"].as_i64(), v["to"].as_i64()) { got_range = Some((f, to)); }
+                            }
+                            "xh" => {
+                                if let (Some(tm), Some(pr)) = (v["time"].as_i64(), v["price"].as_f64()) { self.link_xh = Some((tm, pr, std::time::Instant::now())); }
+                            }
+                            "xhc" => self.link_xh = None,
+                            "hello" => { self.link_sent = std::time::Instant::now() - Duration::from_secs(1); self.link_last = None; got_range = None; }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            if let Some((f, t)) = got_range {
+                self.link_last = Some((f, t));
+                apply_range(self, f, t);
+            }
+            if self.link_xh.map_or(false, |x| x.2.elapsed() > Duration::from_secs(2)) { self.link_xh = None; }
+            {
+                // heartbeat so the ⛓ button shows up when another chart window exists
+                static LAST_ALIVE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+                let mut la = LAST_ALIVE.lock().unwrap();
+                if la.map_or(true, |t| t.elapsed() > Duration::from_secs(2)) {
+                    *la = Some(std::time::Instant::now());
+                    let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"t\":\"alive\"}}", self.link_id));
+                }
+                ctx.request_repaint_after(Duration::from_secs(2));
+            }
+            let (pre_sp, pre_ri) = (self.spacing, self.right_idx);
 
             // ── interaction ──
             if resp.drag_started() {
                 let o = ctx.input(|i| i.pointer.press_origin());
-                self.drag_mode = if o.map_or(false, |p| p.x > plot.right()) { 2 } else { 1 };
+                let shift = ctx.input(|i| i.modifiers.shift);
+                self.drag_mode = if o.map_or(false, |p| p.x > plot.right()) { 2 } else if shift { 3 } else { 1 };
+                self.meas = None;
+                self.meas_p0 = if self.drag_mode == 3 { o } else { None };
                 self.vdrag = 0.0;
             }
-            if resp.dragged() && self.drag_mode != 2 {
+            if resp.drag_stopped() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.meas = None;
+                self.meas_p0 = None;
+                if self.drag_mode == 3 { self.drag_mode = 0; }
+            }
+            if resp.dragged() && self.drag_mode == 1 {
                 self.right_idx -= resp.drag_delta().x / self.spacing;
             }
             if resp.double_clicked() {
                 let on_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
                 self.manual = None; // back to auto-fit
                 if !on_axis {
-                    self.spacing = default_spacing(&self.tf);
-                    self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
+                    let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
+                    self.spacing = sp0;
+                    self.right_idx = (n - 1) as f32 + gap0;
                 }
             }
             {
@@ -1172,11 +1385,22 @@ impl eframe::App for App {
                 } else if scroll != 0.0 {
                     let anchor = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.x).unwrap_or(plot.right());
                     let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
-                    self.spacing = (self.spacing * (scroll * 0.0025).exp()).clamp(3.0, 70.0);
+                    self.spacing = (self.spacing * (scroll * 0.0025).exp()).clamp(3.0, 140.0);
                     self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
                 }
             }
             self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
+            // a view change made HERE (drag, wheel, arrows, double-click) goes out to linked windows
+            if let Some(g) = self.link_g {
+                if (self.spacing - pre_sp).abs() > 1e-4 || (self.right_idx - pre_ri).abs() > 1e-4 {
+                    if got_range.is_none() {
+                        let (a, b) = (l_to_t((self.right_idx - plot.width() / self.spacing) as f64) as i64, l_to_t(self.right_idx as f64) as i64);
+                        self.link_last = Some((a, b));
+                        self.link_sent = std::time::Instant::now();
+                        let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"range\",\"from\":{},\"to\":{}}}", self.link_id, g, a, b));
+                    }
+                }
+            }
             let (sp, ri) = (self.spacing, self.right_idx);
             let x_of = move |i: f32| plot.right() - (ri - i) * sp;
             let first_vis = ((ri - (plot.width() / sp)).floor() as i64 - 1).max(0) as usize;
@@ -1811,6 +2035,113 @@ impl eframe::App for App {
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
             }
 
+            // ═════════ measure tool (shift + drag): points, ticks, dollars, bars, time ═════════
+            if self.drag_mode == 3 && resp.dragged() {
+                if let Some(cur) = ctx.input(|i| i.pointer.latest_pos()) {
+                    let cur = Pos2::new(cur.x.clamp(plot.left(), plot.right()), cur.y.clamp(plot.top(), plot.bottom()));
+                    let idx_of = |x: f32| ri - (plot.right() - x) / sp;
+                    let tk0 = tick_size(&self.sym);
+                    let snap = |p: f64| (p / tk0).round() * tk0; // like TradingView, measure from tick to tick
+                    if self.meas.is_none() {
+                        if let Some(p0) = self.meas_p0 {
+                            self.meas = Some((idx_of(p0.x).round(), snap(p_of(p0.y)), idx_of(p0.x).round(), snap(p_of(p0.y))));
+                        }
+                    }
+                    if let Some(m) = self.meas.as_mut() {
+                        m.2 = idx_of(cur.x).round();
+                        m.3 = snap(p_of(cur.y));
+                    }
+                }
+            }
+            if let (3, Some((i0, p0, i1, p1))) = (self.drag_mode, self.meas) {
+                let up = p1 >= p0;
+                let col = if up { Color32::from_rgb(41, 121, 255) } else { Color32::from_rgb(242, 54, 69) };
+                let (x0, x1) = (x_of(i0), x_of(i1));
+                let (y0, y1) = (y_of(p0), y_of(p1));
+                let rect = Rect::from_min_max(Pos2::new(x0.min(x1), y0.min(y1)), Pos2::new(x0.max(x1), y0.max(y1)));
+                painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), 55));
+                painter.rect_stroke(rect, 0.0, Stroke::new(1.0, col), egui::StrokeKind::Inside);
+                let c = rect.center();
+                painter.line_segment([Pos2::new(rect.left(), c.y), Pos2::new(rect.right(), c.y)], Stroke::new(1.0, col));
+                painter.line_segment([Pos2::new(c.x, rect.top()), Pos2::new(c.x, rect.bottom())], Stroke::new(1.0, col));
+                let hx = if x1 >= x0 { rect.right() } else { rect.left() };
+                let hs = if x1 >= x0 { -7.0 } else { 7.0 };
+                painter.add(egui::Shape::convex_polygon(vec![Pos2::new(hx, c.y), Pos2::new(hx + hs, c.y - 4.0), Pos2::new(hx + hs, c.y + 4.0)], col, Stroke::NONE));
+                let (vy, vs) = if up { (rect.top(), 7.0) } else { (rect.bottom(), -7.0) };
+                painter.add(egui::Shape::convex_polygon(vec![Pos2::new(c.x, vy), Pos2::new(c.x - 4.0, vy + vs), Pos2::new(c.x + 4.0, vy + vs)], col, Stroke::NONE));
+
+                // label
+                let pts = p1 - p0;
+                let tk = tick_size(&self.sym);
+                let dec = if tk >= 0.01 { 2 } else { 4 };
+                let sign = if pts >= 0.0 { "+" } else { "-" };
+                let money = |v: f64| -> String {
+                    let a = v.abs();
+                    let body = if a >= 10.0 { format!("{:.0}", a) } else { format!("{:.2}", a) };
+                    let mut out = String::new();
+                    let (int, frac) = match body.split_once('.') { Some((i, f)) => (i.to_string(), format!(".{f}")), None => (body.clone(), String::new()) };
+                    for (k, ch) in int.chars().enumerate() {
+                        if k > 0 && (int.len() - k) % 3 == 0 { out.push(','); }
+                        out.push(ch);
+                    }
+                    format!("{}${}{}", if v < 0.0 { "-" } else { "" }, out, frac)
+                };
+                let mut lines: Vec<String> = vec![format!("{sign}{:.dec$}  ·  {:.0} ticks", pts.abs(), (pts.abs() / tk).round())];
+                let pv: Option<f64> = match self.sym.as_str() { "ES" => Some(50.0), "NQ" => Some(20.0), "CL" => Some(1000.0), "GC" => Some(100.0), "NG" => Some(10000.0), _ => None };
+                if let Some(pv) = pv {
+                    let micro: Option<(&str, f64)> = match self.sym.as_str() { "ES" => Some(("MES", 5.0)), "NQ" => Some(("MNQ", 2.0)), _ => None };
+                    let mut l = format!("{} (1 {})", money(pts * pv), self.sym);
+                    if let Some((mn, mv)) = micro {
+                        l.push_str(&format!("  ·  {} (1 {})", money(pts * mv), mn));
+                    }
+                    lines.push(l);
+                }
+                let nb = ((i1 - i0).abs().round() as i64).max(0);
+                let secs_d = (l_to_t(i1 as f64) - l_to_t(i0 as f64)).abs() as i64;
+                let dur = if secs_d >= 86400 { format!("{}d {}h", secs_d / 86400, (secs_d % 86400) / 3600) } else if secs_d >= 3600 { format!("{}h {:02}m", secs_d / 3600, (secs_d % 3600) / 60) } else { format!("{}m", secs_d / 60) };
+                lines.push(format!("{nb} bars  ·  {dur}"));
+                let w = lines.iter().map(|t| painter.layout_no_wrap(t.clone(), FontId::monospace(13.0), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 22.0;
+                let h = lines.len() as f32 * 19.0 + 10.0;
+                let lx = (c.x - w / 2.0).clamp(plot.left() + 2.0, (plot.right() - w - 2.0).max(plot.left() + 2.0));
+                let mut ly = if up { rect.top() - h - 8.0 } else { rect.bottom() + 8.0 };
+                if ly < plot.top() + 2.0 { ly = if up { rect.bottom() + 8.0 } else { rect.top() - h - 8.0 }.max(plot.top() + 2.0); }
+                if ly + h > plot.bottom() - 2.0 { ly = (plot.bottom() - h - 2.0).max(plot.top() + 2.0); }
+                painter.rect_filled(Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), 4.0, col);
+                for (k, t) in lines.iter().enumerate() {
+                    painter.text(Pos2::new(lx + 11.0, ly + 5.0 + k as f32 * 19.0), Align2::LEFT_TOP, t, FontId::monospace(13.0), Color32::WHITE);
+                }
+            }
+            // ═════════ linked crosshair (other window's pointer) ═════════
+            let hovering = resp.hover_pos().map_or(false, |p| plot.contains(p));
+            if let Some(g) = self.link_g {
+                if hovering {
+                    if let Some(pos) = resp.hover_pos() {
+                        let tm = l_to_t((ri - (plot.right() - pos.x) / sp) as f64) as i64;
+                        let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xh\",\"time\":{},\"price\":{}}}", self.link_id, g, tm, p_of(pos.y)));
+                        self.link_xh = None;
+                        self.link_xh_sent = true;
+                    }
+                } else if self.link_xh_sent {
+                    self.link_xh_sent = false;
+                    let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xhc\"}}", self.link_id, g));
+                }
+            }
+            if !hovering {
+                if let Some((tm, pr, _)) = self.link_xh {
+                    let x = snapc(x_of(t_to_l(tm as f64) as f32));
+                    let y = snapc(y_of(pr));
+                    let col = Stroke::new(hair, Color32::from_rgb(120, 140, 175));
+                    if x >= plot.left() && x <= plot.right() {
+                        painter.add(egui::Shape::dashed_line(&[Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())], col, 4.0, 4.0));
+                    }
+                    if y >= plot.top() && y <= plot.bottom() {
+                        painter.add(egui::Shape::dashed_line(&[Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)], col, 4.0, 4.0));
+                        let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
+                        painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
+                        painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(pr, step), FontId::monospace(13.0), Color32::WHITE);
+                    }
+                }
+            }
             // ═════════ crosshair + readout ═════════
             if let Some(pos) = resp.hover_pos().filter(|p| plot.contains(*p)) {
                 let dash = |a: Pos2, b: Pos2| {
@@ -1871,6 +2202,7 @@ fn main() -> eframe::Result {
     if let Some((x, y)) = pair("--pos") {
         vb = vb.with_position([x, y]);
     }
+    let lg = get("--link").and_then(|v| v.parse::<usize>().ok()).filter(|g| *g < LINK_COLORS.len());
     let opts = eframe::NativeOptions { viewport: vb, ..Default::default() };
-    eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a }))))
+    eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a.link_g = lg; a }))))
 }
