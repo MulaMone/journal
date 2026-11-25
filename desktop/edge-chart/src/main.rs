@@ -133,6 +133,8 @@ struct Shared {
     nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
     nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
+    ord_sym: String,                  // chart symbol whose live orders the poller fetches
+    orders: Vec<(bool, f64, Option<(f64, f64)>)>, // NinjaTrader orders working right now: (is stop, price, (points, dollars) from the open position's average price) - futures prices, same as the NT candles
 }
 
 enum Req {
@@ -405,6 +407,62 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                 ctx.request_repaint();
             }
         });
+    }
+}
+
+/// Polls EdgeFeed (127.0.0.1:7881/orders) for the stop / target orders NinjaTrader has working on the chart's symbol.
+/// An order is live while its latest recorded event is "W" (working); fills and cancels end it.
+fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
+    loop {
+        std::thread::sleep(Duration::from_millis(1500));
+        let sym = shared.lock().unwrap().ord_sym.clone();
+        if sym.is_empty() {
+            continue;
+        }
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        let url = format!("http://127.0.0.1:7881/orders?sym={sym}&from={}&to={}", now - 259200, now + 120);
+        let res = ureq::get(&url).timeout(Duration::from_secs(2)).call().ok().and_then(|r| r.into_json::<serde_json::Value>().ok());
+        let mut live: Vec<(bool, f64, Option<(f64, f64)>)> = vec![];
+        if let Some(v) = res {
+            let pos: Vec<(String, f64, f64, f64, f64)> = v["pos"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|q| Some((q[0].as_str()?.to_string(), q[1].as_f64()?, q[2].as_f64()?, q[3].as_f64()?, q[4].as_f64()?))).collect())
+                .unwrap_or_default();
+            let mut last: HashMap<String, (i64, bool, f64, String, f64)> = HashMap::new();
+            if let Some(a) = v["orders"].as_array() {
+                for e in a {
+                    let (Some(t), Some(id), Some(k), Some(px), Some(st)) = (e[0].as_i64(), e[1].as_str(), e[2].as_str(), e[4].as_f64(), e[6].as_str()) else { continue };
+                    if last.get(id).map_or(true, |o| t >= o.0) {
+                        last.insert(id.to_string(), (t, k == "S", px, st.to_string(), e[5].as_f64().unwrap_or(0.0)));
+                    }
+                }
+            }
+            for (id, (_, is_stop, px, st, qty)) in last {
+                if st == "W" {
+                    // what the order is worth: points from the position's average price x dollars per point x the order's contracts
+                    let acct = id.split('|').next().unwrap_or("");
+                    let pz = pos.iter().find(|q| q.0 == acct).or(if pos.len() == 1 { pos.first() } else { None });
+                    let val = pz.map(|q| {
+                        let pts = (px - q.3) * q.1;
+                        (pts, pts * q.4 * if qty > 0.0 { qty } else { q.2 })
+                    });
+                    live.push((is_stop, px, val));
+                }
+            }
+            live.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        }
+        let changed = {
+            let mut s = shared.lock().unwrap();
+            if s.orders != live {
+                s.orders = live;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            ctx.request_repaint();
+        }
     }
 }
 
@@ -1315,6 +1373,8 @@ impl App {
             let (sh, ctx) = (shared.clone(), cc.egui_ctx.clone());
             let (tx2, ctx2, sh2) = (tx.clone(), ctx.clone(), sh.clone());
             std::thread::spawn(move || nt_listener(sh2, tx2, ctx2));
+            let (sh4, ctx4) = (sh.clone(), ctx.clone());
+            std::thread::spawn(move || order_poll(sh4, ctx4));
             let tx3 = tx.clone();
             std::thread::spawn(move || worker(rx, tx3, sh, ctx, base, tok));
         }
@@ -1381,6 +1441,13 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        {
+            let mut s = self.shared.lock().unwrap();
+            if s.ord_sym != self.sym {
+                s.ord_sym = self.sym.clone(); // the order poller follows the symbol on screen
+                s.orders.clear();
+            }
+        }
         // ── toolbar ──
         egui::Panel::top("bar").show(ui, |ui| {
             let avail = ui.available_width();
@@ -2450,6 +2517,30 @@ impl eframe::App for App {
                 let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
                 tag_box(&painter, cr, hexc(0x040d1a, 0.9));
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
+            }
+
+            // ═════════ live stop / target orders from NinjaTrader (EdgeFeed /orders), on the futures prices of the NT candles ═════════
+            if src_nt {
+                let orders: Vec<(bool, f64, Option<(f64, f64)>)> = self.shared.lock().unwrap().orders.clone();
+                let oqf = FontId::monospace(12.0);
+                for (is_stop, opx, oval) in orders {
+                    let oy = y_of(opx);
+                    if oy < plot.top() || oy > plot.bottom() {
+                        continue;
+                    }
+                    let ocol: u32 = if is_stop { 0xe24b4a } else { 0x2fb36b };
+                    dash_h(&clip, plot.left(), plot.right(), snapc(oy), 6.0, 4.0, Stroke::new(hair.max(1.0), rgb(ocol)));
+                    let orr = Rect::from_min_size(Pos2::new(plot.right() + 2.0, oy - 9.0), Vec2::new(AXIS_W - 4.0, 18.0));
+                    pill(&painter, orr, rgb(ocol), &format!("{} {}", if is_stop { "SL" } else { "TP" }, fmt_price(opx, step)), Color32::WHITE, FontId::monospace(11.0));
+                    // like NinjaTrader's own label: points and dollars from your entry to this order
+                    if let Some((pts, usd)) = oval {
+                        let sg = |v: f64| if v >= 0.0 { "+" } else { "-" };
+                        let txt = format!("{} {:.2} pts  {}${:.2}", if is_stop { "STOP" } else { "TARGET" }, pts.abs(), sg(usd), usd.abs());
+                        let tw = text_w(&painter, &txt, &oqf) + 12.0;
+                        let tr = Rect::from_min_size(Pos2::new(plot.left() + 12.0, oy - 9.0), Vec2::new(tw, 18.0));
+                        pill(&clip, tr, rgb(ocol), &txt, Color32::WHITE, oqf.clone());
+                    }
+                }
             }
 
             // ═════════ measure tool (shift + drag): points, ticks, dollars, bars, time ═════════
