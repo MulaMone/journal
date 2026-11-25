@@ -1931,7 +1931,12 @@ impl eframe::App for App {
                 let mut bands: Vec<(usize, usize)> = vec![];
                 for i in first_vis..=last_vis.min(n - 1) {
                     let sod = cs[i].e.rem_euclid(86400);
-                    let rth = sod >= 34200 && sod < 57600 && !matches!(weekday_of(cs[i].e), 0 | 6);
+                    let dk = (cs[i].e + anchor).div_euclid(86400);
+                    let wed_done = tf == "30m" && weekday(dk) == 3 && dk != now_dk; // completed Wednesdays are amber: just a line at the open there
+                    if wed_done && sod == 34200 {
+                        dash_v(&clip, snapc(x_of(i as f32) - sp / 2.0), plot.top(), plot.bottom(), 2.0, 4.0, Stroke::new(hair, hexc(0x4aa3ff, 0.9)));
+                    }
+                    let rth = sod >= 34200 && sod < 57600 && !wed_done && !matches!(weekday_of(cs[i].e), 0 | 6);
                     match (rth, run) {
                         (true, None) => run = Some(i),
                         (false, Some(s0)) => {
