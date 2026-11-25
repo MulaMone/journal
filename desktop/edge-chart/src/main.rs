@@ -402,6 +402,16 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
 // ───────────────────────── candle cache (disk + memory, delta refresh) ─────────────────────────
 type Cache = Arc<Mutex<HashMap<(String, String), Vec<Candle>>>>;
 
+fn htf_count(g: &str) -> usize {
+    HTFS.iter().find(|h| h.1 == g).map(|h| h.2 as usize).unwrap_or(500)
+}
+fn tail_n(mut v: Vec<Candle>, n: usize) -> Vec<Candle> {
+    if v.len() > n {
+        let cut = v.len() - n;
+        v.drain(..cut);
+    }
+    v
+}
 fn gran_secs(g: &str) -> i64 {
     match g { "M1" => 60, "M2" => 120, "M5" => 300, "M30" => 1800, "H1" => 3600, "H4" => 14400, "H8" => 28800, "D" => 86400, "W" => 604800, _ => 300 }
 }
@@ -448,9 +458,12 @@ fn cache_save(sym: &str, g: &str, cs: &[Candle]) {
         b.push(c.done as u8);
     }
     let p = cache_file(sym, g);
-    let tmp = p.with_extension("tmp");
+    static SEQ: AtomicU64 = AtomicU64::new(0); // two threads can save the same series at once: never share a temp file
+    let tmp = p.with_extension(format!("tmp{}", SEQ.fetch_add(1, Ordering::SeqCst)));
     if std::fs::write(&tmp, b).is_ok() {
-        let _ = std::fs::rename(&tmp, &p);
+        if std::fs::rename(&tmp, &p).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 }
 /// Memory first, then disk.
@@ -583,7 +596,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                     let mut s = shared.lock().unwrap();
                     if !sd.is_empty() { s.daily = sd; }
                     if !sm.is_empty() { s.m5 = sm; }
-                    if !sh.is_empty() { s.htf = sh; }
+                    if !sh.is_empty() { s.htf = tail_n(sh, hg.map_or(500, htf_count)); }
                 }
                 // levels (D), 5m and the HTF gaps load at the same time as the main candles
                 let need_aux = {
@@ -596,7 +609,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                     std::thread::spawn(move || load_series(&b, &t, &sy, g, n, al, seed))
                 };
                 let h_d = if need_aux { Some(job("D", 800, cached_get(&cache, &sym, "D"))) } else { None };
-                let h_m5 = if need_aux { Some(job("M5", 3000, cached_get(&cache, &sym, "M5"))) } else { None };
+                let h_m5 = if need_aux && gran != "M5" { Some(job("M5", 3000, cached_get(&cache, &sym, "M5"))) } else { None };
                 let h_htf = if need_htf {
                     hg.map(|g| job(g, HTFS.iter().find(|h| h.1 == g).map(|h| h.2).unwrap_or(500), cached_get(&cache, &sym, g)))
                 } else {
@@ -632,6 +645,10 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                     }
                 }
                 ctx.request_repaint();
+                if need_aux && gran == "M5" {
+                    let m = shared.lock().unwrap().main.clone(); // the main 5m candles double as the EMA / NY-open feed
+                    shared.lock().unwrap().m5 = m;
+                }
                 if let Some(Ok(d)) = h_d.map(|h| h.join()).and_then(|r| r.ok()) {
                     cache.lock().unwrap().insert((sym.clone(), "D".to_string()), d.clone());
                     shared.lock().unwrap().daily = d;
@@ -643,7 +660,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 if let (Some(h), Some(g)) = (h_htf, hg) {
                     if let Ok(Ok(b)) = h.join() {
                         cache.lock().unwrap().insert((sym.clone(), g.to_string()), b.clone());
-                        shared.lock().unwrap().htf = b;
+                        shared.lock().unwrap().htf = tail_n(b, htf_count(g));
                         htf_cur = Some((sym.clone(), g.to_string()));
                     }
                 }
@@ -1270,6 +1287,9 @@ struct App {
     fling: f32,                 // pan momentum, bars per second
     zoom_t: Option<(f32, f32)>, // eased wheel zoom: (target spacing, anchor x)
     xh_last: Option<Pos2>,      // last crosshair position, kept while it fades out
+    xh_off: bool,               // a click on the chart hides / shows the crosshair lines (like the web chart)
+    show_wk_d: bool,            // D: a vertical line at the start of each week (off by default)
+    show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
 }
 
 impl App {
@@ -1335,6 +1355,9 @@ impl App {
             fling: 0.0,
             zoom_t: None,
             xh_last: None,
+            xh_off: false,
+            show_wk_d: false,
+            show_mo_w: false,
         };
         app.reload();
         app
@@ -1422,6 +1445,18 @@ impl eframe::App for App {
                     };
                     if let Some(f) = flag {
                         if ui.selectable_label(*f, lbl).clicked() {
+                            *f = !*f;
+                        }
+                    }
+                }
+                if !self.intraday {
+                    let (lbl, flag) = match self.tf.as_str() {
+                        "D" => ("WEEK", Some(&mut self.show_wk_d)),
+                        "W" => ("MONTH", Some(&mut self.show_mo_w)),
+                        _ => ("", None),
+                    };
+                    if let Some(f) = flag {
+                        if ui.selectable_label(*f, lbl).on_hover_text(if lbl == "WEEK" { "Line at the start of each week" } else { "Line at the start of each month" }).clicked() {
                             *f = !*f;
                         }
                     }
@@ -1571,6 +1606,10 @@ impl eframe::App for App {
                                 if let (Some(tm), Some(pr)) = (v["time"].as_i64(), v["price"].as_f64()) { self.link_xh = Some((tm, pr, std::time::Instant::now())); }
                             }
                             "xhc" => self.link_xh = None,
+                            "xhoff" => {
+                                self.xh_off = v["off"].as_bool() == Some(true);
+                                self.link_xh = None;
+                            }
                             "hello" => { self.link_sent = std::time::Instant::now() - Duration::from_secs(1); self.link_last = None; got_range = None; }
                             _ => {}
                         }
@@ -1617,6 +1656,15 @@ impl eframe::App for App {
                 if self.drag_mode == 3 {
                     self.drag_mode = 0;
                     if let Some((i0, p0, i1, p1)) = self.meas { if i0 == i1 && p0 == p1 { self.meas = None; } }
+                }
+            }
+            if resp.clicked() && self.meas.is_none() {
+                // a plain click on the chart hides / shows the crosshair lines (a double click flips twice = no change)
+                if ctx.input(|i| i.pointer.interact_pos()).map_or(false, |p| p.x <= plot.right()) {
+                    self.xh_off = !self.xh_off;
+                    if let Some(g) = self.link_g {
+                        let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xhoff\",\"off\":{}}}", self.link_id, g, self.xh_off));
+                    }
                 }
             }
             if resp.clicked() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -1828,6 +1876,21 @@ impl eframe::App for App {
                 if tf != "D" && secs < 604800 {
                     for i in 1..n {
                         if cs[i].t - cs[i - 1].t > 2 * 86400 { add(i, "WEEK", 0x2ec4b6, &mut marks); }
+                    }
+                }
+                // optional (buttons): D gets a line at the start of each week, W at the start of each month (same colours as the lines above)
+                if tf == "D" && self.show_wk_d {
+                    for i in 1..n {
+                        if key_of(Per::Week, cs[i].e, anchor) != key_of(Per::Week, cs[i - 1].e, anchor) { add(i, "WEEK", 0x2ec4b6, &mut marks); }
+                    }
+                }
+                if tf == "W" && self.show_mo_w {
+                    let mk = |e: i64| {
+                        let (y, m, _) = ymd(e + anchor + 2 * 86400);
+                        y * 12 + m
+                    };
+                    for i in 1..n {
+                        if mk(cs[i].e) != mk(cs[i - 1].e) { add(i, "MONTH", 0xb06aff, &mut marks); }
                     }
                 }
                 if secs < 3600 && FUTURES.contains(&self.sym.as_str()) {
@@ -2467,7 +2530,7 @@ impl eframe::App for App {
             // ═════════ linked crosshair (other window's pointer) ═════════
             let hovering = resp.hover_pos().map_or(false, |p| plot.contains(p));
             if let Some(g) = self.link_g {
-                if hovering {
+                if hovering && !self.xh_off {
                     if let Some(pos) = resp.hover_pos() {
                         let tm = l_to_t((ri - (plot.right() - pos.x) / sp) as f64) as i64;
                         let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xh\",\"time\":{},\"price\":{}}}", self.link_id, g, tm, p_of(pos.y)));
@@ -2479,7 +2542,7 @@ impl eframe::App for App {
                     let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xhc\"}}", self.link_id, g));
                 }
             }
-            if !hovering {
+            if !hovering && !self.xh_off {
                 if let Some((tm, pr, _)) = self.link_xh {
                     let x = snapc(x_of(t_to_l(tm as f64) as f32));
                     let y = snapc(y_of(pr));
@@ -2500,33 +2563,37 @@ impl eframe::App for App {
             if hov_now.is_some() {
                 self.xh_last = hov_now;
             }
-            let fa = ctx.animate_bool_with_time(egui::Id::new("xh_fade"), hov_now.is_some(), 0.12); // crosshair fades in / out
+            let fa = ctx.animate_bool_with_time(egui::Id::new("xh_fade"), hov_now.is_some() && !self.xh_off, 0.12); // crosshair fades in / out
             if let Some(pos) = hov_now.or(if fa > 0.0 { self.xh_last } else { None }) {
-                let wh = Color32::WHITE.gamma_multiply(fa);
-                let tagc = Color32::from_rgb(60, 72, 96).gamma_multiply(fa);
-                let dash = |a: Pos2, b: Pos2| {
-                    painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175).gamma_multiply(fa)), 4.0, 4.0));
-                };
-                dash(Pos2::new(plot.left(), snapc(pos.y)), Pos2::new(plot.right(), snapc(pos.y)));
-                dash(Pos2::new(snapc(pos.x), plot.top()), Pos2::new(snapc(pos.x), plot.bottom()));
-                let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, pos.y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-                tag_box(&painter, r, tagc);
-                painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), wh);
                 let idx = ((ri - (plot.right() - pos.x) / sp).round() as i64).clamp(0, n as i64 - 1) as usize;
                 let c = cs[idx];
-                let d = et(c.t);
-                let tl = if secs >= 86400 { d.format("%a %d %b %Y").to_string() } else { d.format("%a %d %b %Y  %H:%M").to_string() };
-                let tw = 150.0;
-                let r = Rect::from_min_size(Pos2::new((pos.x - tw / 2.0).clamp(plot.left(), plot.right() - tw), plot.bottom() + 3.0), Vec2::new(tw, 20.0));
-                tag_box(&painter, r, tagc);
-                painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), wh);
+                if fa > 0.0 {
+                    let wh = Color32::WHITE.gamma_multiply(fa);
+                    let tagc = Color32::from_rgb(60, 72, 96).gamma_multiply(fa);
+                    let dash = |a: Pos2, b: Pos2| {
+                        painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175).gamma_multiply(fa)), 4.0, 4.0));
+                    };
+                    dash(Pos2::new(plot.left(), snapc(pos.y)), Pos2::new(plot.right(), snapc(pos.y)));
+                    dash(Pos2::new(snapc(pos.x), plot.top()), Pos2::new(snapc(pos.x), plot.bottom()));
+                    let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, pos.y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
+                    tag_box(&painter, r, tagc);
+                    painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), wh);
+                    let d = et(c.t);
+                    let tl = if secs >= 86400 { d.format("%a %d %b %Y").to_string() } else { d.format("%a %d %b %Y  %H:%M").to_string() };
+                    let tw = 150.0;
+                    let r = Rect::from_min_size(Pos2::new((pos.x - tw / 2.0).clamp(plot.left(), plot.right() - tw), plot.bottom() + 3.0), Vec2::new(tw, 20.0));
+                    tag_box(&painter, r, tagc);
+                    painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), wh);
+                }
+                // the O/H/L/C readout stays even with the crosshair lines hidden
+                let ra = if self.xh_off { 1.0 } else { fa };
                 let chg = c.c - c.o;
                 painter.text(
                     Pos2::new(plot.left() + 10.0, plot.top() + 8.0),
                     Align2::LEFT_TOP,
                     format!("O {:.2}  H {:.2}  L {:.2}  C {:.2}  {:+.2}", c.o, c.h, c.l, c.c, chg),
                     FontId::monospace(13.0),
-                    (if chg >= 0.0 { UP_FILL } else { DN_FILL }).gamma_multiply(fa),
+                    (if chg >= 0.0 { UP_FILL } else { DN_FILL }).gamma_multiply(ra),
                 );
             }
             painter.text(
