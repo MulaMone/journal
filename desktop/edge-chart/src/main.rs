@@ -914,6 +914,7 @@ fn ema_points(cs: &[Candle], m5: &[Candle], len: usize, per: i64) -> Vec<(usize,
 }
 
 struct App {
+    bar_x: f32,
     sym: String,
     tf: String,
     shared: Arc<Mutex<Shared>>,
@@ -969,6 +970,7 @@ impl App {
             htf_i: 1,
             hide_nums: false,
             sierra: true,
+            bar_x: 0.0,
             note: String::new(),
             show_pw: false,
             show_pm: true,
@@ -993,7 +995,18 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         // ── toolbar ──
         egui::Panel::top("bar").show(ui, |ui| {
+            let avail = ui.available_width();
             ui.horizontal(|ui| {
+                if ui.button("◀").clicked() {
+                    self.bar_x = (self.bar_x - 300.0).max(0.0);
+                }
+                let out = egui::ScrollArea::horizontal()
+                    .id_salt("barscroll")
+                    .max_width((avail - 80.0).max(100.0))
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .horizontal_scroll_offset(self.bar_x)
+                    .show(ui, |ui| {
+                ui.horizontal(|ui| {
                 let mut changed = false;
                 for (s, inst) in SYMS.iter() {
                     // NinjaTrader-only symbols appear while their feed is connected (or when already selected)
@@ -1069,6 +1082,13 @@ impl eframe::App for App {
                 if !st.is_empty() {
                     ui.separator();
                     ui.colored_label(Color32::from_rgb(255, 191, 0), st);
+                }
+                });
+                });
+                self.bar_x = out.state.offset().x;
+                let max_x = (out.content_size.x - out.inner_rect.width()).max(0.0);
+                if ui.button("▶").clicked() {
+                    self.bar_x = (self.bar_x + 300.0).min(max_x);
                 }
             });
         });
@@ -1840,9 +1860,17 @@ fn main() -> eframe::Result {
     let tf = canon_tf(&get("--tf").unwrap_or_else(|| "5m".into()));
     let tok = std::env::var("EDGE_OANDA_TOKEN").unwrap_or_default();
     let base = std::env::var("EDGE_OANDA_BASE").unwrap_or_else(|_| "https://api-fxpractice.oanda.com".into());
-    let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([1300.0, 850.0]).with_min_inner_size([700.0, 450.0]),
-        ..Default::default()
+    // --pos x,y and --size w,h (logical points) place the window beside the EDGE window; both optional
+    let pair = |k: &str| -> Option<(f32, f32)> {
+        let v = get(k)?;
+        let (a, b) = v.split_once(',')?;
+        Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     };
+    let (w, h) = pair("--size").map(|(w, h)| (w.clamp(500.0, 4000.0), (h - 32.0).clamp(350.0, 3000.0))).unwrap_or((1300.0, 850.0));
+    let mut vb = egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([w, h]).with_min_inner_size([500.0, 350.0]);
+    if let Some((x, y)) = pair("--pos") {
+        vb = vb.with_position([x, y]);
+    }
+    let opts = eframe::NativeOptions { viewport: vb, ..Default::default() };
     eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a }))))
 }
