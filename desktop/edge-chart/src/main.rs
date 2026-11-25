@@ -618,9 +618,63 @@ fn dashed_by_x(p: &egui::Painter, pts: &[Pos2], anchor: f32, on: f32, offl: f32,
 fn text_w(p: &egui::Painter, s: &str, f: &FontId) -> f32 {
     p.layout_no_wrap(s.to_string(), f.clone(), Color32::WHITE).size().x
 }
+/// Soft drop shadow + faint light rim so tags lift off the black background and off the candles behind them.
+fn tag_box(p: &egui::Painter, r: Rect, fill: Color32) {
+    p.add(egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(150) }.as_shape(r, 4.0));
+    p.rect_filled(r, 4.0, fill);
+    p.rect_stroke(r, 4.0, Stroke::new(1.0, Color32::from_white_alpha(28)), egui::StrokeKind::Inside);
+}
 fn pill(p: &egui::Painter, r: Rect, fill: Color32, text: &str, tcol: Color32, f: FontId) {
-    p.rect_filled(r, 2.0, fill);
+    tag_box(p, r, fill);
     p.text(r.center(), Align2::CENTER_CENTER, text, f, tcol);
+}
+/// Four-corner colour gradient rectangle (GPU mesh).
+fn grad_rect(p: &egui::Painter, r: Rect, tl: Color32, tr: Color32, br: Color32, bl: Color32) {
+    let mut m = egui::Mesh::default();
+    m.colored_vertex(r.left_top(), tl);
+    m.colored_vertex(r.right_top(), tr);
+    m.colored_vertex(r.right_bottom(), br);
+    m.colored_vertex(r.left_bottom(), bl);
+    m.add_triangle(0, 1, 2);
+    m.add_triangle(0, 2, 3);
+    p.add(egui::Shape::mesh(m));
+}
+/// Soft fill between a line and the bottom of the plot, fading to nothing.
+fn fill_under(p: &egui::Painter, pts: &[Pos2], col: u32, bottom: f32) {
+    let mut m = egui::Mesh::default();
+    for (k, pt) in pts.iter().enumerate() {
+        m.colored_vertex(*pt, hexc(col, 0.12));
+        m.colored_vertex(Pos2::new(pt.x, bottom), hexc(col, 0.0));
+        if k > 0 {
+            let b = (k * 2) as u32;
+            m.add_triangle(b - 2, b - 1, b);
+            m.add_triangle(b - 1, b + 1, b);
+        }
+    }
+    p.add(egui::Shape::mesh(m));
+}
+/// Nicer fonts when available: fonts next to the exe (font_mono.ttf / font_ui.ttf) win, else Windows' Consolas / Segoe UI.
+fn setup_fonts(ctx: &egui::Context) {
+    use std::sync::Arc;
+    let dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let find = |own: &str, sys: &[&str]| -> Option<Vec<u8>> {
+        if let Some(d) = &dir {
+            if let Ok(b) = std::fs::read(d.join(own)) {
+                return Some(b);
+            }
+        }
+        sys.iter().find_map(|p| std::fs::read(p).ok())
+    };
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(b) = find("font_mono.ttf", &["C:\\Windows\\Fonts\\consola.ttf"]) {
+        fonts.font_data.insert("edge_mono".into(), Arc::new(egui::FontData::from_owned(b)));
+        fonts.families.entry(egui::FontFamily::Monospace).or_default().insert(0, "edge_mono".into());
+    }
+    if let Some(b) = find("font_ui.ttf", &["C:\\Windows\\Fonts\\segoeui.ttf"]) {
+        fonts.font_data.insert("edge_ui".into(), Arc::new(egui::FontData::from_owned(b)));
+        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "edge_ui".into());
+    }
+    ctx.set_fonts(fonts);
 }
 fn lum_text(col: u32) -> Color32 {
     let l = 0.299 * ((col >> 16) & 255) as f32 + 0.587 * ((col >> 8) & 255) as f32 + 0.114 * (col & 255) as f32;
@@ -1023,10 +1077,14 @@ struct App {
     meas: Option<(f32, f64, f32, f64)>, // measure: (bar idx, price) start and end
     meas_w: f32,                // widest label so far (keeps the label from jittering as the text changes)
     vdrag: f32,
+    fling: f32,                 // pan momentum, bars per second
+    zoom_t: Option<(f32, f32)>, // eased wheel zoom: (target spacing, anchor x)
+    xh_last: Option<Pos2>,      // last crosshair position, kept while it fades out
 }
 
 impl App {
     fn new(cc: &eframe::CreationContext<'_>, sym: String, tf: String, base: String, tok: String) -> Self {
+        setup_fonts(&cc.egui_ctx);
         let mut v = egui::Visuals::dark();
         v.panel_fill = BG;
         v.window_fill = BG;
@@ -1084,6 +1142,9 @@ impl App {
             meas: None,
             meas_w: 0.0,
             vdrag: 0.0,
+            fling: 0.0,
+            zoom_t: None,
+            xh_last: None,
         };
         app.reload();
         app
@@ -1283,6 +1344,8 @@ impl eframe::App for App {
             let mut apply_range = |app: &mut App, from: i64, to: i64| {
                 let (lf, lt) = (t_to_l(from as f64), t_to_l(to as f64));
                 if lt > lf + 0.5 {
+                    app.zoom_t = None;
+                    app.fling = 0.0;
                     app.spacing = ((plot.width() as f64 / (lt - lf)) as f32).clamp(3.0, 140.0);
                     app.right_idx = lt as f32;
                 }
@@ -1290,6 +1353,8 @@ impl eframe::App for App {
             if ver != self.seen_version {
                 self.seen_version = ver;
                 self.manual = None;
+                self.zoom_t = None;
+                self.fling = 0.0;
                 let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
                 self.spacing = sp0;
                 self.right_idx = (n - 1) as f32 + gap0;
@@ -1348,9 +1413,16 @@ impl eframe::App for App {
                 self.meas_w = 0.0;
                 self.meas_p0 = if self.drag_mode == 3 { o } else { None };
                 self.vdrag = 0.0;
+                self.fling = 0.0;
+                self.zoom_t = None;
             }
             // the measure stays on screen after you let go; a click or Esc clears it
             if resp.drag_stopped() {
+                if self.drag_mode == 1 {
+                    let v = ctx.input(|i| i.pointer.velocity().x);
+                    let f = (-v / self.spacing).clamp(-600.0, 600.0);
+                    self.fling = if f.abs() > 3.0 { f } else { 0.0 };
+                }
                 self.meas_p0 = None;
                 if self.drag_mode == 3 {
                     self.drag_mode = 0;
@@ -1358,6 +1430,7 @@ impl eframe::App for App {
                 }
             }
             if resp.clicked() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.fling = 0.0;
                 self.meas = None;
                 self.meas_p0 = None;
             }
@@ -1367,6 +1440,8 @@ impl eframe::App for App {
             if resp.double_clicked() {
                 let on_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
                 self.manual = None; // back to auto-fit
+                self.zoom_t = None;
+                self.fling = 0.0;
                 if !on_axis {
                     let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
                     self.spacing = sp0;
@@ -1383,6 +1458,16 @@ impl eframe::App for App {
                     self.right_idx += k;
                 }
             }
+            if self.fling != 0.0 && !resp.dragged() {
+                if self.fling.abs() > 0.5 {
+                    let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                    self.right_idx += self.fling * dt;
+                    self.fling *= (-dt * 3.5).exp();
+                    ctx.request_repaint();
+                } else {
+                    self.fling = 0.0;
+                }
+            }
             let mut axis_scroll = 0.0f32;
             if resp.hovered() {
                 let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
@@ -1391,9 +1476,22 @@ impl eframe::App for App {
                     axis_scroll = scroll;
                 } else if scroll != 0.0 {
                     let anchor = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.x).unwrap_or(plot.right());
-                    let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
-                    self.spacing = (self.spacing * (scroll * 0.0025).exp()).clamp(3.0, 140.0);
-                    self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
+                    self.fling = 0.0;
+                    let cur = self.zoom_t.map_or(self.spacing, |t| t.0);
+                    self.zoom_t = Some(((cur * (scroll * 0.0025).exp()).clamp(3.0, 140.0), anchor));
+                }
+            }
+            if let Some((tgt, anchor)) = self.zoom_t {
+                let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                let k = 1.0 - (-dt * 22.0).exp();
+                let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
+                let ns = self.spacing + (tgt - self.spacing) * k;
+                self.spacing = if (tgt - ns).abs() < 0.02 { tgt } else { ns };
+                self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
+                if self.spacing == tgt {
+                    self.zoom_t = None;
+                } else {
+                    ctx.request_repaint();
                 }
             }
             self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
@@ -1462,9 +1560,6 @@ impl eframe::App for App {
             let axis_font = FontId::monospace(13.0);
             while p < hi {
                 let y = snapc(y_of(p));
-                if self.sym != "NQ" {
-                    painter.hline(plot.x_range(), y, Stroke::new(hair, grid_col));
-                }
                 painter.text(Pos2::new(plot.right() + 8.0, y), Align2::LEFT_CENTER, fmt_price(p, step), axis_font.clone(), AXIS_TXT);
                 p += step;
             }
@@ -1477,7 +1572,6 @@ impl eframe::App for App {
                 if i < n {
                     let x = snapc(x_of(i as f32));
                     if x > plot.left() && x < plot.right() {
-                        painter.vline(x, plot.y_range(), Stroke::new(hair, grid_col));
                         let d = et(cs[i].t);
                         let label = if secs >= 86400 {
                             format!("{} {}", d.format("%b"), d.day())
@@ -1672,7 +1766,7 @@ impl eframe::App for App {
                     }
                     let x0 = x0.max(plot.left());
                     let (y1, y2) = (y_of(z.hi), y_of(z.lo));
-                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0, y1), Pos2::new(plot.right(), y2)), 0.0, hexc(0xff2bd6, 0.2));
+                    grad_rect(&clip, Rect::from_min_max(Pos2::new(x0, y1), Pos2::new(plot.right(), y2)), hexc(0xff2bd6, 0.30), hexc(0xff2bd6, 0.05), hexc(0xff2bd6, 0.05), hexc(0xff2bd6, 0.30));
                     let e = Stroke::new(hair, hexc(0xff2bd6, 0.8));
                     clip.hline(x0..=plot.right(), snapc(y1), e);
                     clip.hline(x0..=plot.right(), snapc(y2), e);
@@ -1694,7 +1788,7 @@ impl eframe::App for App {
                     }
                     let x0 = x0.max(plot.left());
                     let (yt, yb) = (y_of(z.hi0), y_of(z.lo0));
-                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0, yt), Pos2::new(plot.right(), yb)), 0.0, hexc(0xff7a1a, 0.2));
+                    grad_rect(&clip, Rect::from_min_max(Pos2::new(x0, yt), Pos2::new(plot.right(), yb)), hexc(0xff7a1a, 0.30), hexc(0xff7a1a, 0.05), hexc(0xff7a1a, 0.05), hexc(0xff7a1a, 0.30));
                     let (bt, bb, edge) = if z.up && z.hi < z.hi0 {
                         (Some(yt), Some(y_of(z.hi)), Some(y_of(z.hi)))
                     } else if !z.up && z.lo > z.lo0 {
@@ -1967,6 +2061,9 @@ impl eframe::App for App {
                         .collect();
                     if line.len() >= 2 {
                         let st = Stroke::new(2.0, rgb(col));
+                        if !dashed {
+                            fill_under(&clip, &line, col, plot.bottom());
+                        }
                         if dashed {
                             dashed_by_x(&clip, &line, x_of(0.0), 6.0, 4.0, st);
                         } else {
@@ -1997,6 +2094,9 @@ impl eframe::App for App {
                         .filter_map(|i| em[i].map(|v| Pos2::new(x_of(i as f32), y_of(v))))
                         .collect();
                     if line.len() >= 2 {
+                        if len == EMA_FAST {
+                            fill_under(&clip, &line, col, plot.bottom());
+                        }
                         clip.add(egui::Shape::line(line, Stroke::new(2.0, rgb(col))));
                     }
                     if let Some(Some(v)) = em.last() {
@@ -2032,11 +2132,12 @@ impl eframe::App for App {
             let ly_c = ly.clamp(plot.top() + tag_h / 2.0, plot.bottom() - tag_h / 2.0);
             let tcol = if last.c >= last.o { rgb(0x00b862) } else { rgb(0xff4444) };
             let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - tag_h / 2.0), Vec2::new(AXIS_W - 4.0, tag_h));
-            painter.rect_filled(r, 2.0, tcol);
+            tag_box(&painter, r, tcol);
+            grad_rect(&painter, r.shrink(1.5), Color32::from_white_alpha(46), Color32::from_white_alpha(46), Color32::from_white_alpha(0), Color32::from_white_alpha(0));
             painter.text(Pos2::new(r.center().x, if is_range { r.center().y } else { r.top() + 11.0 }), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
             if !is_range {
                 let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
-                painter.rect_filled(cr, 2.0, hexc(0x040d1a, 0.8));
+                tag_box(&painter, cr, hexc(0x040d1a, 0.9));
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
             }
 
@@ -2119,7 +2220,7 @@ impl eframe::App for App {
                 let mut ly = rect.top() - h - 8.0; // always above the box (no flip when dragging past the start point)
                 if ly < plot.top() + 2.0 { ly = rect.bottom() + 8.0; }
                 if ly + h > plot.bottom() - 2.0 { ly = (plot.bottom() - h - 2.0).max(plot.top() + 2.0); }
-                painter.rect_filled(Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), 4.0, col);
+                tag_box(&painter, Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), col);
                 for (k, t) in lines.iter().enumerate() {
                     painter.text(Pos2::new(lx + 11.0, ly + 5.0 + k as f32 * 19.0), Align2::LEFT_TOP, t, FontId::monospace(13.0), Color32::WHITE);
                 }
@@ -2150,36 +2251,43 @@ impl eframe::App for App {
                     if y >= plot.top() && y <= plot.bottom() {
                         painter.add(egui::Shape::dashed_line(&[Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)], col, 4.0, 4.0));
                         let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-                        painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
+                        tag_box(&painter, r, Color32::from_rgb(60, 72, 96));
                         painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(pr, step), FontId::monospace(13.0), Color32::WHITE);
                     }
                 }
             }
             // ═════════ crosshair + readout ═════════
-            if let Some(pos) = resp.hover_pos().filter(|p| plot.contains(*p)) {
+            let hov_now = resp.hover_pos().filter(|p| plot.contains(*p));
+            if hov_now.is_some() {
+                self.xh_last = hov_now;
+            }
+            let fa = ctx.animate_bool_with_time(egui::Id::new("xh_fade"), hov_now.is_some(), 0.12); // crosshair fades in / out
+            if let Some(pos) = hov_now.or(if fa > 0.0 { self.xh_last } else { None }) {
+                let wh = Color32::WHITE.gamma_multiply(fa);
+                let tagc = Color32::from_rgb(60, 72, 96).gamma_multiply(fa);
                 let dash = |a: Pos2, b: Pos2| {
-                    painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175)), 4.0, 4.0));
+                    painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175).gamma_multiply(fa)), 4.0, 4.0));
                 };
                 dash(Pos2::new(plot.left(), snapc(pos.y)), Pos2::new(plot.right(), snapc(pos.y)));
                 dash(Pos2::new(snapc(pos.x), plot.top()), Pos2::new(snapc(pos.x), plot.bottom()));
                 let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, pos.y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-                painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
-                painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), Color32::WHITE);
+                tag_box(&painter, r, tagc);
+                painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), wh);
                 let idx = ((ri - (plot.right() - pos.x) / sp).round() as i64).clamp(0, n as i64 - 1) as usize;
                 let c = cs[idx];
                 let d = et(c.t);
                 let tl = if secs >= 86400 { d.format("%a %d %b %Y").to_string() } else { d.format("%a %d %b %Y  %H:%M").to_string() };
                 let tw = 150.0;
                 let r = Rect::from_min_size(Pos2::new((pos.x - tw / 2.0).clamp(plot.left(), plot.right() - tw), plot.bottom() + 3.0), Vec2::new(tw, 20.0));
-                painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
-                painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), Color32::WHITE);
+                tag_box(&painter, r, tagc);
+                painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), wh);
                 let chg = c.c - c.o;
                 painter.text(
                     Pos2::new(plot.left() + 10.0, plot.top() + 8.0),
                     Align2::LEFT_TOP,
                     format!("O {:.2}  H {:.2}  L {:.2}  C {:.2}  {:+.2}", c.o, c.h, c.l, c.c, chg),
                     FontId::monospace(13.0),
-                    if chg >= 0.0 { UP_FILL } else { DN_FILL },
+                    (if chg >= 0.0 { UP_FILL } else { DN_FILL }).gamma_multiply(fa),
                 );
             }
             painter.text(
@@ -2216,6 +2324,6 @@ fn main() -> eframe::Result {
         vb = vb.with_position([x, y]);
     }
     let lg = get("--link").and_then(|v| v.parse::<usize>().ok()).filter(|g| *g < LINK_COLORS.len());
-    let opts = eframe::NativeOptions { viewport: vb, ..Default::default() };
+    let opts = eframe::NativeOptions { viewport: vb, multisampling: 4, ..Default::default() };
     eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a.link_g = lg; a }))))
 }
