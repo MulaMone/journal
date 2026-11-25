@@ -1788,7 +1788,8 @@ var State={
 // ─── HELPERS ─────────────────────────────────────────────────────────
 function dol(n){n=n||0;var abs=Math.abs(n);var str=abs.toFixed(2);return(n<0?"-":"")+"$"+str;}
 function clr(n){return (n||0)>=0?"g":"r"}
-function getActiveCommission(inst){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;if(!a)return 0;var cm=a.commissions;if(cm&&typeof cm==="object"){var rate=inst&&cm[inst]!==undefined?cm[inst]:cm["default"];return rate!==undefined&&rate!==null&&rate!==""?parseFloat(rate):0;}return(a.commission>0)?parseFloat(a.commission):0;}
+function getActiveCommission(inst){var _v=getActiveCommission0(inst);if(!(_v>0)&&typeof ntCommission==="function"){try{return ntCommission(inst);}catch(e){}}return _v;}
+function getActiveCommission0(inst){var a=State.accounts&&State.activeAccount?State.accounts.find(function(x){return x.id===State.activeAccount;}):null;if(!a)return 0;var cm=a.commissions;if(cm&&typeof cm==="object"){var rate=inst&&cm[inst]!==undefined?cm[inst]:cm["default"];return rate!==undefined&&rate!==null&&rate!==""?parseFloat(rate):0;}return(a.commission>0)?parseFloat(a.commission):0;}
 function parseGoal(str,def){
   if(!str) return def;
   // Match first dollar amount like $8,000 or $8k or 8000 or 8k
@@ -6258,6 +6259,27 @@ function ntSaveBasis(t){
     }).catch(function(){clearTimeout(tmo);});
   }catch(err){_dbg(err);}
 }
+// ── what NinjaTrader knows about each contract, saved in this browser so it is still here when NinjaTrader is closed ──
+// edge_nt_specs = {ES:{tick,pv,hol:["yyyy-mm-dd"],ses:[...],comm:{account:perContractPerSide}}, ...}  (from EdgeFeed /specs)
+function ntSpecs(){try{return JSON.parse(localStorage.getItem("edge_nt_specs")||"{}")||{};}catch(e){return {};}}
+function ntSyncSpecs(){
+  try{
+    var ac=new AbortController(),tm=setTimeout(function(){ac.abort();},4000);
+    fetch("http://127.0.0.1:7881/specs",{signal:ac.signal}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+      clearTimeout(tm);if(!j||typeof j!=="object"||!Object.keys(j).length) return;
+      var old=ntSpecs();Object.keys(j).forEach(function(k){old[k]=j[k];});
+      try{localStorage.setItem("edge_nt_specs",JSON.stringify(old));}catch(e){}
+      try{window.dispatchEvent(new Event("edge-nt-specs"));}catch(e){}
+    }).catch(function(){clearTimeout(tm);});
+  }catch(e){}
+}
+setTimeout(ntSyncSpecs,4000);setInterval(ntSyncSpecs,1800000);
+// round-trip commission per contract that NinjaTrader actually charged (two sides), averaged over the accounts that paid one; 0 when unknown
+function ntCommission(inst){
+  var s=ntSpecs()[inst],c=s&&s.comm,v=[];
+  if(c) Object.keys(c).forEach(function(k){if(c[k]>0) v.push(c[k]);});
+  return v.length?parseFloat((2*v.reduce(function(a,b){return a+b;},0)/v.length).toFixed(2)):0;
+}
 function ntIngest(o){
   if(!o||!o.inst||!o.et||!o.xt) return;
   if(!ntAutoOn()||ntPaused()) return; // off / paused: ignore
@@ -8953,10 +8975,134 @@ function chartTab(){
           // ── Live orders: the stop / target orders NinjaTrader has working right now, as price lines (EdgeFeed /orders), shifted onto this CFD chart with the live futures->CFD offset.
           //    Drag a STOP / TARGET label up or down to move the real order in NinjaTrader; the X beside the entry chip closes the trade (market close + cancel stop and target).
           //    Both are sent to EdgeFeed; the lines always redraw from NinjaTrader's real order state, so the GPU chart and NinjaTrader show the same thing. ──
+
+          // ── red line where the futures contract stops trading (expiry / roll day); only on charts that have a futures contract ──
+          (function(){
+            if(focusTs||["ES","NQ","DXY","CL","GC","NG","BTC","US10Y"].indexOf(sym)<0) return;
+//EXP-CALC-START
+var MN=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"],DW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
+function xDow(y,m,d){return new Date(Date.UTC(y,m,d)).getUTCDay();}
+var xHolC={};
+function xHol(y){
+  if(xHolC[y]) return xHolC[y];
+  var h={};
+  function add(m,d){h[m+"-"+d]=1;}
+  function obs(m,d){var w=xDow(y,m,d);if(w===6){var a1=new Date(Date.UTC(y,m,d-1));add(a1.getUTCMonth(),a1.getUTCDate());}else if(w===0){var a2=new Date(Date.UTC(y,m,d+1));add(a2.getUTCMonth(),a2.getUTCDate());}else add(m,d);}
+  function nth(m,wd,n){return 1+((wd-xDow(y,m,1)+7)%7)+(n-1)*7;}
+  function lastWd(m,wd){var ld=new Date(Date.UTC(y,m+1,0)).getUTCDate();return ld-((xDow(y,m,ld)-wd+7)%7);}
+  var a=y%19,b=Math.floor(y/100),c=y%100,d2=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),hh=(19*a+b-d2-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-hh-k)%7,m2=Math.floor((a+11*hh+22*l)/451),mo=Math.floor((hh+l-7*m2+114)/31)-1,da=((hh+l-7*m2+114)%31)+1,gf=new Date(Date.UTC(y,mo,da-2));
+  add(0,1);add(0,nth(0,1,3));add(1,nth(1,1,3));add(gf.getUTCMonth(),gf.getUTCDate());add(4,lastWd(4,1));if(y>=2022) obs(5,19);obs(6,4);add(8,nth(8,1,1));add(10,nth(10,4,4));obs(11,25);
+  xHolC[y]=h;return h;
+}
+var xNtH=null; // NinjaTrader's own holiday list for this contract (used for the years it covers), else the built-in table
+function xIsBD(t){var w=t.getUTCDay();if(w===0||w===6) return false;var y=t.getUTCFullYear();if(xNtH&&y>=xNtH.a&&y<=xNtH.b) return !xNtH.s[y+"-"+(t.getUTCMonth()+1)+"-"+t.getUTCDate()];return !xHol(y)[t.getUTCMonth()+"-"+t.getUTCDate()];}
+function xAddBD(t,n){var s=n<0?-1:1,r=new Date(t.getTime());while(n!==0){r=new Date(r.getTime()+s*86400000);if(xIsBD(r)) n-=s;}return r;}
+function xPrevBD(t){var r=new Date(t.getTime());while(!xIsBD(r)) r=new Date(r.getTime()-86400000);return r;}
+function xLastBD(y,m){return xPrevBD(new Date(Date.UTC(y,m+1,0)));}
+function xNth(y,m,wd,n){return new Date(Date.UTC(y,m,1+((wd-xDow(y,m,1)+7)%7)+(n-1)*7));}
+function xLastWd(y,m,wd){var ld=new Date(Date.UTC(y,m+1,0)).getUTCDate();return new Date(Date.UTC(y,m,ld-((xDow(y,m,ld)-wd+7)%7)));}
+function xTz(dt,hh,mm,tz){
+  var f=new Intl.DateTimeFormat("en-US",{timeZone:tz,hourCycle:"h23",year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric"});
+  function off(t){var p={};f.formatToParts(new Date(t)).forEach(function(q){p[q.type]=+q.value;});return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute)-t;}
+  var g=Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth(),dt.getUTCDate(),hh,mm),r=g-off(g);r=g-off(r);
+  return Math.floor(r/1000);
+}
+// when each futures contract stops trading (the roll / expiry day), from the exchange rules; [{s: epoch seconds, l: label}]
+function expiryEvents(sym){
+  var out=[],Q=[2,5,8,11];
+  function put(dt,hh,mm,tz,mon,yy){out.push({s:xTz(dt,hh,mm,tz),l:MN[mon]+" EXPIRES  "+DW[dt.getUTCDay()]+" "+MN[dt.getUTCMonth()]+" "+dt.getUTCDate(),k:yy%100*100+mon+1,h:hh,mi:mm,z:tz,mon:mon});}
+  for(var y=2022;y<=2028;y++){
+    for(var m=0;m<12;m++){
+      if(sym==="ES"||sym==="NQ"){if(Q.indexOf(m)<0) continue;put(xPrevBD(xNth(y,m,5,3)),9,30,"America/New_York",m,y);}
+      else if(sym==="DXY"){if(Q.indexOf(m)<0) continue;put(xAddBD(xNth(y,m,3,3),-2),10,16,"America/New_York",m,y);}
+      else if(sym==="US10Y"){if(Q.indexOf(m)<0) continue;put(xAddBD(xLastBD(y,m),-7),13,1,"America/New_York",m,y);}
+      else if(sym==="BTC"){put(xPrevBD(xLastWd(y,m,5)),16,0,"Europe/London",m,y);}
+      else if(sym==="NG"){put(xAddBD(new Date(Date.UTC(y,m,1)),-3),14,30,"America/New_York",m,y);}
+      else if(sym==="CL"){put(xAddBD(xPrevBD(new Date(Date.UTC(y,m-1,25))),-3),14,30,"America/New_York",m,y);}
+      else if(sym==="GC"){if(m%2!==1) continue;put(xAddBD(xLastBD(y,m),-2),13,30,"America/New_York",m,y);}
+    }
+  }
+  return out;
+}
+//EXP-CALC-END
+
+            var NTR=({DXY:"DX",US10Y:"ZN"})[sym]||sym;
+            function loadHol(){
+              try{var sp=ntSpecs()[NTR];xNtH=null;
+                if(sp&&sp.hol&&sp.hol.length){var s={},a=9999,b=0;sp.hol.forEach(function(d){var q=d.split("-"),y=+q[0];s[y+"-"+(+q[1])+"-"+(+q[2])]=1;if(y<a)a=y;if(y>b)b=y;});
+                  // only years inside the list's own span, and only when it covers more than one year (a one-year list could just be this year so far)
+                  if(b>a) xNtH={s:s,a:a+0,b:b-0};}
+              }catch(e){xNtH=null;}
+            }
+            loadHol();
+            var evs=expiryEvents(sym),cvX=document.createElement("canvas"),sigX="";
+            // NinjaTrader's own expiry dates replace the calculated ones. They are saved in this browser, so they stay when NinjaTrader is closed.
+            function applyNt(list){
+              if(!list||!list.length) return;
+              var byK={};list.forEach(function(q){var d=String(q[0]).split("-"),c=String(q[1]).split("-");if(d.length===3&&c.length===2) byK[(+c[1])*100+(+c[0])]=[+d[0],+d[1]-1,+d[2]];});
+              evs.forEach(function(e){
+                var d=byK[e.k];if(!d) return;
+                var dt=new Date(Date.UTC(d[0],d[1],d[2]));
+                e.s=xTz(dt,e.h,e.mi,e.z);e.l=MN[e.mon]+" EXPIRES  "+DW[dt.getUTCDay()]+" "+MN[dt.getUTCMonth()]+" "+dt.getUTCDate();
+              });
+              sigX="";
+            }
+            function rebuild(){loadHol();evs=expiryEvents(sym);try{var cs2=JSON.parse(localStorage.getItem("edge_nt_expiry")||"null");if(cs2&&cs2[NTR]) applyNt(cs2[NTR]);}catch(e){}sigX="";}
+            window.addEventListener("edge-nt-specs",function(){if(!cvX.isConnected) return;rebuild();});
+            try{var cs=JSON.parse(localStorage.getItem("edge_nt_expiry")||"null");if(cs&&cs[NTR]) applyNt(cs[NTR]);}catch(e){}
+            try{
+              var ac3=new AbortController(),t3=setTimeout(function(){ac3.abort();},3000);
+              fetch("http://127.0.0.1:7881/contracts",{signal:ac3.signal}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+                clearTimeout(t3);if(!j||typeof j!=="object") return;
+                var old={};try{old=JSON.parse(localStorage.getItem("edge_nt_expiry")||"{}")||{};}catch(e){}
+                Object.keys(j).forEach(function(k){old[k]=j[k];});
+                try{localStorage.setItem("edge_nt_expiry",JSON.stringify(old));}catch(e){}
+                if(j[NTR]) applyNt(j[NTR]);
+              }).catch(function(){clearTimeout(t3);});
+            }catch(e){}
+            cvX.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:4;";
+            chartDiv.appendChild(cvX);
+            // x of a real time; past the newest candle the spacing of the last bars is carried forward
+            function xFor(sec){
+              var x=xAtTs(sec);if(x!=null) return x;
+              if(!candles.length) return null;
+              var lu=candles[candles.length-1].u,xl=xAtTs(lu),xp=xAtTs(lu-periodSec);
+              if(xl==null||xp==null||sec<lu) return null;
+              return xl+(sec-lu)/periodSec*(xl-xp);
+            }
+            (function drawX(){
+              if(!chartDiv.isConnected||!cvX.isConnected) return;
+              try{
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,xs=[],sg=W+"x"+H;
+                evs.forEach(function(e){var x=xFor(e.s);if(x!=null&&x>=0&&x<=W){xs.push({x:x,l:e.l});sg+="|"+Math.round(x);}});
+                if(sg!==sigX){
+                  sigX=sg;
+                  if(cvX.width!==Math.round(W*dpr)||cvX.height!==Math.round(H*dpr)){cvX.width=Math.round(W*dpr);cvX.height=Math.round(H*dpr);}
+                  var cx=cvX.getContext("2d");cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
+                  var ph=28;try{ph=chart.timeScale().height()||28;}catch(e2){}
+                  cx.save();cx.beginPath();cx.rect(0,0,W,Math.max(0,H-ph));cx.clip();
+                  cx.font="500 12px monospace";cx.textBaseline="middle";
+                  var lastR=-1e9;
+                  xs.sort(function(a,b){return a.x-b.x;}).forEach(function(p){
+                    cx.strokeStyle="#ff4d4d";cx.lineWidth=1.5;cx.setLineDash([6,4]);cx.beginPath();cx.moveTo(Math.round(p.x)+0.5,0);cx.lineTo(Math.round(p.x)+0.5,H-ph);cx.stroke();cx.setLineDash([]);
+                    var tw=Math.ceil(cx.measureText(p.l).width)+16,bx=p.x+6;
+                    if(bx+tw>W-4) bx=p.x-6-tw;
+                    if(bx>lastR+4||bx+tw<p.x){
+                      cx.fillStyle="#0a1424";cx.fillRect(bx,8,tw,22);cx.lineWidth=1;cx.strokeStyle="#ff4d4d";cx.strokeRect(bx+0.5,8.5,tw-1,21);
+                      cx.fillStyle="#ff8a8a";cx.textAlign="left";cx.fillText(p.l,bx+8,19);
+                      if(bx>p.x) lastR=bx+tw;
+                    }
+                  });
+                  cx.restore();
+                }
+              }catch(e){}
+              requestAnimationFrame(drawX);
+            })();
+          })();
           (function(){
             if(focusTs||monthlyFetch||["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)) return;
             var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[],liveArr=[],curBs=0,sigD="";
-            var TK=({ES:0.25,NQ:0.25,CL:0.01,GC:0.1,NG:0.001})[sym]||0.25;
+            var TK=({ES:0.25,NQ:0.25,CL:0.01,GC:0.1,NG:0.001})[sym]||0.25;try{var _sp=ntSpecs()[sym];if(_sp&&_sp.tick>0) TK=_sp.tick;}catch(e){}
             var drag=null,pend=null,toast=null,hoverId="",lastClose=0,rects=[],pressX=null,ghost=null,lt=null;var curLast=null,multi=false,lastHk=0,BE_PTS=10; // Alt+E puts the stop this many points past your entry
             function clearLines(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";}
             function clearL(){clearLines();labs=[];liveArr=[];rects=[];drag=null;pend=null;dropGhost();sigD="";}
