@@ -4616,7 +4616,7 @@ function tradeForm(existing){
     var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
     var updated={id:isEdit?existing.id:Date.now(),accountId:isEdit?(existing.accountId||State.activeAccount||null):(State.activeAccount||null),date:gv("date")||today(),time:timeVal,inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
     if(isEdit){
-      ["ntId","auto","xdate","xtime","ord"].forEach(function(k){if(existing[k]!==undefined&&updated[k]===undefined) updated[k]=existing[k];}); // fields the form doesn't show: auto-import id, exit time, saved stop/target orders
+      ["ntId","auto","xdate","xtime","ord","bs","bsx"].forEach(function(k){if(existing[k]!==undefined&&updated[k]===undefined) updated[k]=existing[k];}); // fields the form doesn't show: auto-import id, exit time, saved stop/target orders
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
     } else {
@@ -6222,6 +6222,42 @@ window.edgeNtTrade=function(){
 };
 function ntSeenHas(id){try{return (JSON.parse(localStorage.getItem("edge_nt_seen")||"[]")).indexOf(id)>-1;}catch(e){return false;}}
 function ntSeenAdd(id){try{var a=JSON.parse(localStorage.getItem("edge_nt_seen")||"[]");a.push(id);if(a.length>500)a=a.slice(-500);localStorage.setItem("edge_nt_seen",JSON.stringify(a));}catch(e){_dbg(e);}}
+// Right after a trade arrives from NinjaTrader (feed is up), work out the futures->OANDA price offset at its entry and exit and keep it
+// with the trade (t.bs / t.bsx), so the chart draws its exact fill levels later even with NinjaTrader closed.
+function ntSaveBasis(t){
+  try{
+    var SY={ES:"ES",MES:"ES",NES:"ES",NQ:"NQ",MNQ:"NQ",NNQ:"NQ",CL:"CL",MCL:"CL",GC:"GC",MGC:"GC",NG:"NG",MNG:"NG"},fs=SY[t.inst];
+    var tk=ls("oanda_token","");
+    if(!fs||!tk) return;
+    var de=tradeTs(t),dx=tradeExitTs(t);
+    if(!de||!dx) return;
+    var per=300,e=Math.floor(de.getTime()/1000),x=Math.floor(dx.getTime()/1000);
+    if(x<e||x-e>86400) return;
+    var from=Math.floor(e/per)*per-2*per,to=Math.floor(x/per)*per+3*per-1;
+    var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},6000);
+    var oUrl=OANDA_ENV_BASE+"/v3/instruments/"+(OANDA_SYMS[fs]||"")+"/candles?granularity=M5&price=M&from="+from+"&to="+Math.min(to,Math.floor(Date.now()/1000)-5);
+    Promise.all([
+      fetch(oUrl,{headers:{Authorization:"Bearer "+tk},signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("oanda "+r.status);return r.json();}),
+      fetch("http://127.0.0.1:7881/bars?sym="+fs+"&from="+from+"&to="+to,{signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("nt "+r.status);return r.json();})
+    ]).then(function(rs){
+      clearTimeout(tmo);
+      var oc={},nc={};
+      ((rs[0]&&rs[0].candles)||[]).forEach(function(c){oc[Math.floor(new Date(c.time).getTime()/1000/per)*per]=parseFloat(c.mid.c);});
+      ((rs[1]&&rs[1].bars)||[]).forEach(function(k){nc[Math.floor(k[0]/per)*per]=k[4];});
+      function bsAt(ts){
+        var b=Math.floor(ts/per)*per,ds=[];
+        [b-per,b,b+per].forEach(function(u){if(oc[u]!=null&&nc[u]!=null) ds.push(oc[u]-nc[u]);});
+        if(!ds.length) return null;
+        ds.sort(function(a,b2){return a-b2;});return ds[Math.floor(ds.length/2)];
+      }
+      var b1=bsAt(e),b2=bsAt(x),live=State.trades.filter(function(z){return z.id===t.id;})[0];
+      if(!live) return;
+      if(b1!=null) live.bs=b1;
+      if(b2!=null) live.bsx=b2;
+      if(b1!=null||b2!=null){ss("trades",State.trades);syncToCloud();}
+    }).catch(function(){clearTimeout(tmo);});
+  }catch(err){_dbg(err);}
+}
 function ntIngest(o){
   if(!o||!o.inst||!o.et||!o.xt) return;
   if(!ntAutoOn()||ntPaused()) return; // off / paused: ignore
@@ -6258,6 +6294,8 @@ function ntIngest(o){
   _ntLast=t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2)+" · "+new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   undoToast("Auto-imported "+t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2),undoLastImport);
   syncToCloud();renderNtPill();renderSoft();
+  ntSaveBasis(t);
+  setTimeout(function(){ntSaveBasis(t);},20000); // second try once the exit candle has settled
 }
 setTimeout(function(){try{window.edgeNtTrade();}catch(e){}},1500);
 
@@ -7726,13 +7764,13 @@ function chartTab(){
   trades.forEach(function(t){
     var d=tradeTs(t);
     if(d&&t.entry!=null){
-      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate,d:t.d,sess:t.sess,ord:t.ord});
+      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate,d:t.d,sess:t.sess,ord:t.ord,sbs:t.bs});
     }
     if(t.xdate&&t.xtime&&t.exit!=null){
       // Real exit timestamp — captured on import (Tradovate/NinjaTrader/forex
       // exports have this; older imports or a generic CSV may not).
       var xd=tradeExitTs(t);
-      if(xd) tradePoints.push({ts:Math.floor(xd.getTime()/1000),price:parseFloat(t.exit),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"exit",id:t.id,approx:false});
+      if(xd) tradePoints.push({ts:Math.floor(xd.getTime()/1000),price:parseFloat(t.exit),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"exit",id:t.id,approx:false,sbs:t.bsx});
     } else if(d&&t.exit!=null){
       // No real exit time on this trade — plot the exit marker at the
       // entry's own time instead of leaving it out entirely. Not the true
@@ -8687,7 +8725,7 @@ function chartTab(){
           function makeMarkerSeries(){return chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});}
           var layers=[{s:makeMarkerSeries(),seen:{},data:[],markers:[]}];
           var markerSeries=layers[0].s;
-          var tradePairs={};
+          var tradePairs={},basisSave={};
           var hoverPoints=[]; // parallel to the arrows — time/price, plus the raw trade point for the tooltip
           displayPoints.forEach(function(p){
             // Snap to the candle period the fill falls inside (a hidden marker series needs a real candle time).
@@ -8701,6 +8739,9 @@ function chartTab(){
             var isUp=p.kind==="entry"?p.isLong:!p.isLong; // entry arrow = the opening action, exit arrow = the closing (opposite) action
             // Basis known (EdgeFeed running): the fill is drawn at its real level, shifted onto this CFD chart and kept inside the candle's range.
             var _bsv=dayCandle?null:ntBasis[Math.floor(p.ts/periodSec)*periodSec];
+            var _live=typeof _bsv==="number";
+            if(!_live&&!dayCandle&&typeof p.sbs==="number") _bsv=p.sbs; // feed is off: use the basis saved with the trade
+            else if(_live&&typeof p.sbs!=="number"&&!(p.kind==="exit"&&p.approx)) basisSave[p.id+"|"+p.kind]=_bsv;
             var exact=(typeof _bsv==="number")&&!(p.kind==="exit"&&p.approx);
             var val;
             if(dayCandle) val=Math.min(dayCandle.high,Math.max(dayCandle.low,p.price));
@@ -8725,6 +8766,17 @@ function chartTab(){
             }
             hoverPoints.push({time:t,value:val,p:p,exact:exact,dy:isUp?10:-10});
           });
+
+          // Keep the basis in the journal so the exact levels survive without NinjaTrader running
+          try{
+            var _ch=false;
+            State.trades.forEach(function(t){
+              var e1=basisSave[t.id+"|entry"],e2=basisSave[t.id+"|exit"];
+              if(typeof e1==="number"&&t.bs!==e1){t.bs=e1;_ch=true;}
+              if(typeof e2==="number"&&t.bsx!==e2){t.bsx=e2;_ch=true;}
+            });
+            if(_ch){ss("trades",State.trades);syncToCloud();}
+          }catch(e){_dbg(e);}
 
           // Exact x of a fill inside its candle (the candle spans x0 +/- half a bar)
           function xAtTs(sec){
