@@ -8728,7 +8728,7 @@ function chartTab(){
               _ds.setMarkers([{time:t,position:"inBar",color:_col,shape:"circle",size:0.5}]);
               dotSeries.push(_ds);
               var _pr=tradePairs[p.id]||(tradePairs[p.id]={});
-              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx,ts:p.ts,bs:_bsv};
+              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx,ts:p.ts,bs:_bsv,raw:p.price};
             }
           });
           // thin dashed line between a trade's two exact fill levels (blue long / purple short); skipped when the exit has no real timestamp
@@ -8742,18 +8742,17 @@ function chartTab(){
             dotSeries.push(cs2);
           });
           // stop (red) and target (green) orders that were working during each trade: one level per stretch of time, stepping when you moved the order
-          var ordSegs=[];
+          var ordTr=[];
           if(ntOrders.length){
             var byOrd={};
             ntOrders.forEach(function(e){(byOrd[e[1]]||(byOrd[e[1]]=[])).push(e);});
             Object.keys(tradePairs).forEach(function(tid){
               var pr=tradePairs[tid];
               if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.ts>pr.entry.ts)||typeof pr.entry.bs!=="number") return;
-              var act=pr.entry.isLong?"S":"B",t0=pr.entry.ts*1000,t1=pr.exit.ts*1000,seen={};
+              var act=pr.entry.isLong?"S":"B",t0=pr.entry.ts*1000,t1=pr.exit.ts*1000,seen={},trSegs=[];
               Object.keys(byOrd).forEach(function(oid){
                 var ev=byOrd[oid];
                 if(ev[0][3]!==act) return;
-                var prev=null;
                 for(var i=0;i<ev.length;i++){
                   var e=ev[i];
                   if(e[6]!=="W") continue;
@@ -8761,13 +8760,14 @@ function chartTab(){
                   if(!(b2>a2)) continue;
                   var key=e[2]+"|"+e[4],dup=seen[key];
                   if(dup){dup.a=Math.min(dup.a,a2/1000);dup.b=Math.max(dup.b,b2/1000);continue;}
-                  var sg2={k:e[2],a:a2/1000,b:b2/1000,px:e[4],bs:pr.entry.bs,pp:(prev&&prev.b>=a2/1000-1)?prev.px:null};
-                  seen[key]=sg2;ordSegs.push(sg2);prev=sg2;
+                  var sg2={k:e[2],a:a2/1000,b:b2/1000,px:e[4]};
+                  seen[key]=sg2;trSegs.push(sg2);
                 }
               });
+              if(trSegs.length&&typeof pr.entry.raw==="number") ordTr.push({ets:pr.entry.ts,xts:pr.exit.ts,bs:pr.entry.bs,ep:pr.entry.raw,isLong:pr.entry.isLong,segs:trSegs});
             });
           }
-          if(sameCandle.length||ordSegs.length){
+          if(sameCandle.length||ordTr.length){
             var cv2=document.createElement("canvas");
             cv2.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5;";
             chartDiv.appendChild(cv2);
@@ -8783,11 +8783,22 @@ function chartTab(){
                   if(x1!=null) w=x1-x0; else{var xm=ts2.timeToCoordinate(t-periodSec);w=xm!=null?x0-xm:8;}
                   return x0-w/2+((sec-bt)/periodSec)*w;
                 }
-                var os=[];
-                if(showTrades) ordSegs.forEach(function(q){
-                  var xa=xAt(q.a),xb=xAt(q.b),y=series.priceToCoordinate(q.px+q.bs),yp=q.pp!=null?series.priceToCoordinate(q.pp+q.bs):null;
-                  if(xa==null||xb==null||y==null) return;
-                  os.push([xa,xb,y,q,yp]);sg+="|o"+Math.round(xa)+","+Math.round(xb)+","+Math.round(y*10);
+                var zs=[];
+                if(showTrades) ordTr.forEach(function(T){
+                  var xe=xAt(T.ets),xx=xAt(T.xts),ye=series.priceToCoordinate(T.ep+T.bs);
+                  if(xe==null||xx==null||ye==null) return;
+                  var it={xe:xe,xx:xx,ye:ye,T:T,lv:[]};
+                  ["S","T"].forEach(function(k){
+                    var ss=T.segs.filter(function(q){return q.k===k;}).sort(function(a,b){return a.a-b.a;});
+                    if(!ss.length) return;
+                    var fin=ss[ss.length-1],yf=series.priceToCoordinate(fin.px+T.bs),xs=xAt(fin.a);
+                    if(yf==null||xs==null) return;
+                    var hist=[];
+                    ss.slice(0,-1).forEach(function(h){var hx=xAt(h.a),hy=series.priceToCoordinate(h.px+T.bs);if(hx!=null&&hy!=null) hist.push({x:hx,y:hy,px:h.px});});
+                    it.lv.push({k:k,fin:fin,yf:yf,xs:Math.max(xs,xe),profit:T.isLong?fin.px>T.ep:fin.px<T.ep,hist:hist,moved:ss.length-1});
+                    sg+="|z"+k+Math.round(xs)+","+Math.round(yf*10)+","+hist.length;
+                  });
+                  if(it.lv.length){zs.push(it);sg+="|e"+Math.round(xe)+","+Math.round(xx)+","+Math.round(ye*10);}
                 });
                 if(showTrades) sameCandle.forEach(function(q){
                   var x=ts2.timeToCoordinate(q.t),y1=series.priceToCoordinate(q.a),y2=series.priceToCoordinate(q.b);
@@ -8801,16 +8812,67 @@ function chartTab(){
                   var pw=70,ph=28;
                   try{pw=chart.priceScale("right").width()||70;ph=chart.timeScale().height()||28;}catch(e2){}
                   cx.save();cx.beginPath();cx.rect(0,0,Math.max(0,W-pw),Math.max(0,H-ph));cx.clip();
+                  var plotW=Math.max(0,W-pw);
+                  function fmt(v){return String(Math.round(v*100)/100);}
+                  // risk / reward zones first (under everything else)
+                  zs.forEach(function(it){
+                    it.lv.forEach(function(L){
+                      cx.fillStyle=L.profit?"rgba(47,179,107,0.22)":"rgba(226,75,74,0.18)";
+                      cx.fillRect(it.xe,Math.min(it.ye,L.yf),Math.max(it.xx-it.xe,3),Math.max(Math.abs(L.yf-it.ye),1));
+                    });
+                  });
                   cx.lineWidth=1.5;cx.setLineDash([3,3]);
                   segs.forEach(function(g){cx.strokeStyle=g[3];cx.beginPath();cx.moveTo(g[0],g[1]);cx.lineTo(g[0],g[2]);cx.stroke();});
-                  cx.font="10px sans-serif";cx.textBaseline="bottom";
-                  os.forEach(function(o){
-                    var col=o[3].k==="S"?"#e24b4a":"#2fb36b";
-                    cx.strokeStyle=col;cx.fillStyle=col;
-                    if(o[4]!=null){cx.setLineDash([]);cx.lineWidth=1;cx.beginPath();cx.moveTo(o[0],o[4]);cx.lineTo(o[0],o[2]);cx.stroke();}
-                    cx.setLineDash([6,3]);cx.lineWidth=1.2;cx.beginPath();cx.moveTo(o[0],o[2]);cx.lineTo(Math.max(o[1],o[0]+3),o[2]);cx.stroke();
-                    if(o[1]-o[0]>=60){cx.setLineDash([]);cx.fillText((o[3].k==="S"?"SL ":"TP ")+o[3].px,o[0]+3,o[2]-2);}
+                  cx.textBaseline="middle";
+                  zs.forEach(function(it){
+                    var T=it.T,labs=[];
+                    cx.setLineDash([2,3]);cx.lineWidth=0.7;cx.strokeStyle="rgba(170,180,200,0.6)";
+                    cx.beginPath();cx.moveTo(it.xe,it.ye);cx.lineTo(Math.max(it.xx,it.xe+3),it.ye);cx.stroke();
+                    it.lv.forEach(function(L){
+                      var col=L.k==="S"?"#e24b4a":"#2fb36b";
+                      // faint history: where this level started and each place you dragged it
+                      if(L.hist.length){
+                        var pts=L.hist.concat([{x:L.xs,y:L.yf}]);
+                        cx.globalAlpha=0.65;cx.strokeStyle=col;cx.lineWidth=1;cx.setLineDash([1,3]);
+                        cx.beginPath();cx.moveTo(pts[0].x,pts[0].y);
+                        for(var hi=1;hi<pts.length;hi++){cx.lineTo(pts[hi].x,pts[hi-1].y);cx.lineTo(pts[hi].x,pts[hi].y);}
+                        cx.stroke();
+                        cx.setLineDash([]);
+                        L.hist.forEach(function(h){cx.beginPath();cx.arc(h.x,h.y,2.8,0,6.2832);cx.stroke();});
+                        cx.globalAlpha=1;
+                        cx.font="10px sans-serif";cx.fillStyle="rgba(170,180,200,0.9)";cx.textAlign="left";
+                        var lastY=-99;
+                        L.hist.forEach(function(h,hi2){
+                          if(hi2>0&&Math.abs(h.y-lastY)<12) return;
+                          lastY=h.y;cx.fillText((hi2===0?"first ":"")+fmt(h.px),h.x+6,h.y);
+                        });
+                      }
+                      // the level you ended with
+                      cx.setLineDash([]);cx.strokeStyle=col;cx.lineWidth=1.5;
+                      cx.beginPath();cx.moveTo(L.xs,L.yf);cx.lineTo(Math.max(it.xx,L.xs+3),L.yf);cx.stroke();
+                      var pts2=Math.abs(L.fin.px-T.ep).toFixed(1);
+                      var lines=[{t:(L.k==="S"?"SL ":"TP ")+fmt(L.fin.px)+"  "+(L.profit?"+":"\u2212")+pts2+" pts",c:col,f:"500 11px sans-serif"}];
+                      if(L.moved>0&&L.hist.length) lines.push({t:"moved "+L.moved+"x, first "+fmt(L.hist[0].px),c:"rgba(170,180,200,0.9)",f:"10px sans-serif"});
+                      labs.push({y:L.yf,lines:lines});
+                    });
+                    labs.push({y:it.ye,lines:[{t:"entry "+fmt(T.ep),c:"#3d8bff",f:"11px sans-serif"}]});
+                    labs.sort(function(a,b){return a.y-b.y;});
+                    var floor=-99;
+                    labs.forEach(function(lb){
+                      var y=Math.max(lb.y,floor+7),w=0;
+                      lb.lines.forEach(function(ln){cx.font=ln.f;w=Math.max(w,cx.measureText(ln.t).width);});
+                      var left=it.xx+10+w>plotW-4;
+                      var x=left?Math.max(it.xx-10,w+4):it.xx+10;
+                      cx.textAlign=left?"right":"left";
+                      lb.lines.forEach(function(ln,li3){
+                        cx.font=ln.f;
+                        cx.lineWidth=3;cx.strokeStyle="rgba(4,13,26,0.85)";cx.strokeText(ln.t,x,y+li3*12);
+                        cx.fillStyle=ln.c;cx.fillText(ln.t,x,y+li3*12);
+                      });
+                      floor=y+(lb.lines.length-1)*12+7;
+                    });
                   });
+                  cx.textAlign="left";
                   cx.restore();
                 }
                 requestAnimationFrame(loop2);
