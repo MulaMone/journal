@@ -134,6 +134,7 @@ struct Shared {
     nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
     ord_sym: String,                  // chart symbol whose live orders the poller fetches
+    entries: Vec<(f64, f64, f64, f64)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point)
     orders: Vec<(bool, f64, Option<(f64, f64)>)>, // NinjaTrader orders working right now: (is stop, price, (points, dollars) from the open position's average price) - futures prices, same as the NT candles
 }
 
@@ -423,11 +424,13 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
         let url = format!("http://127.0.0.1:7881/orders?sym={sym}&from={}&to={}", now - 259200, now + 120);
         let res = ureq::get(&url).timeout(Duration::from_secs(2)).call().ok().and_then(|r| r.into_json::<serde_json::Value>().ok());
         let mut live: Vec<(bool, f64, Option<(f64, f64)>)> = vec![];
+        let mut pos_e: Vec<(f64, f64, f64, f64)> = vec![];
         if let Some(v) = res {
             let pos: Vec<(String, f64, f64, f64, f64)> = v["pos"]
                 .as_array()
                 .map(|a| a.iter().filter_map(|q| Some((q[0].as_str()?.to_string(), q[1].as_f64()?, q[2].as_f64()?, q[3].as_f64()?, q[4].as_f64()?))).collect())
                 .unwrap_or_default();
+            pos_e = pos.iter().map(|q| (q.3, q.1, q.2, q.4)).collect();
             let mut last: HashMap<String, (i64, bool, f64, String, f64)> = HashMap::new();
             if let Some(a) = v["orders"].as_array() {
                 for e in a {
@@ -451,14 +454,15 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
             }
             live.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         }
+        let ents: Vec<(f64, f64, f64, f64)> = pos_e;
         let changed = {
             let mut s = shared.lock().unwrap();
-            if s.orders != live {
+            let c = s.orders != live || s.entries != ents;
+            if c {
                 s.orders = live;
-                true
-            } else {
-                false
+                s.entries = ents;
             }
+            c
         };
         if changed {
             ctx.request_repaint();
@@ -897,6 +901,13 @@ fn tag_box(p: &egui::Painter, r: Rect, fill: Color32) {
     p.add(egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(150) }.as_shape(r, 4.0));
     p.rect_filled(r, 4.0, fill);
     p.rect_stroke(r, 4.0, Stroke::new(1.0, Color32::from_white_alpha(28)), egui::StrokeKind::Inside);
+}
+/// Order label: dark plate, bright accent edge + stripe, large light text - readable on any candle colour.
+fn order_tag(p: &egui::Painter, r: Rect, accent: Color32, txt: &str, tcol: Color32, f: FontId) {
+    tag_box(p, r, rgb(0x0a1424));
+    p.rect_stroke(r, 4.0, Stroke::new(1.5, accent), egui::StrokeKind::Inside);
+    p.rect_filled(Rect::from_min_size(r.min, Vec2::new(6.0, r.height())), 4.0, accent);
+    p.text(Pos2::new(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, txt, f, tcol);
 }
 fn pill(p: &egui::Painter, r: Rect, fill: Color32, text: &str, tcol: Color32, f: FontId) {
     tag_box(p, r, fill);
@@ -1446,6 +1457,7 @@ impl eframe::App for App {
             if s.ord_sym != self.sym {
                 s.ord_sym = self.sym.clone(); // the order poller follows the symbol on screen
                 s.orders.clear();
+                s.entries.clear();
             }
         }
         // ── toolbar ──
@@ -2522,23 +2534,38 @@ impl eframe::App for App {
             // ═════════ live stop / target orders from NinjaTrader (EdgeFeed /orders), on the futures prices of the NT candles ═════════
             if src_nt {
                 let orders: Vec<(bool, f64, Option<(f64, f64)>)> = self.shared.lock().unwrap().orders.clone();
-                let oqf = FontId::monospace(12.0);
+                let oqf = FontId::monospace(15.0);
+                // entry line: your average price, with the open profit / loss at the last price (like NinjaTrader's own)
+                let ents: Vec<(f64, f64, f64, f64)> = self.shared.lock().unwrap().entries.clone();
+                for (avg, dir, qty, pv) in ents {
+                    let ey = y_of(avg);
+                    if ey < plot.top() || ey > plot.bottom() {
+                        continue;
+                    }
+                    let upl = (last.c - avg) * dir * pv * qty;
+                    let etxt = format!("{} {}   {}${:.2}", if dir > 0.0 { "LONG" } else { "SHORT" }, qty, if upl >= 0.0 { "+" } else { "-" }, upl.abs());
+                    let ecol = rgb(0x4da3ff);
+                    dash_h(&clip, plot.left(), plot.right(), snapc(ey), 3.0, 3.0, Stroke::new(hair.max(1.0), ecol));
+                    let etw = text_w(&painter, &etxt, &oqf) + 26.0;
+                    let ecol_txt = if upl >= 0.0 { rgb(0x5cf59a) } else { rgb(0xff8a8a) };
+                    order_tag(&clip, Rect::from_min_size(Pos2::new(plot.left() + 12.0, ey - 12.0), Vec2::new(etw, 24.0)), ecol, &etxt, ecol_txt, oqf.clone());
+                    order_tag(&painter, Rect::from_min_size(Pos2::new(plot.right() + 2.0, ey - 12.0), Vec2::new(AXIS_W - 4.0, 24.0)), ecol, &fmt_price(avg, step), Color32::WHITE, FontId::monospace(13.0));
+                }
                 for (is_stop, opx, oval) in orders {
                     let oy = y_of(opx);
                     if oy < plot.top() || oy > plot.bottom() {
                         continue;
                     }
-                    let ocol: u32 = if is_stop { 0xe24b4a } else { 0x2fb36b };
+                    let ocol: u32 = if is_stop { 0xff4d4d } else { 0x2ee67a };
+                    let otxt: u32 = if is_stop { 0xff8a8a } else { 0x5cf59a };
                     dash_h(&clip, plot.left(), plot.right(), snapc(oy), 6.0, 4.0, Stroke::new(hair.max(1.0), rgb(ocol)));
-                    let orr = Rect::from_min_size(Pos2::new(plot.right() + 2.0, oy - 9.0), Vec2::new(AXIS_W - 4.0, 18.0));
-                    pill(&painter, orr, rgb(ocol), &format!("{} {}", if is_stop { "SL" } else { "TP" }, fmt_price(opx, step)), Color32::WHITE, FontId::monospace(11.0));
-                    // like NinjaTrader's own label: points and dollars from your entry to this order
-                    if let Some((pts, usd)) = oval {
-                        let sg = |v: f64| if v >= 0.0 { "+" } else { "-" };
-                        let txt = format!("{} {:.2} pts  {}${:.2}", if is_stop { "STOP" } else { "TARGET" }, pts.abs(), sg(usd), usd.abs());
-                        let tw = text_w(&painter, &txt, &oqf) + 12.0;
-                        let tr = Rect::from_min_size(Pos2::new(plot.left() + 12.0, oy - 9.0), Vec2::new(tw, 18.0));
-                        pill(&clip, tr, rgb(ocol), &txt, Color32::WHITE, oqf.clone());
+                    let orr = Rect::from_min_size(Pos2::new(plot.right() + 2.0, oy - 12.0), Vec2::new(AXIS_W - 4.0, 24.0));
+                    order_tag(&painter, orr, rgb(ocol), &fmt_price(opx, step), Color32::WHITE, FontId::monospace(13.0));
+                    // what this order is worth in dollars (entry to this level x contracts)
+                    if let Some((_pts, usd)) = oval {
+                        let txt = format!("{}   {}${:.2}", if is_stop { "STOP" } else { "TARGET" }, if usd >= 0.0 { "+" } else { "-" }, usd.abs());
+                        let tw = text_w(&painter, &txt, &oqf) + 26.0;
+                        order_tag(&clip, Rect::from_min_size(Pos2::new(plot.left() + 12.0, oy - 12.0), Vec2::new(tw, 24.0)), rgb(ocol), &txt, rgb(otxt), oqf.clone());
                     }
                 }
             }
