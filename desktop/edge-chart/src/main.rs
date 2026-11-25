@@ -20,6 +20,9 @@ const DN_LINE: Color32 = Color32::from_rgb(74, 10, 10);
 const BODY_RATIO: f32 = 0.70; // body width as a share of the bar spacing (NinjaTrader is ~0.70)
 const WICK_PTS: f32 = 1.0; // wick + outline thickness in points (1px at 100% scaling, 2px at 150-200%)
 const RIGHT_GAP_BARS: f32 = 8.0;
+const RANGE_TICKS: f64 = 400.0; // the "400R" chart: every bar spans this many ticks (NQ/ES tick = 0.25 -> 100 points)
+const EMA_FAST: usize = 14;
+const EMA_SLOW: usize = 50;
 const AXIS_W: f32 = 96.0;
 const AXIS_H: f32 = 28.0;
 // ─────────────────────────────────────────────────────────────────────────
@@ -36,24 +39,23 @@ struct Candle {
     done: bool,
 }
 
-const SYMS: [(&str, &str); 7] = [
-    ("NQ", "NAS100_USD"),
+const SYMS: [(&str, &str); 5] = [
     ("ES", "SPX500_USD"),
-    ("YM", "US30_USD"),
-    ("RTY", "US2000_USD"),
+    ("NQ", "NAS100_USD"),
     ("GC", "XAU_USD"),
     ("CL", "WTICO_USD"),
     ("NG", "NATGAS_USD"),
 ];
-const TFS: [(&str, &str, i64); 8] = [
+const TFS: [(&str, &str, i64); 9] = [
     ("2m", "M2", 120),
     ("5m", "M5", 300),
-    ("15m", "M15", 900),
     ("30m", "M30", 1800),
     ("1h", "H1", 3600),
     ("4h", "H4", 14400),
+    ("8h", "H8", 28800),
     ("D", "D", 86400),
     ("W", "W", 604800),
+    ("400R", "RANGE", 300), // range bars built from 1-minute candles (300 = treated like an intraday chart for sessions/levels)
 ];
 const INTRA_TFS: [&str; 4] = ["2m", "5m", "30m", "1h"];
 const HTFS: [(&str, &str, u32); 3] = [("1H", "H1", 1500), ("4H", "H4", 1000), ("D", "D", 500)];
@@ -61,6 +63,14 @@ const FUTURES: [&str; 5] = ["ES", "NQ", "CL", "GC", "NG"]; // sessions open 18:0
 
 fn inst_for(sym: &str) -> &'static str {
     SYMS.iter().find(|s| s.0 == sym).map(|s| s.1).unwrap_or("NAS100_USD")
+}
+fn tick_size(sym: &str) -> f64 {
+    match sym {
+        "GC" => 0.1,
+        "CL" => 0.01,
+        "NG" => 0.001,
+        _ => 0.25,
+    }
 }
 fn align_for(sym: &str) -> i64 {
     if FUTURES.contains(&sym) { 18 } else { 17 }
@@ -100,8 +110,16 @@ enum Req {
 }
 
 fn fetch(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64) -> Result<Vec<Candle>, String> {
+    fetch_ex(base, tok, inst, gran, count, align, None)
+}
+
+fn fetch_ex(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64, to: Option<i64>) -> Result<Vec<Candle>, String> {
+    let to_q = to
+        .and_then(|t| DateTime::from_timestamp(t, 0))
+        .map(|d| format!("&to={}", d.format("%Y-%m-%dT%H:%M:%SZ")))
+        .unwrap_or_default();
     let url = format!(
-        "{base}/v3/instruments/{inst}/candles?granularity={gran}&price=M&count={count}&alignmentTimezone=America%2FNew_York&dailyAlignment={align}"
+        "{base}/v3/instruments/{inst}/candles?granularity={gran}&price=M&count={count}&alignmentTimezone=America%2FNew_York&dailyAlignment={align}{to_q}"
     );
     let resp = ureq::get(&url)
         .set("Authorization", &format!("Bearer {tok}"))
@@ -143,10 +161,84 @@ fn merge(dst: &mut Vec<Candle>, new: Vec<Candle>) {
     }
 }
 
+/// Range bars from 1-minute candles: each bar spans exactly `r` price units. Inside a minute the price is assumed to
+/// travel open -> low -> high -> close (up candle) or open -> high -> low -> close (down candle), so bar edges are
+/// approximate; real tick data would be exact.
+fn range_bars(m1: &[Candle], r: f64) -> Vec<Candle> {
+    let mut out: Vec<Candle> = vec![];
+    let Some(f) = m1.first() else { return out };
+    let mut price = f.o;
+    let mut cur = Candle { t: f.t, e: f.e, o: price, h: price, l: price, c: price, done: false };
+    let mut guard = 0u32;
+    for k in m1 {
+        let path = if k.c >= k.o { [k.o, k.l, k.h, k.c] } else { [k.o, k.h, k.l, k.c] };
+        for &target in &path {
+            loop {
+                guard += 1;
+                if guard > 5_000_000 {
+                    return out;
+                }
+                if target > price {
+                    let cap = cur.l + r;
+                    if target > cap + 1e-9 {
+                        cur.h = cap;
+                        cur.c = cap;
+                        cur.done = true;
+                        out.push(cur);
+                        price = cap;
+                        cur = Candle { t: k.t, e: k.e, o: cap, h: cap, l: cap, c: cap, done: false };
+                        continue;
+                    }
+                    price = target;
+                    cur.h = cur.h.max(price);
+                    cur.c = price;
+                } else if target < price {
+                    let cap = cur.h - r;
+                    if target < cap - 1e-9 {
+                        cur.l = cap;
+                        cur.c = cap;
+                        cur.done = true;
+                        out.push(cur);
+                        price = cap;
+                        cur = Candle { t: k.t, e: k.e, o: cap, h: cap, l: cap, c: cap, done: false };
+                        continue;
+                    }
+                    price = target;
+                    cur.l = cur.l.min(price);
+                    cur.c = price;
+                }
+                break;
+            }
+        }
+    }
+    out.push(cur);
+    out
+}
+
+/// ~5 trading days of 1-minute candles (several pages of 5000)
+fn fetch_m1(base: &str, tok: &str, inst: &str, align: i64) -> Result<Vec<Candle>, String> {
+    let mut all: Vec<Candle> = vec![];
+    let mut to: Option<i64> = None;
+    for _ in 0..4 {
+        let page = fetch_ex(base, tok, inst, "M1", 5000, align, to)?;
+        let Some(first) = page.first().map(|c| c.t) else { break };
+        if all.first().map_or(false, |a| first >= a.t) {
+            break; // no older candles came back
+        }
+        let keep_until = all.first().map_or(i64::MAX, |a| a.t);
+        let mut merged: Vec<Candle> = page.into_iter().filter(|c| c.t < keep_until).collect();
+        merged.extend(all);
+        all = merged;
+        to = Some(first);
+    }
+    if all.is_empty() { Err("no 1-minute data".into()) } else { Ok(all) }
+}
+
 fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Context, base: String, tok: String) {
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
     let mut tick = 0u32;
+    let mut m1raw: Vec<Candle> = vec![];
     let set_status = |s: &str| {
         shared.lock().unwrap().status = s.to_string();
         ctx.request_repaint();
@@ -157,7 +249,17 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
                 set_status("loading…");
                 let gran = TFS.iter().find(|t| t.0 == tf).map(|t| t.1).unwrap_or("M5");
                 let al = align_for(&sym);
-                match fetch(&base, &tok, inst_for(&sym), gran, 3000, al) {
+                let res = if gran == "RANGE" {
+                    set_status("building range bars…");
+                    fetch_m1(&base, &tok, inst_for(&sym), al).map(|m| {
+                        let bars = range_bars(&m, RANGE_TICKS * tick_size(&sym));
+                        m1raw = m;
+                        bars
+                    })
+                } else {
+                    fetch(&base, &tok, inst_for(&sym), gran, 3000, al)
+                };
+                match res {
                     Ok(cs) => {
                         let mut s = shared.lock().unwrap();
                         s.main = cs;
@@ -193,7 +295,13 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
                 tick += 1;
                 if let Some((sym, gran)) = &cur {
                     let al = align_for(sym);
-                    if let Ok(cs) = fetch(&base, &tok, inst_for(sym), gran, 3, al) {
+                    if gran == "RANGE" {
+                        if let Ok(cs) = fetch(&base, &tok, inst_for(sym), "M1", 3, al) {
+                            merge(&mut m1raw, cs);
+                            let bars = range_bars(&m1raw, RANGE_TICKS * tick_size(sym));
+                            shared.lock().unwrap().main = bars;
+                        }
+                    } else if let Ok(cs) = fetch(&base, &tok, inst_for(sym), gran, 3, al) {
                         merge(&mut shared.lock().unwrap().main, cs);
                     }
                     if tick % 15 == 0 {
@@ -515,12 +623,12 @@ struct Group {
     c: f64,
 }
 /// Normal mode: each period shows the prior period's high / low / close (day for <=30m, week for 1h/4h, month for D).
-fn period_groups(cs: &[Candle], ds: &[Candle], per: Per, anchor: i64) -> Vec<Group> {
+fn period_groups(cs: &[Candle], ds: &[Candle], per: Per, anchor: i64, extra: i64) -> Vec<Group> {
     let m = agg(ds, per, anchor);
     let mut out: Vec<Group> = vec![];
     let mut cur_k = i64::MIN;
     for (i, c) in cs.iter().enumerate() {
-        let k = key_of(per, c.e, anchor);
+        let k = key_of(per, c.e + extra, anchor);
         if k != cur_k {
             cur_k = k;
             if let Some((_, x)) = m.range(..k).next_back() {
@@ -602,6 +710,10 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
+    show_pw: bool, // 30m: previous-week lines (off by default, like the web chart)
+    show_pm: bool, // 8h: previous-month lines
+    show_pq: bool, // D: previous-quarter lines
+    show_py: bool, // W: previous-year lines
     manual: Option<(f64, f64)>, // manual price range (after dragging the price axis / panning vertically); None = auto-fit
     drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag
     vdrag: f32,
@@ -634,6 +746,10 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
+            show_pw: false,
+            show_pm: true,
+            show_pq: true,
+            show_py: true,
             manual: None,
             drag_mode: 0,
             vdrag: 0.0,
@@ -691,6 +807,20 @@ impl eframe::App for App {
                         }
                     }
                 }
+                if !self.intraday {
+                    let (lbl, flag) = match self.tf.as_str() {
+                        "30m" => ("PW", Some(&mut self.show_pw)),
+                        "8h" => ("PM", Some(&mut self.show_pm)),
+                        "D" => ("PQ", Some(&mut self.show_pq)),
+                        "W" => ("PY", Some(&mut self.show_py)),
+                        _ => ("", None),
+                    };
+                    if let Some(f) = flag {
+                        if ui.selectable_label(*f, lbl).clicked() {
+                            *f = !*f;
+                        }
+                    }
+                }
                 if self.sym == "NQ" && ui.selectable_label(!self.hide_nums, "#").clicked() {
                     self.hide_nums = !self.hide_nums;
                 }
@@ -734,7 +864,7 @@ impl eframe::App for App {
             let n = cs.len();
             // default zoom = the web chart's bars-per-timeframe
             let default_spacing = |tf: &str| -> f32 {
-                let bars = match tf { "2m" => 250.0, "5m" => 200.0, "30m" => 250.0, "1h" => 300.0, "4h" => 200.0, "D" => 150.0, "W" => 75.0, _ => 250.0 };
+                let bars = match tf { "2m" => 250.0, "5m" => 200.0, "30m" => 250.0, "1h" => 300.0, "4h" => 200.0, "8h" => 150.0, "D" => 150.0, "W" => 75.0, _ => 250.0 };
                 (plot.width() / (bars + RIGHT_GAP_BARS)).clamp(3.0, 70.0)
             };
             if ver != self.seen_version {
@@ -869,6 +999,7 @@ impl eframe::App for App {
             let anchor = (24 - align) * 3600;
             let tf = self.tf.as_str();
             let intraday = self.intraday;
+            let is_range = tf == "400R";
 
             // ═════════ session lines: YEAR / MONTH / QUARTER / WEEK / ETH ═════════
             let mut marks: Vec<(usize, &str, u32)> = vec![];
@@ -1139,31 +1270,64 @@ impl eframe::App for App {
                         x += ws[j] + 2.0;
                     }
                 }
-            } else if secs < 604800 && secs != 14400 || tf == "D" || tf == "4h" {
-                let (per, pre) = if tf == "D" { (Per::Month, "PM") } else if secs >= 3600 { (Per::Week, "PW") } else { (Per::Day, "PD") };
-                let gs = period_groups(&cs, &ds, per, anchor);
-                for (gi, g) in gs.iter().enumerate() {
-                    let last_g = gi + 1 == gs.len();
-                    let end = if last_g { g.i1 as f32 } else { gs[gi + 1].i0 as f32 };
-                    let (x0, x1) = (x_of(g.i0 as f32), x_of(end));
-                    if x1 < plot.left() || x0 > plot.right() {
-                        continue;
+            } else {
+                // each group set: (period, tag prefix, [close, high, low] colours, line width x, tags [C, H, L], extra shift)
+                let silver = (0xb8c4d9u32, 0x00b862u32, 0xff4444u32);
+                let mut sets: Vec<(Per, &str, [u32; 3], f32, [&str; 3], i64)> = vec![];
+                let std_cols = [silver.0, silver.1, silver.2];
+                let alt_cols = [0x8a3ffc, 0xa3e635, 0xff7a59]; // violet close / lime high / coral low
+                match tf {
+                    "W" => {
+                        sets.push((Per::Quarter, "PQ", std_cols, 1.0, ["PQC", "PQH", "PQL"], 2 * 86400));
+                        if self.show_py {
+                            sets.push((Per::Year, "PY", alt_cols, 2.0, ["PYC", "PYH", "PYL"], 2 * 86400));
+                        }
                     }
-                    for (v, col) in [(g.c, 0xb8c4d9u32), (g.h, 0x00b862), (g.l, 0xff4444)] {
-                        if !v.is_finite() {
+                    "D" => {
+                        sets.push((Per::Month, "PM", std_cols, 1.0, ["PMC", "PMH", "PML"], 0));
+                        if self.show_pq {
+                            sets.push((Per::Quarter, "PQ", alt_cols, 2.0, ["", "PQH", "PQL"], 0));
+                        }
+                    }
+                    _ if secs >= 3600 => {
+                        sets.push((Per::Week, "PW", std_cols, 1.0, ["PWC", "PWH", "PWL"], 0));
+                        if tf == "8h" && self.show_pm {
+                            sets.push((Per::Month, "PM", alt_cols, 2.0, ["", "PMH", "PML"], 0));
+                        }
+                    }
+                    _ => {
+                        sets.push((Per::Day, "PD", std_cols, 1.0, ["PDC", "PDH", "PDL"], 0));
+                        if tf == "30m" && self.show_pw {
+                            sets.push((Per::Week, "PW", std_cols, 2.0, ["", "PWH", "PWL"], 0));
+                        }
+                    }
+                }
+                for (per, _pre, cols, wmul, tags, extra) in sets {
+                    let gs = period_groups(&cs, &ds, per, anchor, extra);
+                    for (gi, g) in gs.iter().enumerate() {
+                        let last_g = gi + 1 == gs.len();
+                        let end = if last_g { g.i1 as f32 } else { gs[gi + 1].i0 as f32 };
+                        let (x0, x1) = (x_of(g.i0 as f32), x_of(end));
+                        if x1 < plot.left() || x0 > plot.right() {
                             continue;
                         }
-                        let y = y_of(v);
-                        if y > plot.top() && y < plot.bottom() {
-                            dash_h(&clip, x0.max(plot.left()), x1.min(plot.right()), snapc(y), 6.0, 6.0, Stroke::new(hair, rgb(col)));
+                        for (v, col) in [(g.h, cols[1]), (g.l, cols[2]), (g.c, cols[0])] {
+                            if !v.is_finite() {
+                                continue;
+                            }
+                            let y = y_of(v);
+                            if y > plot.top() && y < plot.bottom() {
+                                dash_h(&clip, x0.max(plot.left()), x1.min(plot.right()), snapc(y), 6.0, 6.0, Stroke::new(hair * wmul, rgb(col)));
+                            }
                         }
-                    }
-                    if last_g {
-                        for (nm, v, col) in [("C", g.c, 0xb8c4d9u32), ("H", g.h, 0x00b862), ("L", g.l, 0xff4444)] {
-                            if v.is_finite() && v > lo && v < hi {
+                        if last_g {
+                            for (v, col, tag) in [(g.c, cols[0], tags[0]), (g.h, cols[1], tags[1]), (g.l, cols[2], tags[2])] {
+                                if tag.is_empty() || !v.is_finite() || v <= lo || v >= hi {
+                                    continue;
+                                }
                                 let y = y_of(v);
                                 let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, y - 9.0), Vec2::new(AXIS_W - 4.0, 18.0));
-                                pill(&painter, r, rgb(col), &format!("{pre}{nm} {}", fmt_price(v, step)), lum_text(col), FontId::monospace(11.0));
+                                pill(&painter, r, rgb(col), &format!("{tag} {}", fmt_price(v, step)), lum_text(col), FontId::monospace(11.0));
                             }
                         }
                     }
@@ -1321,6 +1485,30 @@ impl eframe::App for App {
                 }
             }
 
+            // ═════════ range chart: 14 / 50 EMA of the bar closes (50 green) ═════════
+            if is_range {
+                let closes: Vec<f64> = cs.iter().map(|c| c.c).collect();
+                for (len, col) in [(EMA_FAST, 0xffb020u32), (EMA_SLOW, 0x00ff55)] {
+                    let em = ema_of(&closes, len);
+                    let line: Vec<Pos2> = (first_vis.saturating_sub(1)..=(last_vis + 1).min(n - 1))
+                        .filter_map(|i| em[i].map(|v| Pos2::new(x_of(i as f32), y_of(v))))
+                        .collect();
+                    if line.len() >= 2 {
+                        clip.add(egui::Shape::line(line, Stroke::new(2.0, rgb(col))));
+                    }
+                    if let Some(Some(v)) = em.last() {
+                        let (lx, ly) = (x_of((n - 1) as f32), y_of(*v));
+                        if ly >= plot.top() + 8.0 && ly <= plot.bottom() - 8.0 {
+                            let tag = format!("EMA {len}");
+                            let tw = text_w(&painter, &tag, &small);
+                            let tx = (lx + 6.0).min(plot.right() - tw - 2.0).max(plot.left() + 2.0);
+                            clip.rect_filled(Rect::from_min_max(Pos2::new(tx - 2.0, ly - 7.0), Pos2::new(tx + tw + 2.0, ly + 7.0)), 0.0, hexc(0x040d1a, 0.75));
+                            clip.text(Pos2::new(tx, ly), Align2::LEFT_CENTER, tag, small.clone(), rgb(col));
+                        }
+                    }
+                }
+            }
+
             // ═════════ last price ═════════
             let ly = snapc(y_of(last.c));
             let lcol = if last.c >= last.o { UP_FILL } else { DN_FILL };
@@ -1337,15 +1525,17 @@ impl eframe::App for App {
             } else {
                 format!("{}:{:02}", remain / 60, remain % 60)
             };
-            let tag_h = 40.0;
+            let tag_h = if is_range { 24.0 } else { 40.0 };
             let ly_c = ly.clamp(plot.top() + tag_h / 2.0, plot.bottom() - tag_h / 2.0);
             let tcol = if last.c >= last.o { rgb(0x00b862) } else { rgb(0xff4444) };
             let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - tag_h / 2.0), Vec2::new(AXIS_W - 4.0, tag_h));
             painter.rect_filled(r, 2.0, tcol);
-            painter.text(Pos2::new(r.center().x, r.top() + 11.0), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
-            let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
-            painter.rect_filled(cr, 2.0, hexc(0x040d1a, 0.8));
-            painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
+            painter.text(Pos2::new(r.center().x, if is_range { r.center().y } else { r.top() + 11.0 }), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
+            if !is_range {
+                let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
+                painter.rect_filled(cr, 2.0, hexc(0x040d1a, 0.8));
+                painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
+            }
 
             // ═════════ crosshair + readout ═════════
             if let Some(pos) = resp.hover_pos().filter(|p| plot.contains(*p)) {
@@ -1377,7 +1567,7 @@ impl eframe::App for App {
             painter.text(
                 Pos2::new(plot.left() + 10.0, plot.top() + 28.0),
                 Align2::LEFT_TOP,
-                format!("{} · {}", self.sym, self.tf),
+                if is_range { format!("{} · {}-tick range ({} pts)", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym)) } else { format!("{} · {}", self.sym, self.tf) },
                 FontId::proportional(13.0),
                 Color32::from_rgb(120, 140, 175),
             );
