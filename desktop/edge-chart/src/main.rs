@@ -1019,6 +1019,7 @@ struct App {
     drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag, 3 = measure (shift + drag)
     meas_p0: Option<Pos2>,      // where the measure drag started (screen)
     meas: Option<(f32, f64, f32, f64)>, // measure: (bar idx, price) start and end
+    meas_w: f32,                // widest label so far (keeps the label from jittering as the text changes)
     vdrag: f32,
 }
 
@@ -1080,6 +1081,7 @@ impl App {
             drag_mode: 0,
             meas_p0: None,
             meas: None,
+            meas_w: 0.0,
             vdrag: 0.0,
         };
         app.reload();
@@ -1252,7 +1254,7 @@ impl eframe::App for App {
             // INTRADAY mode opens close up on the latest candles, like the web chart (desktop counts), with a ~150px gap for the price tags
             let default_view = |tf: &str, intra: bool, sym: &str| -> (f32, f32) {
                 if intra {
-                    let base = match tf { "2m" => 54.0f32, "5m" => 43.0, "30m" => 14.0, "1h" => 14.0, _ => 0.0 };
+                    let base = match tf { "2m" => 120.0f32, "5m" => 96.0, "30m" => 30.0, "1h" => 32.0, _ => 0.0 }; // exactly the web chart's intraday counts
                     if base > 0.0 {
                         let bars = if sym == "BTC" { (base * 0.7).round() } else { base };
                         let sp = ((plot.width() - 150.0) / bars).clamp(3.0, 140.0);
@@ -1346,13 +1348,21 @@ impl eframe::App for App {
                 let shift = ctx.input(|i| i.modifiers.shift);
                 self.drag_mode = if o.map_or(false, |p| p.x > plot.right()) { 2 } else if shift { 3 } else { 1 };
                 self.meas = None;
+                self.meas_w = 0.0;
                 self.meas_p0 = if self.drag_mode == 3 { o } else { None };
                 self.vdrag = 0.0;
             }
-            if resp.drag_stopped() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            // the measure stays on screen after you let go; a click or Esc clears it
+            if resp.drag_stopped() {
+                self.meas_p0 = None;
+                if self.drag_mode == 3 {
+                    self.drag_mode = 0;
+                    if let Some((i0, p0, i1, p1)) = self.meas { if i0 == i1 && p0 == p1 { self.meas = None; } }
+                }
+            }
+            if resp.clicked() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.meas = None;
                 self.meas_p0 = None;
-                if self.drag_mode == 3 { self.drag_mode = 0; }
             }
             if resp.dragged() && self.drag_mode == 1 {
                 self.right_idx -= resp.drag_delta().x / self.spacing;
@@ -2053,7 +2063,7 @@ impl eframe::App for App {
                     }
                 }
             }
-            if let (3, Some((i0, p0, i1, p1))) = (self.drag_mode, self.meas) {
+            if let Some((i0, p0, i1, p1)) = self.meas {
                 let up = p1 >= p0;
                 let col = if up { Color32::from_rgb(41, 121, 255) } else { Color32::from_rgb(242, 54, 69) };
                 let (x0, x1) = (x_of(i0), x_of(i1));
@@ -2100,11 +2110,13 @@ impl eframe::App for App {
                 let secs_d = (l_to_t(i1 as f64) - l_to_t(i0 as f64)).abs() as i64;
                 let dur = if secs_d >= 86400 { format!("{}d {}h", secs_d / 86400, (secs_d % 86400) / 3600) } else if secs_d >= 3600 { format!("{}h {:02}m", secs_d / 3600, (secs_d % 3600) / 60) } else { format!("{}m", secs_d / 60) };
                 lines.push(format!("{nb} bars  ·  {dur}"));
-                let w = lines.iter().map(|t| painter.layout_no_wrap(t.clone(), FontId::monospace(13.0), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 22.0;
+                let w0 = lines.iter().map(|t| painter.layout_no_wrap(t.clone(), FontId::monospace(13.0), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 22.0;
+                if w0 > self.meas_w { self.meas_w = w0; }
+                let w = self.meas_w; // only ever grows while measuring, so the box doesn't resize under the cursor
                 let h = lines.len() as f32 * 19.0 + 10.0;
                 let lx = (c.x - w / 2.0).clamp(plot.left() + 2.0, (plot.right() - w - 2.0).max(plot.left() + 2.0));
-                let mut ly = if up { rect.top() - h - 8.0 } else { rect.bottom() + 8.0 };
-                if ly < plot.top() + 2.0 { ly = if up { rect.bottom() + 8.0 } else { rect.top() - h - 8.0 }.max(plot.top() + 2.0); }
+                let mut ly = rect.top() - h - 8.0; // always above the box (no flip when dragging past the start point)
+                if ly < plot.top() + 2.0 { ly = rect.bottom() + 8.0; }
                 if ly + h > plot.bottom() - 2.0 { ly = (plot.bottom() - h - 2.0).max(plot.top() + 2.0); }
                 painter.rect_filled(Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), 4.0, col);
                 for (k, t) in lines.iter().enumerate() {
