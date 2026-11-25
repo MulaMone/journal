@@ -7856,7 +7856,8 @@ function chartTab(){
     var gs={M2:120,M5:300,M30:1800,H1:3600}[gm[1]];
     var cm=x.match(/[?&]count=(\d+)/),fm=x.match(/[?&]from=([^&]+)/),tm=x.match(/[?&]to=([^&]+)/);
     var cnt=cm?parseInt(cm[1],10):0,q="sym="+sym;
-    if(fm) q+="&from="+Math.floor(new Date(decodeURIComponent(fm[1])).getTime()/1000);
+    var fromSecNt=0;
+    if(fm){fromSecNt=Math.floor(new Date(decodeURIComponent(fm[1])).getTime()/1000);q+="&from="+fromSecNt;}
     else if(cnt) q+="&n="+(cnt*gs/60+Math.ceil(gs/60)+2);
     else return none;
     if(tm) q+="&to="+Math.floor(new Date(decodeURIComponent(tm[1])).getTime()/1000);
@@ -7868,6 +7869,7 @@ function chartTab(){
     }).then(function(j){
       var b=j&&j.bars;
       if(!b||b.length<2) throw new Error("nt empty");
+      if(fromSecNt&&b[0][0]>fromSecNt+4*86400) return null; // the feed's history doesn't reach back to the trade being viewed: use OANDA for this view
       var out=[],cur=null,nowS=Date.now()/1000;
       b.forEach(function(k){
         var bt=Math.floor(k[0]/gs)*gs;
