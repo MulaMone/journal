@@ -8,11 +8,14 @@ use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // ───────────────────────── style (edit to taste) ─────────────────────────
-const BG: Color32 = Color32::from_rgb(4, 13, 26);
+const BG: Color32 = Color32::BLACK;
 const GRID: Color32 = Color32::from_rgb(0x1a, 0x32, 0x60); // web chart grid #1a3260
 const AXIS_TXT: Color32 = Color32::from_rgb(0xe8, 0xf0, 0xff);
 const UP_FILL: Color32 = Color32::from_rgb(0, 230, 118);
@@ -128,11 +131,12 @@ struct Shared {
     nt: HashMap<String, Vec<Candle>>, // 1-minute futures bars pushed by NinjaTrader, per symbol
     nt_d: HashMap<String, Vec<Candle>>, // NinjaTrader's own daily bars (long history for D / W / levels)
     nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
+    nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
 }
 
 enum Req {
-    Load { sym: String, tf: String },
+    Load { sym: String, tf: String, htf: String }, // htf is an HTFS label, fetched in parallel with the main data
     Htf { sym: String, tf: String }, // tf is an HTFS label
     Nt { sym: String },              // NinjaTrader pushed new bars
     NtGone { sym: String },          // a NinjaTrader connection closed
@@ -362,8 +366,13 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                             .collect()
                     })
                     .unwrap_or_default();
+                let raw = v["sym"].as_str().unwrap_or("").to_uppercase();
                 {
                     let mut s = sh.lock().unwrap();
+                    // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
+                    if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
+                        continue;
+                    }
                     if my_sym.is_none() {
                         *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
                         my_sym = Some(sym.clone());
@@ -387,10 +396,140 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                     let mut s = sh.lock().unwrap();
                     if let Some(n) = s.nt_conns.get_mut(&sym) {
                         *n = n.saturating_sub(1);
+                        if *n == 0 {
+                            s.nt_owner.remove(&sym);
+                        }
                     }
                 }
                 let _ = tx.send(Req::NtGone { sym });
                 ctx.request_repaint();
+            }
+        });
+    }
+}
+
+// ───────────────────────── candle cache (disk + memory, delta refresh) ─────────────────────────
+type Cache = Arc<Mutex<HashMap<(String, String), Vec<Candle>>>>;
+
+fn htf_count(g: &str) -> usize {
+    HTFS.iter().find(|h| h.1 == g).map(|h| h.2 as usize).unwrap_or(500)
+}
+fn tail_n(mut v: Vec<Candle>, n: usize) -> Vec<Candle> {
+    if v.len() > n {
+        let cut = v.len() - n;
+        v.drain(..cut);
+    }
+    v
+}
+fn gran_secs(g: &str) -> i64 {
+    match g { "M1" => 60, "M2" => 120, "M5" => 300, "M30" => 1800, "H1" => 3600, "H4" => 14400, "H8" => 28800, "D" => 86400, "W" => 604800, _ => 300 }
+}
+fn cache_dir() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .or_else(|| std::env::var_os("XDG_CACHE_HOME"))
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("EDGE").join("chart-cache")
+}
+fn cache_file(sym: &str, g: &str) -> PathBuf {
+    cache_dir().join(format!("{sym}_{g}.bin"))
+}
+const REC: usize = 41; // t i64, o h l c f64, done u8
+fn cache_load(sym: &str, g: &str) -> Vec<Candle> {
+    let Ok(b) = std::fs::read(cache_file(sym, g)) else { return vec![] };
+    if b.len() < 8 || &b[..4] != b"EDC1" {
+        return vec![];
+    }
+    let n = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
+    if b.len() != 8 + n * REC {
+        return vec![];
+    }
+    let f = |c: &[u8], i: usize| f64::from_le_bytes(c[i..i + 8].try_into().unwrap());
+    b[8..]
+        .chunks_exact(REC)
+        .map(|c| {
+            let t = i64::from_le_bytes(c[0..8].try_into().unwrap());
+            Candle { t, e: t + off(t), o: f(c, 8), h: f(c, 16), l: f(c, 24), c: f(c, 32), done: c[40] != 0 }
+        })
+        .collect()
+}
+fn cache_save(sym: &str, g: &str, cs: &[Candle]) {
+    let _ = std::fs::create_dir_all(cache_dir());
+    let mut b: Vec<u8> = Vec::with_capacity(8 + cs.len() * REC);
+    b.extend_from_slice(b"EDC1");
+    b.extend_from_slice(&(cs.len() as u32).to_le_bytes());
+    for c in cs {
+        b.extend_from_slice(&c.t.to_le_bytes());
+        for v in [c.o, c.h, c.l, c.c] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        b.push(c.done as u8);
+    }
+    let p = cache_file(sym, g);
+    static SEQ: AtomicU64 = AtomicU64::new(0); // two threads can save the same series at once: never share a temp file
+    let tmp = p.with_extension(format!("tmp{}", SEQ.fetch_add(1, Ordering::SeqCst)));
+    if std::fs::write(&tmp, b).is_ok() {
+        if std::fs::rename(&tmp, &p).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+}
+/// Memory first, then disk.
+fn cached_get(cache: &Cache, sym: &str, g: &str) -> Vec<Candle> {
+    let key = (sym.to_string(), g.to_string());
+    if let Some(v) = cache.lock().unwrap().get(&key) {
+        return v.clone();
+    }
+    let v = cache_load(sym, g);
+    if !v.is_empty() {
+        cache.lock().unwrap().insert(key, v.clone());
+    }
+    v
+}
+/// Latest `full_n` candles. With a cached copy that is deep enough, only the candles since its last bar are fetched
+/// (one small request) and appended; otherwise a full fetch. The result is saved to disk.
+fn load_series(base: &str, tok: &str, sym: &str, g: &str, full_n: u32, al: i64, seed: Vec<Candle>) -> Result<Vec<Candle>, String> {
+    let inst = inst_for(sym);
+    let mut cs = seed;
+    if cs.len() as u32 >= full_n * 9 / 10 && cs.len() >= 50 {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        let last = cs[cs.len() - 1].t;
+        let missing = ((now - last) / gran_secs(g)).max(0) + 4;
+        if missing <= 2500 {
+            let new = fetch(base, tok, inst, g, missing as u32, al)?;
+            if let Some(f) = new.first().map(|c| c.t) {
+                cs.retain(|c| c.t < f);
+                cs.extend(new);
+                if cs.len() > 5000 {
+                    let cut = cs.len() - 5000;
+                    cs.drain(..cut);
+                }
+                cache_save(sym, g, &cs);
+                return Ok(cs);
+            }
+        }
+    }
+    let full = fetch(base, tok, inst, g, full_n, al)?;
+    cache_save(sym, g, &full);
+    Ok(full)
+}
+/// Quietly warm the cache for the other timeframes (two at a time) so switching to them is instant.
+fn prefetch(base: &str, tok: &str, sym: &str, skip: &str, cache: &Cache, pgen: &Arc<AtomicU64>, my: u64) {
+    let grans: Vec<&'static str> = ["M2", "M5", "M30", "H1", "H4", "H8", "D", "W"].into_iter().filter(|g| *g != skip).collect();
+    for lane in 0..2usize {
+        let (b, t, sy, ca, ge) = (base.to_string(), tok.to_string(), sym.to_string(), cache.clone(), pgen.clone());
+        let mine: Vec<&'static str> = grans.iter().enumerate().filter(|(i, _)| i % 2 == lane).map(|(_, g)| *g).collect();
+        std::thread::spawn(move || {
+            for g in mine {
+                if ge.load(Ordering::SeqCst) != my {
+                    return; // symbol changed: stop
+                }
+                let seed = cached_get(&ca, &sy, g);
+                if let Ok(cs) = load_series(&b, &t, &sy, g, 3000, align_for(&sy), seed) {
+                    ca.lock().unwrap().insert((sy.clone(), g.to_string()), cs);
+                }
+                std::thread::sleep(Duration::from_millis(200));
             }
         });
     }
@@ -402,6 +541,10 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
     let mut tick = 0u32;
+    let mut data_sym = String::new(); // symbol the daily / 5m / HTF data currently belong to
+    let cache: Cache = Arc::new(Mutex::new(HashMap::new())); // candles per (symbol, OANDA granularity), backed by disk
+    let pf_gen = Arc::new(AtomicU64::new(0));
+    let mut pf_done: HashSet<String> = HashSet::new();
     let mut m1raw: Vec<Candle> = vec![];
     let set_status = |s: &str| {
         shared.lock().unwrap().status = s.to_string();
@@ -409,8 +552,12 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
     };
     loop {
         match rx.recv_timeout(Duration::from_secs(2)) {
-            Ok(Req::Load { sym, tf }) => {
-                {
+            Ok(Req::Load { sym, tf, htf }) => {
+                // daily / 5m / HTF data belong to the symbol, not the timeframe: keep them when only the timeframe changes
+                let same_sym = data_sym == sym;
+                if !same_sym {
+                    pf_gen.fetch_add(1, Ordering::SeqCst);
+                    pf_done.clear();
                     let mut s = shared.lock().unwrap();
                     s.daily.clear();
                     s.m5.clear();
@@ -419,9 +566,11 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 let gran = TFS.iter().find(|t| t.0 == tf).map(|t| t.1).unwrap_or("M5");
                 let al = align_for(&sym);
                 cur_tf = tf.clone();
-                let hg = htf_cur.as_ref().filter(|h| h.0 == sym).map(|h| h.1.clone());
-                if nt_apply(&shared, &sym, &tf, hg.as_deref()) {
+                let hg: Option<&'static str> = HTFS.iter().find(|h| h.0 == htf).map(|h| h.1);
+                if nt_apply(&shared, &sym, &tf, hg) {
                     nt_active = true;
+                    data_sym = sym.clone();
+                    htf_cur = hg.map(|g| (sym.clone(), g.to_string()));
                     cur = Some((sym.clone(), gran.to_string()));
                     {
                         let mut s = shared.lock().unwrap();
@@ -433,8 +582,49 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 }
                 nt_active = false;
                 shared.lock().unwrap().src = "OANDA".into();
-                set_status("loading…");
-                let res = if gran == "RANGE" {
+                let is_range = gran == "RANGE";
+                // paint from the memory / disk cache straight away, then catch up with a small request
+                let seed_main = if is_range { vec![] } else { cached_get(&cache, &sym, gran) };
+                let shown = !seed_main.is_empty();
+                if shown {
+                    {
+                        let mut s = shared.lock().unwrap();
+                        s.main = seed_main.clone();
+                        s.status.clear();
+                        s.version += 1;
+                    }
+                    cur = Some((sym.clone(), gran.to_string()));
+                    ctx.request_repaint();
+                } else {
+                    set_status("loading…");
+                }
+                if !same_sym {
+                    let sd = cached_get(&cache, &sym, "D");
+                    let sm = cached_get(&cache, &sym, "M5");
+                    let sh = hg.map(|g| cached_get(&cache, &sym, g)).unwrap_or_default();
+                    let mut s = shared.lock().unwrap();
+                    if !sd.is_empty() { s.daily = sd; }
+                    if !sm.is_empty() { s.m5 = sm; }
+                    if !sh.is_empty() { s.htf = tail_n(sh, hg.map_or(500, htf_count)); }
+                }
+                // levels (D), 5m and the HTF gaps load at the same time as the main candles
+                let need_aux = {
+                    let s = shared.lock().unwrap();
+                    !same_sym || s.daily.is_empty() || s.m5.is_empty()
+                };
+                let need_htf = hg.is_some() && (!same_sym || htf_cur.as_ref().map_or(true, |h| Some(h.1.as_str()) != hg) || shared.lock().unwrap().htf.is_empty());
+                let job = |g: &'static str, n: u32, seed: Vec<Candle>| {
+                    let (b, t, sy) = (base.clone(), tok.clone(), sym.clone());
+                    std::thread::spawn(move || load_series(&b, &t, &sy, g, n, al, seed))
+                };
+                let h_d = if need_aux { Some(job("D", 800, cached_get(&cache, &sym, "D"))) } else { None };
+                let h_m5 = if need_aux && gran != "M5" { Some(job("M5", 3000, cached_get(&cache, &sym, "M5"))) } else { None };
+                let h_htf = if need_htf {
+                    hg.map(|g| job(g, HTFS.iter().find(|h| h.1 == g).map(|h| h.2).unwrap_or(500), cached_get(&cache, &sym, g)))
+                } else {
+                    None
+                };
+                let res = if is_range {
                     set_status("building range bars…");
                     fetch_m1(&base, &tok, inst_for(&sym), al).map(|m| {
                         let bars = range_bars(&m, RANGE_TICKS * tick_size(&sym));
@@ -442,14 +632,19 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                         bars
                     })
                 } else {
-                    fetch(&base, &tok, inst_for(&sym), gran, 3000, al)
+                    load_series(&base, &tok, &sym, gran, 3000, al, seed_main)
                 };
                 match res {
                     Ok(cs) => {
+                        if !is_range {
+                            cache.lock().unwrap().insert((sym.clone(), gran.to_string()), cs.clone());
+                        }
                         let mut s = shared.lock().unwrap();
                         s.main = cs;
                         s.status.clear();
-                        s.version += 1;
+                        if !shown {
+                            s.version += 1; // a cached view was already shown (and zoomed); the refresh just swaps the data in
+                        }
                         cur = Some((sym.clone(), gran.to_string()));
                     }
                     Err(e) => {
@@ -459,17 +654,37 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                     }
                 }
                 ctx.request_repaint();
-                // levels feed + 5m feed (EMAs, NY open)
-                if let Ok(d) = fetch(&base, &tok, inst_for(&sym), "D", 800, al) {
-                    shared.lock().unwrap().daily = d;
-                }
-                if let Ok(m) = fetch(&base, &tok, inst_for(&sym), "M5", 3000, al) {
+                if need_aux && gran == "M5" {
+                    let m = shared.lock().unwrap().main.clone(); // the main 5m candles double as the EMA / NY-open feed
                     shared.lock().unwrap().m5 = m;
                 }
+                if let Some(Ok(d)) = h_d.map(|h| h.join()).and_then(|r| r.ok()) {
+                    cache.lock().unwrap().insert((sym.clone(), "D".to_string()), d.clone());
+                    shared.lock().unwrap().daily = d;
+                }
+                if let Some(Ok(m)) = h_m5.map(|h| h.join()).and_then(|r| r.ok()) {
+                    cache.lock().unwrap().insert((sym.clone(), "M5".to_string()), m.clone());
+                    shared.lock().unwrap().m5 = m;
+                }
+                if let (Some(h), Some(g)) = (h_htf, hg) {
+                    if let Ok(Ok(b)) = h.join() {
+                        cache.lock().unwrap().insert((sym.clone(), g.to_string()), b.clone());
+                        shared.lock().unwrap().htf = tail_n(b, htf_count(g));
+                        htf_cur = Some((sym.clone(), g.to_string()));
+                    }
+                }
+                data_sym = sym.clone();
                 ctx.request_repaint();
+                if !pf_done.contains(&sym) {
+                    pf_done.insert(sym.clone());
+                    prefetch(&base, &tok, &sym, gran, &cache, &pf_gen, pf_gen.load(Ordering::SeqCst));
+                }
             }
             Ok(Req::Htf { sym, tf }) => {
                 if let Some(h) = HTFS.iter().find(|h| h.0 == tf) {
+                    if htf_cur.as_ref().map_or(false, |c| c.0 == sym && c.1 == h.1) && !shared.lock().unwrap().htf.is_empty() {
+                        continue; // already loaded together with the main data
+                    }
                     if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && nt_ready(&shared, &sym) {
                         let m1 = shared.lock().unwrap().nt.get(&sym).cloned().unwrap_or_default();
                         shared.lock().unwrap().htf = agg_m1(&m1, htf_secs(h.1), align_for(&sym), false);
@@ -502,7 +717,8 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && !nt_ready(&shared, &sym) {
                     nt_active = false;
                     shared.lock().unwrap().src = "OANDA".into();
-                    let _ = tx_self.send(Req::Load { sym: sym.clone(), tf: cur_tf.clone() });
+                    let hl = htf_cur.as_ref().and_then(|h| HTFS.iter().find(|x| x.1 == h.1)).map(|x| x.0).unwrap_or("4H");
+                    let _ = tx_self.send(Req::Load { sym: sym.clone(), tf: cur_tf.clone(), htf: hl.to_string() });
                     if let Some(h) = htf_cur.as_ref().and_then(|h| HTFS.iter().find(|x| x.1 == h.1)) {
                         let _ = tx_self.send(Req::Htf { sym, tf: h.0.to_string() });
                     }
@@ -618,9 +834,63 @@ fn dashed_by_x(p: &egui::Painter, pts: &[Pos2], anchor: f32, on: f32, offl: f32,
 fn text_w(p: &egui::Painter, s: &str, f: &FontId) -> f32 {
     p.layout_no_wrap(s.to_string(), f.clone(), Color32::WHITE).size().x
 }
+/// Soft drop shadow + faint light rim so tags lift off the black background and off the candles behind them.
+fn tag_box(p: &egui::Painter, r: Rect, fill: Color32) {
+    p.add(egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(150) }.as_shape(r, 4.0));
+    p.rect_filled(r, 4.0, fill);
+    p.rect_stroke(r, 4.0, Stroke::new(1.0, Color32::from_white_alpha(28)), egui::StrokeKind::Inside);
+}
 fn pill(p: &egui::Painter, r: Rect, fill: Color32, text: &str, tcol: Color32, f: FontId) {
-    p.rect_filled(r, 2.0, fill);
+    tag_box(p, r, fill);
     p.text(r.center(), Align2::CENTER_CENTER, text, f, tcol);
+}
+/// Four-corner colour gradient rectangle (GPU mesh).
+fn grad_rect(p: &egui::Painter, r: Rect, tl: Color32, tr: Color32, br: Color32, bl: Color32) {
+    let mut m = egui::Mesh::default();
+    m.colored_vertex(r.left_top(), tl);
+    m.colored_vertex(r.right_top(), tr);
+    m.colored_vertex(r.right_bottom(), br);
+    m.colored_vertex(r.left_bottom(), bl);
+    m.add_triangle(0, 1, 2);
+    m.add_triangle(0, 2, 3);
+    p.add(egui::Shape::mesh(m));
+}
+/// Soft fill between a line and the bottom of the plot, fading to nothing.
+fn fill_under(p: &egui::Painter, pts: &[Pos2], col: u32, bottom: f32) {
+    let mut m = egui::Mesh::default();
+    for (k, pt) in pts.iter().enumerate() {
+        m.colored_vertex(*pt, hexc(col, 0.12));
+        m.colored_vertex(Pos2::new(pt.x, bottom), hexc(col, 0.0));
+        if k > 0 {
+            let b = (k * 2) as u32;
+            m.add_triangle(b - 2, b - 1, b);
+            m.add_triangle(b - 1, b + 1, b);
+        }
+    }
+    p.add(egui::Shape::mesh(m));
+}
+/// Nicer fonts when available: fonts next to the exe (font_mono.ttf / font_ui.ttf) win, else Windows' Consolas / Segoe UI.
+fn setup_fonts(ctx: &egui::Context) {
+    use std::sync::Arc;
+    let dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let find = |own: &str, sys: &[&str]| -> Option<Vec<u8>> {
+        if let Some(d) = &dir {
+            if let Ok(b) = std::fs::read(d.join(own)) {
+                return Some(b);
+            }
+        }
+        sys.iter().find_map(|p| std::fs::read(p).ok())
+    };
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(b) = find("font_mono.ttf", &["C:\\Windows\\Fonts\\consola.ttf"]) {
+        fonts.font_data.insert("edge_mono".into(), Arc::new(egui::FontData::from_owned(b)));
+        fonts.families.entry(egui::FontFamily::Monospace).or_default().insert(0, "edge_mono".into());
+    }
+    if let Some(b) = find("font_ui.ttf", &["C:\\Windows\\Fonts\\segoeui.ttf"]) {
+        fonts.font_data.insert("edge_ui".into(), Arc::new(egui::FontData::from_owned(b)));
+        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "edge_ui".into());
+    }
+    ctx.set_fonts(fonts);
 }
 fn lum_text(col: u32) -> Color32 {
     let l = 0.299 * ((col >> 16) & 255) as f32 + 0.587 * ((col >> 8) & 255) as f32 + 0.114 * (col & 255) as f32;
@@ -1012,7 +1282,6 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
-    sierra: bool, // Sierra-style candles + black bg (default); off = NinjaTrader style
     note: String,
     show_pw: bool, // 30m: previous-week lines (off by default, like the web chart)
     show_pm: bool, // 8h: previous-month lines
@@ -1024,10 +1293,17 @@ struct App {
     meas: Option<(f32, f64, f32, f64)>, // measure: (bar idx, price) start and end
     meas_w: f32,                // widest label so far (keeps the label from jittering as the text changes)
     vdrag: f32,
+    fling: f32,                 // pan momentum, bars per second
+    zoom_t: Option<(f32, f32)>, // eased wheel zoom: (target spacing, anchor x)
+    xh_last: Option<Pos2>,      // last crosshair position, kept while it fades out
+    xh_off: bool,               // a click on the chart hides / shows the crosshair lines (like the web chart)
+    show_wk_d: bool,            // D: a vertical line at the start of each week (off by default)
+    show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
 }
 
 impl App {
     fn new(cc: &eframe::CreationContext<'_>, sym: String, tf: String, base: String, tok: String) -> Self {
+        setup_fonts(&cc.egui_ctx);
         let mut v = egui::Visuals::dark();
         v.panel_fill = BG;
         v.window_fill = BG;
@@ -1073,7 +1349,6 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
-            sierra: true,
             bar_x: 0.0,
             note: String::new(),
             show_pw: false,
@@ -1086,13 +1361,19 @@ impl App {
             meas: None,
             meas_w: 0.0,
             vdrag: 0.0,
+            fling: 0.0,
+            zoom_t: None,
+            xh_last: None,
+            xh_off: false,
+            show_wk_d: false,
+            show_mo_w: false,
         };
         app.reload();
         app
     }
 
     fn reload(&self) {
-        let _ = self.tx.send(Req::Load { sym: self.sym.clone(), tf: self.tf.clone() });
+        let _ = self.tx.send(Req::Load { sym: self.sym.clone(), tf: self.tf.clone(), htf: HTFS[self.htf_i].0.to_string() });
         let _ = self.tx.send(Req::Htf { sym: self.sym.clone(), tf: HTFS[self.htf_i].0.to_string() });
     }
 }
@@ -1177,11 +1458,20 @@ impl eframe::App for App {
                         }
                     }
                 }
+                if !self.intraday {
+                    let (lbl, flag) = match self.tf.as_str() {
+                        "D" => ("WEEK", Some(&mut self.show_wk_d)),
+                        "W" => ("MONTH", Some(&mut self.show_mo_w)),
+                        _ => ("", None),
+                    };
+                    if let Some(f) = flag {
+                        if ui.selectable_label(*f, lbl).on_hover_text(if lbl == "WEEK" { "Line at the start of each week" } else { "Line at the start of each month" }).clicked() {
+                            *f = !*f;
+                        }
+                    }
+                }
                 if self.sym == "NQ" && ui.selectable_label(!self.hide_nums, "#").clicked() {
                     self.hide_nums = !self.hide_nums;
-                }
-                if ui.selectable_label(self.sierra, "Sierra").clicked() {
-                    self.sierra = !self.sierra;
                 }
                 if self.shared.lock().unwrap().src == "NT" {
                     ui.colored_label(Color32::from_rgb(0, 230, 118), "NT live");
@@ -1223,9 +1513,8 @@ impl eframe::App for App {
             });
         });
 
-        let bg = if self.sierra { Color32::BLACK } else { BG };
-        let grid_col = if self.sierra { Color32::from_rgb(20, 24, 34) } else { GRID };
-        let sierra = self.sierra;
+        let bg = BG;
+        let grid_col = GRID;
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(bg)).show(ui, |ui| {
             let full = ui.available_rect_before_wrap();
             let src_nt = self.shared.lock().unwrap().src == "NT";
@@ -1257,7 +1546,7 @@ impl eframe::App for App {
             // INTRADAY mode opens close up on the latest candles, like the web chart (desktop counts), with a ~150px gap for the price tags
             let default_view = |tf: &str, intra: bool, sym: &str| -> (f32, f32) {
                 if intra {
-                    let base = match tf { "2m" => 120.0f32, "5m" => 96.0, "30m" => 30.0, "1h" => 32.0, _ => 0.0 }; // exactly the web chart's intraday counts
+                    let base = match tf { "2m" => 54.0f32, "5m" => 43.0, "30m" => 30.0, "1h" => 32.0, _ => 0.0 }; // exactly the web chart's intraday counts
                     if base > 0.0 {
                         let bars = if sym == "BTC" { (base * 0.7).round() } else { base };
                         let sp = ((plot.width() - 150.0) / bars).clamp(3.0, 140.0);
@@ -1289,6 +1578,8 @@ impl eframe::App for App {
             let mut apply_range = |app: &mut App, from: i64, to: i64| {
                 let (lf, lt) = (t_to_l(from as f64), t_to_l(to as f64));
                 if lt > lf + 0.5 {
+                    app.zoom_t = None;
+                    app.fling = 0.0;
                     app.spacing = ((plot.width() as f64 / (lt - lf)) as f32).clamp(3.0, 140.0);
                     app.right_idx = lt as f32;
                 }
@@ -1296,6 +1587,8 @@ impl eframe::App for App {
             if ver != self.seen_version {
                 self.seen_version = ver;
                 self.manual = None;
+                self.zoom_t = None;
+                self.fling = 0.0;
                 let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
                 self.spacing = sp0;
                 self.right_idx = (n - 1) as f32 + gap0;
@@ -1322,6 +1615,10 @@ impl eframe::App for App {
                                 if let (Some(tm), Some(pr)) = (v["time"].as_i64(), v["price"].as_f64()) { self.link_xh = Some((tm, pr, std::time::Instant::now())); }
                             }
                             "xhc" => self.link_xh = None,
+                            "xhoff" => {
+                                self.xh_off = v["off"].as_bool() == Some(true);
+                                self.link_xh = None;
+                            }
                             "hello" => { self.link_sent = std::time::Instant::now() - Duration::from_secs(1); self.link_last = None; got_range = None; }
                             _ => {}
                         }
@@ -1354,16 +1651,33 @@ impl eframe::App for App {
                 self.meas_w = 0.0;
                 self.meas_p0 = if self.drag_mode == 3 { o } else { None };
                 self.vdrag = 0.0;
+                self.fling = 0.0;
+                self.zoom_t = None;
             }
             // the measure stays on screen after you let go; a click or Esc clears it
             if resp.drag_stopped() {
+                if self.drag_mode == 1 {
+                    let v = ctx.input(|i| i.pointer.velocity().x);
+                    let f = (-v / self.spacing).clamp(-600.0, 600.0);
+                    self.fling = if f.abs() > 3.0 { f } else { 0.0 };
+                }
                 self.meas_p0 = None;
                 if self.drag_mode == 3 {
                     self.drag_mode = 0;
                     if let Some((i0, p0, i1, p1)) = self.meas { if i0 == i1 && p0 == p1 { self.meas = None; } }
                 }
             }
+            if resp.clicked() && self.meas.is_none() {
+                // a plain click on the chart hides / shows the crosshair lines (a double click flips twice = no change)
+                if ctx.input(|i| i.pointer.interact_pos()).map_or(false, |p| p.x <= plot.right()) {
+                    self.xh_off = !self.xh_off;
+                    if let Some(g) = self.link_g {
+                        let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xhoff\",\"off\":{}}}", self.link_id, g, self.xh_off));
+                    }
+                }
+            }
             if resp.clicked() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.fling = 0.0;
                 self.meas = None;
                 self.meas_p0 = None;
             }
@@ -1373,6 +1687,8 @@ impl eframe::App for App {
             if resp.double_clicked() {
                 let on_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
                 self.manual = None; // back to auto-fit
+                self.zoom_t = None;
+                self.fling = 0.0;
                 if !on_axis {
                     let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
                     self.spacing = sp0;
@@ -1389,6 +1705,16 @@ impl eframe::App for App {
                     self.right_idx += k;
                 }
             }
+            if self.fling != 0.0 && !resp.dragged() {
+                if self.fling.abs() > 0.5 {
+                    let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                    self.right_idx += self.fling * dt;
+                    self.fling *= (-dt * 3.5).exp();
+                    ctx.request_repaint();
+                } else {
+                    self.fling = 0.0;
+                }
+            }
             let mut axis_scroll = 0.0f32;
             if resp.hovered() {
                 let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
@@ -1397,9 +1723,22 @@ impl eframe::App for App {
                     axis_scroll = scroll;
                 } else if scroll != 0.0 {
                     let anchor = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.x).unwrap_or(plot.right());
-                    let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
-                    self.spacing = (self.spacing * (scroll * 0.0025).exp()).clamp(3.0, 140.0);
-                    self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
+                    self.fling = 0.0;
+                    let cur = self.zoom_t.map_or(self.spacing, |t| t.0);
+                    self.zoom_t = Some(((cur * (scroll * 0.0025).exp()).clamp(3.0, 140.0), anchor));
+                }
+            }
+            if let Some((tgt, anchor)) = self.zoom_t {
+                let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                let k = 1.0 - (-dt * 22.0).exp();
+                let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
+                let ns = self.spacing + (tgt - self.spacing) * k;
+                self.spacing = if (tgt - ns).abs() < 0.02 { tgt } else { ns };
+                self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
+                if self.spacing == tgt {
+                    self.zoom_t = None;
+                } else {
+                    ctx.request_repaint();
                 }
             }
             self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
@@ -1468,9 +1807,6 @@ impl eframe::App for App {
             let axis_font = FontId::monospace(13.0);
             while p < hi {
                 let y = snapc(y_of(p));
-                if self.sym != "NQ" {
-                    painter.hline(plot.x_range(), y, Stroke::new(hair, grid_col));
-                }
                 painter.text(Pos2::new(plot.right() + 8.0, y), Align2::LEFT_CENTER, fmt_price(p, step), axis_font.clone(), AXIS_TXT);
                 p += step;
             }
@@ -1483,7 +1819,6 @@ impl eframe::App for App {
                 if i < n {
                     let x = snapc(x_of(i as f32));
                     if x > plot.left() && x < plot.right() {
-                        painter.vline(x, plot.y_range(), Stroke::new(hair, grid_col));
                         let d = et(cs[i].t);
                         let label = if secs >= 86400 {
                             format!("{} {}", d.format("%b"), d.day())
@@ -1550,6 +1885,21 @@ impl eframe::App for App {
                 if tf != "D" && secs < 604800 {
                     for i in 1..n {
                         if cs[i].t - cs[i - 1].t > 2 * 86400 { add(i, "WEEK", 0x2ec4b6, &mut marks); }
+                    }
+                }
+                // optional (buttons): D gets a line at the start of each week, W at the start of each month (same colours as the lines above)
+                if tf == "D" && self.show_wk_d {
+                    for i in 1..n {
+                        if key_of(Per::Week, cs[i].e, anchor) != key_of(Per::Week, cs[i - 1].e, anchor) { add(i, "WEEK", 0x2ec4b6, &mut marks); }
+                    }
+                }
+                if tf == "W" && self.show_mo_w {
+                    let mk = |e: i64| {
+                        let (y, m, _) = ymd(e + anchor + 2 * 86400);
+                        y * 12 + m
+                    };
+                    for i in 1..n {
+                        if mk(cs[i].e) != mk(cs[i - 1].e) { add(i, "MONTH", 0xb06aff, &mut marks); }
                     }
                 }
                 if secs < 3600 && FUTURES.contains(&self.sym.as_str()) {
@@ -1645,12 +1995,61 @@ impl eframe::App for App {
                 }
             }
 
-            // ═════════ 9:30 ET open (vertical line on every past day <=30m) ═════════
+            // ═════════ RTH shading (<=30m) ═════════
             let weekday_of = |e: i64| weekday(e.div_euclid(86400));
-            if !intraday && secs <= 1800 {
+            // <=30m: the regular trading session (9:30-16:00 ET) as a faint blue band, in place of the old 9:30 line
+            if secs <= 1800 {
+                let mut run: Option<usize> = None;
+                let mut bands: Vec<(usize, usize)> = vec![];
                 for i in first_vis..=last_vis.min(n - 1) {
-                    if cs[i].e.rem_euclid(86400) == 34200 && !matches!(weekday_of(cs[i].e), 0 | 6) {
-                        dash_v(&clip, snapc(x_of(i as f32)), plot.top(), plot.bottom(), 2.0, 4.0, Stroke::new(hair, hexc(0x4aa3ff, 0.9)));
+                    let sod = cs[i].e.rem_euclid(86400);
+                    let dk = (cs[i].e + anchor).div_euclid(86400);
+                    let wed_done = tf == "30m" && weekday(dk) == 3 && dk != now_dk; // completed Wednesdays are amber: just a line at the open there
+                    if wed_done && sod == 34200 {
+                        dash_v(&clip, snapc(x_of(i as f32) - sp / 2.0), plot.top(), plot.bottom(), 2.0, 4.0, Stroke::new(hair, hexc(0x4aa3ff, 0.9)));
+                    }
+                    let rth = sod >= 34200 && sod < 57600 && !wed_done && !matches!(weekday_of(cs[i].e), 0 | 6);
+                    match (rth, run) {
+                        (true, None) => run = Some(i),
+                        (false, Some(s0)) => {
+                            bands.push((s0, i - 1));
+                            run = None;
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(s0) = run {
+                    bands.push((s0, last_vis.min(n - 1)));
+                }
+                for (i0, i1) in bands {
+                    let (x0, x1) = (x_of(i0 as f32) - sp / 2.0, x_of(i1 as f32) + sp / 2.0);
+                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0.max(plot.left()), plot.top()), Pos2::new(x1.min(plot.right()), plot.bottom())), 0.0, hexc(0x4aa3ff, 0.07));
+                }
+            }
+            // 1h: every second trading day gets a faint band, with the weekday name and a dashed line at each day start
+            if tf == "1h" {
+                let mut days: Vec<(usize, usize, i64)> = vec![];
+                for i in 0..n {
+                    let dk = (cs[i].e + anchor).div_euclid(86400);
+                    match days.last_mut() {
+                        Some(g) if g.2 == dk => g.1 = i,
+                        _ => days.push((i, i, dk)),
+                    }
+                }
+                for (gi, g) in days.iter().enumerate() {
+                    let (x0, x1) = (x_of(g.0 as f32) - sp / 2.0, x_of(g.1 as f32) + sp / 2.0);
+                    if x1 < plot.left() || x0 > plot.right() {
+                        continue;
+                    }
+                    if gi % 2 == 1 {
+                        clip.rect_filled(Rect::from_min_max(Pos2::new(x0.max(plot.left()), plot.top()), Pos2::new(x1.min(plot.right()), plot.bottom())), 0.0, hexc(0x6b8cff, 0.07));
+                    }
+                    if gi > 0 && x0 > plot.left() {
+                        dash_v(&clip, snapc(x0), plot.top(), plot.bottom(), 4.0, 4.0, Stroke::new(hair, hexc(0xffb020, 0.3)));
+                    }
+                    if x1 - x0 >= 26.0 {
+                        let name = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][weekday(g.2) as usize];
+                        clip.text(Pos2::new(x0.max(plot.left()) + 4.0, plot.bottom() - 3.0), Align2::LEFT_BOTTOM, name, tiny.clone(), hexc(0xffb020, 0.85));
                     }
                 }
             }
@@ -1678,7 +2077,7 @@ impl eframe::App for App {
                     }
                     let x0 = x0.max(plot.left());
                     let (y1, y2) = (y_of(z.hi), y_of(z.lo));
-                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0, y1), Pos2::new(plot.right(), y2)), 0.0, hexc(0xff2bd6, 0.2));
+                    grad_rect(&clip, Rect::from_min_max(Pos2::new(x0, y1), Pos2::new(plot.right(), y2)), hexc(0xff2bd6, 0.30), hexc(0xff2bd6, 0.05), hexc(0xff2bd6, 0.05), hexc(0xff2bd6, 0.30));
                     let e = Stroke::new(hair, hexc(0xff2bd6, 0.8));
                     clip.hline(x0..=plot.right(), snapc(y1), e);
                     clip.hline(x0..=plot.right(), snapc(y2), e);
@@ -1700,7 +2099,7 @@ impl eframe::App for App {
                     }
                     let x0 = x0.max(plot.left());
                     let (yt, yb) = (y_of(z.hi0), y_of(z.lo0));
-                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0, yt), Pos2::new(plot.right(), yb)), 0.0, hexc(0xff7a1a, 0.2));
+                    grad_rect(&clip, Rect::from_min_max(Pos2::new(x0, yt), Pos2::new(plot.right(), yb)), hexc(0xff7a1a, 0.30), hexc(0xff7a1a, 0.05), hexc(0xff7a1a, 0.05), hexc(0xff7a1a, 0.30));
                     let (bt, bb, edge) = if z.up && z.hi < z.hi0 {
                         (Some(yt), Some(y_of(z.hi)), Some(y_of(z.hi)))
                     } else if !z.up && z.lo > z.lo0 {
@@ -1940,10 +2339,8 @@ impl eframe::App for App {
             for i in first_vis..=last_vis.min(n - 1) {
                 let c = cs[i];
                 let up = c.c >= c.o;
-                let (fill, line) = if sierra {
-                    if up { (Color32::from_rgb(0, 200, 90), Color32::from_rgb(120, 255, 170)) } else { (Color32::from_rgb(230, 40, 40), Color32::from_rgb(255, 130, 130)) }
-                } else if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
-                let wick_col = if sierra { line } else { fill };
+                let (fill, line) = if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
+                let wick_col = fill;
                 let cx = (x_of(i as f32) * ppp).round() as i32;
                 let (top, bot) = {
                     let a = (y_of(c.o.max(c.c)) * ppp).round() as i32;
@@ -1975,6 +2372,9 @@ impl eframe::App for App {
                         .collect();
                     if line.len() >= 2 {
                         let st = Stroke::new(2.0, rgb(col));
+                        if !dashed {
+                            fill_under(&clip, &line, col, plot.bottom());
+                        }
                         if dashed {
                             dashed_by_x(&clip, &line, x_of(0.0), 6.0, 4.0, st);
                         } else {
@@ -2005,6 +2405,9 @@ impl eframe::App for App {
                         .filter_map(|i| em[i].map(|v| Pos2::new(x_of(i as f32), y_of(v))))
                         .collect();
                     if line.len() >= 2 {
+                        if len == EMA_FAST {
+                            fill_under(&clip, &line, col, plot.bottom());
+                        }
                         clip.add(egui::Shape::line(line, Stroke::new(2.0, rgb(col))));
                     }
                     if let Some(Some(v)) = em.last() {
@@ -2040,11 +2443,12 @@ impl eframe::App for App {
             let ly_c = ly.clamp(plot.top() + tag_h / 2.0, plot.bottom() - tag_h / 2.0);
             let tcol = if last.c >= last.o { rgb(0x00b862) } else { rgb(0xff4444) };
             let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - tag_h / 2.0), Vec2::new(AXIS_W - 4.0, tag_h));
-            painter.rect_filled(r, 2.0, tcol);
+            tag_box(&painter, r, tcol);
+            grad_rect(&painter, r.shrink(1.5), Color32::from_white_alpha(46), Color32::from_white_alpha(46), Color32::from_white_alpha(0), Color32::from_white_alpha(0));
             painter.text(Pos2::new(r.center().x, if is_range { r.center().y } else { r.top() + 11.0 }), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
             if !is_range {
                 let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
-                painter.rect_filled(cr, 2.0, hexc(0x040d1a, 0.8));
+                tag_box(&painter, cr, hexc(0x040d1a, 0.9));
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
             }
 
@@ -2127,7 +2531,7 @@ impl eframe::App for App {
                 let mut ly = rect.top() - h - 8.0; // always above the box (no flip when dragging past the start point)
                 if ly < plot.top() + 2.0 { ly = rect.bottom() + 8.0; }
                 if ly + h > plot.bottom() - 2.0 { ly = (plot.bottom() - h - 2.0).max(plot.top() + 2.0); }
-                painter.rect_filled(Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), 4.0, col);
+                tag_box(&painter, Rect::from_min_size(Pos2::new(lx, ly), Vec2::new(w, h)), col);
                 for (k, t) in lines.iter().enumerate() {
                     painter.text(Pos2::new(lx + 11.0, ly + 5.0 + k as f32 * 19.0), Align2::LEFT_TOP, t, FontId::monospace(13.0), Color32::WHITE);
                 }
@@ -2135,7 +2539,7 @@ impl eframe::App for App {
             // ═════════ linked crosshair (other window's pointer) ═════════
             let hovering = resp.hover_pos().map_or(false, |p| plot.contains(p));
             if let Some(g) = self.link_g {
-                if hovering {
+                if hovering && !self.xh_off {
                     if let Some(pos) = resp.hover_pos() {
                         let tm = l_to_t((ri - (plot.right() - pos.x) / sp) as f64) as i64;
                         let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xh\",\"time\":{},\"price\":{}}}", self.link_id, g, tm, p_of(pos.y)));
@@ -2147,7 +2551,7 @@ impl eframe::App for App {
                     let _ = self.link_tx.send(format!("{{\"id\":\"{}\",\"g\":{},\"t\":\"xhc\"}}", self.link_id, g));
                 }
             }
-            if !hovering {
+            if !hovering && !self.xh_off {
                 if let Some((tm, pr, _)) = self.link_xh {
                     let x = snapc(x_of(t_to_l(tm as f64) as f32));
                     let y = snapc(y_of(pr));
@@ -2158,36 +2562,47 @@ impl eframe::App for App {
                     if y >= plot.top() && y <= plot.bottom() {
                         painter.add(egui::Shape::dashed_line(&[Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)], col, 4.0, 4.0));
                         let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-                        painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
+                        tag_box(&painter, r, Color32::from_rgb(60, 72, 96));
                         painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(pr, step), FontId::monospace(13.0), Color32::WHITE);
                     }
                 }
             }
             // ═════════ crosshair + readout ═════════
-            if let Some(pos) = resp.hover_pos().filter(|p| plot.contains(*p)) {
-                let dash = |a: Pos2, b: Pos2| {
-                    painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175)), 4.0, 4.0));
-                };
-                dash(Pos2::new(plot.left(), snapc(pos.y)), Pos2::new(plot.right(), snapc(pos.y)));
-                dash(Pos2::new(snapc(pos.x), plot.top()), Pos2::new(snapc(pos.x), plot.bottom()));
-                let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, pos.y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-                painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
-                painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), Color32::WHITE);
+            let hov_now = resp.hover_pos().filter(|p| plot.contains(*p));
+            if hov_now.is_some() {
+                self.xh_last = hov_now;
+            }
+            let fa = ctx.animate_bool_with_time(egui::Id::new("xh_fade"), hov_now.is_some() && !self.xh_off, 0.12); // crosshair fades in / out
+            if let Some(pos) = hov_now.or(if fa > 0.0 { self.xh_last } else { None }) {
                 let idx = ((ri - (plot.right() - pos.x) / sp).round() as i64).clamp(0, n as i64 - 1) as usize;
                 let c = cs[idx];
-                let d = et(c.t);
-                let tl = if secs >= 86400 { d.format("%a %d %b %Y").to_string() } else { d.format("%a %d %b %Y  %H:%M").to_string() };
-                let tw = 150.0;
-                let r = Rect::from_min_size(Pos2::new((pos.x - tw / 2.0).clamp(plot.left(), plot.right() - tw), plot.bottom() + 3.0), Vec2::new(tw, 20.0));
-                painter.rect_filled(r, 2.0, Color32::from_rgb(60, 72, 96));
-                painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), Color32::WHITE);
+                if fa > 0.0 {
+                    let wh = Color32::WHITE.gamma_multiply(fa);
+                    let tagc = Color32::from_rgb(60, 72, 96).gamma_multiply(fa);
+                    let dash = |a: Pos2, b: Pos2| {
+                        painter.add(egui::Shape::dashed_line(&[a, b], Stroke::new(hair, Color32::from_rgb(120, 140, 175).gamma_multiply(fa)), 4.0, 4.0));
+                    };
+                    dash(Pos2::new(plot.left(), snapc(pos.y)), Pos2::new(plot.right(), snapc(pos.y)));
+                    dash(Pos2::new(snapc(pos.x), plot.top()), Pos2::new(snapc(pos.x), plot.bottom()));
+                    let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, pos.y - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
+                    tag_box(&painter, r, tagc);
+                    painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(p_of(pos.y), step), FontId::monospace(13.0), wh);
+                    let d = et(c.t);
+                    let tl = if secs >= 86400 { d.format("%a %d %b %Y").to_string() } else { d.format("%a %d %b %Y  %H:%M").to_string() };
+                    let tw = 150.0;
+                    let r = Rect::from_min_size(Pos2::new((pos.x - tw / 2.0).clamp(plot.left(), plot.right() - tw), plot.bottom() + 3.0), Vec2::new(tw, 20.0));
+                    tag_box(&painter, r, tagc);
+                    painter.text(r.center(), Align2::CENTER_CENTER, tl, FontId::monospace(12.0), wh);
+                }
+                // the O/H/L/C readout stays even with the crosshair lines hidden
+                let ra = if self.xh_off { 1.0 } else { fa };
                 let chg = c.c - c.o;
                 painter.text(
                     Pos2::new(plot.left() + 10.0, plot.top() + 8.0),
                     Align2::LEFT_TOP,
                     format!("O {:.2}  H {:.2}  L {:.2}  C {:.2}  {:+.2}", c.o, c.h, c.l, c.c, chg),
                     FontId::monospace(13.0),
-                    if chg >= 0.0 { UP_FILL } else { DN_FILL },
+                    (if chg >= 0.0 { UP_FILL } else { DN_FILL }).gamma_multiply(ra),
                 );
             }
             painter.text(
@@ -2224,6 +2639,6 @@ fn main() -> eframe::Result {
         vb = vb.with_position([x, y]);
     }
     let lg = get("--link").and_then(|v| v.parse::<usize>().ok()).filter(|g| *g < LINK_COLORS.len());
-    let opts = eframe::NativeOptions { viewport: vb, ..Default::default() };
+    let opts = eframe::NativeOptions { viewport: vb, multisampling: 4, ..Default::default() };
     eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a.link_g = lg; a }))))
 }
