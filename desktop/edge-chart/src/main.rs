@@ -131,6 +131,7 @@ struct Shared {
     nt: HashMap<String, Vec<Candle>>, // 1-minute futures bars pushed by NinjaTrader, per symbol
     nt_d: HashMap<String, Vec<Candle>>, // NinjaTrader's own daily bars (long history for D / W / levels)
     nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
+    nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
 }
 
@@ -365,8 +366,13 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                             .collect()
                     })
                     .unwrap_or_default();
+                let raw = v["sym"].as_str().unwrap_or("").to_uppercase();
                 {
                     let mut s = sh.lock().unwrap();
+                    // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
+                    if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
+                        continue;
+                    }
                     if my_sym.is_none() {
                         *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
                         my_sym = Some(sym.clone());
@@ -390,6 +396,9 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                     let mut s = sh.lock().unwrap();
                     if let Some(n) = s.nt_conns.get_mut(&sym) {
                         *n = n.saturating_sub(1);
+                        if *n == 0 {
+                            s.nt_owner.remove(&sym);
+                        }
                     }
                 }
                 let _ = tx.send(Req::NtGone { sym });
