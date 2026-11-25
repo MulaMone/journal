@@ -7935,7 +7935,7 @@ function chartTab(){
   // ── Fill basis (trades only): candles stay OANDA CFD. For each candle that holds a fill, ask the NinjaTrader feed (EdgeFeed, 127.0.0.1:7881)
   // for its futures bars and compare closes with the CFD candle: basis = CFD close - futures close (median over the fill candle and its two
   // neighbours). The fill is then plotted at fill + basis, i.e. where that futures price sits on the CFD chart. No feed = no adjustment.
-  var ntBasis={},ntBasisLast=null;
+  var ntBasis={};
   function ntBasisPre(d){
     try{
       if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)||monthlyFetch) return Promise.resolve();
@@ -7964,6 +7964,24 @@ function chartTab(){
           });
         });
       })).then(function(){clearTimeout(tmo);window._ntDownUntil=0;}).catch(function(){clearTimeout(tmo);window._ntDownUntil=Date.now()+20000;});
+    }catch(e){return Promise.resolve();}
+  }
+  // Stop / target orders you really had working (EdgeFeed records them): [timeMs,id,"S"stop|"T"target,"B"|"S",price,qty,"W"working|"F"filled|"C"cancelled]
+  var ntOrders=[];
+  function ntOrdersPre(d){
+    try{
+      ntOrders=[];
+      if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)||monthlyFetch) return Promise.resolve();
+      if(!d||!d.candles||!d.candles.length||!tradePoints.length) return Promise.resolve();
+      if(window._ntDownUntil&&Date.now()<window._ntDownUntil) return Promise.resolve();
+      var firstU=Infinity,lastU=0;
+      d.candles.forEach(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);if(u<firstU)firstU=u;if(u>lastU)lastU=u;});
+      var pts=tradePoints.filter(function(p){return p.ts>=firstU&&p.ts<lastU+periodSec;}).slice(-60);
+      if(!pts.length) return Promise.resolve();
+      var lo=Infinity,hi=0;
+      pts.forEach(function(p){if(p.ts<lo)lo=p.ts;if(p.ts>hi)hi=p.ts;});
+      var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},3500);
+      return fetch("http://127.0.0.1:7881/orders?sym="+sym+"&from="+(lo-60)+"&to="+(hi+60),{signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("nt "+r.status);return r.json();}).then(function(j){clearTimeout(tmo);ntOrders=(j&&j.orders)||[];}).catch(function(){clearTimeout(tmo);});
     }catch(e){return Promise.resolve();}
   }
   function fetchAndRender(){
@@ -8005,7 +8023,7 @@ function chartTab(){
     });
     else chartP=chartFetchJson(url,monthlyFetch);
     chartP
-    .then(function(d){return ntBasisPre(d).then(function(){return d;},function(){return d;});})
+    .then(function(d){return ntBasisPre(d).then(function(){return ntOrdersPre(d);}).then(function(){return d;},function(){return d;});})
     .then(function(d){
       _tFetch=performance.now();
       if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length){
@@ -8710,24 +8728,94 @@ function chartTab(){
               _ds.setMarkers([{time:t,position:"inBar",color:_col,shape:"circle",size:0.5}]);
               dotSeries.push(_ds);
               var _pr=tradePairs[p.id]||(tradePairs[p.id]={});
-              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx};
-              ntBasisLast=_bsv;
+              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx,ts:p.ts,bs:_bsv};
             }
           });
           // thin dashed line between a trade's two exact fill levels (blue long / purple short); skipped when the exit has no real timestamp
+          var sameCandle=[]; // entry and exit inside one candle: a line series can't hold two points at one time, so these are drawn on an overlay canvas
           Object.keys(tradePairs).forEach(function(id){
             var pr=tradePairs[id];
+            if(pr.entry&&pr.exit&&!pr.exit.approx&&pr.exit.t===pr.entry.t&&pr.exit.v!==pr.entry.v){sameCandle.push({t:pr.entry.t,a:pr.entry.v,b:pr.exit.v,col:pr.entry.isLong?"#3d8bff":"#b266ff"});return;}
             if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.t>pr.entry.t)) return;
             var cs2=chart.addLineSeries({color:pr.entry.isLong?"#3d8bff":"#b266ff",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             cs2.setData([{time:pr.entry.t,value:pr.entry.v},{time:pr.exit.t,value:pr.exit.v}]);
             dotSeries.push(cs2);
           });
-          if(dotSeries.length){
-            var sb=div();
-            sb.textContent="FILL BASIS "+(ntBasisLast>=0?"+":"")+ntBasisLast.toFixed(1);
-            sb.title="Fills are plotted at fill price + (CFD - futures) gap measured from NinjaTrader at that candle. Dots mark the adjusted level.";
-            sb.style.cssText="position:absolute;right:86px;top:6px;z-index:6;font-size:10px;letter-spacing:1px;padding:2px 6px;border-radius:3px;pointer-events:none;background:#040d1a;border:1px solid #00e676;color:#00e676;";
-            chartDiv.appendChild(sb);
+          // stop (red) and target (green) orders that were working during each trade: one level per stretch of time, stepping when you moved the order
+          var ordSegs=[];
+          if(ntOrders.length){
+            var byOrd={};
+            ntOrders.forEach(function(e){(byOrd[e[1]]||(byOrd[e[1]]=[])).push(e);});
+            Object.keys(tradePairs).forEach(function(tid){
+              var pr=tradePairs[tid];
+              if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.ts>pr.entry.ts)||typeof pr.entry.bs!=="number") return;
+              var act=pr.entry.isLong?"S":"B",t0=pr.entry.ts*1000,t1=pr.exit.ts*1000,seen={};
+              Object.keys(byOrd).forEach(function(oid){
+                var ev=byOrd[oid];
+                if(ev[0][3]!==act) return;
+                var prev=null;
+                for(var i=0;i<ev.length;i++){
+                  var e=ev[i];
+                  if(e[6]!=="W") continue;
+                  var nx=ev[i+1],a2=Math.max(e[0],t0),b2=Math.min(nx?nx[0]:Infinity,t1);
+                  if(!(b2>a2)) continue;
+                  var key=e[2]+"|"+e[4],dup=seen[key];
+                  if(dup){dup.a=Math.min(dup.a,a2/1000);dup.b=Math.max(dup.b,b2/1000);continue;}
+                  var sg2={k:e[2],a:a2/1000,b:b2/1000,px:e[4],bs:pr.entry.bs,pp:(prev&&prev.b>=a2/1000-1)?prev.px:null};
+                  seen[key]=sg2;ordSegs.push(sg2);prev=sg2;
+                }
+              });
+            });
+          }
+          if(sameCandle.length||ordSegs.length){
+            var cv2=document.createElement("canvas");
+            cv2.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5;";
+            chartDiv.appendChild(cv2);
+            var sig2="";
+            (function loop2(){
+              if(!chartDiv.isConnected||!cv2.isConnected) return;
+              try{
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,ts2=chart.timeScale(),segs=[],sg=W+"x"+H+"|"+(showTrades?1:0);
+                function xAt(sec){
+                  var bt=Math.floor(sec/periodSec)*periodSec,t=bt-etOff(bt),x0=ts2.timeToCoordinate(t);
+                  if(x0==null) return null;
+                  var x1=ts2.timeToCoordinate(t+periodSec),w;
+                  if(x1!=null) w=x1-x0; else{var xm=ts2.timeToCoordinate(t-periodSec);w=xm!=null?x0-xm:8;}
+                  return x0-w/2+((sec-bt)/periodSec)*w;
+                }
+                var os=[];
+                if(showTrades) ordSegs.forEach(function(q){
+                  var xa=xAt(q.a),xb=xAt(q.b),y=series.priceToCoordinate(q.px+q.bs),yp=q.pp!=null?series.priceToCoordinate(q.pp+q.bs):null;
+                  if(xa==null||xb==null||y==null) return;
+                  os.push([xa,xb,y,q,yp]);sg+="|o"+Math.round(xa)+","+Math.round(xb)+","+Math.round(y*10);
+                });
+                if(showTrades) sameCandle.forEach(function(q){
+                  var x=ts2.timeToCoordinate(q.t),y1=series.priceToCoordinate(q.a),y2=series.priceToCoordinate(q.b);
+                  if(x==null||y1==null||y2==null) return;
+                  segs.push([x,y1,y2,q.col]);sg+="|"+Math.round(x*10)+","+Math.round(y1*10)+","+Math.round(y2*10);
+                });
+                if(sg!==sig2){
+                  sig2=sg;
+                  if(cv2.width!==Math.round(W*dpr)||cv2.height!==Math.round(H*dpr)){cv2.width=Math.round(W*dpr);cv2.height=Math.round(H*dpr);}
+                  var cx=cv2.getContext("2d");cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
+                  var pw=70,ph=28;
+                  try{pw=chart.priceScale("right").width()||70;ph=chart.timeScale().height()||28;}catch(e2){}
+                  cx.save();cx.beginPath();cx.rect(0,0,Math.max(0,W-pw),Math.max(0,H-ph));cx.clip();
+                  cx.lineWidth=1.5;cx.setLineDash([3,3]);
+                  segs.forEach(function(g){cx.strokeStyle=g[3];cx.beginPath();cx.moveTo(g[0],g[1]);cx.lineTo(g[0],g[2]);cx.stroke();});
+                  cx.font="10px sans-serif";cx.textBaseline="bottom";
+                  os.forEach(function(o){
+                    var col=o[3].k==="S"?"#e24b4a":"#2fb36b";
+                    cx.strokeStyle=col;cx.fillStyle=col;
+                    if(o[4]!=null){cx.setLineDash([]);cx.lineWidth=1;cx.beginPath();cx.moveTo(o[0],o[4]);cx.lineTo(o[0],o[2]);cx.stroke();}
+                    cx.setLineDash([6,3]);cx.lineWidth=1.2;cx.beginPath();cx.moveTo(o[0],o[2]);cx.lineTo(Math.max(o[1],o[0]+3),o[2]);cx.stroke();
+                    if(o[1]-o[0]>=60){cx.setLineDash([]);cx.fillText((o[3].k==="S"?"SL ":"TP ")+o[3].px,o[0]+3,o[2]-2);}
+                  });
+                  cx.restore();
+                }
+                requestAnimationFrame(loop2);
+              }catch(e){}
+            })();
           }
           layers.forEach(function(l){l.s.setData(l.data);});
           applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});dotSeries.forEach(function(x){x.applyOptions({visible:showTrades});});if(!showTrades)tip.style.display="none";};
