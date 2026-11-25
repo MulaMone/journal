@@ -8658,7 +8658,7 @@ function chartTab(){
             layer.markers.push({
               time:t,
               position:isUp?"belowBar":"aboveBar",
-              color:p.kind==="entry"?(isUp?"#00e676":"#ff4444"):"#ff8c00",
+              color:p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00",
               shape:isUp?"arrowUp":"arrowDown",
               // Label entries only (not exits) so a Short's arrow shows "S"
               // above the bar and a Long's shows "L" below — a quick way to
@@ -8697,7 +8697,7 @@ function chartTab(){
             var p=best.p;
             var trade=trades.find(function(x){return x.id===p.id;});
             var dirLbl=(p.isLong?"LONG":"SHORT")+" "+(p.kind==="entry"?"ENTRY":"EXIT");
-            var dirCol=p.kind==="entry"?(p.isLong?"#00e676":"#ff4444"):"#ff8c00";
+            var dirCol=p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00";
             var html='<div style="color:'+dirCol+';font-weight:700;letter-spacing:1px;margin-bottom:4px;">'+dirLbl+'</div>';
             html+='<div>'+new Date(p.ts*1000).toLocaleString()+'</div>';
             html+='<div>Price: '+(p.kind==="entry"?p.entry:p.exit)+' &nbsp; Ctr: '+p.ctr+'</div>';
