@@ -490,7 +490,7 @@ html.edge-detached #topbar,html.edge-detached #tabs,html.edge-detached #m-bnav{d
 </div>
 <div id="app">
   <div id="topbar">
-    <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">CONSOLE</span><span class="dot"></span></div><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
+    <div id="topbar-left"><div class="row gap8"><span class="logo">EDGE</span><span class="logo-term">CONSOLE</span><span class="dot"></span></div><span id="topbar-nt" style="display:none;margin-left:10px;align-items:center;cursor:pointer;"></span><span id="topbar-dl" style="display:none;margin-left:10px;align-items:center;"></span></div>
     <div class="brand-name" onclick="localStorage.setItem('edge_tab',JSON.stringify('home'));var _r=false,_go=function(){if(!_r){_r=true;window.location.reload();}};setTimeout(_go,2000);try{Promise.resolve(syncToCloud()).then(_go,_go);}catch(e){_go();}" oncontextmenu="return false" onselectstart="return false" style="cursor:pointer" title="Refresh">BILLION$</div>
     <span id="topbar-data-ind" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span>
     <div id="topbar-stats"></div>
@@ -2852,6 +2852,7 @@ function openSettings(){
 
   // ── DATA ──
   body.appendChild(sectionLabel("Data"));
+  if(window._edgeDesktop) body.appendChild(ntAutoRow());
   body.appendChild(toggleRow("Debug log","Record errors that are normally hidden (this device only)","edge_debug",false));
   body.appendChild(actionRow("Error log","Errors recorded this session while Debug log is on","VIEW","var(--accent)",_dbgShow));
   body.appendChild(actionRow("Export Trades to CSV","Download all trades as a .csv file","EXPORT","var(--accent)",function(){
@@ -6052,6 +6053,106 @@ function processCSV(text,source){
 }
 
 
+// ── NinjaTrader auto-import (desktop app) ─────────────────────────────────────
+// EdgeFeed (NinjaTrader) sends each closed round-trip trade to the EDGE desktop app, which hands it to the page via
+// window.__edgeNtQ + window.edgeNtTrade(). The AUTO pill beside CONSOLE only exists while NinjaTrader is connected AND
+// auto-import is on: click it to pause / resume. The on/off switch lives in Settings and on the Import page.
+var _ntUp=false,_ntUpAt=0,_ntLast="",_ntRowCbs=[];
+function ntAutoOn(){return localStorage.getItem("edge_nt_auto")==="1";}
+function ntPaused(){return localStorage.getItem("edge_nt_paused")==="1";}
+function ntUpNow(){return !!(window._edgeDesktop&&_ntUp&&Date.now()-_ntUpAt<7000);}
+function ntPillEl(paused){
+  var col=paused?"#ffbf00":"#00e676",dim=paused?"#9a7a1f":null;
+  var p=document.createElement("span");
+  p.style.cssText="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:11px;font-size:10px;font-weight:700;letter-spacing:1px;line-height:1;border:1px solid "+(paused?"#96700a":"#00784a")+";background:"+(paused?"#1e1600":"#00170c")+";color:"+col+";";
+  var t=document.createElement("span");t.textContent="AUTO";p.appendChild(t);
+  var g=dim||"#00e676",r=dim||"#ff4444";
+  p.insertAdjacentHTML("beforeend",'<svg width="'+(paused?34:22)+'" height="16" viewBox="0 0 '+(paused?34:22)+' 16" aria-hidden="true">'
+    +'<g stroke-width="1"><line x1="3.5" y1="2" x2="3.5" y2="14" stroke="'+g+'"/><rect x="1" y="4" width="5" height="6" fill="'+g+'"/>'
+    +'<line x1="11.5" y1="3" x2="11.5" y2="15" stroke="'+r+'"/><rect x="9" y="6" width="5" height="6" fill="'+r+'"/>'
+    +'<line x1="19.5" y1="1" x2="19.5" y2="13" stroke="'+g+'"/><rect x="17" y="3" width="5" height="6" fill="'+g+'"/></g>'
+    +(paused?'<rect x="26" y="3" width="3" height="10" fill="#ffbf00"/><rect x="31" y="3" width="3" height="10" fill="#ffbf00"/>':'')+'</svg>');
+  return p;
+}
+function ntSetPaused(v){try{localStorage.setItem("edge_nt_paused",v?"1":"0");}catch(e){_dbg(e);}renderNtPill();}
+function renderNtPill(){
+  var el=document.getElementById("topbar-nt");
+  if(el){
+    var show=ntUpNow()&&ntAutoOn();
+    if(!show){el.style.display="none";el.textContent="";el.removeAttribute("data-s");}
+    else{
+      var pz=ntPaused(),st=pz?"p":"o";
+      if(el.getAttribute("data-s")!==st){
+        el.textContent="";el.appendChild(ntPillEl(pz));el.setAttribute("data-s",st);
+        el.onclick=function(){ntSetPaused(!ntPaused());};
+      }
+      el.title=(pz?"Auto-import PAUSED — click to resume":"Auto-import on — click to pause")+(_ntLast?"\nLast: "+_ntLast:"");
+      el.style.display="inline-flex";
+    }
+  }
+  _ntRowCbs=_ntRowCbs.filter(function(f){return f.el.isConnected;});
+  _ntRowCbs.forEach(function(f){try{f.fn();}catch(e){_dbg(e);}});
+}
+window.edgeNtPing=function(up){_ntUp=!!up;_ntUpAt=Date.now();renderNtPill();};
+setInterval(renderNtPill,3000);
+// same row in Settings and on the Import page
+function ntAutoRow(){
+  var row=document.createElement("div");
+  row.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;margin-bottom:8px;";
+  var info=document.createElement("div");info.style.cssText="min-width:0;";
+  var lbl=document.createElement("div");lbl.style.cssText="font-size:12px;color:var(--text);margin-bottom:2px;";lbl.textContent="Auto-import trades";
+  var dsc=document.createElement("div");dsc.style.cssText="font-size:10px;color:var(--text3);";
+  info.appendChild(lbl);info.appendChild(dsc);
+  var right=document.createElement("div");right.style.cssText="display:flex;align-items:center;gap:10px;flex-shrink:0;";
+  var pillBox=document.createElement("span");pillBox.style.cssText="cursor:pointer;display:inline-flex;";
+  pillBox.onclick=function(){ntSetPaused(!ntPaused());};
+  var tog=document.createElement("div");
+  var knob=document.createElement("div");tog.appendChild(knob);
+  function paint(){
+    var on=ntAutoOn();
+    tog.style.cssText="width:36px;height:20px;border-radius:10px;cursor:pointer;flex-shrink:0;position:relative;transition:background .2s;background:"+(on?"var(--accent)":"var(--border2)")+";border:1px solid "+(on?"var(--accent)":"var(--border)")+";";
+    knob.style.cssText="position:absolute;top:2px;"+(on?"right:2px":"left:2px")+";width:14px;height:14px;border-radius:50%;background:#fff;transition:all .2s;";
+    dsc.textContent="Closed NinjaTrader trades are added automatically (EdgeFeed on a chart, live accounts only)"+(ntUpNow()?"":" — NinjaTrader not detected, starts when it opens");
+    pillBox.textContent="";
+    if(on&&ntUpNow()) pillBox.appendChild(ntPillEl(ntPaused()));
+  }
+  tog.onclick=function(){
+    var now=!ntAutoOn();
+    try{localStorage.setItem("edge_nt_auto",now?"1":"0");if(now)localStorage.setItem("edge_nt_paused","0");}catch(e){_dbg(e);}
+    renderNtPill();
+  };
+  right.appendChild(pillBox);right.appendChild(tog);row.appendChild(info);row.appendChild(right);
+  paint();_ntRowCbs.push({el:row,fn:paint});
+  return row;
+}
+window.edgeNtTrade=function(){
+  var q=window.__edgeNtQ||[];window.__edgeNtQ=[];
+  q.forEach(function(o){try{ntIngest(o);}catch(e){_dbg(e);}});
+};
+function ntSeenHas(id){try{return (JSON.parse(localStorage.getItem("edge_nt_seen")||"[]")).indexOf(id)>-1;}catch(e){return false;}}
+function ntSeenAdd(id){try{var a=JSON.parse(localStorage.getItem("edge_nt_seen")||"[]");a.push(id);if(a.length>500)a=a.slice(-500);localStorage.setItem("edge_nt_seen",JSON.stringify(a));}catch(e){_dbg(e);}}
+function ntIngest(o){
+  if(!o||!o.inst||!o.et||!o.xt) return;
+  if(!ntAutoOn()||ntPaused()) return; // off / paused: ignore
+  if(o.id&&ntSeenHas(o.id)) return; // already imported once (even if you since deleted / undid it)
+  var hdr="Instrument,Market pos.,Quantity,Entry price,Exit price,Entry time,Exit time";
+  var row=[o.inst,o.dir,o.qty,o.ep,o.xp,o.et,o.xt].join(",");
+  var res=parseCSV(hdr+"\n"+row);
+  if(res.error||!res.trades.length) return;
+  var t=res.trades[0];
+  var key=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;
+  var dup=State.trades.some(function(x){return (o.id&&x.ntId===o.id)||(x.date+"_"+x.time+"_"+x.inst+"_"+x.entry)===key;});
+  if(dup) return;
+  if(o.id) ntSeenAdd(o.id);
+  t.ntId=o.id||"";t.auto=true;t.accountId=State.activeAccount||null;
+  State.trades=[t].concat(State.trades);ss("trades",State.trades);
+  try{localStorage.setItem("edge_last_import",JSON.stringify({at:Date.now(),ids:[t.id]}));}catch(e){_dbg(e);}
+  _ntLast=t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2)+" · "+new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  undoToast("Auto-imported "+t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2),undoLastImport);
+  syncToCloud();renderNtPill();renderSoft();
+}
+setTimeout(function(){try{window.edgeNtTrade();}catch(e){}},1500);
+
 function lastImportInfo(){
   var li=null;try{li=JSON.parse(localStorage.getItem("edge_last_import"));}catch(e){_dbg(e);}
   if(!li||!Array.isArray(li.ids)) return null;
@@ -6095,6 +6196,7 @@ function importTab(){
   });
   topRow.appendChild(swRow);
   el.appendChild(topRow);
+  if(window._edgeDesktop) el.appendChild(ntAutoRow());
   var _liBar=lastImportBar();if(_liBar) el.appendChild(_liBar);
 
   // Message banner
@@ -7152,6 +7254,11 @@ function chartTab(){
     ncBtn.textContent="\u29C9";ncBtn.style.cssText="padding:6px 7px;";
     ncBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?detached=1&tab=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf),"_blank");});
     ctrlRow.appendChild(ncBtn);
+    // Native (GPU) chart: the desktop shell launches edge-chart.exe and hands it your saved OANDA token via the URL fragment, which never leaves this machine.
+    var ntBtn=h("button",{className:"btn",title:"Open this chart in the native GPU chart window","aria-label":"Native chart"});
+    ntBtn.textContent="GPU";ntBtn.style.cssText="padding:6px 7px;font-size:10px;letter-spacing:1px;";
+    ntBtn.addEventListener("click",function(){window.open(location.href.split("?")[0].split("#")[0]+"?native=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf)+"#t="+encodeURIComponent(ls("oanda_token","")),"_blank");});
+    ctrlRow.appendChild(ntBtn);
     }
     var lkBtn=h("button",{className:"btn",title:"Link zoom and scroll with the other chart windows","aria-label":"Link charts"});
     var paintLk=function(){var g=State.chart_link||null;lkBtn.textContent="\u26D3";lkBtn.style.cssText="padding:6px 7px;"+(g?"border-color:"+g+";color:"+g+";":"border-color:var(--border);color:var(--text3);");lkBtn.title=g?"Linked: charts with this same colour move together. Click to change colour or unlink.":"Not linked. Click to link with the other charts.";edgeLinkVis();};
@@ -7509,7 +7616,7 @@ function chartTab(){
   // P&L that has to be derived from price — but on the chart, they're the
   // same underlying price action as NQ/ES, so the NQ/ES button pulls in
   // trades logged under either symbol.
-  var CHART_FAMILY={ES:["ES","US500"],NQ:["NQ","US100"]};
+  var CHART_FAMILY={ES:["ES","MES","US500"],NQ:["NQ","MNQ","US100"]}; // micros plot on their full-size chart (MNQ on NQ, MES on ES)
   var chartInsts=CHART_FAMILY[sym]||[sym];
   var trades=activeTrades().filter(function(t){return chartInsts.indexOf(t.inst)>-1;});
   var tradePoints=[];
@@ -7897,9 +8004,81 @@ function chartTab(){
 
       var series=chart.addCandlestickSeries({
         upColor:"#00e676",downColor:"#ff4444",
-        borderUpColor:"#00e676",borderDownColor:"#ff4444",
+        borderUpColor:"#04361f",borderDownColor:"#4a0a0a", // dark outline separates bodies, like NinjaTrader
         wickUpColor:"#00e676",wickDownColor:"#ff4444",
       });
+      // ── Thick-wick candles ───────────────────────────────────────────────
+      // The library draws candle wicks and outlines exactly 1 device pixel wide, which reads as a hairline on a TV
+      // (NinjaTrader / Sierra let you set both). This plugin repaints each candle over the built-in one with a thicker
+      // wick and a dark outline, on exact device pixels. The built-in candles stay underneath, so autoscale, the price
+      // label, price lines and trade markers are untouched; if anything throws, the plain candles simply show.
+      // Edit CANDLE_STYLE to taste. wick/border are in CSS px (wick min 1 device px).
+      var CANDLE_STYLE={wick:1,border:1,
+        upFill:"#00e676",upLine:"#04361f",upWick:"#00e676",
+        dnFill:"#ff4444",dnLine:"#4a0a0a",dnWick:"#ff4444"};
+      try{(function(){
+        var mir=[];
+        var _sd=series.setData.bind(series),_su=series.update.bind(series);
+        series.setData=function(d){mir=(d||[]).slice();return _sd(d);};
+        series.update=function(b){
+          if(b&&b.open!=null){
+            var l=mir.length?mir[mir.length-1]:null;
+            if(!l||b.time>l.time) mir.push(b); else if(b.time===l.time) mir[mir.length-1]=b;
+          }
+          return _su(b);
+        };
+        // same width the library uses for a candle body (lightweight-charts 4.1.x), so ours always covers it
+        function bodyW(bs,pr){
+          if(bs>=2.5&&bs<=4) return Math.floor(3*pr);
+          var c=1-0.2*Math.atan(Math.max(4,bs)-4)/(Math.PI*0.5);
+          return Math.max(Math.floor(pr),Math.min(Math.floor(bs*c*pr),Math.floor(bs*pr)));
+        }
+        var view={zOrder:function(){return "normal";},renderer:function(){return {draw:function(target){
+          target.useBitmapCoordinateSpace(function(sc){
+            var n=mir.length;if(!n) return;
+            var ts=chart.timeScale(),bs=ts.options().barSpacing,hpr=sc.horizontalPixelRatio,vpr=sc.verticalPixelRatio,ctx=sc.context;
+            if(bs*hpr<5) return; // too dense for outlines: leave the built-in candles
+            var S=CANDLE_STYLE,i0=0,i1=n-1,vr=ts.getVisibleLogicalRange();
+            if(vr){
+              var bi=series.barsInLogicalRange(vr);
+              if(bi&&typeof bi.from==="number"&&typeof bi.to==="number"){
+                var lo=0,hi=n-1,m;
+                while(lo<hi){m=(lo+hi)>>1;if(mir[m].time<bi.from)lo=m+1;else hi=m;}
+                i0=Math.max(0,lo-1);
+                lo=i0;hi=n-1;
+                while(lo<hi){m=(lo+hi+1)>>1;if(mir[m].time<=bi.to)lo=m;else hi=m-1;}
+                i1=Math.min(n-1,lo+1);
+              }
+            }
+            var bw=bodyW(bs,hpr);
+            if(bw>=2&&(Math.floor(hpr)%2)!==(bw%2)) bw--; // the library's own parity rule
+            var ww=Math.max(1,Math.round(S.wick*hpr)),bw2=bw;
+            if(bw2%2!==ww%2) bw2++; // body and wick share a parity so the wick is centred
+            var bd=Math.max(1,Math.round(S.border*hpr));
+            for(var i=i0;i<=i1;i++){
+              var b=mir[i];if(!b||b.open==null) continue;
+              var x=ts.timeToCoordinate(b.time);if(x==null) continue;
+              var yo=series.priceToCoordinate(b.open),yc=series.priceToCoordinate(b.close),
+                  yh=series.priceToCoordinate(b.high),yl=series.priceToCoordinate(b.low);
+              if(yo==null||yc==null||yh==null||yl==null) continue;
+              var cx=Math.round(x*hpr),
+                  top=Math.round(Math.min(yo,yc)*vpr),bot=Math.round(Math.max(yo,yc)*vpr),
+                  hh=Math.round(yh*vpr),ll=Math.round(yl*vpr),up=b.close>=b.open;
+              ctx.fillStyle=up?S.upWick:S.dnWick;
+              var wl=cx-(ww>>1);
+              if(top>hh) ctx.fillRect(wl,hh,ww,top-hh);
+              if(ll>bot) ctx.fillRect(wl,bot+1,ww,ll-bot);
+              var left=cx-(bw2>>1),h=bot-top+1;
+              if(h<=2*bd+1||bw2<=2*bd+1){ctx.fillStyle=up?S.upFill:S.dnFill;ctx.fillRect(left,top,bw2,h);}
+              else{
+                ctx.fillStyle=up?S.upLine:S.dnLine;ctx.fillRect(left,top,bw2,h);
+                ctx.fillStyle=up?S.upFill:S.dnFill;ctx.fillRect(left+bd,top+bd,bw2-2*bd,h-2*bd);
+              }
+            }
+          });
+        }};}};
+        series.attachPrimitive({paneViews:function(){return [view];},updateAllViews:function(){}});
+      })();}catch(e){_dbg(e);}
       series.setData(candles);
 
       // ── Week boundaries ───────────────────────────────────
@@ -8534,6 +8713,8 @@ function chartTab(){
         ["2m","5m","30m","1h","4h","8h"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X);});
         ["1d","1w","1m"].forEach(function(k){if(ZOOM_BARS[k]) ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*BTC_ZOOM_X_LONG);});
       }
+      var DESK_ZOOM_X=0.45; // desktop / TV: open on fewer, wider candles (1 = the old count; phones unchanged). Edit to taste.
+      if(!isMobile()) Object.keys(ZOOM_BARS).forEach(function(k){ZOOM_BARS[k]=Math.round(ZOOM_BARS[k]*DESK_ZOOM_X);});
       var zoomN=(ZOOM_BARS[tf]&&!focusTs&&!keepView&&candles.length>ZOOM_BARS[tf]+1)?ZOOM_BARS[tf]:0;
       try{
         var _w0=chart.timeScale().width();
@@ -9823,26 +10004,6 @@ function chartTab(){
         zb("+","Zoom in",function(){zoomBy(0.7);});
         zb("\u2212","Zoom out",function(){zoomBy(1/0.7);});
         chartDiv.appendChild(bar);
-      })();
-
-      // ── GPU chart button: sits in the empty bottom-right corner where the price scale meets the time scale (overlay, so the chart keeps its size) ──
-      if(window._edgeDesktop&&!window._edgeDetached&&!isMobile()) (function(){
-        var gb=h("button",{className:"btn",title:"Open this chart in the native GPU chart window","aria-label":"Native GPU chart"});
-        gb.textContent="GPU";
-        gb.style.cssText="position:absolute;right:1px;bottom:1px;z-index:6;padding:0;font-size:10px;font-weight:700;letter-spacing:1px;line-height:1;background:#040d1a;border-color:var(--border2);color:var(--text);touch-action:manipulation;";
-        // the token goes in the URL fragment: the desktop app hands it to the native chart and never navigates to it
-        gb.addEventListener("click",function(e){e.stopPropagation();window.open(location.href.split("?")[0].split("#")[0]+"?native=chart&sym="+encodeURIComponent(sym)+"&tf="+encodeURIComponent(tf)+"#t="+encodeURIComponent(ls("oanda_token","")),"_blank");});
-        ["pointerdown","touchstart","dblclick"].forEach(function(ev){gb.addEventListener(ev,function(e){e.stopPropagation();});});
-        function fit(){
-          try{
-            var w=chart.priceScale("right").width()||76,ht=(chart.timeScale().height&&chart.timeScale().height())||26;
-            gb.style.width=Math.max(40,w-2)+"px";gb.style.height=Math.max(18,ht-2)+"px";
-          }catch(e){_dbg(e);}
-        }
-        chartDiv.appendChild(gb);
-        fit();
-        [150,600,1500].forEach(function(ms){setTimeout(function(){if(gb.isConnected)fit();},ms);});
-        try{new ResizeObserver(fit).observe(chartDiv);}catch(e){}
       })();
 
       // ── Crosshair ────────────────────────────────────────────────
