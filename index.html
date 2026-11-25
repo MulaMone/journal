@@ -8047,8 +8047,9 @@ function chartTab(){
           ln.push(bars+" bars · "+fmtDur(bars*periodSec));
           c.font="12px 'Courier New',monospace";c.textBaseline="middle";
           var tw=0;ln.forEach(function(s){tw=Math.max(tw,c.measureText(s).width);});
-          var bw=tw+16,bh=ln.length*17+8,bx=Math.min(Math.max(2,mx-bw/2),W-bw-80),by=up?T-bh-6:B+6;
-          if(by<2) by=up?B+6:T-bh-6; if(by+bh>H-2) by=Math.max(2,H-bh-2);
+          var bw=Math.max(m.w||0,tw+16);m.w=bw; // width only grows while measuring, so the label doesn't jitter as digits change
+          var bh=ln.length*17+8,bx=Math.min(Math.max(2,mx-bw/2),W-bw-80),by=T-bh-6; // always above the box (no flip past the start point)
+          if(by<2) by=B+6; if(by+bh>H-2) by=Math.max(2,H-bh-2);
           c.fillStyle="rgba(4,13,26,0.92)";c.fillRect(bx,by,bw,bh);c.strokeStyle=col;c.strokeRect(Math.round(bx)+.5,Math.round(by)+.5,bw,bh);
           c.fillStyle="#e8f0ff";ln.forEach(function(s,i){c.fillText(s,bx+8,by+4+8.5+i*17);});
         }
