@@ -8004,6 +8004,82 @@ function chartTab(){
       });
       series.setData(candles);
 
+      // ── Measure tool: Shift+drag. Points/ticks, futures $ (≈ on CFD feeds), bars + time. BTC: price move only. ──
+      try{(function(){
+        var MV={ES:{v:50,tk:0.25,u:"ES",mv:5,mu:"MES"},NQ:{v:20,tk:0.25,u:"NQ",mv:2,mu:"MNQ"},CL:{v:1000,tk:0.01,u:"CL"},GC:{v:100,tk:0.1,u:"GC"},NG:{v:10000,tk:0.001,u:"NG"}};
+        var spec=MV[sym]||null, snapTk=spec?spec.tk:(sym==="BTC"?0.01:0);
+        var cv=document.createElement("canvas");
+        cv.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;";
+        chartDiv.appendChild(cv);
+        var ts=chart.timeScale(),m=null,drag=false,sig="",raf=0;
+        function snap(p){return snapTk?Math.round(p/snapTk)*snapTk:p;}
+        function pt(e){
+          var r=chartDiv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
+          var l=ts.coordinateToLogical(x),p=series.coordinateToPrice(y);
+          if(l==null||p==null) return null;
+          return {l:Math.round(l),p:snap(p)};
+        }
+        function fmtDur(s){s=Math.abs(Math.round(s));var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),mi=Math.floor(s%3600/60);
+          return d?(d+"d"+(h?" "+h+"h":"")):(h?(h+"h"+(mi?" "+mi+"m":"")):(mi+"m"));}
+        function money(x){x=Math.abs(x);var w=Math.abs(x-Math.round(x))<0.005;return "$"+x.toLocaleString("en-US",{minimumFractionDigits:w?0:2,maximumFractionDigits:w?0:2});}
+        function dec(){return snapTk>=1?0:(snapTk>=0.1?2:(snapTk>=0.01?2:3));}
+        function draw(){
+          if(!chartDiv.isConnected){m=null;return;}
+          var dpr=window.devicePixelRatio||1,W=chartDiv.clientWidth,H=chartDiv.clientHeight;
+          if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);}
+          var c=cv.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,W,H);
+          if(!m||!m.b) return;
+          var x0=ts.logicalToCoordinate(m.a.l),x1=ts.logicalToCoordinate(m.b.l),y0=series.priceToCoordinate(m.a.p),y1=series.priceToCoordinate(m.b.p);
+          if(x0==null||x1==null||y0==null||y1==null) return;
+          var up=m.b.p>=m.a.p,col=up?"#2979ff":"#ff4444";
+          var L=Math.min(x0,x1),R=Math.max(x0,x1),T=Math.min(y0,y1),B=Math.max(y0,y1);
+          c.fillStyle=up?"rgba(41,121,255,0.16)":"rgba(255,68,68,0.16)";c.fillRect(L,T,R-L,B-T);
+          c.strokeStyle=col;c.lineWidth=1;c.strokeRect(Math.round(L)+.5,Math.round(T)+.5,R-L,B-T);
+          var mx=(L+R)/2,my=(T+B)/2;c.beginPath();
+          var dx=x1>=x0?1:-1;
+          c.moveTo(x0,my);c.lineTo(x1,my);c.moveTo(x1,my);c.lineTo(x1-dx*6,my-4);c.moveTo(x1,my);c.lineTo(x1-dx*6,my+4);
+          var dy=y1>=y0?1:-1;c.moveTo(mx,y0);c.lineTo(mx,y1);c.moveTo(mx,y1);c.lineTo(mx-4,y1-dy*6);c.moveTo(mx,y1);c.lineTo(mx+4,y1-dy*6);
+          c.stroke();
+          var dp=m.b.p-m.a.p,bars=Math.abs(m.b.l-m.a.l),d=dec();
+          var l1=(dp>=0?"+":"-")+Math.abs(dp).toFixed(d)+(snapTk>=0.01&&spec?" · "+Math.round(Math.abs(dp)/snapTk)+" ticks":"");
+          var ln=[l1];
+          if(spec){var s="≈ "+money(dp*spec.v)+" (1 "+spec.u+")";if(spec.mv) s+=" · "+money(dp*spec.mv)+" (1 "+spec.mu+")";ln.push(s);}
+          ln.push(bars+" bars · "+fmtDur(bars*periodSec));
+          c.font="12px 'Courier New',monospace";c.textBaseline="middle";
+          var tw=0;ln.forEach(function(s){tw=Math.max(tw,c.measureText(s).width);});
+          var bw=tw+16,bh=ln.length*17+8,bx=Math.min(Math.max(2,mx-bw/2),W-bw-80),by=up?T-bh-6:B+6;
+          if(by<2) by=up?B+6:T-bh-6; if(by+bh>H-2) by=Math.max(2,H-bh-2);
+          c.fillStyle="rgba(4,13,26,0.92)";c.fillRect(bx,by,bw,bh);c.strokeStyle=col;c.strokeRect(Math.round(bx)+.5,Math.round(by)+.5,bw,bh);
+          c.fillStyle="#e8f0ff";ln.forEach(function(s,i){c.fillText(s,bx+8,by+4+8.5+i*17);});
+        }
+        function loop(){
+          raf=0;if(!m||!chartDiv.isConnected){draw();return;}
+          var s=m.b?[ts.logicalToCoordinate(m.a.l),ts.logicalToCoordinate(m.b.l),series.priceToCoordinate(m.a.p),series.priceToCoordinate(m.b.p),chartDiv.clientWidth,chartDiv.clientHeight].join():"";
+          if(s!==sig){sig=s;draw();}
+          raf=requestAnimationFrame(loop);
+        }
+        function start(){if(!raf) raf=requestAnimationFrame(loop);}
+        function clear(){m=null;drag=false;sig="";draw();}
+        chartDiv.addEventListener("mousedown",function(e){
+          if(e.button!==0) return;
+          if(!e.shiftKey){if(m) clear();return;}
+          var p=pt(e);if(!p) return;
+          if(e.clientX-chartDiv.getBoundingClientRect().left>ts.width()) return; // not on the price axis
+          e.stopPropagation();e.preventDefault();
+          m={a:p,b:p};drag=true;sig="";start();
+        },true);
+        window.addEventListener("mousemove",function(e){
+          if(!drag||!m) return;
+          if(!chartDiv.isConnected){clear();return;}
+          var p=pt(e);if(p) m.b=p;
+        });
+        window.addEventListener("mouseup",function(){
+          if(!drag) return;drag=false;
+          if(m&&m.a.l===m.b.l&&m.a.p===m.b.p) clear();
+        });
+        window.addEventListener("keydown",function(e){if(e.key==="Escape"&&m) clear();});
+      })();}catch(_me){}
+
       // ── Week boundaries ───────────────────────────────────
       // The futures week reopens Sunday evening after Friday's close — in
       // real candle data that shows up as a multi-day gap between two
