@@ -9013,7 +9013,7 @@ function expiryEvents(sym){
   function put(dt,hh,mm,tz,mon,yy){out.push({s:xTz(dt,hh,mm,tz),l:MN[mon]+" EXPIRES  "+DW[dt.getUTCDay()]+" "+MN[dt.getUTCMonth()]+" "+dt.getUTCDate(),k:yy%100*100+mon+1,h:hh,mi:mm,z:tz,mon:mon});}
   for(var y=2022;y<=2028;y++){
     for(var m=0;m<12;m++){
-      if(sym==="ES"||sym==="NQ"){if(Q.indexOf(m)<0) continue;put(xPrevBD(xNth(y,m,5,3)),9,30,"America/New_York",m,y);}
+      if(sym==="ES"||sym==="NQ"){if(Q.indexOf(m)<0) continue;var xf=xPrevBD(xNth(y,m,5,3)),xr=new Date(xNth(y,m,5,3).getTime()-4*86400000);put(xf,9,30,"America/New_York",m,y);out[out.length-1].c="#c9985a";put(xr,9,30,"America/New_York",m,y);out[out.length-1].l=MN[m]+" ROLL  "+DW[xr.getUTCDay()]+" "+MN[xr.getUTCMonth()]+" "+xr.getUTCDate();}
       else if(sym==="DXY"){if(Q.indexOf(m)<0) continue;put(xAddBD(xNth(y,m,3,3),-2),10,16,"America/New_York",m,y);}
       else if(sym==="US10Y"){if(Q.indexOf(m)<0) continue;put(xAddBD(xLastBD(y,m),-7),13,1,"America/New_York",m,y);}
       else if(sym==="BTC"){put(xPrevBD(xLastWd(y,m,5)),16,0,"Europe/London",m,y);}
@@ -9077,8 +9077,8 @@ function expiryEvents(sym){
             (function drawX(){
               if(!chartDiv.isConnected||!cvX.isConnected) return;
               try{
-                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,xs=[],sg=W+"x"+H;
-                evs.forEach(function(e){var x=xFor(e.s);if(x!=null&&x>=0&&x<=W){xs.push({x:x,l:e.l});sg+="|"+Math.round(x);}});
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,xs=[],sg=W+"x"+H+(window._rollOff?"|off":"");
+                if(!window._rollOff) evs.forEach(function(e){var x=xFor(e.s);if(x!=null&&x>=0&&x<=W){xs.push({x:x,l:e.l,c:e.c||"#ff4d4d"});sg+="|"+Math.round(x);}});
                 if(sg!==sigX){
                   sigX=sg;
                   if(cvX.width!==Math.round(W*dpr)||cvX.height!==Math.round(H*dpr)){cvX.width=Math.round(W*dpr);cvX.height=Math.round(H*dpr);}
@@ -9088,12 +9088,12 @@ function expiryEvents(sym){
                   cx.font="500 12px monospace";cx.textBaseline="middle";
                   var lastR=-1e9;
                   xs.sort(function(a,b){return a.x-b.x;}).forEach(function(p){
-                    cx.strokeStyle="#ff4d4d";cx.lineWidth=1.5;cx.setLineDash([6,4]);cx.beginPath();cx.moveTo(Math.round(p.x)+0.5,0);cx.lineTo(Math.round(p.x)+0.5,H-ph);cx.stroke();cx.setLineDash([]);
+                    cx.strokeStyle=p.c;cx.lineWidth=p.c==="#ff4d4d"?1.5:1;cx.setLineDash(p.c==="#ff4d4d"?[6,4]:[2,4]);cx.beginPath();cx.moveTo(Math.round(p.x)+0.5,0);cx.lineTo(Math.round(p.x)+0.5,H-ph);cx.stroke();cx.setLineDash([]);
                     var tw=Math.ceil(cx.measureText(p.l).width)+16,bx=p.x+6;
                     if(bx+tw>W-4) bx=p.x-6-tw;
                     if(bx>lastR+4||bx+tw<p.x){
-                      cx.fillStyle="#0a1424";cx.fillRect(bx,8,tw,22);cx.lineWidth=1;cx.strokeStyle="#ff4d4d";cx.strokeRect(bx+0.5,8.5,tw-1,21);
-                      cx.fillStyle="#ff8a8a";cx.textAlign="left";cx.fillText(p.l,bx+8,19);
+                      cx.fillStyle="#0a1424";cx.fillRect(bx,8,tw,22);cx.lineWidth=1;cx.strokeStyle=p.c;cx.strokeRect(bx+0.5,8.5,tw-1,21);
+                      cx.fillStyle=p.c==="#ff4d4d"?"#ff8a8a":"#ebcb9c";cx.textAlign="left";cx.fillText(p.l,bx+8,19);
                       if(bx>p.x) lastR=bx+tw;
                     }
                   });
@@ -10780,6 +10780,21 @@ function expiryEvents(sym){
         zb("+","Zoom in",function(){zoomBy(0.7);});
         zb("\u2212","Zoom out",function(){zoomBy(1/0.7);});
         chartDiv.appendChild(bar);
+        // ROLL: show / hide the contract roll + expiry lines (only on symbols that have a futures contract). Remembered.
+        if(["ES","NQ","DXY","CL","GC","NG","BTC","US10Y"].indexOf(sym)>-1) (function(){
+          try{window._rollOff=localStorage.getItem("edge_roll_off")==="1";}catch(e){window._rollOff=false;}
+          var rb=h("button",{className:"btn",title:"Show / hide the contract roll and expiry lines","aria-label":"Roll lines"});
+          rb.textContent=mob?"R":"ROLL";
+          rb.style.cssText="position:absolute;left:"+(8+sz+6)+"px;bottom:34px;z-index:6;height:"+sz+"px;"+(mob?"width:"+sz+"px;padding:0;":"padding:0 9px;")+"font-size:"+(mob?16:11)+"px;font-weight:700;letter-spacing:"+(mob?0:1)+"px;line-height:1;touch-action:manipulation;";
+          function paintRb(){
+            var off=!!window._rollOff;
+            rb.style.background=off?"#040d1acc":"#1c0f16";rb.style.borderColor=off?"var(--border2)":"#ff4d4d";rb.style.color=off?"#5b6b85":"#ff8a8a";rb.style.textDecoration=off?"line-through":"none";
+          }
+          function flipRb(){window._rollOff=!window._rollOff;try{localStorage.setItem("edge_roll_off",window._rollOff?"1":"0");}catch(e){}paintRb();}
+          rb.addEventListener("click",function(e){e.stopPropagation();flipRb();});
+          ["pointerdown","touchstart","dblclick"].forEach(function(ev){rb.addEventListener(ev,function(e){e.stopPropagation();});});
+          paintRb();chartDiv.appendChild(rb);
+        })();
       })();
 
       // ── GPU chart button: sits in the empty bottom-right corner where the price scale meets the time scale (overlay, so the chart keeps its size) ──
