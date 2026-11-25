@@ -8951,8 +8951,39 @@ function chartTab(){
           // ── Live orders: the stop / target orders NinjaTrader has working right now, as price lines (EdgeFeed /orders), shifted onto this CFD chart with the live futures->CFD offset ──
           (function(){
             if(focusTs||monthlyFetch||["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)) return;
-            var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null;
-            function clearL(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";}
+            var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[];
+            function clearL(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";labs=[];}
+            // labels are drawn on a canvas so the dollar amount can be green / red; the price lines only carry the price on the axis
+            var cvL=document.createElement("canvas");
+            cvL.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;";
+            chartDiv.appendChild(cvL);
+            var sigD="";
+            (function drawL(){
+              if(!chartDiv.isConnected||!cvL.isConnected) return;
+              try{
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,it=[],sg=W+"x"+H;
+                labs.forEach(function(o){var y=series.priceToCoordinate(o.p);if(y!=null){it.push({o:o,y:y});sg+="|"+Math.round(y)+o.name+(o.usd==null?"":Math.round(o.usd));}});
+                if(sg!==sigD){
+                  sigD=sg;
+                  if(cvL.width!==Math.round(W*dpr)||cvL.height!==Math.round(H*dpr)){cvL.width=Math.round(W*dpr);cvL.height=Math.round(H*dpr);}
+                  var cx=cvL.getContext("2d");cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
+                  var ph=28;try{ph=chart.timeScale().height()||28;}catch(e2){}
+                  cx.save();cx.beginPath();cx.rect(0,0,W,Math.max(0,H-ph));cx.clip();
+                  cx.font="500 14px monospace";cx.textBaseline="middle";
+                  it.forEach(function(r){
+                    var o=r.o,acc=o.k==="S"?"#ff4d4d":o.k==="E"?"#4da3ff":"#2ee67a",txt1=o.name,usd=o.usd,txt2=usd==null?"":"   "+(usd>=0?"+":"\u2212")+"$"+Math.abs(Math.round(usd*100)/100).toFixed(2);
+                    var w1=cx.measureText(txt1).width,w2=txt2?cx.measureText(txt2).width:0,bw=w1+w2+26,x=12,y=r.y-12;
+                    cx.fillStyle="#0a1424";cx.fillRect(x,y,bw,24);
+                    cx.lineWidth=1.5;cx.strokeStyle=acc;cx.strokeRect(x+0.75,y+0.75,bw-1.5,22.5);
+                    cx.fillStyle=acc;cx.fillRect(x,y,6,24);
+                    cx.fillStyle="#ffffff";cx.textAlign="left";cx.fillText(txt1,x+14,r.y);
+                    if(txt2){cx.fillStyle=usd>=0?"#5cf59a":"#ff8a8a";cx.fillText(txt2,x+14+w1,r.y);}
+                  });
+                  cx.restore();
+                }
+              }catch(e){}
+              requestAnimationFrame(drawL);
+            })();
             function tick(){
               if(!chartDiv.isConnected){clearInterval(iv);clearL();return;}
               if(busy||document.hidden||!candles.length) return;
@@ -8976,10 +9007,10 @@ function chartTab(){
                   var acct=String(e[1]).split("|")[0],pz=null;
                   posL.forEach(function(q){if(q[0]===acct) pz=q;});
                   if(!pz&&posL.length===1) pz=posL[0];
-                  var o={k:e[2],px:e[4],txt:""};
+                  var o={k:e[2],px:e[4],usd:null,name:e[2]==="S"?"STOP":"TARGET"};
                   if(pz){
                     var pts=(e[4]-pz[3])*pz[1],usd=pts*pz[4]*(e[5]||pz[2]);
-                    o.txt="  "+(pts>=0?"+":"\u2212")+Math.abs(Math.round(pts*100)/100)+"p  "+(usd>=0?"+":"\u2212")+"$"+Math.abs(Math.round(usd*100)/100);
+                    o.usd=usd;
                   }
                   live.push(o);
                 });
@@ -8989,14 +9020,20 @@ function chartTab(){
                 ((rs[1]&&rs[1].bars)||[]).forEach(function(k){nc[Math.floor(k[0]/per)*per]=k[4];});
                 var ds=[];
                 candles.slice(-5).forEach(function(c){var u=Math.floor(c.u/per)*per;if(nc[u]!=null) ds.push(c.close-nc[u]);});
+                var lastFut=null;((rs[1]&&rs[1].bars)||[]).forEach(function(k){lastFut=k[4];});
+                posL.forEach(function(q){
+                  var up=lastFut==null?null:(lastFut-q[3])*q[1]*q[4]*q[2];
+                  live.push({k:"E",px:q[3],usd:up,name:(q[1]>0?"LONG ":"SHORT ")+q[2]});
+                });
                 if(!live.length||!ds.length){clearL();return;}
                 ds.sort(function(a,b){return a-b;});
                 var bs=ds[Math.floor(ds.length/2)];
-                var sg=live.map(function(o){return o.k+o.px+o.txt;}).join("|");
+                var sg=live.map(function(o){return o.k+o.px;}).join("|");
+                labs=live.map(function(o){return {k:o.k,p:o.px+bs,usd:o.usd,name:o.name};});
                 if(sg!==sigL||lines.length!==live.length){
                   clearL();sigL=sg;
                   live.forEach(function(o){
-                    lines.push(series.createPriceLine({price:o.px+bs,color:o.k==="S"?"#e24b4a":"#2fb36b",lineWidth:1,lineStyle:2,axisLabelVisible:true,title:(o.k==="S"?"SL ":"TP ")+(Math.round(o.px*100)/100)+o.txt}));
+                    lines.push(series.createPriceLine({price:o.px+bs,color:o.k==="S"?"#e24b4a":o.k==="E"?"#4da3ff":"#2fb36b",lineWidth:1,lineStyle:2,axisLabelVisible:true,title:""}));
                   });
                 } else live.forEach(function(o,i){try{lines[i].applyOptions({price:o.px+bs});}catch(e){}});
               }).catch(function(){clearTimeout(tmo);if(++fails>=3) clearL();}).then(function(){busy=false;});
