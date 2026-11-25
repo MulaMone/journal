@@ -1467,7 +1467,7 @@ var QUOTES=[
   {t:"Risk comes from not knowing what you're doing.",a:"— Warren Buffett"},
   {t:"The market can stay irrational longer than you can stay solvent.",a:"— J.M. Keynes"}
 ];
-var INSTR=["ES","NQ","MES","MNQ","CL","GC","Other"];
+var INSTR=["ES","NQ","MES","MNQ","NNQ","NES","CL","MCL","QM","GC","MGC","1OZ","QO","NG","MNG","QG","Other"];
 var SESSIONS=["Overnight","London","RTH Open","Full RTH","Post-Market"];
 var SETUPS=["VAH/VAL","POC","Trend Continuation","VWAP Fade","Extension Fade","MA Pullback","RTH VWAP","Matrix Level","Bizz Level","GEX Gamma Wall","Live Read — Naked POC Magnet","Live Read — HTF Level Reaction","Live Read — Trend Exhaustion","Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run","Pivot Level — 30m","Pivot Level — 1h","Pivot Level — Daily","Pivot Level — Weekly","Pivot Level — Monthly","Pivot Level — Quarterly"];
 var SDESC={
@@ -1503,7 +1503,7 @@ var SETUP_GROUPS=[
   {label:"Tape Reads",setups:["Tape Read — Failed Auction","Tape Read — Momentum Shift","Tape Read — Stop Run"]},
   {label:"Pivot Levels",setups:["Pivot Level — 30m","Pivot Level — 1h","Pivot Level — Daily","Pivot Level — Weekly","Pivot Level — Monthly","Pivot Level — Quarterly"]}
 ];
-var TICK={ES:50,NQ:20,MES:5,MNQ:2,CL:1000,GC:100,RTY:50,M2K:5,YM:5,MYM:0.5,
+var TICK={ES:50,NQ:20,MES:5,MNQ:2,NNQ:0.2,NES:0.5,CL:1000,MCL:100,QM:500,GC:100,MGC:10,"1OZ":1,QO:50,NG:10000,MNG:1000,QG:2500,RTY:50,M2K:5,YM:5,MYM:0.5,
 // Forex majors/minors — standard lot pip value in USD
 EURUSD:10,GBPUSD:10,AUDUSD:10,NZDUSD:10,USDCAD:10,USDCHF:10,USDJPY:9.09,
 EURGBP:10,EURJPY:9.09,GBPJPY:9.09,AUDJPY:9.09,EURAUD:10,EURNZD:10,GBPAUD:10,GBPCAD:10,GBPCHF:10,GBPNZD:10,CADJPY:9.09,CHFJPY:9.09,AUDCAD:10,AUDCHF:10,AUDNZD:10,NZDJPY:9.09,NZDCAD:10,NZDCHF:10,EURCAD:10,EURCHF:10,CADCHF:10,
@@ -1511,7 +1511,7 @@ EURGBP:10,EURJPY:9.09,GBPJPY:9.09,AUDJPY:9.09,EURAUD:10,EURNZD:10,GBPAUD:10,GBPC
 US500:1,US30:1,US100:1,UK100:1,GER40:1,FRA40:1,AUS200:1,JPN225:1,HKG50:1,
 Other:1};
 // CME minimum price increments (snap entry/exit to valid tick)
-var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,CL:0.01,GC:0.10,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
+var TICK_INC={ES:0.25,NQ:0.25,MES:0.25,MNQ:0.25,NNQ:0.5,NES:0.5,CL:0.01,MCL:0.01,QM:0.025,GC:0.10,MGC:0.10,"1OZ":0.25,QO:0.25,NG:0.001,MNG:0.001,QG:0.005,RTY:0.10,M2K:0.10,YM:1,MYM:1,Other:0.01};
 function snapToTick(val,inst){
   if(isNaN(val)||val===null||val===undefined) return val;
   var inc=TICK_INC[inst]||0.01;
@@ -5737,14 +5737,24 @@ function detectInstrument(s){
   // CME Futures (micro first)
   if(c.indexOf("MES")===0) return "MES";
   if(c.indexOf("MNQ")===0) return "MNQ";
+  if(c.indexOf("NNQ")===0) return "NNQ";
+  if(c.indexOf("NES")===0) return "NES";
   if(c.indexOf("M2K")===0) return "M2K";
   if(c.indexOf("MYM")===0) return "MYM";
   if(c.indexOf("ES")===0)  return "ES";
   if(c.indexOf("NQ")===0)  return "NQ";
   if(c.indexOf("RTY")===0) return "RTY";
   if(c.indexOf("YM")===0)  return "YM";
+  if(c.indexOf("MCL")===0) return "MCL";
+  if(c.indexOf("MGC")===0) return "MGC";
+  if(c.indexOf("MNG")===0) return "MNG";
+  if(c.indexOf("1OZ")===0) return "1OZ";
+  if(c.indexOf("QM")===0)  return "QM";
+  if(c.indexOf("QO")===0)  return "QO";
+  if(c.indexOf("QG")===0)  return "QG";
   if(c.indexOf("CL")===0)  return "CL";
   if(c.indexOf("GC")===0)  return "GC";
+  if(c.indexOf("NG")===0)  return "NG";
   // CFD Indices (broker suffixes like .M .cash stripped above)
   if(c==="US500"||c==="SP500"||c==="SPX500") return "US500";
   if(c==="US30"||c==="DOW"||c==="DJ30")      return "US30";
@@ -7611,7 +7621,7 @@ function chartTab(){
   // P&L that has to be derived from price — but on the chart, they're the
   // same underlying price action as NQ/ES, so the NQ/ES button pulls in
   // trades logged under either symbol.
-  var CHART_FAMILY={ES:["ES","MES","US500"],NQ:["NQ","MNQ","US100"]}; // micros plot on their full-size chart (MNQ on NQ, MES on ES)
+  var CHART_FAMILY={ES:["ES","MES","NES","US500"],NQ:["NQ","MNQ","NNQ","US100"],CL:["CL","MCL","QM"],GC:["GC","MGC","1OZ","QO"],NG:["NG","MNG","QG"]}; // micros / nanos plot on their full-size chart (MNQ + NNQ on NQ, MES on ES)
   var chartInsts=CHART_FAMILY[sym]||[sym];
   var trades=activeTrades().filter(function(t){return chartInsts.indexOf(t.inst)>-1;});
   var tradePoints=[];
@@ -8006,7 +8016,7 @@ function chartTab(){
 
       // ── Measure tool: Shift+drag. Points/ticks, futures $ (≈ on CFD feeds), bars + time. BTC: price move only. ──
       try{(function(){
-        var MV={ES:{v:50,tk:0.25,u:"ES",mv:5,mu:"MES"},NQ:{v:20,tk:0.25,u:"NQ",mv:2,mu:"MNQ"},CL:{v:1000,tk:0.01,u:"CL"},GC:{v:100,tk:0.1,u:"GC"},NG:{v:10000,tk:0.001,u:"NG"}};
+        var MV={ES:{v:50,tk:0.25,u:"ES",ex:[[5,"MES"],[0.5,"NES"]]},NQ:{v:20,tk:0.25,u:"NQ",ex:[[2,"MNQ"],[0.2,"NNQ"]]},CL:{v:1000,tk:0.01,u:"CL",ex:[[500,"QM"],[100,"MCL"]]},GC:{v:100,tk:0.1,u:"GC",ex:[[10,"MGC"],[1,"1OZ"]]},NG:{v:10000,tk:0.001,u:"NG",ex:[[2500,"QG"],[1000,"MNG"]]}};
         var spec=MV[sym]||null, snapTk=spec?spec.tk:(sym==="BTC"?0.01:0);
         var cv=document.createElement("canvas");
         cv.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;";
@@ -8043,7 +8053,7 @@ function chartTab(){
           var dp=m.b.p-m.a.p,bars=Math.abs(m.b.l-m.a.l),d=dec();
           var l1=(dp>=0?"+":"-")+Math.abs(dp).toFixed(d)+(snapTk>=0.01&&spec?" · "+Math.round(Math.abs(dp)/snapTk)+" ticks":"");
           var ln=[l1];
-          if(spec){var s="≈ "+money(dp*spec.v)+" (1 "+spec.u+")";if(spec.mv) s+=" · "+money(dp*spec.mv)+" (1 "+spec.mu+")";ln.push(s);}
+          if(spec){var s="≈ "+money(dp*spec.v)+" (1 "+spec.u+")";ln.push(s);if(spec.ex&&spec.ex.length) ln.push("  "+spec.ex.map(function(x){return money(dp*x[0])+" ("+x[1]+")";}).join(" · "));}
           ln.push(bars+" bars · "+fmtDur(bars*periodSec));
           c.font="12px 'Courier New',monospace";c.textBaseline="middle";
           var tw=0;ln.forEach(function(s){tw=Math.max(tw,c.measureText(s).width);});
@@ -15384,7 +15394,7 @@ function accountsTab(){
   var numInp=fi("e.g. TRD-00123 (optional)","af-num");
   var notesInp=fi("Optional notes","af-notes");
   // Per-instrument commission inputs
-  var COMM_INSTS=["ES","NQ","MES","MNQ","CL","GC","Other"];
+  var COMM_INSTS=["ES","NQ","MES","MNQ","NNQ","NES","CL","MCL","QM","GC","MGC","1OZ","QO","NG","MNG","QG","Other"];
   var commInputs={};
   var commGrid=div();commGrid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:7px;margin-bottom:14px;";
   var commLbl=div();commLbl.style.cssText="grid-column:1/-1;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:2px;";commLbl.textContent="COMMISSION / CONTRACT RT ($)";commGrid.appendChild(commLbl);
