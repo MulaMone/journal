@@ -8609,6 +8609,7 @@ function chartTab(){
             }
             return nearest.close-p.price;
           }
+          function nearestCandleFor(p){var pDisp=p.ts-etOff(p.ts),nearest=candles[0];for(var i=0;i<candles.length;i++){if(Math.abs(candles[i].time-pDisp)<Math.abs(nearest.time-pDisp)) nearest=candles[i];}return nearest;}
 
           // One hidden line series can hold only one point per timestamp. Rather than
           // pushing extra fills into LATER candles (which smeared a busy day's fills
@@ -8639,7 +8640,13 @@ function chartTab(){
             // Daily: a day's range is wide, so sit the arrow at the real fill price
             // (kept inside that candle's high/low to absorb the CFD-vs-futures gap)
             // instead of at the candle's close.
-            var val=dayCandle?Math.min(dayCandle.high,Math.max(dayCandle.low,p.price)):p.price+nearestCandleOffset(p);
+            // Intraday: the old value (price+offset) always collapsed to the candle's CLOSE, so the arrow overlapped the candle body —
+            // a red short arrow on a red candle (or green on green) was invisible. Park it just outside the candle: above the high for
+            // down arrows, below the low for up arrows.
+            var _isUp=p.kind==="entry"?p.isLong:!p.isLong;
+            var val;
+            if(dayCandle) val=Math.min(dayCandle.high,Math.max(dayCandle.low,p.price));
+            else {var _nc=nearestCandleFor(p);val=_isUp?_nc.low:_nc.high;}
             layer.data.push({time:t,value:val});
             hoverPoints.push({time:t,value:val,p:p});
             // Entry arrow reflects the opening action; exit arrow reflects
