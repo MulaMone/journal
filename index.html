@@ -2371,6 +2371,86 @@ function makeChip(label,val,colorCls,sub){
   return c;
 }
 
+// ─── MARGS (contract specs + NinjaTrader day margins) ─────────────────
+// Day margins are NinjaTrader's published rates as of 2026-08-31 (per contract). Update by hand.
+var MARGS_ASOF="2026-08-31";
+var MARGS_DAY={ES:500,MES:50,NES:10,NQ:1000,MNQ:100,NNQ:20,GC:2000,QO:500,MGC:200,"1OZ":50,CL:1000,QM:500,MCL:100,NG:1000,QG:500,MNG:100};
+var MARGS_GROUPS=[["ES — S&P 500",["ES","MES","NES"]],["NQ — Nasdaq 100",["NQ","MNQ","NNQ"]],["GC — Gold",["GC","QO","MGC","1OZ"]],["CL — Crude oil",["CL","QM","MCL"]],["NG — Nat gas",["NG","QG","MNG"]]];
+var MARGS_MICRO={MES:1,NES:1,MNQ:1,NNQ:1,MGC:1,"1OZ":1,MCL:1,MNG:1};
+function margsMoney(n){n=Math.round(n*1e6)/1e6;if(Math.floor(n)===n) return "$"+n.toLocaleString();return "$"+n.toFixed(2);}
+function margsBtn(){
+  var b=document.createElement("button");
+  b.textContent="MARGS";b.setAttribute("aria-label","Open contract specs and margins");
+  b.style.cssText="font-family:'Courier New',monospace;font-size:10px;letter-spacing:1px;color:var(--ca);background:var(--ca15);border:1px solid var(--ca);border-radius:4px;padding:0 9px;height:28px;cursor:pointer;";
+  b.addEventListener("click",function(e){e.stopPropagation();openMargs();});
+  return b;
+}
+function closeMargs(){
+  var o=document.getElementById("margs-modal");if(o) o.remove();
+  document.removeEventListener("keydown",_margsKey);
+}
+function _margsKey(e){if(e.key==="Escape") closeMargs();}
+function openMargs(){
+  if(document.getElementById("margs-modal")) return;
+  var mob=isMobile(),qty=1,micro=false;
+  var ov=document.createElement("div");ov.id="margs-modal";
+  ov.style.cssText="position:fixed;inset:0;background:#000000b0;z-index:9999;display:flex;justify-content:center;align-items:"+(mob?"flex-end":"center")+";";
+  ov.addEventListener("click",function(e){if(e.target===ov) closeMargs();});
+  var box=document.createElement("div");
+  box.style.cssText="background:var(--bg2);border:1px solid var(--border2);font-family:'Courier New',monospace;display:flex;flex-direction:column;"+(mob?"width:100%;max-height:78vh;border-radius:16px 16px 0 0;border-bottom:none;border-top:2px solid var(--ca);padding-bottom:env(safe-area-inset-bottom);":"width:640px;max-width:94vw;max-height:85vh;border-radius:6px;");
+  var hdr=document.createElement("div");
+  hdr.style.cssText="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;";
+  var ttl=document.createElement("div");ttl.textContent="MARGS";ttl.style.cssText="color:var(--accent);letter-spacing:3px;font-size:13px;";
+  var x=document.createElement("button");x.textContent="×";x.setAttribute("aria-label","Close");
+  x.style.cssText="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;width:36px;height:36px;";
+  x.addEventListener("click",closeMargs);
+  hdr.appendChild(ttl);hdr.appendChild(x);box.appendChild(hdr);
+  var body=document.createElement("div");body.style.cssText="overflow-y:auto;padding:10px 14px 14px;";
+  var tbl=document.createElement("div");
+  function draw(){
+    var cols=mob?["CONTRACT","$/TICK","$/PT","DAY"]:["CONTRACT","TICK","$/TICK","$/POINT","$/10 PTS","DAY MARGIN"];
+    var h="<table style='width:100%;border-collapse:collapse;font-size:"+(mob?11:12)+"px;table-layout:fixed;'><thead><tr>";
+    cols.forEach(function(c,i){h+="<th style='font-weight:400;color:var(--text3);font-size:10px;letter-spacing:1px;padding:4px 6px;border-bottom:1px solid var(--border3);text-align:"+(i?"right":"left")+";'>"+c+"</th>";});
+    h+="</tr></thead><tbody>";
+    MARGS_GROUPS.forEach(function(g){
+      h+="<tr><td colspan='"+cols.length+"' style='color:var(--accent);letter-spacing:2px;font-size:11px;padding:10px 6px 4px;border-bottom:1px solid var(--border2);'>"+g[0].toUpperCase()+"</td></tr>";
+      g[1].forEach(function(sym){
+        if(micro&&!MARGS_MICRO[sym]) return;
+        var pt=TICK[sym],inc=TICK_INC[sym],tv=inc*pt;
+        var td="padding:5px 6px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;";
+        h+="<tr><td style='padding:5px 6px;border-bottom:1px solid var(--border);'>"+sym+"</td>";
+        if(!mob) h+="<td style='"+td+"color:var(--text3);'>"+inc+"</td>";
+        h+="<td style='"+td+"'>"+margsMoney(tv*qty)+"</td><td style='"+td+"color:var(--green);'>"+margsMoney(pt*qty)+"</td>";
+        if(!mob) h+="<td style='"+td+"'>"+margsMoney(pt*10*qty)+"</td>";
+        h+="<td style='"+td+"color:var(--ca);'>"+margsMoney(MARGS_DAY[sym])+"</td></tr>";
+      });
+    });
+    h+="</tbody></table>";
+    tbl.innerHTML=h;
+  }
+  if(!mob){
+    var ctl=document.createElement("div");ctl.style.cssText="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;color:var(--text3);";
+    var ql=document.createElement("span");ql.textContent="CONTRACTS";
+    var qi=document.createElement("input");qi.type="number";qi.min="1";qi.value="1";
+    qi.style.cssText="width:48px;background:var(--panel);border:1px solid var(--border2);color:var(--text);font:inherit;font-size:12px;padding:2px 4px;height:24px;border-radius:3px;text-align:center;";
+    qi.addEventListener("input",function(){qty=Math.max(1,parseInt(qi.value)||1);draw();});
+    var vl=document.createElement("span");vl.textContent="VIEW";vl.style.marginLeft="8px";
+    var bA=document.createElement("button"),bM=document.createElement("button");bA.textContent="ALL";bM.textContent="MICRO ONLY";
+    function chipSty(b,on){b.style.cssText="font:inherit;font-size:11px;height:24px;padding:2px 8px;border-radius:3px;cursor:pointer;background:none;border:1px solid "+(on?"var(--accent)":"var(--border2)")+";color:"+(on?"var(--accent)":"var(--text3)")+";";}
+    function setV(m){micro=m;chipSty(bA,!m);chipSty(bM,m);draw();}
+    bA.addEventListener("click",function(){setV(false);});bM.addEventListener("click",function(){setV(true);});
+    chipSty(bA,true);chipSty(bM,false);
+    [ql,qi,vl,bA,bM].forEach(function(n){ctl.appendChild(n);});
+    body.appendChild(ctl);
+  }
+  body.appendChild(tbl);
+  var ft=document.createElement("div");ft.style.cssText="font-size:10px;color:var(--text3);margin-top:8px;";
+  ft.textContent="DAY MARGIN: NinjaTrader published rate as of "+MARGS_ASOF+", per contract. Ends 15:45 CT.";
+  body.appendChild(ft);
+  draw();box.appendChild(body);ov.appendChild(box);document.body.appendChild(ov);
+  document.addEventListener("keydown",_margsKey);
+}
+
 function makeBadge(cls,text){var b=h("span",{className:"badge "+cls});b.textContent=text;return b;}
 function impBadge(imp){
   var cfg={
@@ -3436,7 +3516,7 @@ function homeTab(){
   var _ddEq=0,_ddPeak=0,maxDD=0;
   _ddTrades.forEach(function(t){_ddEq+=t.d;if(_ddEq>_ddPeak)_ddPeak=_ddEq;var dd=_ddPeak-_ddEq;if(dd>maxDD)maxDD=dd;});
   var ddVal=maxDD>0?"-$"+Math.round(maxDD):"$0";
-  g4.appendChild(makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time"));
+  var _ddChip=makeChip("MAX DRAWDOWN",ddVal,maxDD>0?"r":"g","all time");_ddChip.style.position="relative";var _mb=margsBtn();_mb.style.cssText+="position:absolute;top:8px;right:8px;";_ddChip.appendChild(_mb);g4.appendChild(_ddChip);
   // Mindset chip — last
   var msChecked=Object.keys(State.mindsetChecks).map(function(k){return State.mindsetChecks[k];}).filter(Boolean).length;
   var msChipVal=div();msChipVal.style.cssText="font-size:19px;font-weight:700;";
@@ -10684,6 +10764,11 @@ function mobileHomeTab(){
   var sepM=div();sepM.style.cssText="height:1px;background:var(--ca);margin:12px 0;";
   el.appendChild(sepM);
   el.appendChild(atrSlTpCard());
+  var _mgCard=document.createElement("div");_mgCard.className="m-eq-card";_mgCard.setAttribute("role","button");_mgCard.setAttribute("tabindex","0");_mgCard.setAttribute("aria-label","Open contract specs and margins");
+  _mgCard.style.cssText+="position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:12px 14px;border-color:#ff8c0050;";
+  _mgCard.innerHTML='<div class="m-card-title" style="color:#ff8c00;font-size:18px;letter-spacing:4px">MARGINS</div><div style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:22px;color:#ff8c00;line-height:1">&rsaquo;</div>';
+  _mgCard.addEventListener("click",openMargs);_mgCard.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();openMargs();}});
+  el.appendChild(_mgCard);
   return el;
 }
 
