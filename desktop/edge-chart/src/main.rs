@@ -1923,12 +1923,56 @@ impl eframe::App for App {
                 }
             }
 
-            // ═════════ 9:30 ET open (vertical line on every past day <=30m) ═════════
+            // ═════════ RTH shading (<=30m) ═════════
             let weekday_of = |e: i64| weekday(e.div_euclid(86400));
-            if !intraday && secs <= 1800 {
+            // <=30m: the regular trading session (9:30-16:00 ET) as a faint blue band, in place of the old 9:30 line
+            if secs <= 1800 {
+                let mut run: Option<usize> = None;
+                let mut bands: Vec<(usize, usize)> = vec![];
                 for i in first_vis..=last_vis.min(n - 1) {
-                    if cs[i].e.rem_euclid(86400) == 34200 && !matches!(weekday_of(cs[i].e), 0 | 6) {
-                        dash_v(&clip, snapc(x_of(i as f32)), plot.top(), plot.bottom(), 2.0, 4.0, Stroke::new(hair, hexc(0x4aa3ff, 0.9)));
+                    let sod = cs[i].e.rem_euclid(86400);
+                    let rth = sod >= 34200 && sod < 57600 && !matches!(weekday_of(cs[i].e), 0 | 6);
+                    match (rth, run) {
+                        (true, None) => run = Some(i),
+                        (false, Some(s0)) => {
+                            bands.push((s0, i - 1));
+                            run = None;
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(s0) = run {
+                    bands.push((s0, last_vis.min(n - 1)));
+                }
+                for (i0, i1) in bands {
+                    let (x0, x1) = (x_of(i0 as f32) - sp / 2.0, x_of(i1 as f32) + sp / 2.0);
+                    clip.rect_filled(Rect::from_min_max(Pos2::new(x0.max(plot.left()), plot.top()), Pos2::new(x1.min(plot.right()), plot.bottom())), 0.0, hexc(0x4aa3ff, 0.07));
+                }
+            }
+            // 1h: every second trading day gets a faint band, with the weekday name and a dashed line at each day start
+            if tf == "1h" {
+                let mut days: Vec<(usize, usize, i64)> = vec![];
+                for i in 0..n {
+                    let dk = (cs[i].e + anchor).div_euclid(86400);
+                    match days.last_mut() {
+                        Some(g) if g.2 == dk => g.1 = i,
+                        _ => days.push((i, i, dk)),
+                    }
+                }
+                for (gi, g) in days.iter().enumerate() {
+                    let (x0, x1) = (x_of(g.0 as f32) - sp / 2.0, x_of(g.1 as f32) + sp / 2.0);
+                    if x1 < plot.left() || x0 > plot.right() {
+                        continue;
+                    }
+                    if gi % 2 == 1 {
+                        clip.rect_filled(Rect::from_min_max(Pos2::new(x0.max(plot.left()), plot.top()), Pos2::new(x1.min(plot.right()), plot.bottom())), 0.0, hexc(0x6b8cff, 0.07));
+                    }
+                    if gi > 0 && x0 > plot.left() {
+                        dash_v(&clip, snapc(x0), plot.top(), plot.bottom(), 4.0, 4.0, Stroke::new(hair, hexc(0xffb020, 0.3)));
+                    }
+                    if x1 - x0 >= 26.0 {
+                        let name = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][weekday(g.2) as usize];
+                        clip.text(Pos2::new(x0.max(plot.left()) + 4.0, plot.bottom() - 3.0), Align2::LEFT_BOTTOM, name, tiny.clone(), hexc(0xffb020, 0.85));
                     }
                 }
             }
