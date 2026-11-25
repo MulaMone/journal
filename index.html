@@ -7843,6 +7843,48 @@ function chartTab(){
 
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
   // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
+  // ── NinjaTrader futures candles: EdgeFeed (inside NinjaTrader) serves its 1-minute futures bars on 127.0.0.1:7881.
+  // When reachable, ES/NQ/CL/GC/NG intraday requests (2m/5m/30m/1h) are answered from those bars (rolled up here) in the same shape
+  // OANDA returns, so everything downstream (cache, live poll, HTF gaps, markers) is unchanged. Any failure falls back to OANDA.
+  var ntUsed=false; // true once this chart's candles came from the futures feed: fills then plot at their exact price
+  function ntCandles(x){
+    var none=Promise.resolve(null);
+    if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||x.indexOf("/instruments/"+oandaInst+"/")<0) return none;
+    var gm=x.match(/granularity=(M2|M5|M30|H1)(?:&|$)/);
+    if(!gm) return none;
+    if(window._ntDownUntil&&Date.now()<window._ntDownUntil) return none;
+    var gs={M2:120,M5:300,M30:1800,H1:3600}[gm[1]];
+    var cm=x.match(/[?&]count=(\d+)/),fm=x.match(/[?&]from=([^&]+)/),tm=x.match(/[?&]to=([^&]+)/);
+    var cnt=cm?parseInt(cm[1],10):0,q="sym="+sym;
+    if(fm) q+="&from="+Math.floor(new Date(decodeURIComponent(fm[1])).getTime()/1000);
+    else if(cnt) q+="&n="+(cnt*gs/60+Math.ceil(gs/60)+2);
+    else return none;
+    if(tm) q+="&to="+Math.floor(new Date(decodeURIComponent(tm[1])).getTime()/1000);
+    var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},4000);
+    return fetch("http://127.0.0.1:7881/bars?"+q,{signal:ac.signal}).then(function(r){
+      clearTimeout(tmo);
+      if(!r.ok) throw new Error("nt "+r.status);
+      return r.json();
+    }).then(function(j){
+      var b=j&&j.bars;
+      if(!b||b.length<2) throw new Error("nt empty");
+      var out=[],cur=null,nowS=Date.now()/1000;
+      b.forEach(function(k){
+        var bt=Math.floor(k[0]/gs)*gs;
+        if(!cur||cur.t!==bt){cur={t:bt,o:k[1],h:k[2],l:k[3],c:k[4]};out.push(cur);}
+        else{if(k[2]>cur.h)cur.h=k[2];if(k[3]<cur.l)cur.l=k[3];cur.c=k[4];}
+      });
+      if(cnt) out=fm?out.slice(0,cnt):out.slice(-cnt);
+      window._ntOK=window._ntOK||{};window._ntOK[sym]=Date.now();
+      ntUsed=true;
+      return {candles:out.map(function(c){return {time:new Date(c.t*1000).toISOString(),complete:c.t+gs<=nowS,mid:{o:c.o,h:c.h,l:c.l,c:c.c}};})};
+    }).catch(function(e){
+      clearTimeout(tmo);
+      window._ntDownUntil=Date.now()+20000; // feed not running: don't retry (or wait) on every request
+      if(window._ntOK) delete window._ntOK[sym];
+      return null;
+    });
+  }
   function chartFetchJson(u,hist){
     // A 401 here is often transient or a stale token mid-sync (another device /
     // the cloud pull can swap the saved token a moment later). Re-read the saved
@@ -7857,6 +7899,10 @@ function chartTab(){
       });
     }
     function one(x,attempt){
+      if(!attempt) return ntCandles(x).then(function(nd){return nd||oneO(x,0);});
+      return oneO(x,attempt);
+    }
+    function oneO(x,attempt){
       attempt=attempt||0;
       if(x.indexOf("/instruments/BTCUSD_CB/")>-1) return btcCandles(x); // BTC: Coinbase feed, not OANDA
       var useTok=ls("oanda_token","")||tok;
@@ -7945,7 +7991,8 @@ function chartTab(){
     // Key ignores the count (it drifts as time passes); an entry is usable if it was fetched with at least the
     // count this view needs. Memory first, then IndexedDB (survives a page refresh).
     var cacheable=!focusTs&&!eodOnly&&url.indexOf("&count=")>=0;
-    var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
+    var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:"")+((window._ntOK&&window._ntOK[sym]&&Date.now()-window._ntOK[sym]<900000)?"&src=nt":""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
+    if(ckey.indexOf("&src=nt")>-1) ntUsed=true; // cached futures candles: markers plot at the exact fill price too
     var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
     if(cacheable&&sym==="BTC"&&!monthlyFetch){var _mb=btcMaxBars(gran);if(_mb>0&&needN>_mb) needN=_mb;} // BTC can't return more than the Coinbase page cap, so don't demand it of the cache
     if(cacheable&&sym==="BTC") needN=Math.max(0,needN-5); // a few bars may be missing (Coinbase skips no-trade candles)
@@ -8646,6 +8693,7 @@ function chartTab(){
             var _isUp=p.kind==="entry"?p.isLong:!p.isLong;
             var val;
             if(dayCandle) val=Math.min(dayCandle.high,Math.max(dayCandle.low,p.price));
+            else if(ntUsed) val=p.price; // futures candles: the recorded fill price IS on the chart
             else {var _nc=nearestCandleFor(p);val=_isUp?_nc.low:_nc.high;}
             layer.data.push({time:t,value:val});
             hoverPoints.push({time:t,value:val,p:p});
@@ -8670,7 +8718,7 @@ function chartTab(){
           applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});if(!showTrades)tip.style.display="none";};
           layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
+          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+(ntUsed?" • NinjaTrader futures candles":"")+" • "+new Date().toLocaleTimeString();
 
           // ── Hover tooltip ───────────────────────────────────
           // lightweight-charts has no built-in per-marker hover event, so we
