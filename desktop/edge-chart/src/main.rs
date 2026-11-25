@@ -120,6 +120,22 @@ fn off(t: i64) -> i64 {
     New_York.timestamp_opt(t, 0).single().map(|d| d.offset().fix().local_minus_utc() as i64).unwrap_or(-18000)
 }
 
+/// Alt+E puts the stop this many points past your entry.
+const BE_PTS: f64 = 10.0;
+
+/// One working NinjaTrader order on the chart's symbol.
+#[derive(Clone, PartialEq)]
+struct LiveOrd {
+    id: String,
+    is_stop: bool,                 // stop-type price (stop order) vs limit-type (limit / target)
+    px: f64,
+    val: Option<(f64, f64)>,       // exit orders only: (position average price, signed dollars per point)
+    entry: bool,                   // a waiting ENTRY order (no position yet, or it adds to the position), not a stop / target
+    buy: bool,
+    qty: f64,
+    acct: String,
+}
+
 #[derive(Default)]
 struct Shared {
     main: Vec<Candle>,
@@ -135,7 +151,7 @@ struct Shared {
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
     ord_sym: String,                  // chart symbol whose live orders the poller fetches
     entries: Vec<(f64, f64, f64, f64, String)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point, account)
-    orders: Vec<(bool, f64, Option<(f64, f64)>, String)>, // NinjaTrader orders working right now: (is stop, price, (position average price, signed dollars per point), order id) - futures prices, same as the NT candles
+    orders: Vec<LiveOrd>, // NinjaTrader orders working right now - futures prices, same as the NT candles
     toast: Option<(String, bool, std::time::Instant)>, // short message on the chart (text, ok, when)
 }
 
@@ -412,8 +428,9 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
     }
 }
 
-/// Polls EdgeFeed (127.0.0.1:7881/orders) for the stop / target orders NinjaTrader has working on the chart's symbol.
+/// Polls EdgeFeed (127.0.0.1:7881/orders) for the orders NinjaTrader has working on the chart's symbol.
 /// An order is live while its latest recorded event is "W" (working); fills and cancels end it.
+/// With an open position in the order's account, an order on the opposite side is a stop / target; anything else is a waiting entry order.
 fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
     loop {
         std::thread::sleep(Duration::from_millis(1500));
@@ -424,7 +441,7 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
         let url = format!("http://127.0.0.1:7881/orders?sym={sym}&from={}&to={}", now - 259200, now + 120);
         let res = ureq::get(&url).timeout(Duration::from_secs(2)).call().ok().and_then(|r| r.into_json::<serde_json::Value>().ok());
-        let mut live: Vec<(bool, f64, Option<(f64, f64)>, String)> = vec![];
+        let mut live: Vec<LiveOrd> = vec![];
         let mut pos_e: Vec<(f64, f64, f64, f64, String)> = vec![];
         if let Some(v) = res {
             let pos: Vec<(String, f64, f64, f64, f64)> = v["pos"]
@@ -432,25 +449,27 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
                 .map(|a| a.iter().filter_map(|q| Some((q[0].as_str()?.to_string(), q[1].as_f64()?, q[2].as_f64()?, q[3].as_f64()?, q[4].as_f64()?))).collect())
                 .unwrap_or_default();
             pos_e = pos.iter().map(|q| (q.3, q.1, q.2, q.4, q.0.clone())).collect();
-            let mut last: HashMap<String, (i64, bool, f64, String, f64)> = HashMap::new();
+            let mut last: HashMap<String, (i64, bool, f64, String, f64, bool)> = HashMap::new();
             if let Some(a) = v["orders"].as_array() {
                 for e in a {
                     let (Some(t), Some(id), Some(k), Some(px), Some(st)) = (e[0].as_i64(), e[1].as_str(), e[2].as_str(), e[4].as_f64(), e[6].as_str()) else { continue };
                     if last.get(id).map_or(true, |o| t >= o.0) {
-                        last.insert(id.to_string(), (t, k == "S", px, st.to_string(), e[5].as_f64().unwrap_or(0.0)));
+                        last.insert(id.to_string(), (t, k == "S", px, st.to_string(), e[5].as_f64().unwrap_or(0.0), e[3].as_str() == Some("B")));
                     }
                 }
             }
-            for (id, (_, is_stop, px, st, qty)) in last {
+            for (id, (_, is_stop, px, st, qty, buy)) in last {
                 if st == "W" {
-                    // what the order is worth: points from the position's average price x dollars per point x the order's contracts
-                    let acct = id.split('|').next().unwrap_or("");
-                    let pz = pos.iter().find(|q| q.0 == acct).or(if pos.len() == 1 { pos.first() } else { None });
-                    let val = pz.map(|q| (q.3, q.1 * q.4 * if qty > 0.0 { qty } else { q.2 })); // dollars at a price = (price - average) x this
-                    live.push((is_stop, px, val, id.clone()));
+                    let acct = id.split('|').next().unwrap_or("").to_string();
+                    let pz = pos.iter().find(|q| q.0 == acct);
+                    // long position + a sell order (or short + buy) = it exits the trade
+                    let exit = pz.map_or(false, |q| (q.1 > 0.0) != buy);
+                    // what an exit order is worth: (price - average) x this, with this = direction x dollars per point x the order's contracts
+                    let val = if exit { pz.map(|q| (q.3, q.1 * q.4 * if qty > 0.0 { qty } else { q.2 })) } else { None };
+                    live.push(LiveOrd { id: id.clone(), is_stop, px, val, entry: !exit, buy, qty: if qty > 0.0 { qty } else { 1.0 }, acct });
                 }
             }
-            live.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            live.sort_by(|a, b| a.px.partial_cmp(&b.px).unwrap_or(std::cmp::Ordering::Equal));
         }
         let ents: Vec<(f64, f64, f64, f64, String)> = pos_e;
         let changed = {
@@ -464,6 +483,17 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
         };
         if changed {
             ctx.request_repaint();
+        }
+    }
+}
+/// Pushes labels apart so none overlap (each keeps at least 28 px of its own).
+fn spread_y(ys: &mut [f32]) {
+    let mut idx: Vec<usize> = (0..ys.len()).collect();
+    idx.sort_by(|a, b| ys[*a].partial_cmp(&ys[*b]).unwrap_or(std::cmp::Ordering::Equal));
+    for w in 1..idx.len() {
+        let prev = ys[idx[w - 1]];
+        if ys[idx[w]] < prev + 28.0 {
+            ys[idx[w]] = prev + 28.0;
         }
     }
 }
@@ -2583,9 +2613,10 @@ impl eframe::App for App {
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
             }
 
-            // ═════════ live stop / target orders from NinjaTrader (EdgeFeed /orders), on the futures prices of the NT candles ═════════
-            // Labels sit on the left. Drag a STOP / TARGET label up or down to move the real order; the blue entry chip sits right beside them
-            // (never over the stop) and its X closes the trade at market and cancels the stop and target, like NinjaTrader's own X.
+            // ═════════ live orders from NinjaTrader (EdgeFeed /orders), on the futures prices of the NT candles ═════════
+            // Labels sit on the left. Drag a label up or down to move the real order; the blue entry chip sits right beside them (never over the stop)
+            // and its X closes the trade at market and cancels the stop and target. A waiting entry order is tan with its own X (cancels just that order).
+            // With two accounts in the same symbol every label carries its account name.
             if src_nt {
                 let (orders, ents) = {
                     let s = self.shared.lock().unwrap();
@@ -2596,7 +2627,7 @@ impl eframe::App for App {
                 let now_i = std::time::Instant::now();
                 // a move waiting for NinjaTrader: keep the line where you dropped it until NinjaTrader shows it there (or says no)
                 if let Some((pid, ppx, t0)) = self.ord_pend.clone() {
-                    let cur = orders.iter().find(|o| o.3 == pid).map(|o| o.1);
+                    let cur = orders.iter().find(|o| o.id == pid).map(|o| o.px);
                     if cur.map_or(false, |c| (c - ppx).abs() < tk * 0.5) {
                         self.ord_pend = None;
                     } else if t0.elapsed() > Duration::from_secs(4) {
@@ -2608,37 +2639,97 @@ impl eframe::App for App {
                         ctx.request_repaint_after(Duration::from_millis(250));
                     }
                 }
+                // account names show only when more than one account has something on this symbol
+                let mut accts: Vec<String> = vec![];
+                for o in &orders {
+                    if !accts.contains(&o.acct) {
+                        accts.push(o.acct.clone());
+                    }
+                }
+                for e in &ents {
+                    if !accts.contains(&e.4) {
+                        accts.push(e.4.clone());
+                    }
+                }
+                let multi = accts.len() > 1;
+                // hotkeys: Alt+C close the trade, Alt+E stop to break even, Alt+F flatten the account(s)
+                if !ctx.egui_wants_keyboard_input() && (!orders.is_empty() || !ents.is_empty()) {
+                    let (kc, ke, kf) = ctx.input(|i| (i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::C), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::E), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::F)));
+                    if (kc || ke || kf) && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_millis(1500)) {
+                        self.close_sent = Some(now_i);
+                        if kc {
+                            self.shared.lock().unwrap().toast = Some(("Closing trade…".to_string(), true, now_i));
+                            for e in &ents {
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(&e.4), urlenc(&self.sym)));
+                            }
+                        } else if kf {
+                            self.shared.lock().unwrap().toast = Some(("Flat…".to_string(), true, now_i));
+                            for a in &accts {
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/flat?acct={}", urlenc(a)));
+                            }
+                        } else {
+                            let (mut n, mut bad) = (0, 0);
+                            for o in orders.iter().filter(|o| !o.entry && o.is_stop) {
+                                let Some((avg, kk)) = o.val else { continue };
+                                let bp = if kk > 0.0 { avg + BE_PTS } else { avg - BE_PTS };
+                                let wrong = if kk > 0.0 { bp >= last.c } else { bp <= last.c };
+                                if wrong {
+                                    bad += 1;
+                                    continue;
+                                }
+                                n += 1;
+                                self.ord_pend = Some((o.id.clone(), bp, now_i));
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), bp));
+                            }
+                            let msg = if n > 0 { "Stop to entry +10 pts" } else if bad > 0 { "Break even: price isn't 10 pts past your entry yet" } else { "No stop to move" };
+                            self.shared.lock().unwrap().toast = Some((msg.to_string(), n > 0, now_i));
+                        }
+                    }
+                }
+                let pre_of = |a: &str| if multi { format!("{a} ") } else { String::new() };
+                let pre_max: String = accts.iter().map(|a| pre_of(a)).max_by_key(|x| x.len()).unwrap_or_default();
                 // the price each order is drawn at: under the pointer while dragging, the dropped price while waiting, else NinjaTrader's
-                let mut views: Vec<(String, bool, f64, f64, Option<(f64, f64)>)> = vec![];
-                for (is_stop, opx, oval, oid) in orders.iter() {
-                    let mut px = *opx;
-                    if let Some(d) = self.ord_drag.as_ref().filter(|d| &d.0 == oid) {
+                let mut views: Vec<(usize, f64)> = vec![];
+                for (i, o) in orders.iter().enumerate() {
+                    let mut px = o.px;
+                    if let Some(d) = self.ord_drag.as_ref().filter(|d| d.0 == o.id) {
                         px = d.2;
-                    } else if let Some(p) = self.ord_pend.as_ref().filter(|p| &p.0 == oid) {
+                    } else if let Some(p) = self.ord_pend.as_ref().filter(|p| p.0 == o.id) {
                         px = p.1;
                     }
-                    views.push((oid.clone(), *is_stop, px, *opx, *oval));
+                    views.push((i, px));
                 }
-                let label_of = |is_stop: bool, usd: f64| format!("{}   {}${:.2}", if is_stop { "STOP" } else { "TARGET" }, if usd >= 0.0 { "+" } else { "-" }, usd.abs());
+                let any_pend = orders.iter().any(|o| o.entry);
+                let label_of = |is_stop: bool, usd: f64, pre: &str| format!("{}{}   {}${:.2}", pre, if is_stop { "STOP" } else { "TARGET" }, if usd >= 0.0 { "+" } else { "-" }, usd.abs());
                 // fixed width so the entry chip beside the labels does not jiggle while dollars change
-                let lw = text_w(&painter, "TARGET   +$9999.00", &oqf) + 52.0;
-                // entry line: your average price, with the open profit / loss at the last price (like NinjaTrader's own)
-                for (avg, dir, qty, pv, acct) in ents.iter() {
+                let mut lw = text_w(&painter, &format!("{}TARGET   +$9999.00", pre_max), &oqf) + 52.0;
+                if any_pend {
+                    lw = lw.max(text_w(&painter, &format!("{}BUY LMT 9   waiting to fill", pre_max), &oqf) + 36.0);
+                }
+                // label heights: pushed apart so nothing overlaps (not while a drag is in progress, so the dragged label stays under the pointer)
+                let mut ly: Vec<f32> = views.iter().map(|v| y_of(v.1)).collect();
+                let mut cy: Vec<f32> = ents.iter().map(|e| y_of(e.0)).collect();
+                if self.ord_drag.is_none() {
+                    spread_y(&mut ly);
+                    spread_y(&mut cy);
+                }
+                // entry lines: your average price, with the open profit / loss at the last price (like NinjaTrader's own)
+                for (i, (avg, dir, qty, pv, acct)) in ents.iter().enumerate() {
                     let ey = y_of(*avg);
                     if ey < plot.top() || ey > plot.bottom() {
                         continue;
                     }
                     let upl = (last.c - avg) * dir * pv * qty;
-                    let etxt = format!("{} {}   {}${:.2}", if *dir > 0.0 { "LONG" } else { "SHORT" }, qty, if upl >= 0.0 { "+" } else { "-" }, upl.abs());
+                    let etxt = format!("{}{} {}   {}${:.2}", pre_of(acct), if *dir > 0.0 { "LONG" } else { "SHORT" }, qty, if upl >= 0.0 { "+" } else { "-" }, upl.abs());
                     let ecol = rgb(0x4da3ff);
                     dash_h(&clip, plot.left(), plot.right(), snapc(ey), 3.0, 3.0, Stroke::new(hair.max(1.0), ecol));
                     let etw = text_w(&painter, &etxt, &oqf) + 26.0;
                     let ecol_txt = if upl >= 0.0 { rgb(0x5cf59a) } else { rgb(0xff8a8a) };
-                    let ex = plot.left() + 12.0 + if views.is_empty() { 0.0 } else { lw + 10.0 };
-                    let er = Rect::from_min_size(Pos2::new(ex, ey - 12.0), Vec2::new(etw, 24.0));
+                    let ex = plot.left() + 12.0 + if views.is_empty() { 0.0 } else { lw + 10.0 + if any_pend { 30.0 } else { 0.0 } };
+                    let er = Rect::from_min_size(Pos2::new(ex, cy[i] - 12.0), Vec2::new(etw, 24.0));
                     order_tag(&clip, er, ecol, &etxt, ecol_txt, oqf.clone());
-                    // X: close the trade in one click (market close + cancel stop and target)
-                    let xr = Rect::from_min_size(Pos2::new(er.right() + 4.0, ey - 12.0), Vec2::new(26.0, 24.0));
+                    // X: close this account's trade in one click (market close + cancel stop and target)
+                    let xr = Rect::from_min_size(Pos2::new(er.right() + 4.0, cy[i] - 12.0), Vec2::new(26.0, 24.0));
                     let xrsp = ui.interact(xr, egui::Id::new(("ordx", acct.as_str())), Sense::click());
                     let hot = xrsp.hovered();
                     clip.rect_filled(xr, 4.0, if hot { rgb(0x4a1c24) } else { rgb(0x0a1424) });
@@ -2657,26 +2748,58 @@ impl eframe::App for App {
                     }
                     order_tag(&painter, Rect::from_min_size(Pos2::new(plot.right() + 2.0, ey - 12.0), Vec2::new(AXIS_W - 4.0, 24.0)), ecol, &fmt_price(*avg, step), Color32::WHITE, FontId::monospace(13.0));
                 }
-                for (oid, is_stop, px, orig, oval) in views.iter() {
+                for (k, (oi, px)) in views.iter().enumerate() {
+                    let o = &orders[*oi];
                     let oy = y_of(*px);
                     if oy < plot.top() || oy > plot.bottom() {
                         continue;
                     }
-                    let ocol: u32 = if *is_stop { 0xff4d4d } else { 0x2ee67a };
-                    let otxt: u32 = if *is_stop { 0xff8a8a } else { 0x5cf59a };
-                    let busy = self.ord_drag.as_ref().map_or(false, |d| &d.0 == oid);
+                    let tan = 0xc9985a_u32;
+                    let ocol: u32 = if o.entry { tan } else if o.is_stop { 0xff4d4d } else { 0x2ee67a };
+                    let otxt: u32 = if o.is_stop { 0xff8a8a } else { 0x5cf59a };
+                    let busy = self.ord_drag.as_ref().map_or(false, |d| d.0 == o.id);
                     if busy {
                         // faint line where the order still is, until you let go
-                        let oy0 = y_of(*orig);
+                        let oy0 = y_of(o.px);
                         dash_h(&clip, plot.left(), plot.right(), snapc(oy0), 2.0, 5.0, Stroke::new(hair.max(1.0), rgb(ocol).gamma_multiply(0.4)));
                     }
-                    dash_h(&clip, plot.left(), plot.right(), snapc(oy), 6.0, 4.0, Stroke::new(if busy { 2.0 } else { hair.max(1.0) }, rgb(ocol)));
+                    if o.entry {
+                        dash_h(&clip, plot.left(), plot.right(), snapc(oy), 2.0, 5.0, Stroke::new(if busy { 2.0 } else { hair.max(1.0) }, rgb(ocol)));
+                    } else {
+                        dash_h(&clip, plot.left(), plot.right(), snapc(oy), 6.0, 4.0, Stroke::new(if busy { 2.0 } else { hair.max(1.0) }, rgb(ocol)));
+                    }
                     let orr = Rect::from_min_size(Pos2::new(plot.right() + 2.0, oy - 12.0), Vec2::new(AXIS_W - 4.0, 24.0));
                     order_tag(&painter, orr, rgb(ocol), &fmt_price(*px, step), Color32::WHITE, FontId::monospace(13.0));
-                    // what this order is worth in dollars (position average to this level x contracts)
-                    if let Some((avg, k)) = oval {
-                        let txt = label_of(*is_stop, (*px - *avg) * *k);
-                        let lr = Rect::from_min_size(Pos2::new(plot.left() + 12.0, oy - 12.0), Vec2::new(lw, 24.0));
+                    let lr = Rect::from_min_size(Pos2::new(plot.left() + 12.0, ly[k] - 12.0), Vec2::new(lw, 24.0));
+                    let pre = pre_of(&o.acct);
+                    let mut drawn = false;
+                    if o.entry {
+                        // a waiting entry order: BUY LMT 1  waiting to fill
+                        let t1 = format!("{}{} {} {}", pre, if o.buy { "BUY" } else { "SELL" }, if o.is_stop { "STP" } else { "LMT" }, o.qty);
+                        order_tag(&clip, lr, rgb(tan), &t1, Color32::WHITE, oqf.clone());
+                        let gap = text_w(&painter, &t1, &oqf) + text_w(&painter, "   ", &oqf);
+                        clip.text(Pos2::new(lr.left() + 14.0 + gap, lr.center().y), Align2::LEFT_CENTER, "waiting to fill", oqf.clone(), rgb(0xebcb9c));
+                        drawn = true;
+                        // X: cancel just this order
+                        let cr = Rect::from_min_size(Pos2::new(lr.right() + 4.0, lr.top()), Vec2::new(26.0, 24.0));
+                        let crsp = ui.interact(cr, egui::Id::new(("ordc", o.id.as_str())), Sense::click());
+                        let hot = crsp.hovered();
+                        clip.rect_filled(cr, 4.0, if hot { rgb(0x4a1c24) } else { rgb(0x0a1424) });
+                        clip.rect_stroke(cr, 4.0, Stroke::new(1.5, rgb(0xff8a8a)), egui::StrokeKind::Inside);
+                        let cc = cr.center();
+                        let cs = Stroke::new(2.0, Color32::WHITE);
+                        clip.line_segment([cc + Vec2::new(-5.0, -5.0), cc + Vec2::new(5.0, 5.0)], cs);
+                        clip.line_segment([cc + Vec2::new(5.0, -5.0), cc + Vec2::new(-5.0, 5.0)], cs);
+                        if hot {
+                            ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if crsp.clicked() {
+                            self.shared.lock().unwrap().toast = Some(("Cancelling order…".to_string(), true, now_i));
+                            send_cmd(self.shared.clone(), ctx.clone(), format!("/cancel?id={}", urlenc(&o.id)));
+                        }
+                    } else if let Some((avg, kk)) = o.val {
+                        // what this order is worth in dollars (position average to this level x contracts)
+                        let txt = label_of(o.is_stop, (*px - avg) * kk, &pre);
                         order_tag(&clip, lr, rgb(ocol), &txt, rgb(otxt), oqf.clone());
                         // three-line grip: "drag me"
                         let gx = lr.right() - 24.0;
@@ -2684,12 +2807,15 @@ impl eframe::App for App {
                             let gy = lr.center().y - 5.0 + i as f32 * 5.0;
                             clip.line_segment([Pos2::new(gx, gy), Pos2::new(gx + 16.0, gy)], Stroke::new(1.5, if busy { Color32::WHITE } else { rgb(0x888780) }));
                         }
-                        let rsp = ui.interact(lr, egui::Id::new(("ordl", oid.as_str())), Sense::click_and_drag());
+                        drawn = true;
+                    }
+                    if drawn {
+                        let rsp = ui.interact(lr, egui::Id::new(("ordl", o.id.as_str())), Sense::click_and_drag());
                         if rsp.hovered() || rsp.dragged() {
                             ctx.set_cursor_icon(egui::CursorIcon::ResizeVertical);
                         }
                         if rsp.drag_started() {
-                            self.ord_drag = Some((oid.clone(), *is_stop, *px));
+                            self.ord_drag = Some((o.id.clone(), o.is_stop, *px));
                             self.ord_pend = None;
                         }
                         if rsp.dragged() {
@@ -2697,7 +2823,7 @@ impl eframe::App for App {
                                 let y = pp.y.clamp(plot.top() + 2.0, plot.bottom() - 2.0);
                                 let np = ((p_of(y) / tk).round() * tk).max(tk);
                                 if let Some(d) = self.ord_drag.as_mut() {
-                                    if &d.0 == oid {
+                                    if d.0 == o.id {
                                         d.2 = np;
                                     }
                                 }
@@ -2706,12 +2832,17 @@ impl eframe::App for App {
                         }
                         if rsp.drag_stopped() {
                             if let Some(d) = self.ord_drag.take() {
-                                if &d.0 == oid && (d.2 - *orig).abs() >= tk * 0.5 {
-                                    // a stop must stay on the losing side of the market and a target on the winning side, or NinjaTrader would reject it
-                                    let long = oval.map_or(true, |(_, k)| k > 0.0);
-                                    let bad = if *is_stop { if long { d.2 >= last.c } else { d.2 <= last.c } } else if long { d.2 <= last.c } else { d.2 >= last.c };
+                                if d.0 == o.id && (d.2 - o.px).abs() >= tk * 0.5 {
+                                    // a stop must stay on the losing side of the market and a target on the winning side (a waiting buy limit below, buy stop above ...),
+                                    // or NinjaTrader would reject it
+                                    let bad = if o.entry {
+                                        if o.buy { if o.is_stop { d.2 <= last.c } else { d.2 >= last.c } } else if o.is_stop { d.2 >= last.c } else { d.2 <= last.c }
+                                    } else {
+                                        let long = o.val.map_or(true, |(_, kk)| kk > 0.0);
+                                        if o.is_stop { if long { d.2 >= last.c } else { d.2 <= last.c } } else if long { d.2 <= last.c } else { d.2 >= last.c }
+                                    };
                                     if bad {
-                                        self.shared.lock().unwrap().toast = Some((format!("{} can't go there - it is on the wrong side of the market", if *is_stop { "Stop" } else { "Target" }), false, now_i));
+                                        self.shared.lock().unwrap().toast = Some((format!("{} can't go there - it is on the wrong side of the market", if o.entry { "Entry order" } else if o.is_stop { "Stop" } else { "Target" }), false, now_i));
                                     } else {
                                         self.ord_pend = Some((d.0.clone(), d.2, now_i));
                                         send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), d.2));
