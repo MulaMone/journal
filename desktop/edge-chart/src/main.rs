@@ -1135,7 +1135,7 @@ impl eframe::App for App {
                     self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
                 }
             }
-            self.right_idx = self.right_idx.clamp(5.0, (n - 1) as f32 + 200.0);
+            self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
             let (sp, ri) = (self.spacing, self.right_idx);
             let x_of = move |i: f32| plot.right() - (ri - i) * sp;
             let first_vis = ((ri - (plot.width() / sp)).floor() as i64 - 1).max(0) as usize;
@@ -1165,15 +1165,7 @@ impl eframe::App for App {
                     lo = c - half;
                     hi = c + half;
                     self.manual = Some((lo, hi));
-                } else {
-                    self.vdrag += dy;
-                    if self.manual.is_some() || self.vdrag.abs() > 6.0 {
-                        let shift = dy as f64 / plot.height() as f64 * (hi - lo);
-                        lo += shift;
-                        hi += shift;
-                        self.manual = Some((lo, hi));
-                    }
-                }
+                } // dragging the chart body only moves time (like the web chart); price is moved/stretched from the price axis
             }
             if self.manual.is_some() {
                 let c = (lo + hi) / 2.0;
