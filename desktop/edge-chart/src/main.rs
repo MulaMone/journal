@@ -362,8 +362,8 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                         e.clear();
                     }
                     merge(e, bars);
-                    if e.len() > 60000 {
-                        let cut = e.len() - 60000;
+                    if e.len() > 150000 {
+                        let cut = e.len() - 150000;
                         e.drain(..cut);
                     }
                 }
@@ -1041,17 +1041,8 @@ impl eframe::App for App {
                 if ui.selectable_label(self.sierra, "Sierra").clicked() {
                     self.sierra = !self.sierra;
                 }
-                {
-                    let sh = self.shared.lock().unwrap();
-                    if sh.src == "NT" {
-                        let m1 = sh.nt.get(&self.sym).map_or(0, |v| v.len());
-                        let dd = sh.nt_d.get(&self.sym);
-                        let nd = dd.map_or(0, |v| v.len());
-                        let since = |v: Option<&Vec<Candle>>| v.and_then(|v| v.first()).map(|c| et(c.t).format("%Y-%m-%d").to_string()).unwrap_or_else(|| "-".into());
-                        let m1_since = since(sh.nt.get(&self.sym));
-                        let d_since = since(dd);
-                        ui.colored_label(Color32::from_rgb(0, 230, 118), format!("NT live | 1m: {m1} bars since {m1_since} | D: {nd} bars since {d_since}"));
-                    }
+                if self.shared.lock().unwrap().src == "NT" {
+                    ui.colored_label(Color32::from_rgb(0, 230, 118), "NT live");
                 }
                 if changed {
                     self.reload();
