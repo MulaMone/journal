@@ -8948,21 +8948,34 @@ function chartTab(){
               }catch(e){}
             })();
           }
-          // ── Live orders: the stop / target orders NinjaTrader has working right now, as price lines (EdgeFeed /orders), shifted onto this CFD chart with the live futures->CFD offset ──
+          // ── Live orders: the stop / target orders NinjaTrader has working right now, as price lines (EdgeFeed /orders), shifted onto this CFD chart with the live futures->CFD offset.
+          //    Drag a STOP / TARGET label up or down to move the real order in NinjaTrader; the X beside the entry chip closes the trade (market close + cancel stop and target).
+          //    Both are sent to EdgeFeed; the lines always redraw from NinjaTrader's real order state, so the GPU chart and NinjaTrader show the same thing. ──
           (function(){
             if(focusTs||monthlyFetch||["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)) return;
-            var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[];
-            function clearL(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";labs=[];}
+            var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[],liveArr=[],curBs=0,sigD="";
+            var TK=({ES:0.25,NQ:0.25,CL:0.01,GC:0.1,NG:0.001})[sym]||0.25;
+            var drag=null,pend=null,toast=null,hoverId="",lastClose=0,rects=[],pressX=null,ghost=null,lt=null;var curLast=null;
+            function clearLines(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";}
+            function clearL(){clearLines();labs=[];liveArr=[];rects=[];drag=null;pend=null;dropGhost();sigD="";}
+            function dropGhost(){if(ghost){try{series.removePriceLine(ghost);}catch(e){}ghost=null;}}
+            function showToast(msg,ok){toast={msg:msg,ok:ok};sigD="";setTimeout(function(){toast=null;sigD="";},4000);}
+            // the futures price an order is drawn at: under the pointer while dragging, the dropped price while NinjaTrader catches up, else NinjaTrader's
+            function dpx(o){if(drag&&drag.id===o.id) return drag.px;if(pend&&pend.id===o.id) return pend.px;return o.px;}
+            function applyView(){
+              labs=liveArr.map(function(o){var px=dpx(o);return {k:o.k,id:o.id,p:px+curBs,usd:o.k==="E"?o.usd:(o.avg==null?null:(px-o.avg)*o.kk),name:o.name,acct:o.acct};});
+              liveArr.forEach(function(o,i){if(lines[i]){try{lines[i].applyOptions({price:dpx(o)+curBs});}catch(e){}}});
+              sigD="";
+            }
             // labels are drawn on a canvas so the dollar amount can be green / red; the price lines only carry the price on the axis
             var cvL=document.createElement("canvas");
             cvL.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;";
             chartDiv.appendChild(cvL);
-            var sigD="";
             (function drawL(){
               if(!chartDiv.isConnected||!cvL.isConnected) return;
               try{
-                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,it=[],sg=W+"x"+H;
-                labs.forEach(function(o){var y=series.priceToCoordinate(o.p);if(y!=null){it.push({o:o,y:y});sg+="|"+Math.round(y)+o.name+(o.usd==null?"":Math.round(o.usd));}});
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,it=[],sg=W+"x"+H+"|"+hoverId+"|"+(toast?toast.msg:"")+"|"+(drag?"d":"");
+                labs.forEach(function(o){var y=series.priceToCoordinate(o.p);if(y!=null){it.push({o:o,y:y});sg+="|"+Math.round(y)+o.name+(o.usd==null?"":Math.round(o.usd*100));}});
                 if(sg!==sigD){
                   sigD=sg;
                   if(cvL.width!==Math.round(W*dpr)||cvL.height!==Math.round(H*dpr)){cvL.width=Math.round(W*dpr);cvL.height=Math.round(H*dpr);}
@@ -8970,22 +8983,112 @@ function chartTab(){
                   var ph=28;try{ph=chart.timeScale().height()||28;}catch(e2){}
                   cx.save();cx.beginPath();cx.rect(0,0,W,Math.max(0,H-ph));cx.clip();
                   cx.font="500 14px monospace";cx.textBaseline="middle";
+                  function plate(x,y,w,acc){cx.fillStyle="#0a1424";cx.fillRect(x,y,w,24);cx.lineWidth=1.5;cx.strokeStyle=acc;cx.strokeRect(x+0.75,y+0.75,w-1.5,22.5);cx.fillStyle=acc;cx.fillRect(x,y,6,24);}
+                  // stop / target labels share one fixed width on the left; the entry chip sits right beside them so it never covers a stop
+                  var lw=Math.ceil(cx.measureText("TARGET   +$9999.00").width)+52,hasST=it.some(function(r){return r.o.k!=="E";}),ex=12+(hasST?lw+10:0);
+                  rects=[];
                   it.forEach(function(r){
-                    var o=r.o,acc=o.k==="S"?"#ff4d4d":o.k==="E"?"#4da3ff":"#2ee67a",txt1=o.name,usd=o.usd,txt2=usd==null?"":"   "+(usd>=0?"+":"\u2212")+"$"+Math.abs(Math.round(usd*100)/100).toFixed(2);
-                    var w1=cx.measureText(txt1).width,w2=txt2?cx.measureText(txt2).width:0,bw=w1+w2+26,x=12,y=r.y-12;
-                    cx.fillStyle="#0a1424";cx.fillRect(x,y,bw,24);
-                    cx.lineWidth=1.5;cx.strokeStyle=acc;cx.strokeRect(x+0.75,y+0.75,bw-1.5,22.5);
-                    cx.fillStyle=acc;cx.fillRect(x,y,6,24);
-                    cx.fillStyle="#ffffff";cx.textAlign="left";cx.fillText(txt1,x+14,r.y);
+                    var o=r.o,acc=o.k==="S"?"#ff4d4d":o.k==="E"?"#4da3ff":"#2ee67a",usd=o.usd,txt2=usd==null?"":"   "+(usd>=0?"+":"−")+"$"+Math.abs(Math.round(usd*100)/100).toFixed(2);
+                    var w1=cx.measureText(o.name).width,w2=txt2?cx.measureText(txt2).width:0,y=r.y-12,x=o.k==="E"?ex:12,bw=o.k==="E"?w1+w2+26:lw;
+                    plate(x,y,bw,acc);
+                    cx.fillStyle="#ffffff";cx.textAlign="left";cx.fillText(o.name,x+14,r.y);
                     if(txt2){cx.fillStyle=usd>=0?"#5cf59a":"#ff8a8a";cx.fillText(txt2,x+14+w1,r.y);}
+                    if(o.k==="E"){
+                      // X: close the whole trade in one click
+                      var xx=x+bw+4,hot=hoverId==="X";
+                      cx.fillStyle=hot?"#4a1c24":"#0a1424";cx.fillRect(xx,y,26,24);cx.lineWidth=1.5;cx.strokeStyle="#ff8a8a";cx.strokeRect(xx+0.75,y+0.75,24.5,22.5);
+                      cx.strokeStyle="#ffffff";cx.lineWidth=2;cx.lineCap="round";cx.beginPath();cx.moveTo(xx+8,y+7);cx.lineTo(xx+18,y+17);cx.moveTo(xx+18,y+7);cx.lineTo(xx+8,y+17);cx.stroke();cx.lineCap="butt";
+                      if(r.y>0&&r.y<H-ph) rects.push({t:"x",x:xx,y:y,w:26,h:24,acct:o.acct});
+                    }else{
+                      // three-line grip: "drag me"
+                      var busyG=drag&&drag.id===o.id;
+                      cx.strokeStyle=busyG?"#ffffff":"#888780";cx.lineWidth=1.5;cx.lineCap="round";cx.beginPath();
+                      for(var gi=0;gi<3;gi++){cx.moveTo(x+bw-24,y+7+gi*5);cx.lineTo(x+bw-8,y+7+gi*5);}
+                      cx.stroke();cx.lineCap="butt";
+                      if(r.y>0&&r.y<H-ph) rects.push({t:"o",x:x,y:y,w:bw,h:24,id:o.id});
+                    }
                   });
+                  if(toast){
+                    var tm=toast.msg;while(tm.length>8&&cx.measureText(tm).width>W-60) tm=tm.slice(0,-2)+"…";
+                    var tw=cx.measureText(tm).width+28,tx=Math.max(8,(W-tw)/2);
+                    plate(tx,36,tw,toast.ok?"#2ee67a":"#ff4d4d");cx.fillStyle="#ffffff";cx.textAlign="left";cx.fillText(tm,tx+14,48);
+                  }
                   cx.restore();
                 }
               }catch(e){}
               requestAnimationFrame(drawL);
             })();
+            // ── pointer handling: hit-test the label boxes; only while the pointer is over one does the canvas take the mouse (so the chart still pans everywhere else) ──
+            function hit(px,py){var b=chartDiv.getBoundingClientRect(),x=px-b.left,y=py-b.top;for(var i=rects.length-1;i>=0;i--){var r=rects[i];if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h) return r;}return null;}
+            function setHover(r){var id=r?(r.t==="x"?"X":r.id):"";if(id!==hoverId){hoverId=id;sigD="";}cvL.style.pointerEvents=r?"auto":"none";cvL.style.cursor=r?(r.t==="x"?"pointer":"ns-resize"):"";}
+            function send(path){
+              var k="";try{k=localStorage.getItem("edgeKey")||"";}catch(e){}
+              fetch("http://127.0.0.1:7881"+path+(k?"&k="+encodeURIComponent(k):""),{method:"POST"}).then(function(r){return r.json().catch(function(){return {ok:false,err:"bad answer from the NinjaTrader link"};});}).then(function(j){
+                if(!j||!j.ok){var m=(j&&j.err)||"NinjaTrader link refused";showToast(/blocked/.test(m)?"Needs your key (see the box)":(m.length>70?m.slice(0,70)+"…":m),false);if(/blocked/.test(m)) askKey();pend=null;applyView();}
+              }).catch(function(){showToast("Can't reach EdgeFeed in NinjaTrader",false);pend=null;applyView();});
+            }
+            function askKey(){
+              if(document.getElementById("edgeKeyBox")) return;
+              var d=document.createElement("div");d.id="edgeKeyBox";
+              d.style.cssText="position:fixed;left:50%;top:90px;transform:translateX(-50%);z-index:99999;background:#0a1424;border:1.5px solid #4da3ff;border-radius:8px;padding:14px;color:#e8f0ff;font:14px monospace;width:min(440px,90vw);box-shadow:0 8px 30px #000a";
+              var m=document.createElement("div");m.style.marginBottom="8px";m.textContent="NinjaTrader needs your key. Open %APPDATA%\\EdgeFeed\\key.txt on this PC and paste what is inside:";d.appendChild(m);
+              var inp=document.createElement("input");inp.style.cssText="width:100%;box-sizing:border-box;padding:6px;background:#040d1a;color:#fff;border:1px solid #1a3260;font:14px monospace;margin-bottom:8px";d.appendChild(inp);
+              var b1=document.createElement("button"),b2=document.createElement("button");
+              b1.textContent="Save";b2.textContent="Cancel";
+              [b1,b2].forEach(function(b){b.style.cssText="padding:6px 14px;margin-right:8px;background:#0a1424;color:#fff;border:1.5px solid #4da3ff;border-radius:4px;font:14px monospace;cursor:pointer";d.appendChild(b);});
+              b1.onclick=function(){try{localStorage.setItem("edgeKey",inp.value.trim());}catch(e){}d.remove();};
+              b2.onclick=function(){d.remove();};
+              document.body.appendChild(d);inp.focus();
+            }
+            function doClose(acct){
+              if(Date.now()-lastClose<3000) return;
+              lastClose=Date.now();showToast("Closing trade…",true);
+              send("/close?acct="+encodeURIComponent(acct)+"&sym="+encodeURIComponent(sym));
+            }
+            function down(px,py,ev){
+              var r=hit(px,py);if(!r) return false;
+              ev.preventDefault();ev.stopPropagation();
+              if(r.t==="x"){pressX=r;return true;}
+              var lo=null;liveArr.forEach(function(o){if(o.id===r.id) lo=o;});
+              if(!lo) return true;
+              dropGhost();
+              try{ghost=series.createPriceLine({price:lo.px+curBs,color:lo.k==="S"?"rgba(226,75,74,0.45)":"rgba(47,179,107,0.45)",lineWidth:1,lineStyle:3,axisLabelVisible:false,title:""});}catch(e){}
+              drag={id:lo.id,px:dpx(lo),orig:lo.px,moved:false};pend=null;sigD="";return true;
+            }
+            function move(py){
+              if(!drag) return;
+              var b=chartDiv.getBoundingClientRect(),p=series.coordinateToPrice(py-b.top);
+              if(p==null) return;
+              var fp=Math.max(TK,Math.round((p-curBs)/TK)*TK);
+              drag.px=+fp.toFixed(6);drag.moved=true;applyView();
+            }
+            function up(px,py){
+              if(pressX){var r=hit(px,py),pr=pressX;pressX=null;if(r&&r.t==="x"&&r.acct===pr.acct) doClose(r.acct);return;}
+              if(!drag) return;
+              var d=drag;drag=null;dropGhost();
+              if(d.moved&&Math.abs(d.px-d.orig)>=TK/2){
+                // a stop must stay on the losing side of the market and a target on the winning side, or NinjaTrader would reject it
+                var lo2=null;liveArr.forEach(function(o){if(o.id===d.id) lo2=o;});
+                var longP=!lo2||lo2.kk>=0,isS=lo2&&lo2.k==="S",badP=false;
+                if(curLast!=null&&lo2){badP=isS?(longP?d.px>=curLast:d.px<=curLast):(longP?d.px<=curLast:d.px>=curLast);}
+                if(badP) showToast((isS?"Stop":"Target")+" can't go there: wrong side of the market",false);
+                else{pend={id:d.id,px:d.px,t0:Date.now()};send("/move?id="+encodeURIComponent(d.id)+"&px="+encodeURIComponent(String(d.px)));}
+              }
+              applyView();setHover(hit(px,py));
+            }
+            chartDiv.addEventListener("mousemove",function(e){if(drag||pressX) return;setHover(hit(e.clientX,e.clientY));},true);
+            chartDiv.addEventListener("mouseleave",function(){if(!drag) setHover(null);});
+            cvL.addEventListener("mousedown",function(e){if(e.button===0) down(e.clientX,e.clientY,e);});
+            var wm=function(e){if(!chartDiv.isConnected){cleanup();return;}if(drag) move(e.clientY);};
+            var wu=function(e){if(drag||pressX) up(e.clientX,e.clientY);};
+            var wtm=function(e){if(!drag) return;var t=e.touches[0];if(t){lt=t;e.preventDefault();move(t.clientY);}};
+            var wte=function(e){if(!(drag||pressX)) return;var t=(e.changedTouches&&e.changedTouches[0])||lt;if(t) up(t.clientX,t.clientY);else{drag=null;pressX=null;dropGhost();applyView();}};
+            function cleanup(){window.removeEventListener("mousemove",wm);window.removeEventListener("mouseup",wu);window.removeEventListener("touchmove",wtm);window.removeEventListener("touchend",wte);window.removeEventListener("touchcancel",wte);}
+            window.addEventListener("mousemove",wm);window.addEventListener("mouseup",wu);
+            window.addEventListener("touchmove",wtm,{passive:false});window.addEventListener("touchend",wte);window.addEventListener("touchcancel",wte);
+            chartDiv.addEventListener("touchstart",function(e){var t=e.touches[0];if(e.touches.length===1&&t){lt=t;down(t.clientX,t.clientY,e);}},{capture:true,passive:false});
             function tick(){
-              if(!chartDiv.isConnected){clearInterval(iv);clearL();return;}
+              if(!chartDiv.isConnected){clearInterval(iv);clearL();cleanup();return;}
               if(busy||document.hidden||!candles.length) return;
               busy=true;
               var now=Math.floor(Date.now()/1000),ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},2500);
@@ -8999,7 +9102,7 @@ function chartTab(){
                 var last={};
                 ((rs[0]&&rs[0].orders)||[]).forEach(function(e){var o=last[e[1]];if(!o||e[0]>=o[0]) last[e[1]]=e;});
                 var live=[];
-                // open positions (EdgeFeed): what each stop / target is worth = points from the average entry x dollars per point x the order's contracts
+                // open positions (EdgeFeed): what each stop / target is worth = (price - average entry) x dollars per point x the order's contracts
                 var posL=(rs[0]&&rs[0].pos)||[];
                 Object.keys(last).forEach(function(k){
                   var e=last[k];
@@ -9007,11 +9110,8 @@ function chartTab(){
                   var acct=String(e[1]).split("|")[0],pz=null;
                   posL.forEach(function(q){if(q[0]===acct) pz=q;});
                   if(!pz&&posL.length===1) pz=posL[0];
-                  var o={k:e[2],px:e[4],usd:null,name:e[2]==="S"?"STOP":"TARGET"};
-                  if(pz){
-                    var pts=(e[4]-pz[3])*pz[1],usd=pts*pz[4]*(e[5]||pz[2]);
-                    o.usd=usd;
-                  }
+                  var o={k:e[2],id:e[1],px:e[4],usd:null,avg:null,kk:0,name:e[2]==="S"?"STOP":"TARGET",acct:acct};
+                  if(pz){o.avg=pz[3];o.kk=pz[1]*pz[4]*(e[5]||pz[2]);}
                   live.push(o);
                 });
                 live.sort(function(a,b){return a.px-b.px;});
@@ -9022,20 +9122,27 @@ function chartTab(){
                 candles.slice(-5).forEach(function(c){var u=Math.floor(c.u/per)*per;if(nc[u]!=null) ds.push(c.close-nc[u]);});
                 var lastFut=null;((rs[1]&&rs[1].bars)||[]).forEach(function(k){lastFut=k[4];});
                 posL.forEach(function(q){
-                  var up=lastFut==null?null:(lastFut-q[3])*q[1]*q[4]*q[2];
-                  live.push({k:"E",px:q[3],usd:up,name:(q[1]>0?"LONG ":"SHORT ")+q[2]});
+                  var up2=lastFut==null?null:(lastFut-q[3])*q[1]*q[4]*q[2];
+                  live.push({k:"E",id:"E|"+q[0],px:q[3],usd:up2,name:(q[1]>0?"LONG ":"SHORT ")+q[2],acct:q[0]});
                 });
                 if(!live.length||!ds.length){clearL();return;}
                 ds.sort(function(a,b){return a-b;});
-                var bs=ds[Math.floor(ds.length/2)];
+                curBs=ds[Math.floor(ds.length/2)];curLast=lastFut;
+                liveArr=live;
+                // a move we sent: done once NinjaTrader shows the order there; after 4 s say it did not take
+                if(pend){
+                  var po=null;live.forEach(function(o){if(o.id===pend.id) po=o;});
+                  if(po&&Math.abs(po.px-pend.px)<TK/2) pend=null;
+                  else if(Date.now()-pend.t0>4000){if(po) showToast("NinjaTrader did not accept that move",false);pend=null;}
+                }
                 var sg=live.map(function(o){return o.k+o.px;}).join("|");
-                labs=live.map(function(o){return {k:o.k,p:o.px+bs,usd:o.usd,name:o.name};});
                 if(sg!==sigL||lines.length!==live.length){
-                  clearL();sigL=sg;
+                  clearLines();sigL=sg;
                   live.forEach(function(o){
-                    lines.push(series.createPriceLine({price:o.px+bs,color:o.k==="S"?"#e24b4a":o.k==="E"?"#4da3ff":"#2fb36b",lineWidth:1,lineStyle:2,axisLabelVisible:true,title:""}));
+                    lines.push(series.createPriceLine({price:dpx(o)+curBs,color:o.k==="S"?"#e24b4a":o.k==="E"?"#4da3ff":"#2fb36b",lineWidth:1,lineStyle:2,axisLabelVisible:true,title:""}));
                   });
-                } else live.forEach(function(o,i){try{lines[i].applyOptions({price:o.px+bs});}catch(e){}});
+                }
+                applyView();
               }).catch(function(){clearTimeout(tmo);if(++fails>=3) clearL();}).then(function(){busy=false;});
             }
             iv=setInterval(tick,2000);tick();
