@@ -41,12 +41,14 @@ struct Candle {
     done: bool,
 }
 
-const SYMS: [(&str, &str); 5] = [
+const SYMS: [(&str, &str); 7] = [
     ("ES", "SPX500_USD"),
     ("NQ", "NAS100_USD"),
     ("GC", "XAU_USD"),
     ("CL", "WTICO_USD"),
     ("NG", "NATGAS_USD"),
+    ("DXY", ""), // NinjaTrader only (no OANDA feed): shown while EdgeFeed is connected for it
+    ("BTC", ""),
 ];
 const TFS: [(&str, &str, i64); 9] = [
     ("2m", "M2", 120),
@@ -61,7 +63,7 @@ const TFS: [(&str, &str, i64); 9] = [
 ];
 const INTRA_TFS: [&str; 4] = ["2m", "5m", "30m", "1h"];
 const HTFS: [(&str, &str, u32); 3] = [("1H", "H1", 1500), ("4H", "H4", 1000), ("D", "D", 500)];
-const FUTURES: [&str; 5] = ["ES", "NQ", "CL", "GC", "NG"]; // sessions open 18:00 ET (the web chart's FUTURES_ALIGN_SYMS)
+const FUTURES: [&str; 7] = ["ES", "NQ", "CL", "GC", "NG", "DXY", "BTC"]; // sessions open 18:00 ET (the web chart's FUTURES_ALIGN_SYMS)
 
 fn inst_for(sym: &str) -> &'static str {
     SYMS.iter().find(|s| s.0 == sym).map(|s| s.1).unwrap_or("NAS100_USD")
@@ -71,6 +73,8 @@ fn tick_size(sym: &str) -> f64 {
         "GC" => 0.1,
         "CL" => 0.01,
         "NG" => 0.001,
+        "DXY" => 0.005,
+        "BTC" => 5.0,
         _ => 0.25,
     }
 }
@@ -87,6 +91,8 @@ fn canon_sym(s: &str) -> String {
         "GOLD" => "GC",
         "OIL" => "CL",
         "NATGAS" => "NG",
+        "DX" | "USDX" => "DXY",
+        "MBT" => "BTC",
         other => other,
     }
     .to_string()
@@ -134,6 +140,9 @@ fn fetch(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64) 
 }
 
 fn fetch_ex(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64, to: Option<i64>) -> Result<Vec<Candle>, String> {
+    if inst.is_empty() {
+        return Err("DXY and BTC only work while NinjaTrader is live (EdgeFeed on a DX / BTC chart)".into());
+    }
     let to_q = to
         .and_then(|t| DateTime::from_timestamp(t, 0))
         .map(|d| format!("&to={}", d.format("%Y-%m-%dT%H:%M:%SZ")))
@@ -441,6 +450,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                         cur = Some((sym.clone(), gran.to_string()));
                     }
                     Err(e) => {
+                        cur = Some((sym.clone(), gran.to_string())); // so a NinjaTrader feed that connects later is picked up
                         set_status(&e);
                         continue;
                     }
@@ -985,7 +995,11 @@ impl eframe::App for App {
         egui::Panel::top("bar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let mut changed = false;
-                for (s, _) in SYMS.iter() {
+                for (s, inst) in SYMS.iter() {
+                    // NinjaTrader-only symbols appear while their feed is connected (or when already selected)
+                    if inst.is_empty() && self.sym != *s && self.shared.lock().unwrap().nt_conns.get(*s).copied().unwrap_or(0) == 0 {
+                        continue;
+                    }
                     if ui.selectable_label(self.sym == *s, *s).clicked() && self.sym != *s {
                         self.sym = s.to_string();
                         changed = true;
