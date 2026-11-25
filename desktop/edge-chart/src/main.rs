@@ -8,6 +8,9 @@ use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -132,7 +135,7 @@ struct Shared {
 }
 
 enum Req {
-    Load { sym: String, tf: String },
+    Load { sym: String, tf: String, htf: String }, // htf is an HTFS label, fetched in parallel with the main data
     Htf { sym: String, tf: String }, // tf is an HTFS label
     Nt { sym: String },              // NinjaTrader pushed new bars
     NtGone { sym: String },          // a NinjaTrader connection closed
@@ -396,12 +399,130 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
     }
 }
 
+// ───────────────────────── candle cache (disk + memory, delta refresh) ─────────────────────────
+type Cache = Arc<Mutex<HashMap<(String, String), Vec<Candle>>>>;
+
+fn gran_secs(g: &str) -> i64 {
+    match g { "M1" => 60, "M2" => 120, "M5" => 300, "M30" => 1800, "H1" => 3600, "H4" => 14400, "H8" => 28800, "D" => 86400, "W" => 604800, _ => 300 }
+}
+fn cache_dir() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .or_else(|| std::env::var_os("XDG_CACHE_HOME"))
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("EDGE").join("chart-cache")
+}
+fn cache_file(sym: &str, g: &str) -> PathBuf {
+    cache_dir().join(format!("{sym}_{g}.bin"))
+}
+const REC: usize = 41; // t i64, o h l c f64, done u8
+fn cache_load(sym: &str, g: &str) -> Vec<Candle> {
+    let Ok(b) = std::fs::read(cache_file(sym, g)) else { return vec![] };
+    if b.len() < 8 || &b[..4] != b"EDC1" {
+        return vec![];
+    }
+    let n = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
+    if b.len() != 8 + n * REC {
+        return vec![];
+    }
+    let f = |c: &[u8], i: usize| f64::from_le_bytes(c[i..i + 8].try_into().unwrap());
+    b[8..]
+        .chunks_exact(REC)
+        .map(|c| {
+            let t = i64::from_le_bytes(c[0..8].try_into().unwrap());
+            Candle { t, e: t + off(t), o: f(c, 8), h: f(c, 16), l: f(c, 24), c: f(c, 32), done: c[40] != 0 }
+        })
+        .collect()
+}
+fn cache_save(sym: &str, g: &str, cs: &[Candle]) {
+    let _ = std::fs::create_dir_all(cache_dir());
+    let mut b: Vec<u8> = Vec::with_capacity(8 + cs.len() * REC);
+    b.extend_from_slice(b"EDC1");
+    b.extend_from_slice(&(cs.len() as u32).to_le_bytes());
+    for c in cs {
+        b.extend_from_slice(&c.t.to_le_bytes());
+        for v in [c.o, c.h, c.l, c.c] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        b.push(c.done as u8);
+    }
+    let p = cache_file(sym, g);
+    let tmp = p.with_extension("tmp");
+    if std::fs::write(&tmp, b).is_ok() {
+        let _ = std::fs::rename(&tmp, &p);
+    }
+}
+/// Memory first, then disk.
+fn cached_get(cache: &Cache, sym: &str, g: &str) -> Vec<Candle> {
+    let key = (sym.to_string(), g.to_string());
+    if let Some(v) = cache.lock().unwrap().get(&key) {
+        return v.clone();
+    }
+    let v = cache_load(sym, g);
+    if !v.is_empty() {
+        cache.lock().unwrap().insert(key, v.clone());
+    }
+    v
+}
+/// Latest `full_n` candles. With a cached copy that is deep enough, only the candles since its last bar are fetched
+/// (one small request) and appended; otherwise a full fetch. The result is saved to disk.
+fn load_series(base: &str, tok: &str, sym: &str, g: &str, full_n: u32, al: i64, seed: Vec<Candle>) -> Result<Vec<Candle>, String> {
+    let inst = inst_for(sym);
+    let mut cs = seed;
+    if cs.len() as u32 >= full_n * 9 / 10 && cs.len() >= 50 {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        let last = cs[cs.len() - 1].t;
+        let missing = ((now - last) / gran_secs(g)).max(0) + 4;
+        if missing <= 2500 {
+            let new = fetch(base, tok, inst, g, missing as u32, al)?;
+            if let Some(f) = new.first().map(|c| c.t) {
+                cs.retain(|c| c.t < f);
+                cs.extend(new);
+                if cs.len() > 5000 {
+                    let cut = cs.len() - 5000;
+                    cs.drain(..cut);
+                }
+                cache_save(sym, g, &cs);
+                return Ok(cs);
+            }
+        }
+    }
+    let full = fetch(base, tok, inst, g, full_n, al)?;
+    cache_save(sym, g, &full);
+    Ok(full)
+}
+/// Quietly warm the cache for the other timeframes (two at a time) so switching to them is instant.
+fn prefetch(base: &str, tok: &str, sym: &str, skip: &str, cache: &Cache, pgen: &Arc<AtomicU64>, my: u64) {
+    let grans: Vec<&'static str> = ["M2", "M5", "M30", "H1", "H4", "H8", "D", "W"].into_iter().filter(|g| *g != skip).collect();
+    for lane in 0..2usize {
+        let (b, t, sy, ca, ge) = (base.to_string(), tok.to_string(), sym.to_string(), cache.clone(), pgen.clone());
+        let mine: Vec<&'static str> = grans.iter().enumerate().filter(|(i, _)| i % 2 == lane).map(|(_, g)| *g).collect();
+        std::thread::spawn(move || {
+            for g in mine {
+                if ge.load(Ordering::SeqCst) != my {
+                    return; // symbol changed: stop
+                }
+                let seed = cached_get(&ca, &sy, g);
+                if let Ok(cs) = load_series(&b, &t, &sy, g, 3000, align_for(&sy), seed) {
+                    ca.lock().unwrap().insert((sy.clone(), g.to_string()), cs);
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        });
+    }
+}
+
 fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Context, base: String, tok: String) {
     let mut cur_tf = String::new();
     let mut nt_active = false;
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
     let mut tick = 0u32;
+    let mut data_sym = String::new(); // symbol the daily / 5m / HTF data currently belong to
+    let cache: Cache = Arc::new(Mutex::new(HashMap::new())); // candles per (symbol, OANDA granularity), backed by disk
+    let pf_gen = Arc::new(AtomicU64::new(0));
+    let mut pf_done: HashSet<String> = HashSet::new();
     let mut m1raw: Vec<Candle> = vec![];
     let set_status = |s: &str| {
         shared.lock().unwrap().status = s.to_string();
@@ -409,8 +530,12 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
     };
     loop {
         match rx.recv_timeout(Duration::from_secs(2)) {
-            Ok(Req::Load { sym, tf }) => {
-                {
+            Ok(Req::Load { sym, tf, htf }) => {
+                // daily / 5m / HTF data belong to the symbol, not the timeframe: keep them when only the timeframe changes
+                let same_sym = data_sym == sym;
+                if !same_sym {
+                    pf_gen.fetch_add(1, Ordering::SeqCst);
+                    pf_done.clear();
                     let mut s = shared.lock().unwrap();
                     s.daily.clear();
                     s.m5.clear();
@@ -419,9 +544,11 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 let gran = TFS.iter().find(|t| t.0 == tf).map(|t| t.1).unwrap_or("M5");
                 let al = align_for(&sym);
                 cur_tf = tf.clone();
-                let hg = htf_cur.as_ref().filter(|h| h.0 == sym).map(|h| h.1.clone());
-                if nt_apply(&shared, &sym, &tf, hg.as_deref()) {
+                let hg: Option<&'static str> = HTFS.iter().find(|h| h.0 == htf).map(|h| h.1);
+                if nt_apply(&shared, &sym, &tf, hg) {
                     nt_active = true;
+                    data_sym = sym.clone();
+                    htf_cur = hg.map(|g| (sym.clone(), g.to_string()));
                     cur = Some((sym.clone(), gran.to_string()));
                     {
                         let mut s = shared.lock().unwrap();
@@ -433,8 +560,49 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 }
                 nt_active = false;
                 shared.lock().unwrap().src = "OANDA".into();
-                set_status("loading…");
-                let res = if gran == "RANGE" {
+                let is_range = gran == "RANGE";
+                // paint from the memory / disk cache straight away, then catch up with a small request
+                let seed_main = if is_range { vec![] } else { cached_get(&cache, &sym, gran) };
+                let shown = !seed_main.is_empty();
+                if shown {
+                    {
+                        let mut s = shared.lock().unwrap();
+                        s.main = seed_main.clone();
+                        s.status.clear();
+                        s.version += 1;
+                    }
+                    cur = Some((sym.clone(), gran.to_string()));
+                    ctx.request_repaint();
+                } else {
+                    set_status("loading…");
+                }
+                if !same_sym {
+                    let sd = cached_get(&cache, &sym, "D");
+                    let sm = cached_get(&cache, &sym, "M5");
+                    let sh = hg.map(|g| cached_get(&cache, &sym, g)).unwrap_or_default();
+                    let mut s = shared.lock().unwrap();
+                    if !sd.is_empty() { s.daily = sd; }
+                    if !sm.is_empty() { s.m5 = sm; }
+                    if !sh.is_empty() { s.htf = sh; }
+                }
+                // levels (D), 5m and the HTF gaps load at the same time as the main candles
+                let need_aux = {
+                    let s = shared.lock().unwrap();
+                    !same_sym || s.daily.is_empty() || s.m5.is_empty()
+                };
+                let need_htf = hg.is_some() && (!same_sym || htf_cur.as_ref().map_or(true, |h| Some(h.1.as_str()) != hg) || shared.lock().unwrap().htf.is_empty());
+                let job = |g: &'static str, n: u32, seed: Vec<Candle>| {
+                    let (b, t, sy) = (base.clone(), tok.clone(), sym.clone());
+                    std::thread::spawn(move || load_series(&b, &t, &sy, g, n, al, seed))
+                };
+                let h_d = if need_aux { Some(job("D", 800, cached_get(&cache, &sym, "D"))) } else { None };
+                let h_m5 = if need_aux { Some(job("M5", 3000, cached_get(&cache, &sym, "M5"))) } else { None };
+                let h_htf = if need_htf {
+                    hg.map(|g| job(g, HTFS.iter().find(|h| h.1 == g).map(|h| h.2).unwrap_or(500), cached_get(&cache, &sym, g)))
+                } else {
+                    None
+                };
+                let res = if is_range {
                     set_status("building range bars…");
                     fetch_m1(&base, &tok, inst_for(&sym), al).map(|m| {
                         let bars = range_bars(&m, RANGE_TICKS * tick_size(&sym));
@@ -442,14 +610,19 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                         bars
                     })
                 } else {
-                    fetch(&base, &tok, inst_for(&sym), gran, 3000, al)
+                    load_series(&base, &tok, &sym, gran, 3000, al, seed_main)
                 };
                 match res {
                     Ok(cs) => {
+                        if !is_range {
+                            cache.lock().unwrap().insert((sym.clone(), gran.to_string()), cs.clone());
+                        }
                         let mut s = shared.lock().unwrap();
                         s.main = cs;
                         s.status.clear();
-                        s.version += 1;
+                        if !shown {
+                            s.version += 1; // a cached view was already shown (and zoomed); the refresh just swaps the data in
+                        }
                         cur = Some((sym.clone(), gran.to_string()));
                     }
                     Err(e) => {
@@ -459,17 +632,33 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                     }
                 }
                 ctx.request_repaint();
-                // levels feed + 5m feed (EMAs, NY open)
-                if let Ok(d) = fetch(&base, &tok, inst_for(&sym), "D", 800, al) {
+                if let Some(Ok(d)) = h_d.map(|h| h.join()).and_then(|r| r.ok()) {
+                    cache.lock().unwrap().insert((sym.clone(), "D".to_string()), d.clone());
                     shared.lock().unwrap().daily = d;
                 }
-                if let Ok(m) = fetch(&base, &tok, inst_for(&sym), "M5", 3000, al) {
+                if let Some(Ok(m)) = h_m5.map(|h| h.join()).and_then(|r| r.ok()) {
+                    cache.lock().unwrap().insert((sym.clone(), "M5".to_string()), m.clone());
                     shared.lock().unwrap().m5 = m;
                 }
+                if let (Some(h), Some(g)) = (h_htf, hg) {
+                    if let Ok(Ok(b)) = h.join() {
+                        cache.lock().unwrap().insert((sym.clone(), g.to_string()), b.clone());
+                        shared.lock().unwrap().htf = b;
+                        htf_cur = Some((sym.clone(), g.to_string()));
+                    }
+                }
+                data_sym = sym.clone();
                 ctx.request_repaint();
+                if !pf_done.contains(&sym) {
+                    pf_done.insert(sym.clone());
+                    prefetch(&base, &tok, &sym, gran, &cache, &pf_gen, pf_gen.load(Ordering::SeqCst));
+                }
             }
             Ok(Req::Htf { sym, tf }) => {
                 if let Some(h) = HTFS.iter().find(|h| h.0 == tf) {
+                    if htf_cur.as_ref().map_or(false, |c| c.0 == sym && c.1 == h.1) && !shared.lock().unwrap().htf.is_empty() {
+                        continue; // already loaded together with the main data
+                    }
                     if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && nt_ready(&shared, &sym) {
                         let m1 = shared.lock().unwrap().nt.get(&sym).cloned().unwrap_or_default();
                         shared.lock().unwrap().htf = agg_m1(&m1, htf_secs(h.1), align_for(&sym), false);
@@ -502,7 +691,8 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && !nt_ready(&shared, &sym) {
                     nt_active = false;
                     shared.lock().unwrap().src = "OANDA".into();
-                    let _ = tx_self.send(Req::Load { sym: sym.clone(), tf: cur_tf.clone() });
+                    let hl = htf_cur.as_ref().and_then(|h| HTFS.iter().find(|x| x.1 == h.1)).map(|x| x.0).unwrap_or("4H");
+                    let _ = tx_self.send(Req::Load { sym: sym.clone(), tf: cur_tf.clone(), htf: hl.to_string() });
                     if let Some(h) = htf_cur.as_ref().and_then(|h| HTFS.iter().find(|x| x.1 == h.1)) {
                         let _ = tx_self.send(Req::Htf { sym, tf: h.0.to_string() });
                     }
@@ -1151,7 +1341,7 @@ impl App {
     }
 
     fn reload(&self) {
-        let _ = self.tx.send(Req::Load { sym: self.sym.clone(), tf: self.tf.clone() });
+        let _ = self.tx.send(Req::Load { sym: self.sym.clone(), tf: self.tf.clone(), htf: HTFS[self.htf_i].0.to_string() });
         let _ = self.tx.send(Req::Htf { sym: self.sym.clone(), tf: HTFS[self.htf_i].0.to_string() });
     }
 }
@@ -1312,7 +1502,7 @@ impl eframe::App for App {
             // INTRADAY mode opens close up on the latest candles, like the web chart (desktop counts), with a ~150px gap for the price tags
             let default_view = |tf: &str, intra: bool, sym: &str| -> (f32, f32) {
                 if intra {
-                    let base = match tf { "2m" => 120.0f32, "5m" => 96.0, "30m" => 30.0, "1h" => 32.0, _ => 0.0 }; // exactly the web chart's intraday counts
+                    let base = match tf { "2m" => 54.0f32, "5m" => 43.0, "30m" => 30.0, "1h" => 32.0, _ => 0.0 }; // exactly the web chart's intraday counts
                     if base > 0.0 {
                         let bars = if sym == "BTC" { (base * 0.7).round() } else { base };
                         let sp = ((plot.width() - 150.0) / bars).clamp(3.0, 140.0);
