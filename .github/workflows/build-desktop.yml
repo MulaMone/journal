@@ -17,13 +17,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: desktop/src-tauri
+          workspaces: |
+            desktop/src-tauri
+            desktop/edge-chart
       - name: Install CLI
         working-directory: desktop
         run: npm install
       - name: Generate icons from site icon
         working-directory: desktop
         run: npx tauri icon ../images/icon-512.png
+      - name: Build native chart
+        working-directory: desktop/edge-chart
+        run: cargo build --release
+      - name: Copy native chart into app bundle
+        shell: bash
+        run: cp desktop/edge-chart/target/release/edge-chart.exe desktop/src-tauri/edge-chart.exe
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
