@@ -12,7 +12,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // ───────────────────────── style (edit to taste) ─────────────────────────
-const BG: Color32 = Color32::from_rgb(4, 13, 26);
+const BG: Color32 = Color32::BLACK;
 const GRID: Color32 = Color32::from_rgb(0x1a, 0x32, 0x60); // web chart grid #1a3260
 const AXIS_TXT: Color32 = Color32::from_rgb(0xe8, 0xf0, 0xff);
 const UP_FILL: Color32 = Color32::from_rgb(0, 230, 118);
@@ -1012,7 +1012,6 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
-    sierra: bool, // Sierra-style candles + black bg (default); off = NinjaTrader style
     note: String,
     show_pw: bool, // 30m: previous-week lines (off by default, like the web chart)
     show_pm: bool, // 8h: previous-month lines
@@ -1073,7 +1072,6 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
-            sierra: true,
             bar_x: 0.0,
             note: String::new(),
             show_pw: false,
@@ -1180,9 +1178,6 @@ impl eframe::App for App {
                 if self.sym == "NQ" && ui.selectable_label(!self.hide_nums, "#").clicked() {
                     self.hide_nums = !self.hide_nums;
                 }
-                if ui.selectable_label(self.sierra, "Sierra").clicked() {
-                    self.sierra = !self.sierra;
-                }
                 if self.shared.lock().unwrap().src == "NT" {
                     ui.colored_label(Color32::from_rgb(0, 230, 118), "NT live");
                 }
@@ -1223,9 +1218,8 @@ impl eframe::App for App {
             });
         });
 
-        let bg = if self.sierra { Color32::BLACK } else { BG };
-        let grid_col = if self.sierra { Color32::from_rgb(20, 24, 34) } else { GRID };
-        let sierra = self.sierra;
+        let bg = BG;
+        let grid_col = GRID;
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(bg)).show(ui, |ui| {
             let full = ui.available_rect_before_wrap();
             let src_nt = self.shared.lock().unwrap().src == "NT";
@@ -1940,10 +1934,8 @@ impl eframe::App for App {
             for i in first_vis..=last_vis.min(n - 1) {
                 let c = cs[i];
                 let up = c.c >= c.o;
-                let (fill, line) = if sierra {
-                    if up { (Color32::from_rgb(0, 200, 90), Color32::from_rgb(120, 255, 170)) } else { (Color32::from_rgb(230, 40, 40), Color32::from_rgb(255, 130, 130)) }
-                } else if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
-                let wick_col = if sierra { line } else { fill };
+                let (fill, line) = if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
+                let wick_col = fill;
                 let cx = (x_of(i as f32) * ppp).round() as i32;
                 let (top, bot) = {
                     let a = (y_of(c.o.max(c.c)) * ppp).round() as i32;
