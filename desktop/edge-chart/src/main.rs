@@ -117,6 +117,7 @@ struct Shared {
     status: String,
     version: u64, // bumps when a fresh full load replaces the main data
     nt: HashMap<String, Vec<Candle>>, // 1-minute futures bars pushed by NinjaTrader, per symbol
+    nt_d: HashMap<String, Vec<Candle>>, // NinjaTrader's own daily bars (long history for D / W / levels)
     nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
 }
@@ -295,15 +296,20 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
     }
     let m1 = shared.lock().unwrap().nt.get(sym).cloned().unwrap_or_default();
     let al = align_for(sym);
+    let nd = shared.lock().unwrap().nt_d.get(sym).cloned().unwrap_or_default();
+    // daily / weekly come from NinjaTrader's daily series when it sent one (years of history), else from the 1-minute bars
+    let daily_src: &[Candle] = if nd.len() >= 2 { &nd } else { &m1 };
     let main = if tf == "400R" {
         range_bars(&m1, RANGE_TICKS * tick_size(sym))
+    } else if tf == "D" || tf == "W" {
+        agg_m1(daily_src, if tf == "W" { 604800 } else { 86400 }, al, tf == "W")
     } else {
         let secs = TFS.iter().find(|t| t.0 == tf).map(|t| t.2).unwrap_or(300);
-        agg_m1(&m1, secs, al, tf == "W")
+        agg_m1(&m1, secs, al, false)
     };
     let m5 = agg_m1(&m1, 300, al, false);
-    let daily = agg_m1(&m1, 86400, al, false);
-    let htf = htf_gran.map(|g| agg_m1(&m1, htf_secs(g), al, false));
+    let daily = agg_m1(daily_src, 86400, al, false);
+    let htf = htf_gran.map(|g| agg_m1(if g == "D" { daily_src } else { &m1 }, htf_secs(g), al, false));
     let mut s = shared.lock().unwrap();
     s.main = main;
     s.m5 = m5;
@@ -350,7 +356,8 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                         *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
                         my_sym = Some(sym.clone());
                     }
-                    let e = s.nt.entry(sym.clone()).or_default();
+                    let is_d = v["tf"].as_str() == Some("D");
+                    let e = if is_d { s.nt_d.entry(sym.clone()).or_default() } else { s.nt.entry(sym.clone()).or_default() };
                     if v["reset"].as_bool() == Some(true) {
                         e.clear();
                     }
