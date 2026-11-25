@@ -7,19 +7,18 @@ use chrono_tz::America::New_York;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // ───────────────────────── style (edit to taste) ─────────────────────────
 const BG: Color32 = Color32::from_rgb(4, 13, 26);
-const GRID: Color32 = Color32::from_rgb(20, 34, 58);
-const AXIS_TXT: Color32 = Color32::from_rgb(214, 224, 242);
+const GRID: Color32 = Color32::from_rgb(0x1a, 0x32, 0x60); // web chart grid #1a3260
+const AXIS_TXT: Color32 = Color32::from_rgb(0xe8, 0xf0, 0xff);
 const UP_FILL: Color32 = Color32::from_rgb(0, 230, 118);
 const UP_LINE: Color32 = Color32::from_rgb(4, 54, 31);
 const DN_FILL: Color32 = Color32::from_rgb(255, 68, 68);
 const DN_LINE: Color32 = Color32::from_rgb(74, 10, 10);
 const BODY_RATIO: f32 = 0.70; // body width as a share of the bar spacing (NinjaTrader is ~0.70)
 const WICK_PTS: f32 = 1.0; // wick + outline thickness in points (1px at 100% scaling, 2px at 150-200%)
-const DEFAULT_SPACING: f32 = 13.0; // points between candles on open
 const RIGHT_GAP_BARS: f32 = 8.0;
 const AXIS_W: f32 = 96.0;
 const AXIS_H: f32 = 28.0;
@@ -262,6 +261,30 @@ fn dash_v(p: &egui::Painter, x: f32, y0: f32, y1: f32, on: f32, offl: f32, s: St
     while y < y1 {
         p.vline(x, y..=(y + on).min(y1), s);
         y += on + offl;
+    }
+}
+/// Dashes laid out on the chart's own x axis, so they move with the candles instead of crawling while you pan.
+fn dashed_by_x(p: &egui::Painter, pts: &[Pos2], anchor: f32, on: f32, offl: f32, st: Stroke) {
+    let per = on + offl;
+    for w in pts.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if b.x - a.x < 1e-3 {
+            continue;
+        }
+        let mut x = a.x;
+        let mut guard = 0;
+        while x < b.x && guard < 64 {
+            guard += 1;
+            let u = (x - anchor).rem_euclid(per);
+            let (is_on, rem) = if u < on { (true, on - u) } else { (false, per - u) };
+            let nx = (x + rem.max(0.01)).min(b.x);
+            if is_on {
+                let t0 = (x - a.x) / (b.x - a.x);
+                let t1 = (nx - a.x) / (b.x - a.x);
+                p.line_segment([Pos2::new(x, a.y + (b.y - a.y) * t0), Pos2::new(nx, a.y + (b.y - a.y) * t1)], st);
+            }
+            x = nx;
+        }
     }
 }
 fn text_w(p: &egui::Painter, s: &str, f: &FontId) -> f32 {
@@ -579,6 +602,9 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
+    manual: Option<(f64, f64)>, // manual price range (after dragging the price axis / panning vertically); None = auto-fit
+    drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag
+    vdrag: f32,
 }
 
 impl App {
@@ -599,7 +625,7 @@ impl App {
             tf,
             shared,
             tx,
-            spacing: DEFAULT_SPACING,
+            spacing: 13.0,
             right_idx: 0.0,
             seen_version: 0,
             has_token,
@@ -608,6 +634,9 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
+            manual: None,
+            drag_mode: 0,
+            vdrag: 0.0,
         };
         app.reload();
         app
@@ -703,23 +732,42 @@ impl eframe::App for App {
                 return;
             }
             let n = cs.len();
+            // default zoom = the web chart's bars-per-timeframe
+            let default_spacing = |tf: &str| -> f32 {
+                let bars = match tf { "2m" => 250.0, "5m" => 200.0, "30m" => 250.0, "1h" => 300.0, "4h" => 200.0, "D" => 150.0, "W" => 75.0, _ => 250.0 };
+                (plot.width() / (bars + RIGHT_GAP_BARS)).clamp(3.0, 70.0)
+            };
             if ver != self.seen_version {
                 self.seen_version = ver;
-                self.spacing = DEFAULT_SPACING;
+                self.manual = None;
+                self.spacing = default_spacing(&self.tf);
                 self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
             }
 
             // ── interaction ──
-            if resp.dragged() {
+            if resp.drag_started() {
+                let o = ctx.input(|i| i.pointer.press_origin());
+                self.drag_mode = if o.map_or(false, |p| p.x > plot.right()) { 2 } else { 1 };
+                self.vdrag = 0.0;
+            }
+            if resp.dragged() && self.drag_mode != 2 {
                 self.right_idx -= resp.drag_delta().x / self.spacing;
             }
             if resp.double_clicked() {
-                self.spacing = DEFAULT_SPACING;
-                self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
+                let on_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
+                self.manual = None; // back to auto-fit
+                if !on_axis {
+                    self.spacing = default_spacing(&self.tf);
+                    self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
+                }
             }
+            let mut axis_scroll = 0.0f32;
             if resp.hovered() {
                 let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
-                if scroll != 0.0 {
+                let over_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
+                if scroll != 0.0 && over_axis {
+                    axis_scroll = scroll;
+                } else if scroll != 0.0 {
                     let anchor = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.x).unwrap_or(plot.right());
                     let idx_at = self.right_idx - (plot.right() - anchor) / self.spacing;
                     self.spacing = (self.spacing * (scroll * 0.0025).exp()).clamp(3.0, 70.0);
@@ -743,6 +791,36 @@ impl eframe::App for App {
             let pad = (hi - lo) * 0.08;
             lo -= pad;
             hi += pad;
+            if let Some((ml, mh)) = self.manual {
+                lo = ml;
+                hi = mh;
+            }
+            // price scale: drag the axis (or wheel over it) to stretch the range, drag the chart vertically to shift it
+            if resp.dragged() {
+                let dy = resp.drag_delta().y;
+                if self.drag_mode == 2 {
+                    let c = (lo + hi) / 2.0;
+                    let half = ((hi - lo) / 2.0 * (dy as f64 * 0.006).exp()).max(1e-6);
+                    lo = c - half;
+                    hi = c + half;
+                    self.manual = Some((lo, hi));
+                } else {
+                    self.vdrag += dy;
+                    if self.manual.is_some() || self.vdrag.abs() > 6.0 {
+                        let shift = dy as f64 / plot.height() as f64 * (hi - lo);
+                        lo += shift;
+                        hi += shift;
+                        self.manual = Some((lo, hi));
+                    }
+                }
+            }
+            if axis_scroll != 0.0 {
+                let c = (lo + hi) / 2.0;
+                let half = ((hi - lo) / 2.0 * (-(axis_scroll as f64) * 0.0025).exp()).max(1e-6);
+                lo = c - half;
+                hi = c + half;
+                self.manual = Some((lo, hi));
+            }
             let y_of = move |p: f64| plot.bottom() - ((p - lo) / (hi - lo)) as f32 * plot.height();
             let p_of = move |y: f32| lo + ((plot.bottom() - y) / plot.height()) as f64 * (hi - lo);
 
@@ -752,7 +830,9 @@ impl eframe::App for App {
             let axis_font = FontId::monospace(13.0);
             while p < hi {
                 let y = snapc(y_of(p));
-                painter.hline(plot.x_range(), y, Stroke::new(hair, GRID));
+                if self.sym != "NQ" {
+                    painter.hline(plot.x_range(), y, Stroke::new(hair, GRID));
+                }
                 painter.text(Pos2::new(plot.right() + 8.0, y), Align2::LEFT_CENTER, fmt_price(p, step), axis_font.clone(), AXIS_TXT);
                 p += step;
             }
@@ -783,6 +863,7 @@ impl eframe::App for App {
             let clip = painter.with_clip_rect(plot);
             let small = FontId::monospace(10.0);
             let tiny = FontId::monospace(9.0);
+            clip.text(plot.center(), Align2::CENTER_CENTER, &self.sym, FontId::monospace(140.0), Color32::from_rgba_unmultiplied(255, 255, 255, 18));
 
             let align = align_for(&self.sym);
             let anchor = (24 - align) * 3600;
@@ -1220,7 +1301,7 @@ impl eframe::App for App {
                     if line.len() >= 2 {
                         let st = Stroke::new(2.0, rgb(col));
                         if dashed {
-                            clip.add(egui::Shape::dashed_line(&line, st, 6.0, 4.0));
+                            dashed_by_x(&clip, &line, x_of(0.0), 6.0, 4.0, st);
                         } else {
                             clip.add(egui::Shape::line(line.clone(), st));
                         }
@@ -1246,10 +1327,25 @@ impl eframe::App for App {
             if ly > plot.top() && ly < plot.bottom() {
                 dash_h(&clip, plot.left(), plot.right(), ly, 2.0, 3.0, Stroke::new(hair, lcol));
             }
-            let ly_c = ly.clamp(plot.top() + 10.0, plot.bottom() - 10.0);
-            let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - 10.0), Vec2::new(AXIS_W - 4.0, 20.0));
-            painter.rect_filled(r, 2.0, lcol);
-            painter.text(r.center(), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::BLACK);
+            // price tag with the bar countdown underneath (as on the web chart)
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+            let remain = (last.t + secs - now).max(0);
+            let cd = if secs > 86400 {
+                format!("{}d:{}h", remain / 86400, (remain % 86400) / 3600)
+            } else if secs >= 14400 {
+                format!("{:02}:{:02}:{:02}", remain / 3600, (remain % 3600) / 60, remain % 60)
+            } else {
+                format!("{}:{:02}", remain / 60, remain % 60)
+            };
+            let tag_h = 40.0;
+            let ly_c = ly.clamp(plot.top() + tag_h / 2.0, plot.bottom() - tag_h / 2.0);
+            let tcol = if last.c >= last.o { rgb(0x00b862) } else { rgb(0xff4444) };
+            let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - tag_h / 2.0), Vec2::new(AXIS_W - 4.0, tag_h));
+            painter.rect_filled(r, 2.0, tcol);
+            painter.text(Pos2::new(r.center().x, r.top() + 11.0), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
+            let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
+            painter.rect_filled(cr, 2.0, hexc(0x040d1a, 0.8));
+            painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
 
             // ═════════ crosshair + readout ═════════
             if let Some(pos) = resp.hover_pos().filter(|p| plot.contains(*p)) {
@@ -1285,6 +1381,7 @@ impl eframe::App for App {
                 FontId::proportional(13.0),
                 Color32::from_rgb(120, 140, 175),
             );
+            ctx.request_repaint_after(Duration::from_millis(500));
         });
     }
 }
