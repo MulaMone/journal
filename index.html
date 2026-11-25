@@ -4616,6 +4616,7 @@ function tradeForm(existing){
     var r=riskUsd>0?parseFloat((dv/riskUsd).toFixed(2)):null;
     var updated={id:isEdit?existing.id:Date.now(),accountId:isEdit?(existing.accountId||State.activeAccount||null):(State.activeAccount||null),date:gv("date")||today(),time:timeVal,inst:inst,dir:dir,entry:entry,exit:exit,ctr:ctr,setup:setupStr,setups:setupsArr,sess:gv("sess"),conf:gv("conf"),post:gv("post"),ex:gv("ex"),ru:gv("ru"),emo:parseInt(gv("emo"))||3,right:gv("right"),wrong:gv("wrong"),pts:pts,d:dv,stopPts:stopPts||undefined,riskUsd:riskUsd||undefined,r:r!==null?r:undefined};
     if(isEdit){
+      ["ntId","auto","xdate","xtime","ord"].forEach(function(k){if(existing[k]!==undefined&&updated[k]===undefined) updated[k]=existing[k];}); // fields the form doesn't show: auto-import id, exit time, saved stop/target orders
       State.trades=State.trades.map(function(t){return t.id===existing.id?updated:t;});
       State.editing=null;State.expanded=updated.id;
     } else {
@@ -6235,6 +6236,23 @@ function ntIngest(o){
   if(dup) return;
   if(o.id) ntSeenAdd(o.id);
   t.ntId=o.id||"";t.auto=true;t.accountId=State.activeAccount||null;
+  // stop / target orders NinjaTrader had working during the trade (every move): [timeMs,"S"stop|"T"target,price,"W"|"F"|"C",orderNo]
+  try{
+    if(Array.isArray(o.ord)&&o.ord.length){
+      t.ord=o.ord.slice(0,40);
+      var _fs=null;o.ord.forEach(function(r){if(r[1]==="S"&&r[3]==="W"&&(_fs===null||r[0]<_fs[0])) _fs=r;});
+      var _ep=parseFloat(o.ep);
+      if(_fs&&_ep>0&&!t.stopPts){
+        var _sp=Math.abs(_ep-_fs[2]);
+        if(_sp>0){
+          t.stopPts=parseFloat(_sp.toFixed(2));
+          var _tv=(typeof TICK!=="undefined"&&TICK[t.inst])||1,_ct=parseFloat(t.ctr)||1;
+          t.riskUsd=parseFloat((t.stopPts*_tv*_ct).toFixed(2));
+          if(t.riskUsd>0&&typeof t.d==="number") t.r=parseFloat((t.d/t.riskUsd).toFixed(2));
+        }
+      }
+    }
+  }catch(e){_dbg(e);}
   State.trades=[t].concat(State.trades);ss("trades",State.trades);
   try{localStorage.setItem("edge_last_import",JSON.stringify({at:Date.now(),ids:[t.id]}));}catch(e){_dbg(e);}
   _ntLast=t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2)+" · "+new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -7708,7 +7726,7 @@ function chartTab(){
   trades.forEach(function(t){
     var d=tradeTs(t);
     if(d&&t.entry!=null){
-      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate,d:t.d,sess:t.sess});
+      tradePoints.push({ts:Math.floor(d.getTime()/1000),price:parseFloat(t.entry),isLong:t.dir==="Long",entry:t.entry,exit:t.exit,ctr:t.ctr||1,kind:"entry",id:t.id,hasExitTime:!!t.xdate,d:t.d,sess:t.sess,ord:t.ord});
     }
     if(t.xdate&&t.xtime&&t.exit!=null){
       // Real exit timestamp — captured on import (Tradovate/NinjaTrader/forex
@@ -8635,9 +8653,7 @@ function chartTab(){
       // Narrow further to whatever the person has checked in the list below.
       // Empty selection = show everything in the window (the default).
       var selectedIds=State.chart_selected_ids||[];
-      var displayPoints=(selectedIds.length
-        ? windowPoints.filter(function(p){return selectedIds.indexOf(p.id)>-1;})
-        : windowPoints);
+      var displayPoints=windowPoints; // every trade stays drawn; ticking trades below only adds their text
       applyTradeVisibility=null;
 
       if(windowPoints.length){
@@ -8671,15 +8687,10 @@ function chartTab(){
           function makeMarkerSeries(){return chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});}
           var layers=[{s:makeMarkerSeries(),seen:{},data:[],markers:[]}];
           var markerSeries=layers[0].s;
-          var tradePairs={},dotSeries=[]; // exact (basis-adjusted) fill dots and entry->exit lines
-          var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
+          var tradePairs={};
+          var hoverPoints=[]; // parallel to the arrows — time/price, plus the raw trade point for the tooltip
           displayPoints.forEach(function(p){
-            // Snap to the candle period the fill falls inside, rather than the raw
-            // fill timestamp. The candlestick series only has data on period
-            // boundaries (e.g. :00/:15/:30/:45 for 15m); plotting this marker's own
-            // line series at an unaligned timestamp adds a new time column the
-            // chart's axis has no candle for, rendering as a blank gap under the
-            // marker. Snapping keeps the arrow on a real candle; price stays exact.
+            // Snap to the candle period the fill falls inside (a hidden marker series needs a real candle time).
             var t=Math.floor(p.ts/periodSec)*periodSec;t-=etOff(t); // snap in true time first, then shift to match the ET-shifted candles
             var dayCandle=null;
             if(tf==="1d"||tf==="1w"){ // daily/weekly candles open at the 17:00/18:00 ET anchor, not UTC midnight — snap to the candle that contains the fill
@@ -8687,71 +8698,60 @@ function chartTab(){
               for(var di=0;di<candles.length;di++){if(candles[di].time<=pd)dayCandle=candles[di];else break;}
               t=dayCandle.time;
             }
-            var layer=null;
-            for(var li=0;li<layers.length&&!layer;li++){if(!layers[li].seen[t]) layer=layers[li];}
-            if(!layer){layer={s:makeMarkerSeries(),seen:{},data:[],markers:[]};layers.push(layer);}
-            layer.seen[t]=true;
-            // Daily: a day's range is wide, so sit the arrow at the real fill price
-            // (kept inside that candle's high/low to absorb the CFD-vs-futures gap)
-            // instead of at the candle's close.
-            // Intraday: the old value (price+offset) always collapsed to the candle's CLOSE, so the arrow overlapped the candle body.
-            // Park it just outside the candle: above the high for down arrows, below the low for up arrows.
-            var _isUp=p.kind==="entry"?p.isLong:!p.isLong;
+            var isUp=p.kind==="entry"?p.isLong:!p.isLong; // entry arrow = the opening action, exit arrow = the closing (opposite) action
+            // Basis known (EdgeFeed running): the fill is drawn at its real level, shifted onto this CFD chart and kept inside the candle's range.
+            var _bsv=dayCandle?null:ntBasis[Math.floor(p.ts/periodSec)*periodSec];
+            var exact=(typeof _bsv==="number")&&!(p.kind==="exit"&&p.approx);
             var val;
             if(dayCandle) val=Math.min(dayCandle.high,Math.max(dayCandle.low,p.price));
-            else {var _nc=nearestCandleFor(p);val=_isUp?_nc.low:_nc.high;}
-            layer.data.push({time:t,value:val});
-            hoverPoints.push({time:t,value:val,p:p});
-            // Entry arrow reflects the opening action; exit arrow reflects
-            // the closing action, which is the opposite side — closing a
-            // long is a sell (down), closing a short is a buy (up). Exits get
-            // their own color (purple) so they read as "closing" at a glance,
-            // distinct from the green/red of entries.
-            var isUp=p.kind==="entry"?p.isLong:!p.isLong;
-            layer.markers.push({
-              time:t,
-              position:isUp?"belowBar":"aboveBar",
-              color:p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00",
-              shape:isUp?"arrowUp":"arrowDown",
-              // Label entries only (not exits) so a Short's arrow shows "S"
-              // above the bar and a Long's shows "L" below — a quick way to
-              // tell separate trades apart at a glance without opening the list.
-              text:p.kind==="entry"?(p.isLong?"L":"S"):""
-            });
-            // Basis known for this fill's candle: put a small dot on the fill's level as it sits on THIS (CFD) chart, kept inside the candle's range
-            var _bsv=dayCandle?null:ntBasis[Math.floor(p.ts/periodSec)*periodSec];
-            if(typeof _bsv==="number"){
-              var _nc2=nearestCandleFor(p),_ex=Math.min(_nc2.high,Math.max(_nc2.low,p.price+_bsv));
-              var _col=p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00";
-              var _ds=makeMarkerSeries();
-              _ds.setData([{time:t,value:_ex}]);
-              _ds.setMarkers([{time:t,position:"inBar",color:_col,shape:"circle",size:0.5}]);
-              dotSeries.push(_ds);
+            else {var _nc=nearestCandleFor(p);val=exact?Math.min(_nc.high,Math.max(_nc.low,p.price+_bsv)):(isUp?_nc.low:_nc.high);}
+            if(!exact){
+              // No basis: arrow parked just outside the candle (below the low for up arrows, above the high for down arrows)
+              var layer=null;
+              for(var li=0;li<layers.length&&!layer;li++){if(!layers[li].seen[t]) layer=layers[li];}
+              if(!layer){layer={s:makeMarkerSeries(),seen:{},data:[],markers:[]};layers.push(layer);}
+              layer.seen[t]=true;
+              layer.data.push({time:t,value:val});
+              layer.markers.push({
+                time:t,
+                position:isUp?"belowBar":"aboveBar",
+                color:p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00",
+                shape:isUp?"arrowUp":"arrowDown",
+                text:p.kind==="entry"?(p.isLong?"L":"S"):""
+              });
+            } else {
               var _pr=tradePairs[p.id]||(tradePairs[p.id]={});
-              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx,ts:p.ts,bs:_bsv,raw:p.price};
+              _pr[p.kind]={t:t,v:val,isLong:p.isLong,approx:!!p.approx,ts:p.ts,bs:_bsv,raw:p.price,ord:p.ord,ctr:p.ctr,d:p.d};
             }
+            hoverPoints.push({time:t,value:val,p:p,exact:exact,dy:isUp?10:-10});
           });
-          // thin dashed line between a trade's two exact fill levels (blue long / purple short); skipped when the exit has no real timestamp
-          var sameCandle=[]; // entry and exit inside one candle: a line series can't hold two points at one time, so these are drawn on an overlay canvas
-          Object.keys(tradePairs).forEach(function(id){
-            var pr=tradePairs[id];
-            if(pr.entry&&pr.exit&&!pr.exit.approx&&pr.exit.t===pr.entry.t&&pr.exit.v!==pr.entry.v){sameCandle.push({t:pr.entry.t,a:pr.entry.v,b:pr.exit.v,col:pr.entry.isLong?"#3d8bff":"#b266ff"});return;}
-            if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.t>pr.entry.t)) return;
-            var cs2=chart.addLineSeries({color:pr.entry.isLong?"#3d8bff":"#b266ff",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
-            cs2.setData([{time:pr.entry.t,value:pr.entry.v},{time:pr.exit.t,value:pr.exit.v}]);
-            dotSeries.push(cs2);
-          });
-          // stop (red) and target (green) orders that were working during each trade: one level per stretch of time, stepping when you moved the order
-          var ordTr=[];
-          if(ntOrders.length){
-            var byOrd={};
-            ntOrders.forEach(function(e){(byOrd[e[1]]||(byOrd[e[1]]=[])).push(e);});
-            Object.keys(tradePairs).forEach(function(tid){
-              var pr=tradePairs[tid];
-              if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.ts>pr.entry.ts)||typeof pr.entry.bs!=="number") return;
-              var act=pr.entry.isLong?"S":"B",t0=pr.entry.ts*1000,t1=pr.exit.ts*1000,seen={},trSegs=[];
-              Object.keys(byOrd).forEach(function(oid){
-                var ev=byOrd[oid];
+
+          // Exact x of a fill inside its candle (the candle spans x0 +/- half a bar)
+          function xAtTs(sec){
+            var bt=Math.floor(sec/periodSec)*periodSec,t=bt-etOff(bt),ts2=chart.timeScale(),x0=ts2.timeToCoordinate(t);
+            if(x0==null) return null;
+            var x1=ts2.timeToCoordinate(t+periodSec),w;
+            if(x1!=null) w=x1-x0; else{var xm=ts2.timeToCoordinate(t-periodSec);w=xm!=null?x0-xm:8;}
+            return x0-w/2+((sec-bt)/periodSec)*w;
+          }
+
+          // One item per trade drawn at price level: its arrows, connector and (when NinjaTrader recorded them) the stop / target orders.
+          // Orders come from the trade itself (saved at import) or, for older trades, from EdgeFeed's live memory.
+          var ovTr=[],selSet={};
+          selectedIds.forEach(function(i){selSet[String(i)]=1;});
+          var byOrdLive=null;
+          if(ntOrders.length){byOrdLive={};ntOrders.forEach(function(e){(byOrdLive[e[1]]||(byOrdLive[e[1]]=[])).push(e);});}
+          Object.keys(tradePairs).forEach(function(tid){
+            var pr=tradePairs[tid],en=pr.entry||null,ex=pr.exit||null,any=en||ex;
+            var T={id:tid,sel:!!selSet[tid],en:en,ex:ex,isLong:any.isLong,bs:any.bs,lv:[]};
+            if(en&&ex&&ex.ts>en.ts){
+              var act=en.isLong?"S":"B",t0=en.ts*1000,t1=ex.ts*1000,src=null,seen={},trSegs=[];
+              if(en.ord&&en.ord.length){
+                src={};
+                en.ord.slice().sort(function(a,b){return a[0]-b[0];}).forEach(function(r){var k="n"+r[4];(src[k]||(src[k]=[])).push([r[0],k,r[1],act,r[2],1,r[3]]);});
+              } else src=byOrdLive;
+              if(src) Object.keys(src).forEach(function(oid){
+                var ev=src[oid];
                 if(ev[0][3]!==act) return;
                 for(var i=0;i<ev.length;i++){
                   var e=ev[i];
@@ -8764,10 +8764,14 @@ function chartTab(){
                   seen[key]=sg2;trSegs.push(sg2);
                 }
               });
-              if(trSegs.length&&typeof pr.entry.raw==="number") ordTr.push({ets:pr.entry.ts,xts:pr.exit.ts,bs:pr.entry.bs,ep:pr.entry.raw,isLong:pr.entry.isLong,segs:trSegs});
-            });
-          }
-          if(sameCandle.length||ordTr.length){
+              ["S","T"].forEach(function(k){
+                var ss=trSegs.filter(function(q){return q.k===k;}).sort(function(a,b){return a.a-b.a;});
+                if(ss.length) T.lv.push({k:k,fin:ss[ss.length-1],first:ss[0],hist:ss.slice(0,-1)});
+              });
+            }
+            ovTr.push(T);
+          });
+          if(ovTr.length){
             var cv2=document.createElement("canvas");
             cv2.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5;";
             chartDiv.appendChild(cv2);
@@ -8775,35 +8779,27 @@ function chartTab(){
             (function loop2(){
               if(!chartDiv.isConnected||!cv2.isConnected) return;
               try{
-                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,ts2=chart.timeScale(),segs=[],sg=W+"x"+H+"|"+(showTrades?1:0);
-                function xAt(sec){
-                  var bt=Math.floor(sec/periodSec)*periodSec,t=bt-etOff(bt),x0=ts2.timeToCoordinate(t);
-                  if(x0==null) return null;
-                  var x1=ts2.timeToCoordinate(t+periodSec),w;
-                  if(x1!=null) w=x1-x0; else{var xm=ts2.timeToCoordinate(t-periodSec);w=xm!=null?x0-xm:8;}
-                  return x0-w/2+((sec-bt)/periodSec)*w;
-                }
-                var zs=[];
-                if(showTrades) ordTr.forEach(function(T){
-                  var xe=xAt(T.ets),xx=xAt(T.xts),ye=series.priceToCoordinate(T.ep+T.bs);
-                  if(xe==null||xx==null||ye==null) return;
-                  var it={xe:xe,xx:xx,ye:ye,T:T,lv:[]};
-                  ["S","T"].forEach(function(k){
-                    var ss=T.segs.filter(function(q){return q.k===k;}).sort(function(a,b){return a.a-b.a;});
-                    if(!ss.length) return;
-                    var fin=ss[ss.length-1],yf=series.priceToCoordinate(fin.px+T.bs),xs=xAt(fin.a);
+                var W=chartDiv.clientWidth,H=chartDiv.clientHeight,dpr=window.devicePixelRatio||1,items=[],sg=W+"x"+H+"|"+(showTrades?1:0);
+                if(showTrades) ovTr.forEach(function(T){
+                  var it={T:T,xe:null,ye:null,xx:null,yx:null,lv:[]};
+                  if(T.en){it.xe=xAtTs(T.en.ts);it.ye=series.priceToCoordinate(T.en.v);}
+                  if(T.ex){it.xx=xAtTs(T.ex.ts);it.yx=series.priceToCoordinate(T.ex.v);}
+                  it.okE=it.xe!=null&&it.ye!=null;it.okX=it.xx!=null&&it.yx!=null;
+                  if(!it.okE&&!it.okX) return;
+                  if(it.okE&&it.okX) T.lv.forEach(function(L){
+                    var yf=series.priceToCoordinate(L.fin.px+T.bs),xs=xAtTs(L.fin.a);
                     if(yf==null||xs==null) return;
-                    var hist=[];
-                    ss.slice(0,-1).forEach(function(h){var hx=xAt(h.a),hy=series.priceToCoordinate(h.px+T.bs);if(hx!=null&&hy!=null) hist.push({x:hx,y:hy,px:h.px});});
-                    it.lv.push({k:k,fin:fin,yf:yf,xs:Math.max(xs,xe),profit:T.isLong?fin.px>T.ep:fin.px<T.ep,hist:hist,moved:ss.length-1});
-                    sg+="|z"+k+Math.round(xs)+","+Math.round(yf*10)+","+hist.length;
+                    var isL=T.en.isLong,ep=T.en.raw;
+                    var o={L:L,yf:yf,xs:Math.max(xs,it.xe),profit:isL?L.fin.px>ep:L.fin.px<ep,hist:[],yfirst:null,firstProfit:false};
+                    if(T.sel&&L.hist.length){
+                      o.yfirst=series.priceToCoordinate(L.first.px+T.bs);
+                      o.firstProfit=isL?L.first.px>ep:L.first.px<ep;
+                      L.hist.forEach(function(h){var hx=xAtTs(h.a),hy=series.priceToCoordinate(h.px+T.bs);if(hx!=null&&hy!=null) o.hist.push({x:hx,y:hy,px:h.px});});
+                    }
+                    it.lv.push(o);sg+="|"+L.k+Math.round(o.xs)+","+Math.round(yf*10)+","+L.hist.length;
                   });
-                  if(it.lv.length){zs.push(it);sg+="|e"+Math.round(xe)+","+Math.round(xx)+","+Math.round(ye*10);}
-                });
-                if(showTrades) sameCandle.forEach(function(q){
-                  var x=ts2.timeToCoordinate(q.t),y1=series.priceToCoordinate(q.a),y2=series.priceToCoordinate(q.b);
-                  if(x==null||y1==null||y2==null) return;
-                  segs.push([x,y1,y2,q.col]);sg+="|"+Math.round(x*10)+","+Math.round(y1*10)+","+Math.round(y2*10);
+                  items.push(it);
+                  sg+="|t"+Math.round(it.xe||0)+","+Math.round((it.ye||0)*10)+","+Math.round(it.xx||0)+","+Math.round((it.yx||0)*10)+(T.sel?"s":"");
                 });
                 if(sg!==sig2){
                   sig2=sg;
@@ -8811,64 +8807,85 @@ function chartTab(){
                   var cx=cv2.getContext("2d");cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
                   var pw=70,ph=28;
                   try{pw=chart.priceScale("right").width()||70;ph=chart.timeScale().height()||28;}catch(e2){}
-                  cx.save();cx.beginPath();cx.rect(0,0,Math.max(0,W-pw),Math.max(0,H-ph));cx.clip();
                   var plotW=Math.max(0,W-pw);
+                  cx.save();cx.beginPath();cx.rect(0,0,plotW,Math.max(0,H-ph));cx.clip();
                   function fmt(v){return String(Math.round(v*100)/100);}
-                  // risk / reward zones first (under everything else)
-                  zs.forEach(function(it){
-                    it.lv.forEach(function(L){
-                      cx.fillStyle=L.profit?"rgba(47,179,107,0.22)":"rgba(226,75,74,0.18)";
-                      cx.fillRect(it.xe,Math.min(it.ye,L.yf),Math.max(it.xx-it.xe,3),Math.max(Math.abs(L.yf-it.ye),1));
+                  function arrow(x,y,up,col){
+                    var d=up?1:-1;
+                    cx.beginPath();cx.moveTo(x,y);cx.lineTo(x-7,y+11*d);cx.lineTo(x-3,y+11*d);cx.lineTo(x-3,y+20*d);cx.lineTo(x+3,y+20*d);cx.lineTo(x+3,y+11*d);cx.lineTo(x+7,y+11*d);cx.closePath();
+                    cx.fillStyle=col;cx.fill();cx.lineWidth=1;cx.strokeStyle="rgba(4,13,26,0.7)";cx.setLineDash([]);cx.stroke();
+                  }
+                  function halo(txt,x,y,col){cx.lineWidth=3;cx.strokeStyle="rgba(4,13,26,0.85)";cx.strokeText(txt,x,y);cx.fillStyle=col;cx.fillText(txt,x,y);}
+                  // 1) zones: reward / risk boxes to the FINAL target and stop; a selected trade also gets a faint one out to the FIRST level
+                  items.forEach(function(it){
+                    if(!(it.okE&&it.okX)) return;
+                    var w=Math.max(it.xx-it.xe,3);
+                    it.lv.forEach(function(o){
+                      if(o.yfirst!=null){cx.fillStyle=o.firstProfit?"rgba(47,179,107,0.07)":"rgba(226,75,74,0.08)";cx.fillRect(it.xe,Math.min(it.ye,o.yfirst),w,Math.max(Math.abs(o.yfirst-it.ye),1));}
+                      cx.fillStyle=o.profit?"rgba(47,179,107,0.22)":"rgba(226,75,74,0.2)";
+                      cx.fillRect(it.xe,Math.min(it.ye,o.yf),w,Math.max(Math.abs(o.yf-it.ye),1));
                     });
                   });
-                  cx.lineWidth=1.5;cx.setLineDash([3,3]);
-                  segs.forEach(function(g){cx.strokeStyle=g[3];cx.beginPath();cx.moveTo(g[0],g[1]);cx.lineTo(g[0],g[2]);cx.stroke();});
-                  cx.textBaseline="middle";
-                  zs.forEach(function(it){
-                    var T=it.T,labs=[];
-                    cx.setLineDash([2,3]);cx.lineWidth=0.7;cx.strokeStyle="rgba(170,180,200,0.6)";
-                    cx.beginPath();cx.moveTo(it.xe,it.ye);cx.lineTo(Math.max(it.xx,it.xe+3),it.ye);cx.stroke();
-                    it.lv.forEach(function(L){
-                      var col=L.k==="S"?"#e24b4a":"#2fb36b";
-                      // faint history: where this level started and each place you dragged it
-                      if(L.hist.length){
-                        var pts=L.hist.concat([{x:L.xs,y:L.yf}]);
-                        cx.globalAlpha=0.65;cx.strokeStyle=col;cx.lineWidth=1;cx.setLineDash([1,3]);
+                  // 2) faint order history (selected trades), final level lines
+                  items.forEach(function(it){
+                    it.lv.forEach(function(o){
+                      var col=o.L.k==="S"?"#e24b4a":"#2fb36b";
+                      if(o.hist.length){
+                        var pts=o.hist.concat([{x:o.xs,y:o.yf}]);
+                        cx.globalAlpha=0.7;cx.strokeStyle=col;cx.lineWidth=1;cx.setLineDash([1,3]);
                         cx.beginPath();cx.moveTo(pts[0].x,pts[0].y);
                         for(var hi=1;hi<pts.length;hi++){cx.lineTo(pts[hi].x,pts[hi-1].y);cx.lineTo(pts[hi].x,pts[hi].y);}
                         cx.stroke();
+                        if(o.yfirst!=null){cx.beginPath();cx.moveTo(it.xe,o.yfirst);cx.lineTo(Math.max(it.xx,it.xe+3),o.yfirst);cx.stroke();}
                         cx.setLineDash([]);
-                        L.hist.forEach(function(h){cx.beginPath();cx.arc(h.x,h.y,2.8,0,6.2832);cx.stroke();});
+                        o.hist.forEach(function(h){cx.beginPath();cx.arc(h.x,h.y,2.8,0,6.2832);cx.stroke();});
                         cx.globalAlpha=1;
-                        cx.font="10px sans-serif";cx.fillStyle="rgba(170,180,200,0.9)";cx.textAlign="left";
-                        var lastY=-99;
-                        L.hist.forEach(function(h,hi2){
-                          if(hi2>0&&Math.abs(h.y-lastY)<12) return;
-                          lastY=h.y;cx.fillText((hi2===0?"first ":"")+fmt(h.px),h.x+6,h.y);
-                        });
                       }
-                      // the level you ended with
                       cx.setLineDash([]);cx.strokeStyle=col;cx.lineWidth=1.5;
-                      cx.beginPath();cx.moveTo(L.xs,L.yf);cx.lineTo(Math.max(it.xx,L.xs+3),L.yf);cx.stroke();
-                      var pts2=Math.abs(L.fin.px-T.ep).toFixed(1);
-                      var lines=[{t:(L.k==="S"?"SL ":"TP ")+fmt(L.fin.px)+"  "+(L.profit?"+":"\u2212")+pts2+" pts",c:col,f:"500 11px sans-serif"}];
-                      if(L.moved>0&&L.hist.length) lines.push({t:"moved "+L.moved+"x, first "+fmt(L.hist[0].px),c:"rgba(170,180,200,0.9)",f:"10px sans-serif"});
-                      labs.push({y:L.yf,lines:lines});
+                      cx.beginPath();cx.moveTo(o.xs,o.yf);cx.lineTo(Math.max(it.xx,o.xs+3),o.yf);cx.stroke();
                     });
-                    labs.push({y:it.ye,lines:[{t:"entry "+fmt(T.ep),c:"#3d8bff",f:"11px sans-serif"}]});
+                  });
+                  // 3) entry -> exit connector, then the arrows with their tips on the fill prices
+                  items.forEach(function(it){
+                    var T=it.T;
+                    if(it.okE&&it.okX){
+                      cx.setLineDash([3,3]);cx.lineWidth=1.5;cx.strokeStyle=T.en.isLong?"#3d8bff":"#b266ff";
+                      cx.beginPath();cx.moveTo(it.xe,it.ye);cx.lineTo(it.xx,it.yx);cx.stroke();cx.setLineDash([]);
+                    }
+                    if(it.okE) arrow(it.xe,it.ye,T.en.isLong,T.en.isLong?"#3d8bff":"#b266ff");
+                    if(it.okX) arrow(it.xx,it.yx,!T.ex.isLong,"#ff8c00");
+                  });
+                  // 4) text, only for trades ticked in the list
+                  cx.textBaseline="middle";
+                  items.forEach(function(it){
+                    var T=it.T;
+                    if(!T.sel) return;
+                    if(it.okE){
+                      cx.font="11px sans-serif";cx.textAlign="right";
+                      halo((T.en.isLong?"L":"S")+" x"+T.en.ctr+"  "+fmt(T.en.raw),it.xe-12,it.ye,T.en.isLong?"#3d8bff":"#b266ff");
+                    }
+                    if(it.okX){
+                      var dd=T.en&&typeof T.en.d==="number"?"  "+(T.en.d>=0?"+":"−")+"$"+Math.abs(T.en.d).toFixed(0):"";
+                      cx.font="11px sans-serif";cx.textAlign="center";
+                      halo("exit "+fmt(T.ex.raw)+dd,it.xx,it.yx+(T.ex.isLong?14:-14),"#ff8c00");
+                    }
+                    if(!(it.okE&&it.okX)) return;
+                    var labs=[];
+                    it.lv.forEach(function(o){
+                      var col=o.L.k==="S"?"#e24b4a":"#2fb36b",nm=o.L.k==="S"?"SL ":"TP ",ep=T.en.raw;
+                      var lines=[{t:nm+fmt(o.L.fin.px)+"  "+(o.profit?"+":"−")+Math.abs(o.L.fin.px-ep).toFixed(1)+" pts",c:col,f:"500 11px sans-serif"}];
+                      if(o.L.hist.length) lines.push({t:"moved "+o.L.hist.length+"x",c:"rgba(170,180,200,0.9)",f:"10px sans-serif"});
+                      labs.push({y:o.yf,lines:lines});
+                      if(o.yfirst!=null) labs.push({y:o.yfirst,lines:[{t:"plan "+(o.L.k==="S"?"stop ":"target ")+fmt(o.L.first.px)+"  "+(o.firstProfit?"+":"−")+Math.abs(o.L.first.px-ep).toFixed(1)+" pts",c:"rgba(170,180,200,0.95)",f:"11px sans-serif"}]});
+                    });
                     labs.sort(function(a,b){return a.y-b.y;});
                     var floor=-99;
                     labs.forEach(function(lb){
                       var y=Math.max(lb.y,floor+7),w=0;
                       lb.lines.forEach(function(ln){cx.font=ln.f;w=Math.max(w,cx.measureText(ln.t).width);});
-                      var left=it.xx+10+w>plotW-4;
-                      var x=left?Math.max(it.xx-10,w+4):it.xx+10;
+                      var left=it.xx+10+w>plotW-4,x=left?Math.max(it.xx-10,w+4):it.xx+10;
                       cx.textAlign=left?"right":"left";
-                      lb.lines.forEach(function(ln,li3){
-                        cx.font=ln.f;
-                        cx.lineWidth=3;cx.strokeStyle="rgba(4,13,26,0.85)";cx.strokeText(ln.t,x,y+li3*12);
-                        cx.fillStyle=ln.c;cx.fillText(ln.t,x,y+li3*12);
-                      });
+                      lb.lines.forEach(function(ln,li3){cx.font=ln.f;halo(ln.t,x,y+li3*12,ln.c);});
                       floor=y+(lb.lines.length-1)*12+7;
                     });
                   });
@@ -8880,9 +8897,8 @@ function chartTab(){
             })();
           }
           layers.forEach(function(l){l.s.setData(l.data);});
-          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});dotSeries.forEach(function(x){x.applyOptions({visible:showTrades});});if(!showTrades)tip.style.display="none";};
+          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});if(!showTrades)tip.style.display="none";};
           layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});
-          if(!showTrades) dotSeries.forEach(function(x){x.applyOptions({visible:false});});
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
           note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
@@ -8901,9 +8917,10 @@ function chartTab(){
             var best=null,bestD=18*18; // 18px hit radius
             for(var i=0;i<hoverPoints.length;i++){
               var hp=hoverPoints[i];
-              var x=chart.timeScale().timeToCoordinate(hp.time);
-              var y=markerSeries.priceToCoordinate(hp.value);
+              var x=hp.exact?xAtTs(hp.p.ts):chart.timeScale().timeToCoordinate(hp.time);
+              var y=series.priceToCoordinate(hp.value);
               if(x==null||y==null) continue;
+              if(hp.exact) y+=hp.dy; // the arrow body sits beside its tip
               var dx=x-mx,dy=y-my,d=dx*dx+dy*dy;
               if(d<bestD){bestD=d;best=hp;}
             }
@@ -8944,7 +8961,7 @@ function chartTab(){
         // ones) so there's always something left to check/uncheck.
         if(selectedIds.length){
           var selRow=div("row gap8");selRow.style.cssText="align-items:center;margin-top:10px;margin-bottom:4px;";
-          var selTxt=span("xs m");selTxt.textContent="Showing "+displayPoints.filter(function(p){return p.kind==="entry";}).length+" selected trade"+(displayPoints.length===1?"":"s");selRow.appendChild(selTxt);
+          var selTxt=span("xs m");selTxt.textContent=selectedIds.length+" selected trade"+(selectedIds.length===1?"":"s")+" · text shown";selRow.appendChild(selTxt);
           var clrSel=h("button",{className:"btn"});clrSel.style.cssText="font-size:11px;padding:3px 8px;";clrSel.textContent="Clear selection";
           clrSel.addEventListener("click",function(){State.chart_selected_ids=[];render();});
           selRow.appendChild(clrSel);
@@ -8970,6 +8987,13 @@ function chartTab(){
             var idx=cur.indexOf(p.id);
             if(idx>-1) cur.splice(idx,1); else cur.push(p.id);
             State.chart_selected_ids=cur;
+            try{ // keep the chart where it is: ticking a trade only redraws, it never recentres
+              var _r=chart.timeScale().getVisibleLogicalRange(),_n=candles.length;
+              if(_r&&_n>1){
+                if(_r.to>=_n-1-0.5) _chartKeepView={mode:"right",spanBars:_r.to-_r.from,gapBars:_r.to-(_n-1)};
+                else{var _m=Math.max(0,Math.min(_n-1,Math.round((_r.from+_r.to)/2)));_chartKeepView={mode:"center",centerT:candles[_m].time,spanBars:_r.to-_r.from};}
+              }
+            }catch(e){_dbg(e);}
             render();
           });
           row.appendChild(cb);
