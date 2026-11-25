@@ -6231,7 +6231,7 @@ function ntIngest(o){
   if(res.error||!res.trades.length) return;
   var t=res.trades[0];
   var key=t.date+"_"+t.time+"_"+t.inst+"_"+t.entry;
-  var dup=State.trades.some(function(x){return (o.id&&x.ntId===o.id)||(x.date+"_"+x.time+"_"+x.inst+"_"+x.entry)===key;});
+  var dup=State.trades.some(function(x){return o.id?x.ntId===o.id:(x.date+"_"+x.time+"_"+x.inst+"_"+x.entry)===key;}); // trade id is unique per account+fills; only fall back to the field match when there is no id
   if(dup) return;
   if(o.id) ntSeenAdd(o.id);
   t.ntId=o.id||"";t.auto=true;t.accountId=State.activeAccount||null;
