@@ -85,9 +85,15 @@ fn main() {
                     };
                     std::thread::spawn(move || {
                         let n = CHILD_COUNT.fetch_add(1, Ordering::SeqCst);
+                        // Unique label every time: the window-state plugin remembers position by label, so a reused "child-0"
+                        // could reopen off-screen (e.g. where the TV used to be) and look like it never opened.
+                        let stamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis())
+                            .unwrap_or(0);
                         let _ = WebviewWindowBuilder::new(
                             &h,
-                            format!("child-{n}"),
+                            format!("child-{n}-{stamp}"),
                             WebviewUrl::External(url),
                         )
                         .title(title)
