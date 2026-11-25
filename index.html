@@ -6293,7 +6293,9 @@ function ntIngest(o){
   try{localStorage.setItem("edge_last_import",JSON.stringify({at:Date.now(),ids:[t.id]}));}catch(e){_dbg(e);}
   _ntLast=t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2)+" · "+new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   undoToast("Auto-imported "+t.inst+" "+t.dir+" "+(t.d>=0?"+":"-")+"$"+Math.abs(t.d).toFixed(2),undoLastImport);
-  syncToCloud();renderNtPill();renderSoft();
+  syncToCloud();renderNtPill();
+  // a full re-render would rebuild the chart and reload its data (e.g. right after a hotkey close), so while a chart is on screen wait until you leave it
+  (function wait(){var c=document.getElementById("content");if(c&&c.querySelector(".tv-lightweight-charts")){setTimeout(wait,3000);return;}renderSoft();})();
   ntSaveBasis(t);
   setTimeout(function(){ntSaveBasis(t);},20000); // second try once the exit candle has settled
 }
