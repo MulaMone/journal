@@ -86,8 +86,11 @@ fn align_for(sym: &str) -> i64 {
 fn canon_sym(s: &str) -> String {
     let s = s.to_uppercase();
     match s.as_str() {
-        "MNQ" => "NQ",
-        "MES" => "ES",
+        "MNQ" | "NNQ" => "NQ",
+        "MES" | "NES" => "ES",
+        "MGC" | "1OZ" | "QO" => "GC",
+        "MCL" | "QM" => "CL",
+        "MNG" | "QG" => "NG",
         "GOLD" => "GC",
         "OIL" => "CL",
         "NATGAS" => "NG",
@@ -2099,12 +2102,18 @@ impl eframe::App for App {
                 let mut lines: Vec<String> = vec![format!("{sign}{:.dec$}  ·  {:.0} ticks", pts.abs(), (pts.abs() / tk).round())];
                 let pv: Option<f64> = match self.sym.as_str() { "ES" => Some(50.0), "NQ" => Some(20.0), "CL" => Some(1000.0), "GC" => Some(100.0), "NG" => Some(10000.0), _ => None };
                 if let Some(pv) = pv {
-                    let micro: Option<(&str, f64)> = match self.sym.as_str() { "ES" => Some(("MES", 5.0)), "NQ" => Some(("MNQ", 2.0)), _ => None };
-                    let mut l = format!("{} (1 {})", money(pts * pv), self.sym);
-                    if let Some((mn, mv)) = micro {
-                        l.push_str(&format!("  ·  {} (1 {})", money(pts * mv), mn));
+                    let ex: &[(&str, f64)] = match self.sym.as_str() {
+                        "ES" => &[("MES", 5.0), ("NES", 0.5)],
+                        "NQ" => &[("MNQ", 2.0), ("NNQ", 0.2)],
+                        "CL" => &[("QM", 500.0), ("MCL", 100.0)],
+                        "GC" => &[("MGC", 10.0), ("1OZ", 1.0)],
+                        "NG" => &[("QG", 2500.0), ("MNG", 1000.0)],
+                        _ => &[],
+                    };
+                    lines.push(format!("{} (1 {})", money(pts * pv), self.sym));
+                    if !ex.is_empty() {
+                        lines.push(ex.iter().map(|(n, v)| format!("{} ({})", money(pts * v), n)).collect::<Vec<_>>().join("  ·  "));
                     }
-                    lines.push(l);
                 }
                 let nb = ((i1 - i0).abs().round() as i64).max(0);
                 let secs_d = (l_to_t(i1 as f64) - l_to_t(i0 as f64)).abs() as i64;
