@@ -27,7 +27,7 @@ fn clean(s: &str) -> String {
 /// The GPU chart button opens ?native=chart&sym=..&tf=..#t=<token>. Start edge-chart.exe (next to this exe),
 /// hand it the saved OANDA token through its environment, and report whether it started.
 /// The token only travels inside this app: the URL is never navigated to, and the fragment is never sent anywhere.
-fn launch_native_chart(url: &Url) -> bool {
+fn launch_native_chart(app: &tauri::AppHandle, url: &Url) -> bool {
     let (mut sym, mut tf) = ("NQ".to_string(), "5m".to_string());
     for (k, v) in url.query_pairs() {
         match k.as_ref() {
@@ -44,8 +44,26 @@ fn launch_native_chart(url: &Url) -> bool {
     if !exe.exists() {
         return false;
     }
+    // open the GPU chart right next to the EDGE window: same top, same height, same width, on its right side
+    let mut geo: Vec<String> = vec![];
+    if let Some(w) = app.get_webview_window("main") {
+        if let (Ok(p), Ok(sz), Ok(sf)) = (w.outer_position(), w.outer_size(), w.scale_factor()) {
+            let sf = if sf > 0.0 { sf } else { 1.0 };
+            let (mut x, y) = ((p.x as f64 + sz.width as f64) / sf, p.y as f64 / sf);
+            let (cw, ch) = (sz.width as f64 / sf, sz.height as f64 / sf);
+            // no room to the right of EDGE on this monitor: tuck the chart against the monitor's right edge instead
+            if let Ok(Some(m)) = w.current_monitor() {
+                let right = (m.position().x as f64 + m.size().width as f64) / sf;
+                if x + cw > right {
+                    x = (right - cw).max(0.0);
+                }
+            }
+            geo = vec!["--pos".into(), format!("{:.0},{:.0}", x, y), "--size".into(), format!("{:.0},{:.0}", cw, ch)];
+        }
+    }
     match std::process::Command::new(exe)
         .args(["--sym", &sym, "--tf", &tf])
+        .args(&geo)
         .env("EDGE_OANDA_TOKEN", tok)
         .spawn()
     {
@@ -88,7 +106,7 @@ fn main() {
                     // GPU chart button: start the native chart program. If it isn't installed next to this exe,
                     // fall back to the normal web chart window so the button is never dead.
                     if url.query().map_or(false, |q| q.contains("native=chart")) {
-                        if launch_native_chart(&url) {
+                        if launch_native_chart(&h, &url) {
                             return NewWindowResponse::Deny;
                         }
                         let q = url.query().unwrap_or("").replace("native=chart", "detached=1&tab=chart");
