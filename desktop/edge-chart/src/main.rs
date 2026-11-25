@@ -5,7 +5,9 @@
 use chrono::{DateTime, Datelike, Offset, TimeZone, Timelike};
 use chrono_tz::America::New_York;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::io::{BufRead, BufReader};
+use std::net::TcpListener;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -39,12 +41,14 @@ struct Candle {
     done: bool,
 }
 
-const SYMS: [(&str, &str); 5] = [
+const SYMS: [(&str, &str); 7] = [
     ("ES", "SPX500_USD"),
     ("NQ", "NAS100_USD"),
     ("GC", "XAU_USD"),
     ("CL", "WTICO_USD"),
     ("NG", "NATGAS_USD"),
+    ("DXY", ""), // NinjaTrader only (no OANDA feed): shown while EdgeFeed is connected for it
+    ("BTC", ""),
 ];
 const TFS: [(&str, &str, i64); 9] = [
     ("2m", "M2", 120),
@@ -59,7 +63,7 @@ const TFS: [(&str, &str, i64); 9] = [
 ];
 const INTRA_TFS: [&str; 4] = ["2m", "5m", "30m", "1h"];
 const HTFS: [(&str, &str, u32); 3] = [("1H", "H1", 1500), ("4H", "H4", 1000), ("D", "D", 500)];
-const FUTURES: [&str; 5] = ["ES", "NQ", "CL", "GC", "NG"]; // sessions open 18:00 ET (the web chart's FUTURES_ALIGN_SYMS)
+const FUTURES: [&str; 7] = ["ES", "NQ", "CL", "GC", "NG", "DXY", "BTC"]; // sessions open 18:00 ET (the web chart's FUTURES_ALIGN_SYMS)
 
 fn inst_for(sym: &str) -> &'static str {
     SYMS.iter().find(|s| s.0 == sym).map(|s| s.1).unwrap_or("NAS100_USD")
@@ -69,6 +73,8 @@ fn tick_size(sym: &str) -> f64 {
         "GC" => 0.1,
         "CL" => 0.01,
         "NG" => 0.001,
+        "DXY" => 0.005,
+        "BTC" => 5.0,
         _ => 0.25,
     }
 }
@@ -85,6 +91,8 @@ fn canon_sym(s: &str) -> String {
         "GOLD" => "GC",
         "OIL" => "CL",
         "NATGAS" => "NG",
+        "DX" | "USDX" => "DXY",
+        "MBT" => "BTC",
         other => other,
     }
     .to_string()
@@ -114,11 +122,17 @@ struct Shared {
     htf: Vec<Candle>,
     status: String,
     version: u64, // bumps when a fresh full load replaces the main data
+    nt: HashMap<String, Vec<Candle>>, // 1-minute futures bars pushed by NinjaTrader, per symbol
+    nt_d: HashMap<String, Vec<Candle>>, // NinjaTrader's own daily bars (long history for D / W / levels)
+    nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
+    src: String,                      // "NT" or "OANDA" (shown in the toolbar)
 }
 
 enum Req {
     Load { sym: String, tf: String },
     Htf { sym: String, tf: String }, // tf is an HTFS label
+    Nt { sym: String },              // NinjaTrader pushed new bars
+    NtGone { sym: String },          // a NinjaTrader connection closed
 }
 
 fn fetch(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64) -> Result<Vec<Candle>, String> {
@@ -126,6 +140,9 @@ fn fetch(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64) 
 }
 
 fn fetch_ex(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i64, to: Option<i64>) -> Result<Vec<Candle>, String> {
+    if inst.is_empty() {
+        return Err("DXY and BTC only work while NinjaTrader is live (EdgeFeed on a DX / BTC chart)".into());
+    }
     let to_q = to
         .and_then(|t| DateTime::from_timestamp(t, 0))
         .map(|d| format!("&to={}", d.format("%Y-%m-%dT%H:%M:%SZ")))
@@ -247,7 +264,138 @@ fn fetch_m1(base: &str, tok: &str, inst: &str, align: i64) -> Result<Vec<Candle>
     if all.is_empty() { Err("no 1-minute data".into()) } else { Ok(all) }
 }
 
-fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Context, base: String, tok: String) {
+// ───────────────────────── NinjaTrader feed ─────────────────────────
+/// Bucket 1-minute bars into `secs` buckets aligned to the session start (align hour ET); weekly buckets start Sunday.
+fn agg_m1(m1: &[Candle], secs: i64, align: i64, weekly: bool) -> Vec<Candle> {
+    let woff = if weekly { 3 * 86400 } else { 0 };
+    let mut out: Vec<Candle> = vec![];
+    let mut last_key = i64::MIN;
+    for k in m1 {
+        let key = (k.e - align * 3600 - woff).div_euclid(secs);
+        if key == last_key {
+            let c = out.last_mut().unwrap();
+            c.h = c.h.max(k.h);
+            c.l = c.l.min(k.l);
+            c.c = k.c;
+        } else {
+            let e0 = key * secs + align * 3600 + woff;
+            out.push(Candle { t: k.t - (k.e - e0), e: e0, o: k.o, h: k.h, l: k.l, c: k.c, done: true });
+            last_key = key;
+        }
+    }
+    if let Some(l) = out.last_mut() {
+        l.done = false;
+    }
+    out
+}
+
+fn nt_ready(shared: &Arc<Mutex<Shared>>, sym: &str) -> bool {
+    let s = shared.lock().unwrap();
+    s.nt_conns.get(sym).copied().unwrap_or(0) > 0 && s.nt.get(sym).map_or(0, |v| v.len()) >= 2
+}
+
+fn htf_secs(gran: &str) -> i64 {
+    match gran { "H1" => 3600, "H4" => 14400, _ => 86400 }
+}
+
+/// Rebuild every feed (main, 5m, daily, HTF) from the NinjaTrader 1-minute bars. False when NinjaTrader has nothing for `sym`.
+fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&str>) -> bool {
+    if !nt_ready(shared, sym) {
+        return false;
+    }
+    let m1 = shared.lock().unwrap().nt.get(sym).cloned().unwrap_or_default();
+    let al = align_for(sym);
+    let nd = shared.lock().unwrap().nt_d.get(sym).cloned().unwrap_or_default();
+    // daily / weekly come from NinjaTrader's daily series when it sent one (years of history), else from the 1-minute bars
+    let daily_src: &[Candle] = if nd.len() >= 2 { &nd } else { &m1 };
+    let main = if tf == "400R" {
+        range_bars(&m1, RANGE_TICKS * tick_size(sym))
+    } else if tf == "D" || tf == "W" {
+        agg_m1(daily_src, if tf == "W" { 604800 } else { 86400 }, al, tf == "W")
+    } else {
+        let secs = TFS.iter().find(|t| t.0 == tf).map(|t| t.2).unwrap_or(300);
+        agg_m1(&m1, secs, al, false)
+    };
+    let m5 = agg_m1(&m1, 300, al, false);
+    let daily = agg_m1(daily_src, 86400, al, false);
+    let htf = htf_gran.map(|g| agg_m1(if g == "D" { daily_src } else { &m1 }, htf_secs(g), al, false));
+    let mut s = shared.lock().unwrap();
+    s.main = main;
+    s.m5 = m5;
+    s.daily = daily;
+    if let Some(h) = htf {
+        s.htf = h;
+    }
+    s.src = "NT".into();
+    true
+}
+
+/// Local TCP listener for the NinjaTrader indicator: one JSON object per line,
+/// {"sym":"NQ","reset":true,"bars":[[unix_utc_open,o,h,l,c],...]} (history, then one-bar updates).
+fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Context) {
+    let port: u16 = std::env::var("EDGE_NT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7878);
+    let Ok(l) = TcpListener::bind(("127.0.0.1", port)) else { return };
+    for st in l.incoming() {
+        let Ok(st) = st else { continue };
+        let (sh, tx, ctx) = (shared.clone(), tx.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let mut my_sym: Option<String> = None;
+            for line in BufReader::new(st).lines() {
+                let Ok(line) = line else { break };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+                let sym = canon_sym(v["sym"].as_str().unwrap_or(""));
+                if !SYMS.iter().any(|x| x.0 == sym) {
+                    continue;
+                }
+                let bars: Vec<Candle> = v["bars"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|b| {
+                                let f = |i: usize| b.get(i).and_then(|x| x.as_f64());
+                                let t = f(0)? as i64;
+                                Some(Candle { t, e: t + off(t), o: f(1)?, h: f(2)?, l: f(3)?, c: f(4)?, done: true })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                {
+                    let mut s = sh.lock().unwrap();
+                    if my_sym.is_none() {
+                        *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
+                        my_sym = Some(sym.clone());
+                    }
+                    let is_d = v["tf"].as_str() == Some("D");
+                    let e = if is_d { s.nt_d.entry(sym.clone()).or_default() } else { s.nt.entry(sym.clone()).or_default() };
+                    if v["reset"].as_bool() == Some(true) {
+                        e.clear();
+                    }
+                    merge(e, bars);
+                    if e.len() > 150000 {
+                        let cut = e.len() - 150000;
+                        e.drain(..cut);
+                    }
+                }
+                let _ = tx.send(Req::Nt { sym });
+                ctx.request_repaint();
+            }
+            if let Some(sym) = my_sym {
+                {
+                    let mut s = sh.lock().unwrap();
+                    if let Some(n) = s.nt_conns.get_mut(&sym) {
+                        *n = n.saturating_sub(1);
+                    }
+                }
+                let _ = tx.send(Req::NtGone { sym });
+                ctx.request_repaint();
+            }
+        });
+    }
+}
+
+fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Context, base: String, tok: String) {
+    let mut cur_tf = String::new();
+    let mut nt_active = false;
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
     let mut tick = 0u32;
@@ -265,9 +413,24 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
                     s.m5.clear();
                     s.htf.clear();
                 }
-                set_status("loading…");
                 let gran = TFS.iter().find(|t| t.0 == tf).map(|t| t.1).unwrap_or("M5");
                 let al = align_for(&sym);
+                cur_tf = tf.clone();
+                let hg = htf_cur.as_ref().filter(|h| h.0 == sym).map(|h| h.1.clone());
+                if nt_apply(&shared, &sym, &tf, hg.as_deref()) {
+                    nt_active = true;
+                    cur = Some((sym.clone(), gran.to_string()));
+                    {
+                        let mut s = shared.lock().unwrap();
+                        s.status.clear();
+                        s.version += 1;
+                    }
+                    ctx.request_repaint();
+                    continue;
+                }
+                nt_active = false;
+                shared.lock().unwrap().src = "OANDA".into();
+                set_status("loading…");
                 let res = if gran == "RANGE" {
                     set_status("building range bars…");
                     fetch_m1(&base, &tok, inst_for(&sym), al).map(|m| {
@@ -287,6 +450,7 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
                         cur = Some((sym.clone(), gran.to_string()));
                     }
                     Err(e) => {
+                        cur = Some((sym.clone(), gran.to_string())); // so a NinjaTrader feed that connects later is picked up
                         set_status(&e);
                         continue;
                     }
@@ -303,14 +467,48 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
             }
             Ok(Req::Htf { sym, tf }) => {
                 if let Some(h) = HTFS.iter().find(|h| h.0 == tf) {
-                    if let Ok(b) = fetch(&base, &tok, inst_for(&sym), h.1, h.2, align_for(&sym)) {
+                    if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && nt_ready(&shared, &sym) {
+                        let m1 = shared.lock().unwrap().nt.get(&sym).cloned().unwrap_or_default();
+                        shared.lock().unwrap().htf = agg_m1(&m1, htf_secs(h.1), align_for(&sym), false);
+                        htf_cur = Some((sym, h.1.to_string()));
+                        ctx.request_repaint();
+                    } else if let Ok(b) = fetch(&base, &tok, inst_for(&sym), h.1, h.2, align_for(&sym)) {
                         shared.lock().unwrap().htf = b;
                         htf_cur = Some((sym, h.1.to_string()));
                         ctx.request_repaint();
                     }
                 }
             }
+            Ok(Req::Nt { sym }) => {
+                if let Some((cs, _)) = cur.clone() {
+                    if cs == sym {
+                        let hg = htf_cur.as_ref().filter(|h| h.0 == sym).map(|h| h.1.clone());
+                        if nt_apply(&shared, &sym, &cur_tf, hg.as_deref()) {
+                            if !nt_active {
+                                nt_active = true;
+                                let mut s = shared.lock().unwrap();
+                                s.version += 1;
+                                s.status.clear();
+                            }
+                            ctx.request_repaint();
+                        }
+                    }
+                }
+            }
+            Ok(Req::NtGone { sym }) => {
+                if nt_active && cur.as_ref().map_or(false, |c| c.0 == sym) && !nt_ready(&shared, &sym) {
+                    nt_active = false;
+                    shared.lock().unwrap().src = "OANDA".into();
+                    let _ = tx_self.send(Req::Load { sym: sym.clone(), tf: cur_tf.clone() });
+                    if let Some(h) = htf_cur.as_ref().and_then(|h| HTFS.iter().find(|x| x.1 == h.1)) {
+                        let _ = tx_self.send(Req::Htf { sym, tf: h.0.to_string() });
+                    }
+                }
+            }
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                if nt_active {
+                    continue; // NinjaTrader is the live source; no OANDA polling
+                }
                 tick += 1;
                 if let Some((sym, gran)) = &cur {
                     let al = align_for(sym);
@@ -716,6 +914,7 @@ fn ema_points(cs: &[Candle], m5: &[Candle], len: usize, per: i64) -> Vec<(usize,
 }
 
 struct App {
+    bar_x: f32,
     sym: String,
     tf: String,
     shared: Arc<Mutex<Shared>>,
@@ -729,6 +928,7 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
+    sierra: bool, // Sierra-style candles + black bg (default); off = NinjaTrader style
     note: String,
     show_pw: bool, // 30m: previous-week lines (off by default, like the web chart)
     show_pm: bool, // 8h: previous-month lines
@@ -750,7 +950,10 @@ impl App {
         let has_token = !tok.is_empty();
         {
             let (sh, ctx) = (shared.clone(), cc.egui_ctx.clone());
-            std::thread::spawn(move || worker(rx, sh, ctx, base, tok));
+            let (tx2, ctx2, sh2) = (tx.clone(), ctx.clone(), sh.clone());
+            std::thread::spawn(move || nt_listener(sh2, tx2, ctx2));
+            let tx3 = tx.clone();
+            std::thread::spawn(move || worker(rx, tx3, sh, ctx, base, tok));
         }
         let app = App {
             sym,
@@ -766,6 +969,8 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
+            sierra: true,
+            bar_x: 0.0,
             note: String::new(),
             show_pw: false,
             show_pm: true,
@@ -790,9 +995,24 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         // ── toolbar ──
         egui::Panel::top("bar").show(ui, |ui| {
+            let avail = ui.available_width();
             ui.horizontal(|ui| {
+                if ui.button("◀").clicked() {
+                    self.bar_x = (self.bar_x - 300.0).max(0.0);
+                }
+                let out = egui::ScrollArea::horizontal()
+                    .id_salt("barscroll")
+                    .max_width((avail - 80.0).max(100.0))
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .horizontal_scroll_offset(self.bar_x)
+                    .show(ui, |ui| {
+                ui.horizontal(|ui| {
                 let mut changed = false;
-                for (s, _) in SYMS.iter() {
+                for (s, inst) in SYMS.iter() {
+                    // NinjaTrader-only symbols appear while their feed is connected (or when already selected)
+                    if inst.is_empty() && self.sym != *s && self.shared.lock().unwrap().nt_conns.get(*s).copied().unwrap_or(0) == 0 {
+                        continue;
+                    }
                     if ui.selectable_label(self.sym == *s, *s).clicked() && self.sym != *s {
                         self.sym = s.to_string();
                         changed = true;
@@ -845,6 +1065,12 @@ impl eframe::App for App {
                 if self.sym == "NQ" && ui.selectable_label(!self.hide_nums, "#").clicked() {
                     self.hide_nums = !self.hide_nums;
                 }
+                if ui.selectable_label(self.sierra, "Sierra").clicked() {
+                    self.sierra = !self.sierra;
+                }
+                if self.shared.lock().unwrap().src == "NT" {
+                    ui.colored_label(Color32::from_rgb(0, 230, 118), "NT live");
+                }
                 if changed {
                     self.reload();
                 }
@@ -857,12 +1083,23 @@ impl eframe::App for App {
                     ui.separator();
                     ui.colored_label(Color32::from_rgb(255, 191, 0), st);
                 }
+                });
+                });
+                self.bar_x = out.state.offset().x;
+                let max_x = (out.content_size.x - out.inner_rect.width()).max(0.0);
+                if ui.button("▶").clicked() {
+                    self.bar_x = (self.bar_x + 300.0).min(max_x);
+                }
             });
         });
 
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(BG)).show(ui, |ui| {
+        let bg = if self.sierra { Color32::BLACK } else { BG };
+        let grid_col = if self.sierra { Color32::from_rgb(20, 24, 34) } else { GRID };
+        let sierra = self.sierra;
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(bg)).show(ui, |ui| {
             let full = ui.available_rect_before_wrap();
-            if !self.has_token {
+            let src_nt = self.shared.lock().unwrap().src == "NT";
+            if !self.has_token && !src_nt {
                 ui.painter().text(
                     full.center(),
                     Align2::CENTER_CENTER,
@@ -939,7 +1176,7 @@ impl eframe::App for App {
                     self.right_idx = idx_at + (plot.right() - anchor) / self.spacing;
                 }
             }
-            self.right_idx = self.right_idx.clamp(5.0, (n - 1) as f32 + 200.0);
+            self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
             let (sp, ri) = (self.spacing, self.right_idx);
             let x_of = move |i: f32| plot.right() - (ri - i) * sp;
             let first_vis = ((ri - (plot.width() / sp)).floor() as i64 - 1).max(0) as usize;
@@ -969,15 +1206,7 @@ impl eframe::App for App {
                     lo = c - half;
                     hi = c + half;
                     self.manual = Some((lo, hi));
-                } else {
-                    self.vdrag += dy;
-                    if self.manual.is_some() || self.vdrag.abs() > 6.0 {
-                        let shift = dy as f64 / plot.height() as f64 * (hi - lo);
-                        lo += shift;
-                        hi += shift;
-                        self.manual = Some((lo, hi));
-                    }
-                }
+                } // dragging the chart body only moves time (like the web chart); price is moved/stretched from the price axis
             }
             if self.manual.is_some() {
                 let c = (lo + hi) / 2.0;
@@ -1003,7 +1232,7 @@ impl eframe::App for App {
             while p < hi {
                 let y = snapc(y_of(p));
                 if self.sym != "NQ" {
-                    painter.hline(plot.x_range(), y, Stroke::new(hair, GRID));
+                    painter.hline(plot.x_range(), y, Stroke::new(hair, grid_col));
                 }
                 painter.text(Pos2::new(plot.right() + 8.0, y), Align2::LEFT_CENTER, fmt_price(p, step), axis_font.clone(), AXIS_TXT);
                 p += step;
@@ -1017,7 +1246,7 @@ impl eframe::App for App {
                 if i < n {
                     let x = snapc(x_of(i as f32));
                     if x > plot.left() && x < plot.right() {
-                        painter.vline(x, plot.y_range(), Stroke::new(hair, GRID));
+                        painter.vline(x, plot.y_range(), Stroke::new(hair, grid_col));
                         let d = et(cs[i].t);
                         let label = if secs >= 86400 {
                             format!("{} {}", d.format("%b"), d.day())
@@ -1031,7 +1260,7 @@ impl eframe::App for App {
                 }
                 i += every;
             }
-            painter.rect_stroke(plot, 0.0, Stroke::new(hair, GRID), egui::StrokeKind::Inside);
+            painter.rect_stroke(plot, 0.0, Stroke::new(hair, grid_col), egui::StrokeKind::Inside);
             let clip = painter.with_clip_rect(plot);
             let small = FontId::monospace(10.0);
             let tiny = FontId::monospace(9.0);
@@ -1400,7 +1629,7 @@ impl eframe::App for App {
                         let ar = Rect::from_min_size(Pos2::new(plot.right() + 2.0, y - 9.0), Vec2::new(AXIS_W - 4.0, 18.0));
                         for (r, txt) in [(tr, title.clone()), (ar, fmt_price(p, step))] {
                             if inv {
-                                painter.rect_filled(r, 2.0, BG);
+                                painter.rect_filled(r, 2.0, bg);
                                 painter.rect_stroke(r, 2.0, Stroke::new(hair.max(1.0), rgb(colr)), egui::StrokeKind::Inside);
                                 painter.text(r.center(), Align2::CENTER_CENTER, txt, FontId::monospace(11.0), rgb(colr));
                             } else {
@@ -1474,7 +1703,10 @@ impl eframe::App for App {
             for i in first_vis..=last_vis.min(n - 1) {
                 let c = cs[i];
                 let up = c.c >= c.o;
-                let (fill, line) = if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
+                let (fill, line) = if sierra {
+                    if up { (Color32::from_rgb(0, 200, 90), Color32::from_rgb(120, 255, 170)) } else { (Color32::from_rgb(230, 40, 40), Color32::from_rgb(255, 130, 130)) }
+                } else if up { (UP_FILL, UP_LINE) } else { (DN_FILL, DN_LINE) };
+                let wick_col = if sierra { line } else { fill };
                 let cx = (x_of(i as f32) * ppp).round() as i32;
                 let (top, bot) = {
                     let a = (y_of(c.o.max(c.c)) * ppp).round() as i32;
@@ -1483,7 +1715,7 @@ impl eframe::App for App {
                 };
                 let (hh, ll) = ((y_of(c.h) * ppp).round() as i32, (y_of(c.l) * ppp).round() as i32);
                 let wl = cx - wick_px / 2;
-                clip.rect_filled(rect_px(wl, hh, wl + wick_px, ll.max(hh + 1)), 0.0, fill);
+                clip.rect_filled(rect_px(wl, hh, wl + wick_px, ll.max(hh + 1)), 0.0, wick_col);
                 let left = cx - bw / 2;
                 let right = left + bw;
                 let body_h = bot - top;
@@ -1628,9 +1860,17 @@ fn main() -> eframe::Result {
     let tf = canon_tf(&get("--tf").unwrap_or_else(|| "5m".into()));
     let tok = std::env::var("EDGE_OANDA_TOKEN").unwrap_or_default();
     let base = std::env::var("EDGE_OANDA_BASE").unwrap_or_else(|_| "https://api-fxpractice.oanda.com".into());
-    let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([1300.0, 850.0]).with_min_inner_size([700.0, 450.0]),
-        ..Default::default()
+    // --pos x,y and --size w,h (logical points) place the window beside the EDGE window; both optional
+    let pair = |k: &str| -> Option<(f32, f32)> {
+        let v = get(k)?;
+        let (a, b) = v.split_once(',')?;
+        Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     };
+    let (w, h) = pair("--size").map(|(w, h)| (w.clamp(500.0, 4000.0), (h - 32.0).clamp(350.0, 3000.0))).unwrap_or((1300.0, 850.0));
+    let mut vb = egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([w, h]).with_min_inner_size([500.0, 350.0]);
+    if let Some((x, y)) = pair("--pos") {
+        vb = vb.with_position([x, y]);
+    }
+    let opts = eframe::NativeOptions { viewport: vb, ..Default::default() };
     eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a }))))
 }
