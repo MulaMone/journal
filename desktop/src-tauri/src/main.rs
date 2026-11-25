@@ -1,10 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 static CHILD_COUNT: AtomicUsize = AtomicUsize::new(0);
+/// GPU chart processes started by this app; they are closed when the main EDGE window closes.
+static CHARTS: Mutex<Vec<std::process::Child>> = Mutex::new(Vec::new());
+
+fn close_native_charts() {
+    if let Ok(mut v) = CHARTS.lock() {
+        for c in v.iter_mut() {
+            let _ = c.kill();
+        }
+        v.clear();
+    }
+}
 const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true; window.__EDGE_TB = true;";
 
 /// Only letters/digits, so nothing odd can reach the child's command line.
@@ -32,11 +44,19 @@ fn launch_native_chart(url: &Url) -> bool {
     if !exe.exists() {
         return false;
     }
-    std::process::Command::new(exe)
+    match std::process::Command::new(exe)
         .args(["--sym", &sym, "--tf", &tf])
         .env("EDGE_OANDA_TOKEN", tok)
         .spawn()
-        .is_ok()
+    {
+        Ok(child) => {
+            if let Ok(mut v) = CHARTS.lock() {
+                v.push(child);
+            }
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 fn main() {
@@ -51,6 +71,7 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let WindowEvent::Destroyed = event {
+                    close_native_charts();
                     window.app_handle().exit(0);
                 }
             }
