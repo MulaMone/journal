@@ -7843,50 +7843,6 @@ function chartTab(){
 
   // OANDA has no DXY instrument: fetch the six USDX legs and combine per candle
   // time with the ICE formula. Returns the same {candles:[{time,mid}]} shape.
-  // ── NinjaTrader futures candles: EdgeFeed (inside NinjaTrader) serves its 1-minute futures bars on 127.0.0.1:7881.
-  // When reachable, ES/NQ/CL/GC/NG intraday requests (2m/5m/30m/1h) are answered from those bars (rolled up here) in the same shape
-  // OANDA returns, so everything downstream (cache, live poll, HTF gaps, markers) is unchanged. Any failure falls back to OANDA.
-  var ntUsed=false; // true once this chart's candles came from the futures feed: fills then plot at their exact price
-  function ntCandles(x){
-    var none=Promise.resolve(null);
-    if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||x.indexOf("/instruments/"+oandaInst+"/")<0) return none;
-    var gm=x.match(/granularity=(M2|M5|M30|H1)(?:&|$)/);
-    if(!gm) return none;
-    if(window._ntDownUntil&&Date.now()<window._ntDownUntil) return none;
-    var gs={M2:120,M5:300,M30:1800,H1:3600}[gm[1]];
-    var cm=x.match(/[?&]count=(\d+)/),fm=x.match(/[?&]from=([^&]+)/),tm=x.match(/[?&]to=([^&]+)/);
-    var cnt=cm?parseInt(cm[1],10):0,q="sym="+sym;
-    var fromSecNt=0;
-    if(fm){fromSecNt=Math.floor(new Date(decodeURIComponent(fm[1])).getTime()/1000);q+="&from="+fromSecNt;}
-    else if(cnt) q+="&n="+(cnt*gs/60+Math.ceil(gs/60)+2);
-    else return none;
-    if(tm) q+="&to="+Math.floor(new Date(decodeURIComponent(tm[1])).getTime()/1000);
-    var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},4000);
-    return fetch("http://127.0.0.1:7881/bars?"+q,{signal:ac.signal}).then(function(r){
-      clearTimeout(tmo);
-      if(!r.ok) throw new Error("nt "+r.status);
-      return r.json();
-    }).then(function(j){
-      var b=j&&j.bars;
-      if(!b||b.length<2) throw new Error("nt empty");
-      if(fromSecNt&&b[0][0]>fromSecNt+4*86400) return null; // the feed's history doesn't reach back to the trade being viewed: use OANDA for this view
-      var out=[],cur=null,nowS=Date.now()/1000;
-      b.forEach(function(k){
-        var bt=Math.floor(k[0]/gs)*gs;
-        if(!cur||cur.t!==bt){cur={t:bt,o:k[1],h:k[2],l:k[3],c:k[4]};out.push(cur);}
-        else{if(k[2]>cur.h)cur.h=k[2];if(k[3]<cur.l)cur.l=k[3];cur.c=k[4];}
-      });
-      if(cnt) out=fm?out.slice(0,cnt):out.slice(-cnt);
-      window._ntOK=window._ntOK||{};window._ntOK[sym]=Date.now();
-      ntUsed=true;
-      return {candles:out.map(function(c){return {time:new Date(c.t*1000).toISOString(),complete:c.t+gs<=nowS,mid:{o:c.o,h:c.h,l:c.l,c:c.c}};})};
-    }).catch(function(e){
-      clearTimeout(tmo);
-      window._ntDownUntil=Date.now()+20000; // feed not running: don't retry (or wait) on every request
-      if(window._ntOK) delete window._ntOK[sym];
-      return null;
-    });
-  }
   function chartFetchJson(u,hist){
     // A 401 here is often transient or a stale token mid-sync (another device /
     // the cloud pull can swap the saved token a moment later). Re-read the saved
@@ -7901,10 +7857,6 @@ function chartTab(){
       });
     }
     function one(x,attempt){
-      if(!attempt) return ntCandles(x).then(function(nd){return nd||oneO(x,0);});
-      return oneO(x,attempt);
-    }
-    function oneO(x,attempt){
       attempt=attempt||0;
       if(x.indexOf("/instruments/BTCUSD_CB/")>-1) return btcCandles(x); // BTC: Coinbase feed, not OANDA
       var useTok=ls("oanda_token","")||tok;
@@ -7980,6 +7932,40 @@ function chartTab(){
       return Promise.resolve(addHist({candles:out})).then(yrAgg);
     });
   }
+  // ── Fill basis (trades only): candles stay OANDA CFD. For each candle that holds a fill, ask the NinjaTrader feed (EdgeFeed, 127.0.0.1:7881)
+  // for its futures bars and compare closes with the CFD candle: basis = CFD close - futures close (median over the fill candle and its two
+  // neighbours). The fill is then plotted at fill + basis, i.e. where that futures price sits on the CFD chart. No feed = no adjustment.
+  var ntBasis={},ntBasisLast=null;
+  function ntBasisPre(d){
+    try{
+      if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)||monthlyFetch) return Promise.resolve();
+      if(!d||!d.candles||!d.candles.length||!tradePoints.length) return Promise.resolve();
+      if(window._ntDownUntil&&Date.now()<window._ntDownUntil) return Promise.resolve();
+      var per=periodSec,oc={},firstU=Infinity,lastU=0;
+      d.candles.forEach(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);oc[u]=parseFloat(c.mid.c);if(u<firstU)firstU=u;if(u>lastU)lastU=u;});
+      var seen={},bs=[];
+      tradePoints.filter(function(p){return p.ts>=firstU&&p.ts<lastU+per;}).slice(-60).forEach(function(p){var b=Math.floor(p.ts/per)*per;if(!seen[b]){seen[b]=1;bs.push(b);}});
+      if(!bs.length) return Promise.resolve();
+      bs.sort(function(a,b){return a-b;});
+      var wins=[];
+      bs.forEach(function(b){var w=wins[wins.length-1];if(w&&b-w.e<=3*per&&w.e-w.s<400*per) w.e=b;else wins.push({s:b,e:b});});
+      var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},3500);
+      return Promise.all(wins.map(function(w){
+        return fetch("http://127.0.0.1:7881/bars?sym="+sym+"&from="+(w.s-per)+"&to="+(w.e+2*per-1),{signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("nt "+r.status);return r.json();}).then(function(j){
+          var nc={};
+          ((j&&j.bars)||[]).forEach(function(k){nc[Math.floor(k[0]/per)*per]=k[4];}); // bars ascend: the last one in a bucket is its close
+          bs.forEach(function(b){
+            if(b<w.s||b>w.e) return;
+            var ds=[];
+            [b-per,b,b+per].forEach(function(x){if(oc[x]!=null&&nc[x]!=null) ds.push(oc[x]-nc[x]);});
+            if(!ds.length) return;
+            ds.sort(function(a,b){return a-b;});
+            ntBasis[b]=ds[Math.floor(ds.length/2)];
+          });
+        });
+      })).then(function(){clearTimeout(tmo);window._ntDownUntil=0;}).catch(function(){clearTimeout(tmo);window._ntDownUntil=Date.now()+20000;});
+    }catch(e){return Promise.resolve();}
+  }
   function fetchAndRender(){
     // Stop any live-poll loop (and countdown ticker) from a previous chart
     // load up front — covers the case where this new load itself fails,
@@ -7993,8 +7979,7 @@ function chartTab(){
     // Key ignores the count (it drifts as time passes); an entry is usable if it was fetched with at least the
     // count this view needs. Memory first, then IndexedDB (survives a page refresh).
     var cacheable=!focusTs&&!eodOnly&&url.indexOf("&count=")>=0;
-    var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:"")+((window._ntOK&&window._ntOK[sym]&&Date.now()-window._ntOK[sym]<900000)?"&src=nt":""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
-    if(ckey.indexOf("&src=nt")>-1) ntUsed=true; // cached futures candles: markers plot at the exact fill price too
+    var ckey=cacheable?url.replace(/&count=\d+/,"")+(monthlyFetch?"&view="+tf:""):""; // 1M and 1Y hit the same OANDA URL but store different data (1Y is rolled up by year)
     var needN=cacheable?(parseInt((url.match(/&count=(\d+)/)||[])[1],10)||0):0;
     if(cacheable&&sym==="BTC"&&!monthlyFetch){var _mb=btcMaxBars(gran);if(_mb>0&&needN>_mb) needN=_mb;} // BTC can't return more than the Coinbase page cap, so don't demand it of the cache
     if(cacheable&&sym==="BTC") needN=Math.max(0,needN-5); // a few bars may be missing (Coinbase skips no-trade candles)
@@ -8020,6 +8005,7 @@ function chartTab(){
     });
     else chartP=chartFetchJson(url,monthlyFetch);
     chartP
+    .then(function(d){return ntBasisPre(d).then(function(){return d;},function(){return d;});})
     .then(function(d){
       _tFetch=performance.now();
       if(cacheable&&!fromCache&&d&&d.candles&&d.candles.length){
@@ -8667,7 +8653,7 @@ function chartTab(){
           function makeMarkerSeries(){return chart.addLineSeries({lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});}
           var layers=[{s:makeMarkerSeries(),seen:{},data:[],markers:[]}];
           var markerSeries=layers[0].s;
-          var tradePairs={}; // trade id -> {entry,exit} plotted points (futures candles only)
+          var tradePairs={},dotSeries=[]; // exact (basis-adjusted) fill dots and entry->exit lines
           var hoverPoints=[]; // parallel to markers — same time/value, plus the raw trade point for the tooltip
           displayPoints.forEach(function(p){
             // Snap to the candle period the fill falls inside, rather than the raw
@@ -8690,13 +8676,11 @@ function chartTab(){
             // Daily: a day's range is wide, so sit the arrow at the real fill price
             // (kept inside that candle's high/low to absorb the CFD-vs-futures gap)
             // instead of at the candle's close.
-            // Intraday: the old value (price+offset) always collapsed to the candle's CLOSE, so the arrow overlapped the candle body —
-            // a red short arrow on a red candle (or green on green) was invisible. Park it just outside the candle: above the high for
-            // down arrows, below the low for up arrows.
+            // Intraday: the old value (price+offset) always collapsed to the candle's CLOSE, so the arrow overlapped the candle body.
+            // Park it just outside the candle: above the high for down arrows, below the low for up arrows.
             var _isUp=p.kind==="entry"?p.isLong:!p.isLong;
             var val;
             if(dayCandle) val=Math.min(dayCandle.high,Math.max(dayCandle.low,p.price));
-            else if(ntUsed) val=p.price; // futures candles: the recorded fill price IS on the chart
             else {var _nc=nearestCandleFor(p);val=_isUp?_nc.low:_nc.high;}
             layer.data.push({time:t,value:val});
             hoverPoints.push({time:t,value:val,p:p});
@@ -8716,28 +8700,41 @@ function chartTab(){
               // tell separate trades apart at a glance without opening the list.
               text:p.kind==="entry"?(p.isLong?"L":"S"):""
             });
-            // Futures candles: the fill price is real, so also drop a small dot exactly on it (the arrow only sits beside the level)
-            if(ntUsed&&!dayCandle){
-              var _dc=p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00";
-              layer.markers.push({time:t,position:"inBar",color:_dc,shape:"circle",size:0.5});
+            // Basis known for this fill's candle: put a small dot on the fill's level as it sits on THIS (CFD) chart, kept inside the candle's range
+            var _bsv=dayCandle?null:ntBasis[Math.floor(p.ts/periodSec)*periodSec];
+            if(typeof _bsv==="number"){
+              var _nc2=nearestCandleFor(p),_ex=Math.min(_nc2.high,Math.max(_nc2.low,p.price+_bsv));
+              var _col=p.kind==="entry"?(p.isLong?"#3d8bff":"#b266ff"):"#ff8c00";
+              var _ds=makeMarkerSeries();
+              _ds.setData([{time:t,value:_ex}]);
+              _ds.setMarkers([{time:t,position:"inBar",color:_col,shape:"circle",size:0.5}]);
+              dotSeries.push(_ds);
               var _pr=tradePairs[p.id]||(tradePairs[p.id]={});
-              _pr[p.kind]={t:t,v:val,isLong:p.isLong,approx:!!p.approx};
+              _pr[p.kind]={t:t,v:_ex,isLong:p.isLong,approx:!!p.approx};
+              ntBasisLast=_bsv;
             }
           });
-          // Entry -> exit connector per trade (futures candles only): a thin dashed line between the two exact fill prices, blue for longs, purple for shorts
-          var connectors=[];
+          // thin dashed line between a trade's two exact fill levels (blue long / purple short); skipped when the exit has no real timestamp
           Object.keys(tradePairs).forEach(function(id){
             var pr=tradePairs[id];
             if(!pr.entry||!pr.exit||pr.exit.approx||!(pr.exit.t>pr.entry.t)) return;
             var cs2=chart.addLineSeries({color:pr.entry.isLong?"#3d8bff":"#b266ff",lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
             cs2.setData([{time:pr.entry.t,value:pr.entry.v},{time:pr.exit.t,value:pr.exit.v}]);
-            connectors.push(cs2);
+            dotSeries.push(cs2);
           });
+          if(dotSeries.length){
+            var sb=div();
+            sb.textContent="FILL BASIS "+(ntBasisLast>=0?"+":"")+ntBasisLast.toFixed(1);
+            sb.title="Fills are plotted at fill price + (CFD - futures) gap measured from NinjaTrader at that candle. Dots mark the adjusted level.";
+            sb.style.cssText="position:absolute;right:86px;top:6px;z-index:6;font-size:10px;letter-spacing:1px;padding:2px 6px;border-radius:3px;pointer-events:none;background:#040d1a;border:1px solid #00e676;color:#00e676;";
+            chartDiv.appendChild(sb);
+          }
           layers.forEach(function(l){l.s.setData(l.data);});
-          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});connectors.forEach(function(c){c.applyOptions({visible:showTrades});});if(!showTrades)tip.style.display="none";};
+          applyTradeVisibility=function(){layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});dotSeries.forEach(function(x){x.applyOptions({visible:showTrades});});if(!showTrades)tip.style.display="none";};
           layers.forEach(function(l){l.s.setMarkers(showTrades?l.markers:[]);});
+          if(!showTrades) dotSeries.forEach(function(x){x.applyOptions({visible:false});});
           var tradeCount=displayPoints.filter(function(p){return p.kind==="entry";}).length;
-          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+(ntUsed?" • NinjaTrader futures candles":" • OANDA CFD candles (futures feed not reached)")+" • "+new Date().toLocaleTimeString();
+          note.textContent=tradeCount+" trade"+(tradeCount===1?"":"s")+(selectedIds.length?" (selected)":"")+" • "+new Date().toLocaleTimeString();
 
           // ── Hover tooltip ───────────────────────────────────
           // lightweight-charts has no built-in per-marker hover event, so we
@@ -10168,14 +10165,6 @@ function chartTab(){
         chartDiv.appendChild(bar);
       })();
 
-      // ── data source badge (top right of the plot): green when the candles come from the NinjaTrader futures feed, grey for OANDA CFD ──
-      (function(){
-        var sb=div();
-        sb.textContent=ntUsed?"NT FUTURES":"OANDA CFD";
-        sb.title=ntUsed?"Candles from NinjaTrader (EdgeFeed): fills plot at their exact price":"Candles from OANDA (CFD): futures feed not reached";
-        sb.style.cssText="position:absolute;right:86px;top:6px;z-index:6;font-size:10px;letter-spacing:1px;padding:2px 6px;border-radius:3px;pointer-events:none;background:#040d1a;border:1px solid "+(ntUsed?"#00e676":"#4a5a78")+";color:"+(ntUsed?"#00e676":"#8a9ab8")+";";
-        chartDiv.appendChild(sb);
-      })();
       // ── GPU chart button: sits in the empty bottom-right corner where the price scale meets the time scale (overlay, so the chart keeps its size) ──
       if(window._edgeDesktop&&!window._edgeDetached&&!isMobile()) (function(){
         var gb=h("button",{className:"btn",title:"Open this chart in the native GPU chart window","aria-label":"Native GPU chart"});
