@@ -90,6 +90,18 @@ fn canon_sym(s: &str) -> String {
     .to_string()
 }
 
+/// EDGE timeframe names -> this chart's labels
+fn canon_tf(s: &str) -> String {
+    let t = s.to_lowercase();
+    let m = match t.as_str() {
+        "1d" | "d" | "1y" | "1m" => "D",
+        "1w" | "w" => "W",
+        "400r" => "400R",
+        other => other,
+    };
+    if TFS.iter().any(|x| x.0 == m) { m.to_string() } else { "5m".to_string() }
+}
+
 fn off(t: i64) -> i64 {
     New_York.timestamp_opt(t, 0).single().map(|d| d.offset().fix().local_minus_utc() as i64).unwrap_or(-18000)
 }
@@ -118,8 +130,9 @@ fn fetch_ex(base: &str, tok: &str, inst: &str, gran: &str, count: u32, align: i6
         .and_then(|t| DateTime::from_timestamp(t, 0))
         .map(|d| format!("&to={}", d.format("%Y-%m-%dT%H:%M:%SZ")))
         .unwrap_or_default();
+    let wk = if gran == "W" { "&weeklyAlignment=Sunday" } else { "" };
     let url = format!(
-        "{base}/v3/instruments/{inst}/candles?granularity={gran}&price=M&count={count}&alignmentTimezone=America%2FNew_York&dailyAlignment={align}{to_q}"
+        "{base}/v3/instruments/{inst}/candles?granularity={gran}&price=M&count={count}&alignmentTimezone=America%2FNew_York&dailyAlignment={align}{wk}{to_q}"
     );
     let resp = ureq::get(&url)
         .set("Authorization", &format!("Bearer {tok}"))
@@ -246,6 +259,12 @@ fn worker(rx: mpsc::Receiver<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Contex
     loop {
         match rx.recv_timeout(Duration::from_secs(2)) {
             Ok(Req::Load { sym, tf }) => {
+                {
+                    let mut s = shared.lock().unwrap();
+                    s.daily.clear();
+                    s.m5.clear();
+                    s.htf.clear();
+                }
                 set_status("loading…");
                 let gran = TFS.iter().find(|t| t.0 == tf).map(|t| t.1).unwrap_or("M5");
                 let al = align_for(&sym);
@@ -710,6 +729,7 @@ struct App {
     show_htf: bool,
     htf_i: usize,
     hide_nums: bool,
+    note: String,
     show_pw: bool, // 30m: previous-week lines (off by default, like the web chart)
     show_pm: bool, // 8h: previous-month lines
     show_pq: bool, // D: previous-quarter lines
@@ -746,6 +766,7 @@ impl App {
             show_htf: true,
             htf_i: 1,
             hide_nums: false,
+            note: String::new(),
             show_pw: false,
             show_pm: true,
             show_pq: true,
@@ -827,7 +848,11 @@ impl eframe::App for App {
                 if changed {
                     self.reload();
                 }
+                if changed {
+                    self.note.clear();
+                }
                 let st = self.shared.lock().unwrap().status.clone();
+                let st = if st.is_empty() { self.note.clone() } else { st };
                 if !st.is_empty() {
                     ui.separator();
                     ui.colored_label(Color32::from_rgb(255, 191, 0), st);
@@ -891,6 +916,16 @@ impl eframe::App for App {
                     self.right_idx = (n - 1) as f32 + RIGHT_GAP_BARS;
                 }
             }
+            {
+                let (l, r, sh) = ctx.input(|i| (i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight), i.modifiers.shift));
+                let k = if sh { 5.0 } else { 1.0 };
+                if l {
+                    self.right_idx -= k;
+                }
+                if r {
+                    self.right_idx += k;
+                }
+            }
             let mut axis_scroll = 0.0f32;
             if resp.hovered() {
                 let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
@@ -943,6 +978,13 @@ impl eframe::App for App {
                         self.manual = Some((lo, hi));
                     }
                 }
+            }
+            if self.manual.is_some() {
+                let c = (lo + hi) / 2.0;
+                let half = ((hi - lo) / 2.0).clamp(1e-4, 1e7);
+                lo = c - half;
+                hi = c + half;
+                self.manual = Some((lo, hi));
             }
             if axis_scroll != 0.0 {
                 let c = (lo + hi) / 2.0;
@@ -1580,14 +1622,15 @@ fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().collect();
     let get = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).cloned();
     let sym = canon_sym(&get("--sym").unwrap_or_else(|| "NQ".into()));
+    let asked = sym.clone();
     let sym = if SYMS.iter().any(|s| s.0 == sym) { sym } else { "NQ".to_string() };
-    let tf = get("--tf").unwrap_or_else(|| "5m".into());
-    let tf = if TFS.iter().any(|t| t.0 == tf) { tf } else { "5m".to_string() };
+    let note = if asked != sym { format!("{asked} isn't in the GPU chart yet - showing {sym}") } else { String::new() };
+    let tf = canon_tf(&get("--tf").unwrap_or_else(|| "5m".into()));
     let tok = std::env::var("EDGE_OANDA_TOKEN").unwrap_or_default();
     let base = std::env::var("EDGE_OANDA_BASE").unwrap_or_else(|_| "https://api-fxpractice.oanda.com".into());
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([1300.0, 850.0]).with_min_inner_size([700.0, 450.0]),
         ..Default::default()
     };
-    eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.intraday = args.iter().any(|x| x == "--intraday"); a }))))
+    eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a }))))
 }
