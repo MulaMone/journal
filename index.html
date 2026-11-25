@@ -9064,6 +9064,18 @@ function expiryEvents(sym){
             chartDiv.appendChild(cvX);
             // x of a real time; past the newest candle the spacing of the last bars is carried forward
             function xFor(sec){
+              // weekly / monthly / yearly bars: place the line at its day inside the bar (not on the bar's first day)
+              if(periodSec>=604800&&candles.length>1){
+                var tt=sec-etOff(sec),ts2=chart.timeScale(),n=candles.length,i=-1;
+                for(var k=n-1;k>=0;k--){if(candles[k].time<=tt){i=k;break;}}
+                if(i<0) return null;
+                var c0=ts2.timeToCoordinate(candles[i].time),span,w;
+                if(c0==null) return null;
+                if(i<n-1){var c1=ts2.timeToCoordinate(candles[i+1].time);span=candles[i+1].time-candles[i].time;w=c1==null?null:c1-c0;}
+                else{var cp=ts2.timeToCoordinate(candles[i-1].time);span=candles[i].time-candles[i-1].time;w=cp==null?null:c0-cp;}
+                if(w==null||!(span>0)) return null;
+                return c0-w/2+(tt-candles[i].time)/span*w;
+              }
               var x=xAtTs(sec);if(x!=null) return x;
               if(!candles.length) return null;
               var lu=candles[candles.length-1].u,xl=xAtTs(lu),xp=xAtTs(lu-periodSec);
