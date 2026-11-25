@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::io::{BufRead, BufReader};
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
@@ -17,6 +20,80 @@ fn close_native_charts() {
         v.clear();
     }
 }
+/// NinjaTrader (EdgeFeed) connections on 127.0.0.1:7880 — while at least one is open, NinjaTrader counts as "up".
+static NT_CONNS: AtomicUsize = AtomicUsize::new(0);
+/// Recently received closed trades (JSON lines). Re-sent for a short while so a trade that arrives while the page is still
+/// loading is not lost; the page ignores repeats by trade id.
+static NT_RECENT: Mutex<Vec<(Instant, String)>> = Mutex::new(Vec::new());
+
+/// Make a received line safe inside a single-quoted JS string.
+fn js_quote(s: &str) -> String {
+    let mut o = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => o.push_str("\\\\"),
+            '\'' => o.push_str("\\'"),
+            c if (c as u32) < 32 || c == '\u{2028}' || c == '\u{2029}' => {}
+            c => o.push(c),
+        }
+    }
+    o
+}
+
+fn push_to_page(app: &tauri::AppHandle, js: String) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval(js);
+    }
+}
+
+fn trade_js(line: &str) -> String {
+    format!(
+        "try{{(window.__edgeNtQ=window.__edgeNtQ||[]).push(JSON.parse('{}').trade);window.edgeNtTrade&&window.edgeNtTrade();}}catch(e){{}}",
+        js_quote(line)
+    )
+}
+
+/// Auto-import link: EdgeFeed (inside NinjaTrader) connects here, sends a heartbeat and each closed trade.
+/// The page learns "NinjaTrader is up" every 2 s and receives trades through window.__edgeNtQ.
+fn nt_link(app: tauri::AppHandle) {
+    let port: u16 = std::env::var("EDGE_TRADE_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(7880);
+    let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) else { return };
+    {
+        let app = app.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(2));
+            let up = NT_CONNS.load(Ordering::SeqCst) > 0;
+            let mut js = format!("window.edgeNtPing&&window.edgeNtPing({});", up);
+            if let Ok(mut v) = NT_RECENT.lock() {
+                v.retain(|(t, _)| t.elapsed() < Duration::from_secs(45));
+                for (_, l) in v.iter() {
+                    js.push_str(&trade_js(l));
+                }
+            }
+            push_to_page(&app, js);
+        });
+    }
+    for st in listener.incoming().flatten() {
+        NT_CONNS.fetch_add(1, Ordering::SeqCst);
+        let app = app.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(st).lines().map_while(Result::ok) {
+                if line.len() > 8192 || !line.starts_with("{\"trade\":") {
+                    continue;
+                }
+                if let Ok(mut v) = NT_RECENT.lock() {
+                    v.push((Instant::now(), line.clone()));
+                    if v.len() > 50 {
+                        v.remove(0);
+                    }
+                }
+                push_to_page(&app, trade_js(&line));
+            }
+            NT_CONNS.fetch_sub(1, Ordering::SeqCst);
+        });
+    }
+}
+
 const DESKTOP_FLAG: &str = "window.__EDGE_DESKTOP = true; window.__EDGE_TB = true;";
 
 /// Only letters/digits, so nothing odd can reach the child's command line.
@@ -96,6 +173,10 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || nt_link(h));
+            }
             let cfg = app.config().app.windows[0].clone();
             WebviewWindowBuilder::from_config(app.handle(), &cfg)?
                 .initialization_script(DESKTOP_FLAG)
