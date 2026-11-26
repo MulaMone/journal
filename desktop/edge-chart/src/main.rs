@@ -1474,6 +1474,7 @@ struct App {
     ord_drag: Option<(String, bool, f64)>, // a stop / target being dragged: (order id, is stop, price under the pointer)
     ord_pend: Option<(String, f64, std::time::Instant)>, // a move sent to NinjaTrader, held on screen until NinjaTrader shows it
     close_sent: Option<std::time::Instant>, // last X click (ignores a double click)
+    rev_sent: Option<std::time::Instant>, // last reverse click (own timer, so Close right after a reverse still works)
     meas_p0: Option<Pos2>,      // where the measure drag started (screen)
     meas: Option<(f32, f64, f32, f64)>, // measure: (bar idx, price) start and end
     meas_w: f32,                // widest label so far (keeps the label from jittering as the text changes)
@@ -1548,6 +1549,7 @@ impl App {
             ord_drag: None,
             ord_pend: None,
             close_sent: None,
+            rev_sent: None,
             meas_p0: None,
             meas: None,
             meas_w: 0.0,
@@ -2792,8 +2794,8 @@ impl eframe::App for App {
                         let tr = Rect::from_min_size(Pos2::new(rr.left(), rr.top() - 30.0), Vec2::new(text_w(&painter, &tip, &oqf) + 20.0, 24.0));
                         order_tag(&clip, tr, rgb(0xff8c00), &tip, rgb(0xffb15c), oqf.clone());
                     }
-                    if rrsp.clicked() && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
-                        self.close_sent = Some(now_i);
+                    if rrsp.clicked() && self.rev_sent.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                        self.rev_sent = Some(now_i);
                         self.shared.lock().unwrap().toast = Some(("Reversing…".to_string(), true, now_i));
                         send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(acct), urlenc(&self.sym)));
                     }
