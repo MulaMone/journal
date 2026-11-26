@@ -492,6 +492,7 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
     let env_port = |k: &str, d: u16| -> u16 { std::env::var(k).ok().and_then(|p| p.parse().ok()).unwrap_or(d) };
     let (port, rport) = (env_port("EDGE_NT_PORT", 7878), env_port("EDGE_NT_RELAY_PORT", 7880));
     let mut first = true;
+    let mut fails = 0u32;
     loop {
         let bound = TcpListener::bind(("127.0.0.1", port));
         if first && bound.is_err() {
@@ -519,7 +520,17 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
             return;
         }
         // another window owns the port: read the same feed from it
-        if let Ok(st) = std::net::TcpStream::connect(("127.0.0.1", rport)) {
+        let link = std::net::TcpStream::connect(("127.0.0.1", rport));
+        if link.is_err() {
+            fails += 1;
+            if fails == 3 {
+                // the owner is an older chart build (or something else holds the port) and isn't sharing NinjaTrader with this window
+                shared.lock().unwrap().toast = Some(("Another chart owns NinjaTrader and is not sharing it - close it and reopen".to_string(), false, std::time::Instant::now()));
+                ctx.request_repaint();
+            }
+        }
+        if let Ok(st) = link {
+            fails = 0;
             let mut mine: Vec<String> = vec![];
             for line in BufReader::new(st).lines() {
                 let Ok(line) = line else { break };
