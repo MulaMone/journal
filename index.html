@@ -9187,7 +9187,8 @@ function expiryEvents(sym){
             function send(path){
               var k="";try{k=localStorage.getItem("edgeKey")||"";}catch(e){}
               fetch("http://127.0.0.1:7881"+path+(k?"&k="+encodeURIComponent(k):""),{method:"POST"}).then(function(r){return r.json().catch(function(){return {ok:false,err:"bad answer from the NinjaTrader link"};});}).then(function(j){
-                if(!j||!j.ok){var m=(j&&j.err)||"NinjaTrader link refused";showToast(/blocked/.test(m)?"Needs your key (see the box)":(m.length>70?m.slice(0,70)+"…":m),false);if(/blocked/.test(m)) askKey();pend=null;applyView();}
+                if(!j||!j.ok){var m=(j&&j.err)||"NinjaTrader link refused";showToast(/blocked/.test(m)?"Needs your key (see the box)":(m.length>70?m.slice(0,70)+"…":m),false);if(/blocked/.test(m)) askKey();pend=null;applyView();return;}
+                [120,350,700,1300].forEach(function(ms){setTimeout(tick,ms);}); // NinjaTrader just acted: re-read now instead of waiting for the 2 s poll
               }).catch(function(){showToast("Can't reach EdgeFeed in NinjaTrader",false);pend=null;applyView();});
             }
             // ── hotkeys: Alt+C close this trade, Alt+E stop to break even, Alt+F flatten the account(s) ──
