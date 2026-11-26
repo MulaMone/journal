@@ -9246,7 +9246,7 @@ function expiryEvents(sym){
                   if(o.k!=="S"||o.avg==null) return;
                   var long=o.kk>=0,bp=long?o.avg+BE_PTS:o.avg-BE_PTS,wrong=curLast!=null&&(long?bp>=curLast:bp<=curLast);
                   if(wrong){bad++;return;}
-                  n++;pend={id:o.id,px:bp,t:Date.now()};send("/move?id="+encodeURIComponent(o.id)+"&px="+bp);
+                  n++;pend={id:o.id,px:bp,t0:Date.now(),orig:o.px};send("/move?id="+encodeURIComponent(o.id)+"&px="+bp);
                 });
                 if(n) showToast("Stop to entry +"+BE_PTS+" pts",true);else showToast(bad?"Break even: price isn't "+BE_PTS+" pts past your entry yet":"No stop to move",false);
               }
@@ -9306,7 +9306,7 @@ function expiryEvents(sym){
                   else{var longP=lo2.kk>=0;badP=isS?(longP?d.px>=curLast:d.px<=curLast):(longP?d.px<=curLast:d.px>=curLast);}
                 }
                 if(badP) showToast((isP?"Entry order":isS?"Stop":"Target")+" can't go there: wrong side of the market",false);
-                else{pend={id:d.id,px:d.px,t0:Date.now()};send("/move?id="+encodeURIComponent(d.id)+"&px="+encodeURIComponent(String(d.px)));}
+                else{pend={id:d.id,px:d.px,t0:Date.now(),orig:d.orig};send("/move?id="+encodeURIComponent(d.id)+"&px="+encodeURIComponent(String(d.px)));}
               }
               applyView();setHover(hit(px,py));
             }
@@ -9369,7 +9369,7 @@ function expiryEvents(sym){
                 // a move we sent: done once NinjaTrader shows the order there; after 4 s say it did not take
                 if(pend){
                   var po=null;live.forEach(function(o){if(o.id===pend.id) po=o;});
-                  if(po&&Math.abs(po.px-pend.px)<TK/2) pend=null;
+                  if(po&&(Math.abs(po.px-pend.px)<TK/2||(pend.orig!=null&&Math.abs(po.px-pend.orig)>=TK/2))) pend=null; /* taken: at the wanted price, or any new price (NinjaTrader rounds to the contract's own tick, e.g. NNQ 0.5) */
                   else if(Date.now()-pend.t0>4000){if(po) showToast("NinjaTrader did not accept that move",false);pend=null;}
                 }
                 var sg=live.map(function(o){return o.k+o.px;}).join("|");
