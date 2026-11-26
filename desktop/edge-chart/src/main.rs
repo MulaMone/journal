@@ -2811,7 +2811,7 @@ impl eframe::App for App {
 
             // ═════════ NQ round numbers ═════════
             if self.sym == "NQ" && !self.hide_nums {
-                if intraday {
+                if intraday || is_range {
                     let mut p = (lo / 250.0).ceil() * 250.0;
                     while p < hi {
                         let m = (p as i64).rem_euclid(1000);
