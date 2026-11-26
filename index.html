@@ -6274,6 +6274,25 @@ function ntSyncSpecs(){
   }catch(e){}
 }
 setTimeout(ntSyncSpecs,4000);setInterval(ntSyncSpecs,1800000);
+// Trades that never got their futures->CFD offset saved (taken before it worked, or NinjaTrader was off when they closed) get it filled in
+// the next time NinjaTrader's feed is up, so they keep the exact look (connector, stop / target, selected text) with NinjaTrader closed.
+var _bsTried={};
+function ntBackfillBasis(){
+  try{
+    if(!ls("oanda_token","")) return;
+    var now=Date.now(),n=0;
+    (State.trades||[]).forEach(function(t){
+      if(n>=6||!t||!t.id||!t.inst) return;
+      if(typeof t.bs==="number"&&typeof t.bsx==="number") return;
+      if(["ES","MES","NES","NQ","MNQ","NNQ","CL","MCL","GC","MGC","NG","MNG"].indexOf(t.inst)<0) return;
+      var de=null;try{de=tradeTs(t);}catch(e){}
+      if(!de||now-de.getTime()>5*86400000) return;
+      if(_bsTried[t.id]&&now-_bsTried[t.id]<300000) return;
+      _bsTried[t.id]=now;n++;ntSaveBasis(t);
+    });
+  }catch(e){_dbg(e);}
+}
+setTimeout(ntBackfillBasis,8000);setInterval(ntBackfillBasis,60000);
 // round-trip commission per contract that NinjaTrader actually charged (two sides), averaged over the accounts that paid one; 0 when unknown
 function ntCommission(inst){
   var s=ntSpecs()[inst],c=s&&s.comm,v=[];
@@ -8715,7 +8734,8 @@ function chartTab(){
       // Narrow further to whatever the person has checked in the list below.
       // Empty selection = show everything in the window (the default).
       var selectedIds=State.chart_selected_ids||[];
-      var displayPoints=windowPoints; // every trade stays drawn; ticking trades below only adds their text
+      var _selS={};selectedIds.forEach(function(i){_selS[String(i)]=1;});
+      var displayPoints=selectedIds.length?windowPoints.filter(function(p){return _selS[String(p.id)];}):windowPoints; // nothing ticked = every trade; ticked = only those trades on the chart
       applyTradeVisibility=null;
 
       if(windowPoints.length){
