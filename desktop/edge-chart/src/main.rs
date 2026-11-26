@@ -136,6 +136,7 @@ struct LiveOrd {
     buy: bool,
     qty: f64,
     acct: String,
+    inst: String,                  // contract the order is on (NQ, MNQ, NNQ ...)
 }
 
 #[derive(Default)]
@@ -153,7 +154,7 @@ struct Shared {
     nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
     src: String,                      // "NT" or "OANDA" (shown in the toolbar)
     ord_sym: String,                  // chart symbol whose live orders the poller fetches
-    entries: Vec<(f64, f64, f64, f64, String)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point, account)
+    entries: Vec<(f64, f64, f64, f64, String, String)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point, account, contract e.g. NQ / NNQ)
     orders: Vec<LiveOrd>, // NinjaTrader orders working right now - futures prices, same as the NT candles
     toast: Option<(String, bool, std::time::Instant)>, // short message on the chart (text, ok, when)
     link_state: u8,                   // 2nd+ window: 1 = receiving NinjaTrader from the first window, 2 = first window is not sharing it
@@ -696,36 +697,36 @@ fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
         let url = format!("http://127.0.0.1:7881/orders?sym={sym}&from={}&to={}", now - 259200, now + 120);
         let res = ureq::get(&url).timeout(Duration::from_secs(2)).call().ok().and_then(|r| r.into_json::<serde_json::Value>().ok());
         let mut live: Vec<LiveOrd> = vec![];
-        let mut pos_e: Vec<(f64, f64, f64, f64, String)> = vec![];
+        let mut pos_e: Vec<(f64, f64, f64, f64, String, String)> = vec![];
         if let Some(v) = res {
-            let pos: Vec<(String, f64, f64, f64, f64)> = v["pos"]
+            let pos: Vec<(String, f64, f64, f64, f64, String)> = v["pos"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|q| Some((q[0].as_str()?.to_string(), q[1].as_f64()?, q[2].as_f64()?, q[3].as_f64()?, q[4].as_f64()?))).collect())
+                .map(|a| a.iter().filter_map(|q| Some((q[0].as_str()?.to_string(), q[1].as_f64()?, q[2].as_f64()?, q[3].as_f64()?, q[4].as_f64()?, q[5].as_str().unwrap_or("").to_string()))).collect())
                 .unwrap_or_default();
-            pos_e = pos.iter().map(|q| (q.3, q.1, q.2, q.4, q.0.clone())).collect();
-            let mut last: HashMap<String, (i64, bool, f64, String, f64, bool)> = HashMap::new();
+            pos_e = pos.iter().map(|q| (q.3, q.1, q.2, q.4, q.0.clone(), q.5.clone())).collect();
+            let mut last: HashMap<String, (i64, bool, f64, String, f64, bool, String)> = HashMap::new();
             if let Some(a) = v["orders"].as_array() {
                 for e in a {
                     let (Some(t), Some(id), Some(k), Some(px), Some(st)) = (e[0].as_i64(), e[1].as_str(), e[2].as_str(), e[4].as_f64(), e[6].as_str()) else { continue };
                     if last.get(id).map_or(true, |o| t >= o.0) {
-                        last.insert(id.to_string(), (t, k == "S", px, st.to_string(), e[5].as_f64().unwrap_or(0.0), e[3].as_str() == Some("B")));
+                        last.insert(id.to_string(), (t, k == "S", px, st.to_string(), e[5].as_f64().unwrap_or(0.0), e[3].as_str() == Some("B"), e[7].as_str().unwrap_or("").to_string()));
                     }
                 }
             }
-            for (id, (_, is_stop, px, st, qty, buy)) in last {
+            for (id, (_, is_stop, px, st, qty, buy, inst)) in last {
                 if st == "W" {
                     let acct = id.split('|').next().unwrap_or("").to_string();
-                    let pz = pos.iter().find(|q| q.0 == acct);
+                    let pz = pos.iter().find(|q| q.0 == acct && (inst.is_empty() || q.5 == inst));
                     // long position + a sell order (or short + buy) = it exits the trade
                     let exit = pz.map_or(false, |q| (q.1 > 0.0) != buy);
                     // what an exit order is worth: (price - average) x this, with this = direction x dollars per point x the order's contracts
                     let val = if exit { pz.map(|q| (q.3, q.1 * q.4 * if qty > 0.0 { qty } else { q.2 })) } else { None };
-                    live.push(LiveOrd { id: id.clone(), is_stop, px, val, entry: !exit, buy, qty: if qty > 0.0 { qty } else { 1.0 }, acct });
+                    live.push(LiveOrd { id: id.clone(), is_stop, px, val, entry: !exit, buy, qty: if qty > 0.0 { qty } else { 1.0 }, acct, inst });
                 }
             }
             live.sort_by(|a, b| a.px.partial_cmp(&b.px).unwrap_or(std::cmp::Ordering::Equal));
         }
-        let ents: Vec<(f64, f64, f64, f64, String)> = pos_e;
+        let ents: Vec<(f64, f64, f64, f64, String, String)> = pos_e;
         let changed = {
             let mut s = shared.lock().unwrap();
             let c = s.orders != live || s.entries != ents;
@@ -3132,6 +3133,11 @@ impl eframe::App for App {
                     }
                 }
                 let multi = accts.len() > 1;
+                // contract names show only when more than one contract (NQ and NNQ) has something on this symbol
+                let mut insts: Vec<String> = vec![];
+                for o in &orders { if !o.inst.is_empty() && !insts.contains(&o.inst) { insts.push(o.inst.clone()); } }
+                for e in &ents { if !e.5.is_empty() && !insts.contains(&e.5) { insts.push(e.5.clone()); } }
+                let multi_i = insts.len() > 1;
                 // hotkeys: Alt+C close the trade, Alt+R reverse it, Alt+E stop to break even, Alt+F flatten the account(s)
                 if !ctx.egui_wants_keyboard_input() && (!orders.is_empty() || !ents.is_empty()) {
                     let (kc, ke, kf, kr) = ctx.input(|i| (i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::C), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::E), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::F), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::R)));
@@ -3140,12 +3146,12 @@ impl eframe::App for App {
                         if kc {
                             self.shared.lock().unwrap().toast = Some(("Closing trade…".to_string(), true, now_i));
                             for e in &ents {
-                                send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(&e.4), urlenc(&self.sym)));
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(&e.4), urlenc(if e.5.is_empty() { self.sym.as_str() } else { e.5.as_str() })));
                             }
                         } else if kr {
                             self.shared.lock().unwrap().toast = Some(("Reversing…".to_string(), true, now_i));
                             for e in &ents {
-                                send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(&e.4), urlenc(&self.sym)));
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(&e.4), urlenc(if e.5.is_empty() { self.sym.as_str() } else { e.5.as_str() })));
                             }
                         } else if kf {
                             self.shared.lock().unwrap().toast = Some(("Flat…".to_string(), true, now_i));
@@ -3171,8 +3177,8 @@ impl eframe::App for App {
                         }
                     }
                 }
-                let pre_of = |a: &str| if multi { format!("{a} ") } else { String::new() };
-                let pre_max: String = accts.iter().map(|a| pre_of(a)).max_by_key(|x| x.len()).unwrap_or_default();
+                let pre_of = |a: &str, i: &str| -> String { let mut p = String::new(); if multi { p.push_str(a); p.push(' '); } if multi_i { p.push_str(i); p.push(' '); } p };
+                let pre_max: String = pre_of(accts.iter().max_by_key(|x| x.len()).map(|x| x.as_str()).unwrap_or(""), insts.iter().max_by_key(|x| x.len()).map(|x| x.as_str()).unwrap_or(""));
                 // the price each order is drawn at: under the pointer while dragging, the dropped price while waiting, else NinjaTrader's
                 let mut views: Vec<(usize, f64)> = vec![];
                 for (i, o) in orders.iter().enumerate() {
@@ -3199,13 +3205,13 @@ impl eframe::App for App {
                     spread_y(&mut cy);
                 }
                 // entry lines: your average price, with the open profit / loss at the last price (like NinjaTrader's own)
-                for (i, (avg, dir, qty, pv, acct)) in ents.iter().enumerate() {
+                for (i, (avg, dir, qty, pv, acct, inst)) in ents.iter().enumerate() {
                     let ey = y_of(*avg);
                     if ey < plot.top() || ey > plot.bottom() {
                         continue;
                     }
                     let upl = (last.c - avg) * dir * pv * qty;
-                    let etxt = format!("{}{} {}   {}${:.2}", pre_of(acct), if *dir > 0.0 { "LONG" } else { "SHORT" }, qty, if upl >= 0.0 { "+" } else { "-" }, upl.abs());
+                    let etxt = format!("{}{} {}   {}${:.2}", pre_of(acct, inst), if *dir > 0.0 { "LONG" } else { "SHORT" }, qty, if upl >= 0.0 { "+" } else { "-" }, upl.abs());
                     let ecol = rgb(0x4da3ff);
                     dash_h(&clip, plot.left(), plot.right(), snapc(ey), 3.0, 3.0, Stroke::new(hair.max(1.0), ecol));
                     let etw = text_w(&painter, &etxt, &oqf) + 26.0;
@@ -3237,7 +3243,7 @@ impl eframe::App for App {
                     if rrsp.clicked() && self.rev_sent.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                         self.rev_sent = Some(now_i);
                         self.shared.lock().unwrap().toast = Some(("Reversing…".to_string(), true, now_i));
-                        send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(acct), urlenc(&self.sym)));
+                        send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(acct), urlenc(if inst.is_empty() { self.sym.as_str() } else { inst.as_str() })));
                     }
                     let xr = Rect::from_min_size(Pos2::new(er.right() + 34.0, cy[i] - 12.0), Vec2::new(26.0, 24.0));
                     let xrsp = ui.interact(xr, egui::Id::new(("ordx", acct.as_str())), Sense::click());
@@ -3254,7 +3260,7 @@ impl eframe::App for App {
                     if xrsp.clicked() && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                         self.close_sent = Some(now_i);
                         self.shared.lock().unwrap().toast = Some(("Closing trade…".to_string(), true, now_i));
-                        send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(acct), urlenc(&self.sym)));
+                        send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(acct), urlenc(if inst.is_empty() { self.sym.as_str() } else { inst.as_str() })));
                     }
                     order_tag(&painter, Rect::from_min_size(Pos2::new(plot.right() + 2.0, ey - 12.0), Vec2::new(AXIS_W - 4.0, 24.0)), ecol, &fmt_price(*avg, step), Color32::WHITE, FontId::monospace(13.0));
                 }
@@ -3281,7 +3287,7 @@ impl eframe::App for App {
                     let orr = Rect::from_min_size(Pos2::new(plot.right() + 2.0, oy - 12.0), Vec2::new(AXIS_W - 4.0, 24.0));
                     order_tag(&painter, orr, rgb(ocol), &fmt_price(*px, step), Color32::WHITE, FontId::monospace(13.0));
                     let lr = Rect::from_min_size(Pos2::new(plot.left() + 12.0, ly[k] - 12.0), Vec2::new(lw, 24.0));
-                    let pre = pre_of(&o.acct);
+                    let pre = pre_of(&o.acct, &o.inst);
                     let mut drawn = false;
                     if o.entry {
                         // a waiting entry order: BUY LMT 1  waiting to fill
