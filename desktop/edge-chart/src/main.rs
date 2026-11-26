@@ -1794,7 +1794,7 @@ struct App {
     manual: Option<(f64, f64)>, // manual price range (after dragging the price axis / panning vertically); None = auto-fit
     drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag, 3 = measure (shift + drag)
     ord_drag: Option<(String, bool, f64)>, // a stop / target being dragged: (order id, is stop, price under the pointer)
-    ord_pend: Option<(String, f64, std::time::Instant)>, // a move sent to NinjaTrader, held on screen until NinjaTrader shows it
+    ord_pend: Option<(String, f64, std::time::Instant, f64)>, // (id, wanted futures price, when, futures price before the move) // a move sent to NinjaTrader, held on screen until NinjaTrader shows it
     close_sent: Option<std::time::Instant>, // last X click (ignores a double click)
     rev_sent: Option<std::time::Instant>, // last reverse click (own timer, so Close right after a reverse still works)
     meas_p0: Option<Pos2>,      // where the measure drag started (screen)
@@ -3113,18 +3113,44 @@ impl eframe::App for App {
             // Labels sit on the left. Drag a label up or down to move the real order; the blue entry chip sits right beside them (never over the stop)
             // and its X closes the trade at market and cancels the stop and target. A waiting entry order is tan with its own X (cancels just that order).
             // With two accounts in the same symbol every label carries its account name.
-            if src_nt {
-                let (orders, ents) = {
+            // On the CFD chart the orders still come from NinjaTrader (futures prices): shift them by the futures->CFD difference
+            // (CFD last price minus NinjaTrader's last price) so they sit where they belong on the CFD candles.
+            let cfd_basis: Option<f64> = if src_nt {
+                Some(0.0)
+            } else {
+                let s = self.shared.lock().unwrap();
+                if s.force_cfd && s.nt_conns.get(&self.sym).copied().unwrap_or(0) > 0 {
+                    s.nt.get(&self.sym).and_then(|v| v.last()).map(|b| last.c - b.c)
+                } else {
+                    None
+                }
+            };
+            if let Some(bas) = cfd_basis {
+                let (mut orders, mut ents) = {
                     let s = self.shared.lock().unwrap();
                     (s.orders.clone(), s.entries.clone())
                 };
+                if bas != 0.0 {
+                    for o in orders.iter_mut() {
+                        o.px += bas;
+                        if let Some(v) = o.val.as_mut() {
+                            v.0 += bas;
+                        }
+                    }
+                    for e in ents.iter_mut() {
+                        e.0 += bas;
+                    }
+                }
                 let oqf = FontId::monospace(15.0);
                 let tk = tick_size(&self.sym);
+                // chart price -> the futures price NinjaTrader understands (back-shifted, on a tick)
+                let fpx = |p: f64| ((p - bas) / tk).round() * tk;
                 let now_i = std::time::Instant::now();
                 // a move waiting for NinjaTrader: keep the line where you dropped it until NinjaTrader shows it there (or says no)
-                if let Some((pid, ppx, t0)) = self.ord_pend.clone() {
-                    let cur = orders.iter().find(|o| o.id == pid).map(|o| o.px);
-                    if cur.map_or(false, |c| (c - ppx).abs() < tk * 0.5) {
+                if let Some((pid, ppx, t0, porig)) = self.ord_pend.clone() {
+                    let cur = orders.iter().find(|o| o.id == pid).map(|o| o.px - bas); // back to futures price
+                    // taken = at the wanted price, or at ANY new price (NinjaTrader rounds to the contract's own tick, e.g. NNQ / NES 0.5)
+                    if cur.map_or(false, |c| (c - ppx).abs() < tk * 0.5 || (c - porig).abs() >= tk * 0.5) {
                         self.ord_pend = None;
                     } else if t0.elapsed() > Duration::from_secs(4) {
                         self.ord_pend = None;
@@ -3184,8 +3210,8 @@ impl eframe::App for App {
                                     continue;
                                 }
                                 n += 1;
-                                self.ord_pend = Some((o.id.clone(), bp, now_i));
-                                send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), bp));
+                                self.ord_pend = Some((o.id.clone(), fpx(bp), now_i, o.px - bas));
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), fpx(bp)));
                             }
                             let msg = if n > 0 { "Stop to entry +10 pts" } else if bad > 0 { "Break even: price isn't 10 pts past your entry yet" } else { "No stop to move" };
                             self.shared.lock().unwrap().toast = Some((msg.to_string(), n > 0, now_i));
@@ -3201,7 +3227,7 @@ impl eframe::App for App {
                     if let Some(d) = self.ord_drag.as_ref().filter(|d| d.0 == o.id) {
                         px = d.2;
                     } else if let Some(p) = self.ord_pend.as_ref().filter(|p| p.0 == o.id) {
-                        px = p.1;
+                        px = p.1 + bas; // pending is stored as a futures price
                     }
                     views.push((i, px));
                 }
@@ -3375,8 +3401,8 @@ impl eframe::App for App {
                                     if bad {
                                         self.shared.lock().unwrap().toast = Some((format!("{} can't go there - it is on the wrong side of the market", if o.entry { "Entry order" } else if o.is_stop { "Stop" } else { "Target" }), false, now_i));
                                     } else {
-                                        self.ord_pend = Some((d.0.clone(), d.2, now_i));
-                                        send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), d.2));
+                                        self.ord_pend = Some((d.0.clone(), fpx(d.2), now_i, o.px - bas));
+                                        send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), fpx(d.2)));
                                     }
                                 }
                             }
