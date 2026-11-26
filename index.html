@@ -9105,9 +9105,9 @@ function expiryEvents(sym){
           })();
           (function(){
             if(focusTs||monthlyFetch||["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)) return;
-            var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[],liveArr=[],curBs=0,sigD="";
+            var es=null,want=false;var per=periodSec,lines=[],sigL="",busy=false,fails=0,iv=null,labs=[],liveArr=[],curBs=0,sigD="";
             var TK=({ES:0.25,NQ:0.25,CL:0.01,GC:0.1,NG:0.001})[sym]||0.25;try{var _sp=ntSpecs()[sym];if(_sp&&_sp.tick>0) TK=_sp.tick;}catch(e){}
-            var drag=null,pend=null,toast=null,hoverId="",lastClose=0,rects=[],pressX=null,ghost=null,lt=null;var curLast=null,multi=false,lastHk=0,BE_PTS=10; // Alt+E puts the stop this many points past your entry
+            var closing={};var drag=null,pend=null,toast=null,hoverId="",lastClose=0,rects=[],pressX=null,ghost=null,lt=null;var curLast=null,multi=false,lastHk=0,BE_PTS=10; // Alt+E puts the stop this many points past your entry
             function clearLines(){lines.forEach(function(l){try{series.removePriceLine(l);}catch(e){}});lines=[];sigL="";}
             function clearL(){clearLines();labs=[];liveArr=[];rects=[];drag=null;pend=null;dropGhost();sigD="";}
             function dropGhost(){if(ghost){try{series.removePriceLine(ghost);}catch(e){}ghost=null;}}
@@ -9185,9 +9185,12 @@ function expiryEvents(sym){
             function hit(px,py){var b=chartDiv.getBoundingClientRect(),x=px-b.left,y=py-b.top;for(var i=rects.length-1;i>=0;i--){var r=rects[i];if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h) return r;}return null;}
             function setHover(r){var id=r?(r.t==="x"?"X|"+r.acct:r.t==="c"?"C|"+r.id:r.id):"";if(id!==hoverId){hoverId=id;sigD="";}cvL.style.pointerEvents=r?"auto":"none";cvL.style.cursor=r?(r.t==="x"||r.t==="c"?"pointer":"ns-resize"):"";}
             function send(path){
+              var cm=/^\/(close|flat)\?acct=([^&]*)/.exec(path);
               var k="";try{k=localStorage.getItem("edgeKey")||"";}catch(e){}
               fetch("http://127.0.0.1:7881"+path+(k?"&k="+encodeURIComponent(k):""),{method:"POST"}).then(function(r){return r.json().catch(function(){return {ok:false,err:"bad answer from the NinjaTrader link"};});}).then(function(j){
                 if(!j||!j.ok){var m=(j&&j.err)||"NinjaTrader link refused";showToast(/blocked/.test(m)?"Needs your key (see the box)":(m.length>70?m.slice(0,70)+"…":m),false);if(/blocked/.test(m)) askKey();pend=null;applyView();return;}
+                // EdgeFeed waits for the fill: only when it says the account is flat do the stop, target and position come off the chart (instantly); otherwise they stay
+                if(cm&&j.flat===true){var cac=decodeURIComponent(cm[2]);closing[cac]=Date.now();liveArr=liveArr.filter(function(o){return o.acct!==cac;});clearLines();applyView();}
                 [120,350,700,1300].forEach(function(ms){setTimeout(tick,ms);}); // NinjaTrader just acted: re-read now instead of waiting for the 2 s poll
               }).catch(function(){showToast("Can't reach EdgeFeed in NinjaTrader",false);pend=null;applyView();});
             }
@@ -9279,7 +9282,7 @@ function expiryEvents(sym){
             window.addEventListener("touchmove",wtm,{passive:false});window.addEventListener("touchend",wte);window.addEventListener("touchcancel",wte);
             chartDiv.addEventListener("touchstart",function(e){var t=e.touches[0];if(e.touches.length===1&&t){lt=t;down(t.clientX,t.clientY,e);}},{capture:true,passive:false});
             function tick(){
-              if(!chartDiv.isConnected){clearInterval(iv);clearL();cleanup();return;}
+              if(!chartDiv.isConnected){clearInterval(iv);try{if(es) es.close();}catch(e){}clearL();cleanup();return;}
               if(busy||document.hidden||!candles.length) return;
               busy=true;
               var now=Math.floor(Date.now()/1000),ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},2500);
@@ -9317,6 +9320,7 @@ function expiryEvents(sym){
                   var up2=lastFut==null?null:(lastFut-q[3])*q[1]*q[4]*q[2];
                   live.push({k:"E",id:"E|"+q[0],px:q[3],usd:up2,name:(q[1]>0?"LONG ":"SHORT ")+q[2],acct:q[0]});
                 });
+                var _nw=Date.now();live=live.filter(function(o){return !(closing[o.acct]&&_nw-closing[o.acct]<2500);});
                 if(!live.length||!ds.length){clearL();return;}
                 var accSet={};live.forEach(function(o){accSet[o.acct]=1;});multi=Object.keys(accSet).length>1;
                 ds.sort(function(a,b){return a-b;});
@@ -9336,8 +9340,10 @@ function expiryEvents(sym){
                   });
                 }
                 applyView();
-              }).catch(function(){clearTimeout(tmo);if(++fails>=3) clearL();}).then(function(){busy=false;});
+              }).catch(function(){clearTimeout(tmo);if(++fails>=3) clearL();}).then(function(){busy=false;if(want){want=false;setTimeout(tick,0);}});
             }
+            // NinjaTrader pushes a tiny message on every order / fill (EdgeFeed /stream): re-read right away instead of waiting for the 2 s poll, which stays as a safety net
+            try{es=new EventSource("http://127.0.0.1:7881/stream");es.onmessage=function(){if(!chartDiv.isConnected){try{es.close();}catch(e){}return;}if(busy){want=true;}else tick();};}catch(e){}
             iv=setInterval(tick,2000);tick();
           })();
           layers.forEach(function(l){l.s.setData(l.data);});
