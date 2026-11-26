@@ -9482,6 +9482,7 @@ function expiryEvents(sym){
           row.style.cssText="display:grid;grid-template-columns:auto 1fr auto"+(isMobile()?"":" auto")+";column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);box-shadow:"+(isSel?"inset 3px 0 0 "+(p.isLong?"var(--green)":"var(--red)"):"none")+";background:"+(isSel?(p.isLong?"#00e67622":"#ff444422"):"transparent")+";font-family:monospace;font-size:12px;cursor:pointer;";
           row.addEventListener("click",function(){
             State._tlScroll=listWrap.scrollTop;
+            var _pc=document.getElementById("content");State._pgScroll={c:_pc?_pc.scrollTop:0,w:window.pageYOffset||0};
             var cur=(State.chart_selected_ids||[]).slice();
             var idx=cur.indexOf(p.id);
             if(idx>-1) cur.splice(idx,1); else cur.push(p.id);
@@ -9520,6 +9521,11 @@ function expiryEvents(sym){
           listWrap.appendChild(row);
         });
         el.appendChild(listWrap);tradeListEls.push(listWrap);
+        if(State._pgScroll){ // the list is built after the chart data arrives, when the page is tall enough again: put the page back where it was
+          var _pg=State._pgScroll;State._pgScroll=null;
+          var _rp=function(){var c=document.getElementById("content");if(c&&_pg.c)c.scrollTop=_pg.c;if(_pg.w)window.scrollTo(0,_pg.w);};
+          _rp();requestAnimationFrame(_rp);setTimeout(_rp,60);setTimeout(_rp,250);
+        }
         if(State._tlScroll){var _ts=State._tlScroll;listWrap.scrollTop=_ts;requestAnimationFrame(function(){listWrap.scrollTop=_ts;});setTimeout(function(){listWrap.scrollTop=_ts;},60);}
         layoutTrades();
       }
