@@ -28,6 +28,8 @@ const RIGHT_GAP_BARS: f32 = 8.0;
 const RANGE_TICKS: f64 = 400.0; // the "400R" chart: every bar spans this many ticks (NQ/ES tick = 0.25 -> 100 points)
 const EMA_FAST: usize = 14;
 const EMA_SLOW: usize = 50;
+const BIG_SWING: usize = 5; // 400R: big swings (NinjaTrader's Swing indicator, strength 5) = solid lines
+const SMALL_SWING: usize = 2; // 400R: small swings = stars
 const AXIS_W: f32 = 96.0;
 const AXIS_H: f32 = 28.0;
 // ─────────────────────────────────────────────────────────────────────────
@@ -1550,6 +1552,82 @@ fn ema_points(cs: &[Candle], m5: &[Candle], len: usize, per: i64) -> Vec<(usize,
     pts
 }
 
+/// NinjaTrader's Swing indicator (same rules as its source), run on the completed bars. Prices within `eps` count as equal, like ApproxCompare.
+/// Returns (high line per bar, low line per bar, confirmed swing-high bars, confirmed swing-low bars).
+/// The lines follow NinjaTrader's plot: only the latest swing is shown, a newer swing replaces it, and a bar that trades through it clears it.
+fn nt_swing(cs: &[Candle], s: usize, eps: f64) -> (Vec<Option<f64>>, Vec<Option<f64>>, Vec<usize>, Vec<usize>) {
+    let mut n = cs.len();
+    while n > 0 && !cs[n - 1].done {
+        n -= 1; // the forming bar is not processed (Calculate = OnBarClose)
+    }
+    let k = 2 * s + 1;
+    let mut hp: Vec<Option<f64>> = vec![None; cs.len()];
+    let mut lp: Vec<Option<f64>> = vec![None; cs.len()];
+    let (mut ph, mut pl): (Vec<usize>, Vec<usize>) = (vec![], vec![]);
+    let (mut ch, mut cl) = (0.0f64, 0.0f64);
+    for i in 0..n {
+        if i + 1 < k {
+            continue;
+        }
+        let w = &cs[i + 1 - k..=i];
+        let cand = w[s].h;
+        let is_h = (0..s).all(|j| w[j].h < cand - eps) && (s + 1..k).all(|j| w[j].h <= cand + eps);
+        if is_h {
+            ch = cand;
+            ph.push(i - s);
+            for j in 0..=s {
+                hp[i - j] = Some(ch);
+            }
+        } else if cs[i].h > ch + eps || ch == 0.0 {
+            ch = 0.0;
+            hp[i] = None;
+        } else {
+            hp[i] = Some(ch);
+        }
+        let cand = w[s].l;
+        let is_l = (0..s).all(|j| w[j].l > cand + eps) && (s + 1..k).all(|j| w[j].l >= cand - eps);
+        if is_l {
+            cl = cand;
+            pl.push(i - s);
+            for j in 0..=s {
+                lp[i - j] = Some(cl);
+            }
+        } else if cs[i].l < cl - eps || cl == 0.0 {
+            cl = f64::MAX;
+            lp[i] = None;
+        } else {
+            lp[i] = Some(cl);
+        }
+    }
+    (hp, lp, ph, pl)
+}
+/// Runs of equal levels -> (first bar, last bar, price)
+fn swing_runs(pl: &[Option<f64>]) -> Vec<(usize, usize, f64)> {
+    let mut out: Vec<(usize, usize, f64)> = vec![];
+    for (i, v) in pl.iter().enumerate() {
+        let Some(v) = *v else { continue };
+        match out.last_mut() {
+            Some(r) if r.1 + 1 == i && (r.2 - v).abs() < 1e-9 => r.1 = i,
+            _ => out.push((i, i, v)),
+        }
+    }
+    out
+}
+/// Five-point star (filled mesh)
+fn star_shape(p: &egui::Painter, c: Pos2, r: f32, col: Color32) {
+    let mut m = egui::Mesh::default();
+    m.colored_vertex(c, col);
+    for k in 0..10 {
+        let a = -std::f32::consts::FRAC_PI_2 + k as f32 * std::f32::consts::PI / 5.0;
+        let rr = if k % 2 == 0 { r } else { r * 0.45 };
+        m.colored_vertex(Pos2::new(c.x + rr * a.cos(), c.y + rr * a.sin()), col);
+    }
+    for k in 0..10u32 {
+        m.add_triangle(0, 1 + k, 1 + (k + 1) % 10);
+    }
+    p.add(egui::Shape::mesh(m));
+}
+
 // ── chart linking: native chart windows sharing the same colour group mirror zoom/scroll (by TIME) and the crosshair ──
 const LINK_COLORS: [(u8, u8, u8); 5] = [(0, 212, 212), (0, 230, 118), (251, 191, 36), (255, 68, 68), (168, 85, 247)];
 const LINK_PORT: u16 = 7879;
@@ -1667,6 +1745,7 @@ struct App {
     xh_off: bool,               // a click on the chart hides / shows the crosshair lines (like the web chart)
     show_wk_d: bool,            // D: a vertical line at the start of each week (off by default)
     show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
+    swing_ext: bool,            // 400R: big swing lines run on until price hits them (off by default = NinjaTrader's own Swing plot)
     title_green: bool,          // window title bar currently painted green (futures feed live)
 }
 
@@ -1743,6 +1822,7 @@ impl App {
             xh_off: false,
             show_wk_d: false,
             show_mo_w: false,
+            swing_ext: false,
             title_green: false,
         };
         app.reload();
@@ -1840,6 +1920,12 @@ impl eframe::App for App {
                 }
                 if ui.selectable_label(self.show_fvg, "FVG").clicked() {
                     self.show_fvg = !self.show_fvg;
+                }
+                if self.tf == "400R" {
+                    let ext_txt = egui::RichText::new("EXTEND").strong().color(if self.swing_ext { Color32::from_rgb(255, 176, 32) } else { Color32::from_rgb(150, 165, 195) });
+                    if ui.selectable_label(self.swing_ext, ext_txt).on_hover_text("Big swing lines keep running until price hits them (off: only the latest swing line, like NinjaTrader)").clicked() {
+                        self.swing_ext = !self.swing_ext;
+                    }
                 }
                 if self.intraday {
                     if ui.selectable_label(self.show_htf, "HTF").clicked() {
@@ -2742,6 +2828,49 @@ impl eframe::App for App {
                 }
             }
 
+            // ═════════ 400R swings: big = solid lines (NinjaTrader Swing, strength 5), drawn behind the candles ═════════
+            let swing_tk = tick_size(&self.sym) * 0.5;
+            let (small_h, small_l) = if is_range {
+                let (_, _, ph, pl) = nt_swing(&cs, SMALL_SWING, swing_tk);
+                (ph, pl)
+            } else {
+                (vec![], vec![])
+            };
+            if is_range {
+                let (hp, lp, ph, pl) = nt_swing(&cs, BIG_SWING, swing_tk);
+                let (red, grn) = (rgb(0xff4444), UP_FILL);
+                let mut segs: Vec<(usize, usize, f64, bool)> = vec![]; // (from bar, to bar, price, is high)
+                if self.swing_ext {
+                    // every confirmed swing runs on until a later bar hits its price (or to the right edge)
+                    for &i in &ph {
+                        let v = cs[i].h;
+                        segs.push((i, (i + 1..n).find(|&j| cs[j].h >= v).unwrap_or(usize::MAX), v, true));
+                    }
+                    for &i in &pl {
+                        let v = cs[i].l;
+                        segs.push((i, (i + 1..n).find(|&j| cs[j].l <= v).unwrap_or(usize::MAX), v, false));
+                    }
+                } else {
+                    for (a, b, v) in swing_runs(&hp) {
+                        segs.push((a, if b + 1 >= n.saturating_sub(1) { usize::MAX } else { b }, v, true));
+                    }
+                    for (a, b, v) in swing_runs(&lp) {
+                        segs.push((a, if b + 1 >= n.saturating_sub(1) { usize::MAX } else { b }, v, false));
+                    }
+                }
+                for (a, b, v, is_high) in segs {
+                    let y = y_of(v);
+                    if y < plot.top() || y > plot.bottom() {
+                        continue;
+                    }
+                    let x0 = x_of(a as f32);
+                    let x1 = if b == usize::MAX { plot.right() } else { x_of(b as f32) };
+                    if x1 < plot.left() || x0 > plot.right() {
+                        continue;
+                    }
+                    clip.hline(x0.max(plot.left())..=x1.min(plot.right()), snapc(y), Stroke::new(2.0, if is_high { red } else { grn }));
+                }
+            }
             // ═════════ candles (all drawn on whole physical pixels) ═════════
             let wick_px = ((WICK_PTS * ppp).round() as i32).max(1);
             let bw = {
@@ -2772,6 +2901,20 @@ impl eframe::App for App {
                 } else {
                     clip.rect_filled(rect_px(left, top, right, bot), 0.0, line);
                     clip.rect_filled(rect_px(left + wick_px, top + wick_px, right - wick_px, bot - wick_px), 0.0, fill);
+                }
+            }
+
+            // small swings (strength 2): a star past the wick
+            for &i in &small_h {
+                let p = Pos2::new(x_of(i as f32), y_of(cs[i].h) - 11.0);
+                if plot.expand(8.0).contains(p) {
+                    star_shape(&clip, p, 6.0, rgb(0xff2a2a));
+                }
+            }
+            for &i in &small_l {
+                let p = Pos2::new(x_of(i as f32), y_of(cs[i].l) + 11.0);
+                if plot.expand(8.0).contains(p) {
+                    star_shape(&clip, p, 6.0, rgb(0x1fe05a));
                 }
             }
 
