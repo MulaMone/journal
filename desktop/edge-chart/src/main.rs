@@ -2690,15 +2690,20 @@ impl eframe::App for App {
                     }
                 }
                 let multi = accts.len() > 1;
-                // hotkeys: Alt+C close the trade, Alt+E stop to break even, Alt+F flatten the account(s)
+                // hotkeys: Alt+C close the trade, Alt+R reverse it, Alt+E stop to break even, Alt+F flatten the account(s)
                 if !ctx.egui_wants_keyboard_input() && (!orders.is_empty() || !ents.is_empty()) {
-                    let (kc, ke, kf) = ctx.input(|i| (i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::C), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::E), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::F)));
-                    if (kc || ke || kf) && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_millis(1500)) {
+                    let (kc, ke, kf, kr) = ctx.input(|i| (i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::C), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::E), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::F), i.modifiers.alt && !i.modifiers.ctrl && i.key_pressed(egui::Key::R)));
+                    if (kc || ke || kf || kr) && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_millis(1500)) {
                         self.close_sent = Some(now_i);
                         if kc {
                             self.shared.lock().unwrap().toast = Some(("Closing trade…".to_string(), true, now_i));
                             for e in &ents {
                                 send_cmd(self.shared.clone(), ctx.clone(), format!("/close?acct={}&sym={}", urlenc(&e.4), urlenc(&self.sym)));
+                            }
+                        } else if kr {
+                            self.shared.lock().unwrap().toast = Some(("Reversing…".to_string(), true, now_i));
+                            for e in &ents {
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(&e.4), urlenc(&self.sym)));
                             }
                         } else if kf {
                             self.shared.lock().unwrap().toast = Some(("Flat…".to_string(), true, now_i));
@@ -2767,7 +2772,32 @@ impl eframe::App for App {
                     let er = Rect::from_min_size(Pos2::new(ex, cy[i] - 12.0), Vec2::new(etw, 24.0));
                     order_tag(&clip, er, ecol, &etxt, ecol_txt, oqf.clone());
                     // X: close this account's trade in one click (market close + cancel stop and target)
-                    let xr = Rect::from_min_size(Pos2::new(er.right() + 4.0, cy[i] - 12.0), Vec2::new(26.0, 24.0));
+                    // reverse: close this trade and open the same size the other way (market), no new stop or target
+                    let rr = Rect::from_min_size(Pos2::new(er.right() + 4.0, cy[i] - 12.0), Vec2::new(26.0, 24.0));
+                    let rrsp = ui.interact(rr, egui::Id::new(("ordr", acct.as_str())), Sense::click());
+                    let rhot = rrsp.hovered();
+                    clip.rect_filled(rr, 4.0, if rhot { rgb(0x4a3410) } else { rgb(0x0a1424) });
+                    clip.rect_stroke(rr, 4.0, Stroke::new(1.5, rgb(0xffb15c)), egui::StrokeKind::Inside);
+                    let rc = rr.center();
+                    let rs = Stroke::new(2.0, Color32::WHITE);
+                    clip.line_segment([rc + Vec2::new(-4.0, 5.0), rc + Vec2::new(-4.0, -5.0)], rs);
+                    clip.line_segment([rc + Vec2::new(-7.0, -2.0), rc + Vec2::new(-4.0, -5.0)], rs);
+                    clip.line_segment([rc + Vec2::new(-1.0, -2.0), rc + Vec2::new(-4.0, -5.0)], rs);
+                    clip.line_segment([rc + Vec2::new(4.0, -5.0), rc + Vec2::new(4.0, 5.0)], rs);
+                    clip.line_segment([rc + Vec2::new(1.0, 2.0), rc + Vec2::new(4.0, 5.0)], rs);
+                    clip.line_segment([rc + Vec2::new(7.0, 2.0), rc + Vec2::new(4.0, 5.0)], rs);
+                    if rhot {
+                        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                        let tip = format!("Reverse: close {}, go {} {}", if *dir > 0.0 { "long" } else { "short" }, if *dir > 0.0 { "short" } else { "long" }, qty);
+                        let tr = Rect::from_min_size(Pos2::new(rr.left(), rr.top() - 30.0), Vec2::new(text_w(&painter, &tip, &oqf) + 20.0, 24.0));
+                        order_tag(&clip, tr, rgb(0xff8c00), &tip, rgb(0xffb15c), oqf.clone());
+                    }
+                    if rrsp.clicked() && self.close_sent.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                        self.close_sent = Some(now_i);
+                        self.shared.lock().unwrap().toast = Some(("Reversing…".to_string(), true, now_i));
+                        send_cmd(self.shared.clone(), ctx.clone(), format!("/reverse?acct={}&sym={}", urlenc(acct), urlenc(&self.sym)));
+                    }
+                    let xr = Rect::from_min_size(Pos2::new(er.right() + 34.0, cy[i] - 12.0), Vec2::new(26.0, 24.0));
                     let xrsp = ui.interact(xr, egui::Id::new(("ordx", acct.as_str())), Sense::click());
                     let hot = xrsp.hovered();
                     clip.rect_filled(xr, 4.0, if hot { rgb(0x4a1c24) } else { rgb(0x0a1424) });
