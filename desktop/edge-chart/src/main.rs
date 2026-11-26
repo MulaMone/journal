@@ -361,74 +361,175 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
     true
 }
 
-/// Local TCP listener for the NinjaTrader indicator: one JSON object per line,
-/// {"sym":"NQ","reset":true,"bars":[[unix_utc_open,o,h,l,c],...]} (history, then one-bar updates).
-fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Context) {
-    let port: u16 = std::env::var("EDGE_NT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7878);
+/// NinjaTrader feed. The first chart window owns the NinjaTrader port and relays everything it accepts (127.0.0.1:7880) to the other
+/// chart windows, so every window can show futures. If the owner closes, another window takes the port over by itself.
+/// Wire format, one JSON object per line: {"sym":"NQ","reset":true,"bars":[[unix_utc_open,o,h,l,c],...]} (history, then one-bar updates);
+/// the relay adds {"sym":"NQ","gone":true} when NinjaTrader drops a symbol.
+static RELAY: Mutex<Vec<std::net::TcpStream>> = Mutex::new(Vec::new());
+
+fn relay_send(line: &str) {
+    use std::io::Write;
+    let msg = format!("{line}\n");
+    RELAY.lock().unwrap().retain_mut(|c| c.write_all(msg.as_bytes()).is_ok());
+}
+
+/// A new window joining the relay first gets everything the owner already holds (history), then the live lines.
+fn relay_server(shared: Arc<Mutex<Shared>>, port: u16) {
+    use std::io::Write;
     let Ok(l) = TcpListener::bind(("127.0.0.1", port)) else { return };
-    for st in l.incoming() {
-        let Ok(st) = st else { continue };
-        let (sh, tx, ctx) = (shared.clone(), tx.clone(), ctx.clone());
-        std::thread::spawn(move || {
-            let mut my_sym: Option<String> = None;
-            for line in BufReader::new(st).lines() {
-                let Ok(line) = line else { break };
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
-                let sym = canon_sym(v["sym"].as_str().unwrap_or(""));
-                if !SYMS.iter().any(|x| x.0 == sym) {
+    for st in l.incoming().flatten() {
+        let _ = st.set_nodelay(true);
+        let _ = st.set_write_timeout(Some(Duration::from_secs(5)));
+        let mut st = st;
+        let mut clients = RELAY.lock().unwrap(); // held until the snapshot is out, so no live line slips between snapshot and stream
+        let mut lines: Vec<String> = vec![];
+        {
+            let s = shared.lock().unwrap();
+            for (sym, n) in &s.nt_conns {
+                if *n == 0 {
                     continue;
                 }
-                let bars: Vec<Candle> = v["bars"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|b| {
-                                let f = |i: usize| b.get(i).and_then(|x| x.as_f64());
-                                let t = f(0)? as i64;
-                                Some(Candle { t, e: t + off(t), o: f(1)?, h: f(2)?, l: f(3)?, c: f(4)?, done: true })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let raw = v["sym"].as_str().unwrap_or("").to_uppercase();
-                {
-                    let mut s = sh.lock().unwrap();
-                    // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
-                    if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
-                        continue;
-                    }
-                    if my_sym.is_none() {
-                        *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
-                        my_sym = Some(sym.clone());
-                    }
-                    let is_d = v["tf"].as_str() == Some("D");
-                    let e = if is_d { s.nt_d.entry(sym.clone()).or_default() } else { s.nt.entry(sym.clone()).or_default() };
-                    if v["reset"].as_bool() == Some(true) {
-                        e.clear();
-                    }
-                    merge(e, bars);
-                    if e.len() > 150000 {
-                        let cut = e.len() - 150000;
-                        e.drain(..cut);
-                    }
-                }
-                let _ = tx.send(Req::Nt { sym });
-                ctx.request_repaint();
-            }
-            if let Some(sym) = my_sym {
-                {
-                    let mut s = sh.lock().unwrap();
-                    if let Some(n) = s.nt_conns.get_mut(&sym) {
-                        *n = n.saturating_sub(1);
-                        if *n == 0 {
-                            s.nt_owner.remove(&sym);
+                let raw = s.nt_owner.get(sym).cloned().unwrap_or_else(|| sym.clone());
+                for (is_d, src) in [(false, s.nt.get(sym)), (true, s.nt_d.get(sym))] {
+                    let Some(v) = src else { continue };
+                    for (k, chunk) in v.chunks(20000).enumerate() {
+                        let bars: Vec<serde_json::Value> = chunk.iter().map(|c| serde_json::json!([c.t, c.o, c.h, c.l, c.c])).collect();
+                        let mut o = serde_json::json!({ "sym": raw, "bars": bars });
+                        if k == 0 {
+                            o["reset"] = serde_json::json!(true);
                         }
+                        if is_d {
+                            o["tf"] = serde_json::json!("D");
+                        }
+                        lines.push(o.to_string());
                     }
                 }
-                let _ = tx.send(Req::NtGone { sym });
-                ctx.request_repaint();
             }
-        });
+        }
+        let ok = lines.iter().all(|l| st.write_all(format!("{l}\n").as_bytes()).is_ok());
+        if ok {
+            clients.push(st);
+        }
+    }
+}
+
+/// One NinjaTrader (or relay) line. Returns true when it was accepted. `relay` = the line came from the owner window, not from NinjaTrader.
+fn nt_line(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context, line: &str, mine: &mut Vec<String>, relay: bool) {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return };
+    let sym = canon_sym(v["sym"].as_str().unwrap_or(""));
+    if !SYMS.iter().any(|x| x.0 == sym) {
+        return;
+    }
+    if relay && v["gone"].as_bool() == Some(true) {
+        if let Some(i) = mine.iter().position(|m| *m == sym) {
+            mine.remove(i);
+            nt_drop(sh, tx, ctx, &sym, false);
+        }
+        return;
+    }
+    let bars: Vec<Candle> = v["bars"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|b| {
+                    let f = |i: usize| b.get(i).and_then(|x| x.as_f64());
+                    let t = f(0)? as i64;
+                    Some(Candle { t, e: t + off(t), o: f(1)?, h: f(2)?, l: f(3)?, c: f(4)?, done: true })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let raw = v["sym"].as_str().unwrap_or("").to_uppercase();
+    {
+        let mut s = sh.lock().unwrap();
+        // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
+        if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
+            return;
+        }
+        if !mine.contains(&sym) {
+            *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
+            mine.push(sym.clone());
+        }
+        let is_d = v["tf"].as_str() == Some("D");
+        let e = if is_d { s.nt_d.entry(sym.clone()).or_default() } else { s.nt.entry(sym.clone()).or_default() };
+        if v["reset"].as_bool() == Some(true) {
+            e.clear();
+        }
+        merge(e, bars);
+        if e.len() > 150000 {
+            let cut = e.len() - 150000;
+            e.drain(..cut);
+        }
+    }
+    if !relay {
+        relay_send(line);
+    }
+    let _ = tx.send(Req::Nt { sym });
+    ctx.request_repaint();
+}
+
+/// This window lost its NinjaTrader link for `sym`. The owner tells the other windows once the last connection for it is gone.
+fn nt_drop(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context, sym: &str, owner: bool) {
+    let mut gone = false;
+    {
+        let mut s = sh.lock().unwrap();
+        if let Some(n) = s.nt_conns.get_mut(sym) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                s.nt_owner.remove(sym);
+                gone = true;
+            }
+        }
+    }
+    if gone && owner {
+        relay_send(&format!("{{\"sym\":\"{sym}\",\"gone\":true}}"));
+    }
+    let _ = tx.send(Req::NtGone { sym: sym.to_string() });
+    ctx.request_repaint();
+}
+
+fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Context) {
+    let env_port = |k: &str, d: u16| -> u16 { std::env::var(k).ok().and_then(|p| p.parse().ok()).unwrap_or(d) };
+    let (port, rport) = (env_port("EDGE_NT_PORT", 7878), env_port("EDGE_NT_RELAY_PORT", 7880));
+    let mut first = true;
+    loop {
+        let bound = TcpListener::bind(("127.0.0.1", port));
+        if first && bound.is_err() {
+            shared.lock().unwrap().force_cfd = true; // 2nd, 3rd... window: starts on CFD, the FUT | CFD switch can still move it to futures
+        }
+        first = false;
+        if let Ok(l) = bound {
+            // owner window: takes NinjaTrader's connections and relays them
+            let sh0 = shared.clone();
+            std::thread::spawn(move || relay_server(sh0, rport));
+            for st in l.incoming() {
+                let Ok(st) = st else { continue };
+                let (sh, tx, ctx) = (shared.clone(), tx.clone(), ctx.clone());
+                std::thread::spawn(move || {
+                    let mut mine: Vec<String> = vec![];
+                    for line in BufReader::new(st).lines() {
+                        let Ok(line) = line else { break };
+                        nt_line(&sh, &tx, &ctx, &line, &mut mine, false);
+                    }
+                    for sym in mine {
+                        nt_drop(&sh, &tx, &ctx, &sym, true);
+                    }
+                });
+            }
+            return;
+        }
+        // another window owns the port: read the same feed from it
+        if let Ok(st) = std::net::TcpStream::connect(("127.0.0.1", rport)) {
+            let mut mine: Vec<String> = vec![];
+            for line in BufReader::new(st).lines() {
+                let Ok(line) = line else { break };
+                nt_line(&shared, &tx, &ctx, &line, &mut mine, true);
+            }
+            for sym in mine {
+                nt_drop(&shared, &tx, &ctx, &sym, false);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(800)); // owner gone or not ready yet: try to take over / reconnect
     }
 }
 
