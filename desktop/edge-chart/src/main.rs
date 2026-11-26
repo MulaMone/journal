@@ -431,9 +431,40 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
 /// Polls EdgeFeed (127.0.0.1:7881/orders) for the orders NinjaTrader has working on the chart's symbol.
 /// An order is live while its latest recorded event is "W" (working); fills and cancels end it.
 /// With an open position in the order's account, an order on the opposite side is a stop / target; anything else is a waiting entry order.
+/// Wakes order_poll early: EdgeFeed's push stream and a command that just succeeded both call this, so the lines redraw at once instead of after the next 1.5 s tick.
+static WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
+fn wake_poll() {
+    let (m, c) = &WAKE;
+    *m.lock().unwrap() = true;
+    c.notify_all();
+}
+fn wait_poll(ms: u64) {
+    let (m, c) = &WAKE;
+    let g = m.lock().unwrap();
+    let (mut g, _) = c.wait_timeout_while(g, Duration::from_millis(ms), |w| !*w).unwrap();
+    *g = false;
+}
+
+/// Listens to EdgeFeed's server-sent events (127.0.0.1:7881/stream): a tiny message arrives the moment NinjaTrader reports an order or a fill.
+/// Reconnects by itself; while EdgeFeed is not running it just retries every second (the 1.5 s poll keeps working on its own).
+fn order_stream() {
+    loop {
+        let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(2)).timeout_read(Duration::from_secs(30)).build();
+        if let Ok(r) = agent.get("http://127.0.0.1:7881/stream").call() {
+            for line in BufReader::new(r.into_reader()).lines() {
+                let Ok(line) = line else { break };
+                if line.starts_with("data:") {
+                    wake_poll();
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(1000));
+    }
+}
+
 fn order_poll(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
     loop {
-        std::thread::sleep(Duration::from_millis(1500));
+        wait_poll(1500);
         let sym = shared.lock().unwrap().ord_sym.clone();
         if sym.is_empty() {
             continue;
@@ -538,6 +569,12 @@ fn send_cmd(shared: Arc<Mutex<Shared>>, ctx: egui::Context, path: String) {
             }
             Err(_) => (false, "Can't reach EdgeFeed in NinjaTrader".to_string()),
         };
+        if ok {
+            // NinjaTrader acted (EdgeFeed already waited for the fill): re-read orders and positions now
+            wake_poll();
+            std::thread::sleep(Duration::from_millis(300));
+            wake_poll();
+        }
         if !ok {
             let msg: String = msg.chars().take(110).collect();
             shared.lock().unwrap().toast = Some((msg, false, std::time::Instant::now()));
@@ -1465,6 +1502,7 @@ impl App {
             std::thread::spawn(move || nt_listener(sh2, tx2, ctx2));
             let (sh4, ctx4) = (sh.clone(), ctx.clone());
             std::thread::spawn(move || order_poll(sh4, ctx4));
+            std::thread::spawn(order_stream);
             let tx3 = tx.clone();
             std::thread::spawn(move || worker(rx, tx3, sh, ctx, base, tok));
         }
