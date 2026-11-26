@@ -366,21 +366,22 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
 /// chart windows, so every window can show futures. If the owner closes, another window takes the port over by itself.
 /// Wire format, one JSON object per line: {"sym":"NQ","reset":true,"bars":[[unix_utc_open,o,h,l,c],...]} (history, then one-bar updates);
 /// the relay adds {"sym":"NQ","gone":true} when NinjaTrader drops a symbol.
-static RELAY: Mutex<Vec<std::net::TcpStream>> = Mutex::new(Vec::new());
+static RELAY: Mutex<Vec<mpsc::Sender<Arc<String>>>> = Mutex::new(Vec::new()); // one writer queue per joined window
 
 fn relay_send(line: &str) {
-    use std::io::Write;
-    let msg = format!("{line}\n");
-    RELAY.lock().unwrap().retain_mut(|c| c.write_all(msg.as_bytes()).is_ok());
+    let msg = Arc::new(format!("{line}\n"));
+    RELAY.lock().unwrap().retain(|c| c.send(msg.clone()).is_ok()); // a window that is gone has a dead queue: dropped here
 }
 
 /// A window that joined as a relay client gets a "relay ok" answer, then everything the owner already holds (history), then the live lines.
+/// Each joined window has its own writer thread and queue: a slow window can never stall NinjaTrader's feed or the other windows,
+/// and no socket timeout is used (Windows applies timeouts per socket handle, not per connection, which cut links on a quiet feed).
 fn relay_attach(shared: &Arc<Mutex<Shared>>, mut st: std::net::TcpStream) {
     use std::io::Write;
     let _ = st.set_nodelay(true);
-    let _ = st.set_write_timeout(Some(Duration::from_secs(5)));
-    let mut clients = RELAY.lock().unwrap(); // held until the snapshot is out, so no live line slips between snapshot and stream
-    let mut lines: Vec<String> = vec!["{\"relay\":\"ok\"}".to_string()];
+    let (qtx, qrx) = mpsc::channel::<Arc<String>>();
+    let mut clients = RELAY.lock().unwrap(); // held while the snapshot is queued, so no live line slips between snapshot and stream
+    let _ = qtx.send(Arc::new("{\"relay\":\"ok\"}\n".to_string()));
     {
         let s = shared.lock().unwrap();
         for (sym, n) in &s.nt_conns {
@@ -399,14 +400,21 @@ fn relay_attach(shared: &Arc<Mutex<Shared>>, mut st: std::net::TcpStream) {
                     if is_d {
                         o["tf"] = serde_json::json!("D");
                     }
-                    lines.push(o.to_string());
+                    let _ = qtx.send(Arc::new(format!("{o}\n")));
                 }
             }
         }
     }
-    if lines.iter().all(|l| st.write_all(format!("{l}\n").as_bytes()).is_ok()) {
-        clients.push(st);
-    }
+    clients.push(qtx);
+    drop(clients);
+    std::thread::spawn(move || {
+        for msg in qrx {
+            if st.write_all(msg.as_bytes()).is_err() {
+                ilog("relay: write to a joined window failed, dropping it");
+                break;
+            }
+        }
+    });
 }
 
 /// One NinjaTrader (or relay) line. Returns true when it was accepted. `relay` = the line came from the owner window, not from NinjaTrader.
@@ -464,24 +472,45 @@ fn nt_line(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context,
     ctx.request_repaint();
 }
 
-/// This window lost its NinjaTrader link for `sym`. The owner tells the other windows once the last connection for it is gone.
+/// Link diagnostics: %LOCALAPPDATA%\\EDGE\\chart-cache\\chart-link.log (kept small). Shows when a window joins / loses the NinjaTrader feed and why.
+fn ilog(msg: &str) {
+    use std::io::Write;
+    let dir = cache_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("chart-link.log");
+    if std::fs::metadata(&p).map_or(false, |m| m.len() > 200_000) {
+        let _ = std::fs::remove_file(&p);
+    }
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+        let _ = writeln!(f, "{:.2} pid{} {}", now, std::process::id(), msg);
+    }
+}
+
+/// This window lost its NinjaTrader link for `sym`. The drop only counts after 4 s with no reconnect, so a brief
+/// reconnect doesn't make the FUT | CFD switch flicker or push a futures chart back onto CFD. The owner tells the other windows once the last connection for it is gone.
 fn nt_drop(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context, sym: &str, owner: bool) {
-    let mut gone = false;
-    {
-        let mut s = sh.lock().unwrap();
-        if let Some(n) = s.nt_conns.get_mut(sym) {
-            *n = n.saturating_sub(1);
-            if *n == 0 {
-                s.nt_owner.remove(sym);
-                gone = true;
+    let (sh, tx, ctx, sym) = (sh.clone(), tx.clone(), ctx.clone(), sym.to_string());
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(4));
+        let mut gone = false;
+        {
+            let mut s = sh.lock().unwrap();
+            if let Some(n) = s.nt_conns.get_mut(&sym) {
+                *n = n.saturating_sub(1);
+                if *n == 0 {
+                    s.nt_owner.remove(&sym);
+                    gone = true;
+                }
             }
         }
-    }
-    if gone && owner {
-        relay_send(&format!("{{\"sym\":\"{sym}\",\"gone\":true}}"));
-    }
-    let _ = tx.send(Req::NtGone { sym: sym.to_string() });
-    ctx.request_repaint();
+        ilog(&format!("{sym}: link gone for good={gone} owner={owner}"));
+        if gone && owner {
+            relay_send(&format!("{{\"sym\":\"{sym}\",\"gone\":true}}"));
+        }
+        let _ = tx.send(Req::NtGone { sym });
+        ctx.request_repaint();
+    });
 }
 
 fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Context) {
@@ -503,8 +532,15 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                     let mut mine: Vec<String> = vec![];
                     let Ok(wr) = st.try_clone() else { return };
                     let mut n = 0;
+                    ilog("owner: connection accepted");
                     for line in BufReader::new(st).lines() {
-                        let Ok(line) = line else { break };
+                        let line = match line {
+                            Ok(l) => l,
+                            Err(e) => {
+                                ilog(&format!("owner: connection read error: {e}"));
+                                break;
+                            }
+                        };
                         n += 1;
                         if n == 1 && line.len() < 64 && line.contains("\"relay\"") {
                             relay_attach(&sh, wr); // another chart window, not NinjaTrader
@@ -512,6 +548,7 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
                         }
                         nt_line(&sh, &tx, &ctx, &line, &mut mine, false);
                     }
+                    ilog(&format!("owner: connection ended, symbols {:?}", mine));
                     for sym in mine {
                         nt_drop(&sh, &tx, &ctx, &sym, true);
                     }
@@ -530,21 +567,35 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
             if st.write_all(b"{\"relay\":true}\n").is_ok() {
                 let mut hello = String::new();
                 // an older chart build never answers: that shows as "not shared"
-                if rd.read_line(&mut hello).is_ok() && hello.contains("ok") {
+                let hello_ok = rd.read_line(&mut hello).is_ok() && hello.contains("ok");
+                // Windows keeps the 3 s timeout on the handle that reads (the clone), so clear it there, not only on `st`
+                let _ = rd.get_ref().set_read_timeout(None);
+                let _ = st.set_read_timeout(None);
+                if hello_ok {
                     ok = true;
                     shared.lock().unwrap().link_state = 1;
                     ctx.request_repaint();
-                    let _ = st.set_read_timeout(None);
                     let mut mine: Vec<String> = vec![];
+                    ilog("client: joined the first window");
                     for line in rd.lines() {
-                        let Ok(line) = line else { break };
+                        let line = match line {
+                            Ok(l) => l,
+                            Err(e) => {
+                                ilog(&format!("client: read error: {e}"));
+                                break;
+                            }
+                        };
                         nt_line(&shared, &tx, &ctx, &line, &mut mine, true);
                     }
+                    ilog(&format!("client: link ended, symbols {:?}", mine));
                     for sym in mine {
                         nt_drop(&shared, &tx, &ctx, &sym, false);
                     }
                 }
             }
+        }
+        if !ok {
+            ilog("client: could not join the first window");
         }
         shared.lock().unwrap().link_state = if ok { 0 } else { 2 };
         ctx.request_repaint();
