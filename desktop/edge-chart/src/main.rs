@@ -153,6 +153,7 @@ struct Shared {
     entries: Vec<(f64, f64, f64, f64, String)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point, account)
     orders: Vec<LiveOrd>, // NinjaTrader orders working right now - futures prices, same as the NT candles
     toast: Option<(String, bool, std::time::Instant)>, // short message on the chart (text, ok, when)
+    force_cfd: bool,                  // the FUT | CFD switch is on CFD: ignore NinjaTrader and use the OANDA feed
 }
 
 enum Req {
@@ -318,6 +319,9 @@ fn agg_m1(m1: &[Candle], secs: i64, align: i64, weekly: bool) -> Vec<Candle> {
 
 fn nt_ready(shared: &Arc<Mutex<Shared>>, sym: &str) -> bool {
     let s = shared.lock().unwrap();
+    if s.force_cfd && !inst_for(sym).is_empty() {
+        return false; // CFD selected (symbols with no OANDA feed, DXY / BTC, stay on NinjaTrader)
+    }
     s.nt_conns.get(sym).copied().unwrap_or(0) > 0 && s.nt.get(sym).map_or(0, |v| v.len()) >= 2
 }
 
@@ -716,6 +720,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
     let mut tick = 0u32;
+    let mut last_cfd = false; // feed the aux data (daily / 5m / HTF) was loaded from
     let mut data_sym = String::new(); // symbol the daily / 5m / HTF data currently belong to
     let cache: Cache = Arc::new(Mutex::new(HashMap::new())); // candles per (symbol, OANDA granularity), backed by disk
     let pf_gen = Arc::new(AtomicU64::new(0));
@@ -729,11 +734,17 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
         match rx.recv_timeout(Duration::from_secs(2)) {
             Ok(Req::Load { sym, tf, htf }) => {
                 // daily / 5m / HTF data belong to the symbol, not the timeframe: keep them when only the timeframe changes
-                let same_sym = data_sym == sym;
+                let cfd_now = shared.lock().unwrap().force_cfd;
+                let feed_changed = cfd_now != last_cfd; // futures prices and CFD prices differ: nothing may carry over
+                last_cfd = cfd_now;
+                let same_sym = data_sym == sym && !feed_changed;
                 if !same_sym {
                     pf_gen.fetch_add(1, Ordering::SeqCst);
                     pf_done.clear();
                     let mut s = shared.lock().unwrap();
+                    if feed_changed {
+                        s.main.clear();
+                    }
                     s.daily.clear();
                     s.m5.clear();
                     s.htf.clear();
@@ -1485,6 +1496,7 @@ struct App {
     xh_off: bool,               // a click on the chart hides / shows the crosshair lines (like the web chart)
     show_wk_d: bool,            // D: a vertical line at the start of each week (off by default)
     show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
+    title_green: bool,          // window title bar currently painted green (futures feed live)
 }
 
 impl App {
@@ -1560,6 +1572,7 @@ impl App {
             xh_off: false,
             show_wk_d: false,
             show_mo_w: false,
+            title_green: false,
         };
         app.reload();
         app
@@ -1572,8 +1585,14 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // the title bar turns green while the futures (NinjaTrader) feed is the one on screen
+        let nt_on = self.shared.lock().unwrap().src == "NT";
+        if nt_on != self.title_green {
+            self.title_green = nt_on;
+            set_title_green(frame, nt_on);
+        }
         {
             let mut s = self.shared.lock().unwrap();
             if s.ord_sym != self.sym {
@@ -1604,6 +1623,25 @@ impl eframe::App for App {
                     .show(ui, |ui| {
                 ui.horizontal(|ui| {
                 let mut changed = false;
+                // FUT | CFD: shown only while NinjaTrader is feeding this symbol
+                if self.shared.lock().unwrap().nt_conns.get(&self.sym).copied().unwrap_or(0) > 0 {
+                    let is_fut = !self.shared.lock().unwrap().force_cfd || inst_for(&self.sym).is_empty();
+                    let fut = egui::RichText::new("FUT").strong().color(if is_fut { Color32::from_rgb(0, 230, 118) } else { Color32::from_rgb(150, 165, 195) });
+                    let cfd = egui::RichText::new("CFD").strong().color(if !is_fut { Color32::from_rgb(77, 163, 255) } else { Color32::from_rgb(150, 165, 195) });
+                    if ui.selectable_label(is_fut, fut).clicked() && !is_fut {
+                        self.shared.lock().unwrap().force_cfd = false;
+                        changed = true;
+                    }
+                    if ui.selectable_label(!is_fut, cfd).clicked() && is_fut {
+                        if inst_for(&self.sym).is_empty() {
+                            self.shared.lock().unwrap().toast = Some((format!("{} has no CFD feed", self.sym), false, std::time::Instant::now()));
+                        } else {
+                            self.shared.lock().unwrap().force_cfd = true;
+                            changed = true;
+                        }
+                    }
+                    ui.separator();
+                }
                 for (s, inst) in SYMS.iter() {
                     // NinjaTrader-only symbols appear while their feed is connected (or when already selected)
                     if inst.is_empty() && self.sym != *s && self.shared.lock().unwrap().nt_conns.get(*s).copied().unwrap_or(0) == 0 {
@@ -3104,6 +3142,27 @@ impl eframe::App for App {
     }
 }
 
+/// Windows 11: paints the window's own title bar (DWM caption colour). Older Windows ignores it and keeps the normal bar.
+#[cfg(windows)]
+fn set_title_green(frame: &eframe::Frame, green: bool) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    #[link(name = "dwmapi")]
+    unsafe extern "system" {
+        fn DwmSetWindowAttribute(hwnd: isize, attr: u32, value: *const u32, size: u32) -> i32;
+    }
+    let Ok(h) = frame.window_handle() else { return };
+    let RawWindowHandle::Win32(w) = h.as_raw() else { return };
+    let hwnd = w.hwnd.get();
+    // COLORREF is 0x00BBGGRR; 0xFFFFFFFF puts the default back
+    let (cap, txt): (u32, u32) = if green { (0x0062_B800, 0x000F_2104) } else { (0xFFFF_FFFF, 0xFFFF_FFFF) };
+    unsafe {
+        DwmSetWindowAttribute(hwnd, 35, &cap, 4); // DWMWA_CAPTION_COLOR
+        DwmSetWindowAttribute(hwnd, 36, &txt, 4); // DWMWA_TEXT_COLOR
+    }
+}
+#[cfg(not(windows))]
+fn set_title_green(_frame: &eframe::Frame, _green: bool) {}
+
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().collect();
     let get = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).cloned();
@@ -3121,11 +3180,12 @@ fn main() -> eframe::Result {
         Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     };
     let (w, h) = pair("--size").map(|(w, h)| (w.clamp(500.0, 4000.0), (h - 32.0).clamp(350.0, 3000.0))).unwrap_or((1300.0, 850.0));
-    let mut vb = egui::ViewportBuilder::default().with_title("EDGE — Native Chart").with_inner_size([w, h]).with_min_inner_size([500.0, 350.0]);
+    let mut vb = egui::ViewportBuilder::default().with_title("EDGE — Matrix").with_inner_size([w, h]).with_min_inner_size([500.0, 350.0]);
+    vb = vb.with_icon(egui::IconData { rgba: include_bytes!("../icon_rgba.bin").to_vec(), width: 64, height: 64 });
     if let Some((x, y)) = pair("--pos") {
         vb = vb.with_position([x, y]);
     }
     let lg = get("--link").and_then(|v| v.parse::<usize>().ok()).filter(|g| *g < LINK_COLORS.len());
     let opts = eframe::NativeOptions { viewport: vb, multisampling: 4, ..Default::default() };
-    eframe::run_native("EDGE Native Chart", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a.link_g = lg; a }))))
+    eframe::run_native("EDGE Matrix", opts, Box::new(move |cc| Ok(Box::new({ let mut a = App::new(cc, sym, tf, base, tok); a.note = note.clone(); a.intraday = args.iter().any(|x| x == "--intraday"); a.link_g = lg; a }))))
 }
