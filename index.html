@@ -9459,8 +9459,8 @@ function expiryEvents(sym){
         // as a plain scrollable list so it can never overlap itself. Every
         // trade in the fetched window is listed (not just the selected
         // ones) so there's always something left to check/uncheck.
-        if(selectedIds.length){
-          var selRow=div("row gap8");selRow.style.cssText="align-items:center;margin-top:10px;margin-bottom:4px;";
+        {
+          var selRow=div("row gap8");selRow.style.cssText="align-items:center;margin-top:10px;margin-bottom:4px;min-height:27px;visibility:"+(selectedIds.length?"visible":"hidden")+";";
           var selTxt=span("xs m");selTxt.textContent=selectedIds.length+" selected trade"+(selectedIds.length===1?"":"s")+" · text shown";selRow.appendChild(selTxt);
           var clrSel=h("button",{className:"btn"});clrSel.style.cssText="font-size:11px;padding:3px 8px;";clrSel.textContent="Clear selection";
           clrSel.addEventListener("click",function(){State.chart_selected_ids=[];render();});
@@ -9468,7 +9468,7 @@ function expiryEvents(sym){
           el.appendChild(selRow);tradeListEls.push(selRow);
         }
         var listWrap=div();
-        listWrap.style.cssText="margin-top:"+(selectedIds.length?"4px":"10px")+";max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;";
+        listWrap.style.cssText="margin-top:4px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;";
         // Two-line grid per trade (checkbox/badge/time on line 1, price info
         // lined up underneath on line 2) instead of one flex row with
         // margin-left:auto pushing the price to the far edge — that squeezed
@@ -9479,8 +9479,9 @@ function expiryEvents(sym){
         windowPoints.filter(function(p){return p.kind==="entry";}).slice().reverse().forEach(function(p){
           var isSel=selectedIds.indexOf(p.id)>-1;
           var row=div();
-          row.style.cssText="display:grid;grid-template-columns:auto 1fr auto"+(isMobile()?"":" auto")+";column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);border-left:3px solid "+(isSel?(p.isLong?"var(--green)":"var(--red)"):"transparent")+";background:"+(isSel?(p.isLong?"#00e67622":"#ff444422"):"transparent")+";font-family:monospace;font-size:12px;cursor:pointer;";
+          row.style.cssText="display:grid;grid-template-columns:auto 1fr auto"+(isMobile()?"":" auto")+";column-gap:8px;row-gap:3px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);box-shadow:"+(isSel?"inset 3px 0 0 "+(p.isLong?"var(--green)":"var(--red)"):"none")+";background:"+(isSel?(p.isLong?"#00e67622":"#ff444422"):"transparent")+";font-family:monospace;font-size:12px;cursor:pointer;";
           row.addEventListener("click",function(){
+            State._tlScroll=listWrap.scrollTop;
             var cur=(State.chart_selected_ids||[]).slice();
             var idx=cur.indexOf(p.id);
             if(idx>-1) cur.splice(idx,1); else cur.push(p.id);
@@ -9519,6 +9520,7 @@ function expiryEvents(sym){
           listWrap.appendChild(row);
         });
         el.appendChild(listWrap);tradeListEls.push(listWrap);
+        if(State._tlScroll){var _ts=State._tlScroll;listWrap.scrollTop=_ts;requestAnimationFrame(function(){listWrap.scrollTop=_ts;});setTimeout(function(){listWrap.scrollTop=_ts;},60);}
         layoutTrades();
       }
 
