@@ -8040,6 +8040,8 @@ function chartTab(){
       if(["ES","NQ","CL","GC","NG"].indexOf(sym)<0||!/^(M2|M5|M30|H1)$/.test(gran)||monthlyFetch) return Promise.resolve();
       if(!d||!d.candles||!d.candles.length||!tradePoints.length) return Promise.resolve();
       if(window._ntDownUntil&&Date.now()<window._ntDownUntil) return Promise.resolve();
+      var _pk="b|"+sym+"|"+gran+"|"+tradePoints.length,_pc=(window._ntPre=window._ntPre||{})[_pk];
+      if(_pc&&Date.now()-_pc.t<60000){for(var _k in _pc.v) ntBasis[_k]=_pc.v[_k];return Promise.resolve();} // ticking a trade re-renders the chart: reuse what NinjaTrader just told us instead of asking again
       var per=periodSec,oc={},firstU=Infinity,lastU=0;
       d.candles.forEach(function(c){var u=Math.floor(new Date(c.time).getTime()/1000);oc[u]=parseFloat(c.mid.c);if(u<firstU)firstU=u;if(u>lastU)lastU=u;});
       var seen={},bs=[];
@@ -8062,7 +8064,7 @@ function chartTab(){
             ntBasis[b]=ds[Math.floor(ds.length/2)];
           });
         });
-      })).then(function(){clearTimeout(tmo);window._ntDownUntil=0;}).catch(function(){clearTimeout(tmo);window._ntDownUntil=Date.now()+20000;});
+      })).then(function(){clearTimeout(tmo);window._ntDownUntil=0;var _cp={};for(var _k in ntBasis) _cp[_k]=ntBasis[_k];window._ntPre[_pk]={t:Date.now(),v:_cp};}).catch(function(){clearTimeout(tmo);window._ntDownUntil=Date.now()+20000;});
     }catch(e){return Promise.resolve();}
   }
   // Stop / target orders you really had working (EdgeFeed records them): [timeMs,id,"S"stop|"T"target,"B"|"S",price,qty,"W"working|"F"filled|"C"cancelled]
@@ -8079,8 +8081,10 @@ function chartTab(){
       if(!pts.length) return Promise.resolve();
       var lo=Infinity,hi=0;
       pts.forEach(function(p){if(p.ts<lo)lo=p.ts;if(p.ts>hi)hi=p.ts;});
+      var _ok="o|"+sym+"|"+gran+"|"+lo+"|"+hi,_oc=(window._ntPre=window._ntPre||{})[_ok];
+      if(_oc&&Date.now()-_oc.t<60000){ntOrders=_oc.v;return Promise.resolve();}
       var ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},3500);
-      return fetch("http://127.0.0.1:7881/orders?sym="+sym+"&from="+(lo-60)+"&to="+(hi+60),{signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("nt "+r.status);return r.json();}).then(function(j){clearTimeout(tmo);ntOrders=(j&&j.orders)||[];}).catch(function(){clearTimeout(tmo);});
+      return fetch("http://127.0.0.1:7881/orders?sym="+sym+"&from="+(lo-60)+"&to="+(hi+60),{signal:ac.signal}).then(function(r){if(!r.ok) throw new Error("nt "+r.status);return r.json();}).then(function(j){clearTimeout(tmo);ntOrders=(j&&j.orders)||[];window._ntPre[_ok]={t:Date.now(),v:ntOrders};}).catch(function(){clearTimeout(tmo);});
     }catch(e){return Promise.resolve();}
   }
   function fetchAndRender(){
