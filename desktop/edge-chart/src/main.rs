@@ -3113,13 +3113,38 @@ impl eframe::App for App {
             // Labels sit on the left. Drag a label up or down to move the real order; the blue entry chip sits right beside them (never over the stop)
             // and its X closes the trade at market and cancels the stop and target. A waiting entry order is tan with its own X (cancels just that order).
             // With two accounts in the same symbol every label carries its account name.
-            if src_nt {
-                let (orders, ents) = {
+            // On the CFD chart the orders still come from NinjaTrader (futures prices): shift them by the futures->CFD difference
+            // (CFD last price minus NinjaTrader's last price) so they sit where they belong on the CFD candles.
+            let cfd_basis: Option<f64> = if src_nt {
+                Some(0.0)
+            } else {
+                let s = self.shared.lock().unwrap();
+                if s.force_cfd && s.nt_conns.get(&self.sym).copied().unwrap_or(0) > 0 {
+                    s.nt.get(&self.sym).and_then(|v| v.last()).map(|b| last.c - b.c)
+                } else {
+                    None
+                }
+            };
+            if let Some(bas) = cfd_basis {
+                let (mut orders, mut ents) = {
                     let s = self.shared.lock().unwrap();
                     (s.orders.clone(), s.entries.clone())
                 };
+                if bas != 0.0 {
+                    for o in orders.iter_mut() {
+                        o.px += bas;
+                        if let Some(v) = o.val.as_mut() {
+                            v.0 += bas;
+                        }
+                    }
+                    for e in ents.iter_mut() {
+                        e.0 += bas;
+                    }
+                }
                 let oqf = FontId::monospace(15.0);
                 let tk = tick_size(&self.sym);
+                // chart price -> the futures price NinjaTrader understands (back-shifted, on a tick)
+                let fpx = |p: f64| ((p - bas) / tk).round() * tk;
                 let now_i = std::time::Instant::now();
                 // a move waiting for NinjaTrader: keep the line where you dropped it until NinjaTrader shows it there (or says no)
                 if let Some((pid, ppx, t0)) = self.ord_pend.clone() {
@@ -3185,7 +3210,7 @@ impl eframe::App for App {
                                 }
                                 n += 1;
                                 self.ord_pend = Some((o.id.clone(), bp, now_i));
-                                send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), bp));
+                                send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), fpx(bp)));
                             }
                             let msg = if n > 0 { "Stop to entry +10 pts" } else if bad > 0 { "Break even: price isn't 10 pts past your entry yet" } else { "No stop to move" };
                             self.shared.lock().unwrap().toast = Some((msg.to_string(), n > 0, now_i));
@@ -3376,7 +3401,7 @@ impl eframe::App for App {
                                         self.shared.lock().unwrap().toast = Some((format!("{} can't go there - it is on the wrong side of the market", if o.entry { "Entry order" } else if o.is_stop { "Stop" } else { "Target" }), false, now_i));
                                     } else {
                                         self.ord_pend = Some((d.0.clone(), d.2, now_i));
-                                        send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), d.2));
+                                        send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), fpx(d.2)));
                                     }
                                 }
                             }
