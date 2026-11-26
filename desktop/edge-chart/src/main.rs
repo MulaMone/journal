@@ -147,6 +147,7 @@ struct Shared {
     status: String,
     version: u64, // bumps when a fresh full load replaces the main data
     nt: HashMap<String, Vec<Candle>>, // 1-minute futures bars pushed by NinjaTrader, per symbol
+    nt_r: HashMap<String, Vec<Candle>>, // NinjaTrader's own 400-range bars (exact tick fills), per symbol; the 400R chart uses these when present
     nt_d: HashMap<String, Vec<Candle>>, // NinjaTrader's own daily bars (long history for D / W / levels)
     nt_conns: HashMap<String, usize>, // open NinjaTrader connections per symbol
     nt_owner: HashMap<String, String>, // canonical symbol -> raw NinjaTrader symbol that feeds it (MNQ and NQ must not both write the same bars)
@@ -342,8 +343,17 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
     let nd = shared.lock().unwrap().nt_d.get(sym).cloned().unwrap_or_default();
     // daily / weekly come from NinjaTrader's daily series when it sent one (years of history), else from the 1-minute bars
     let daily_src: &[Candle] = if nd.len() >= 2 { &nd } else { &m1 };
+    let nr = shared.lock().unwrap().nt_r.get(sym).cloned().unwrap_or_default();
     let main = if tf == "400R" {
-        range_bars(&m1, RANGE_TICKS * tick_size(sym))
+        if nr.len() >= 2 {
+            let mut v = nr;
+            if let Some(l) = v.last_mut() {
+                l.done = false;
+            }
+            v
+        } else {
+            range_bars(&m1, RANGE_TICKS * tick_size(sym))
+        }
     } else if tf == "D" || tf == "W" {
         agg_m1(daily_src, if tf == "W" { 604800 } else { 86400 }, al, tf == "W")
     } else {
@@ -407,6 +417,22 @@ fn relay_attach(shared: &Arc<Mutex<Shared>>, mut st: std::net::TcpStream) {
             }
         }
     }
+    {
+        let s = shared.lock().unwrap();
+        for (sym, n) in &s.nt_conns {
+            if *n == 0 {
+                continue;
+            }
+            let raw = s.nt_owner.get(sym).cloned().unwrap_or_else(|| sym.clone());
+            if let Some(v) = s.nt_r.get(sym) {
+                for (k, chunk) in v.chunks(20000).enumerate() {
+                    let bars: Vec<serde_json::Value> = chunk.iter().map(|c| serde_json::json!([c.t, c.o, c.h, c.l, c.c])).collect();
+                    let o = serde_json::json!({ "sym": raw, "tf": "R", "from": k * 20000, "bars": bars });
+                    let _ = qtx.send(Arc::new(format!("{o}\n")));
+                }
+            }
+        }
+    }
     clients.push(qtx);
     drop(clients);
     std::thread::spawn(move || {
@@ -455,6 +481,26 @@ fn nt_line(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context,
         if !mine.contains(&sym) {
             *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
             mine.push(sym.clone());
+        }
+        if v["tf"].as_str() == Some("R") {
+            // 400-range bars: replace from bar index `from` on (several range bars can share one second, so no merge by time)
+            let from = v["from"].as_u64().unwrap_or(0) as usize;
+            let e = s.nt_r.entry(sym.clone()).or_default();
+            if from <= e.len() {
+                e.truncate(from);
+                e.extend(bars);
+                if e.len() > 60000 {
+                    let cut = e.len() - 60000;
+                    e.drain(..cut);
+                }
+            }
+            drop(s);
+            if !relay {
+                relay_send(line);
+            }
+            let _ = tx.send(Req::Nt { sym });
+            ctx.request_repaint();
+            return;
         }
         let is_d = v["tf"].as_str() == Some("D");
         let e = if is_d { s.nt_d.entry(sym.clone()).or_default() } else { s.nt.entry(sym.clone()).or_default() };
@@ -3004,6 +3050,18 @@ impl eframe::App for App {
                         }
                     }
                 }
+            }
+
+            // ═════════ 400R: how long the forming bar has been open (hh:mm:ss), bottom right ═════════
+            if is_range && !cs.is_empty() {
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                let d = (now - cs[cs.len() - 1].t).max(0);
+                let txt = format!("{:02}:{:02}:{:02}", d / 3600, (d % 3600) / 60, d % 60);
+                let tw = text_w(&painter, &txt, &small);
+                let (rx, by) = (plot.right() - 8.0, plot.bottom() - 8.0);
+                clip.rect_filled(Rect::from_min_max(Pos2::new(rx - tw - 4.0, by - 14.0), Pos2::new(rx + 3.0, by + 2.0)), 0.0, hexc(0x040d1a, 0.75));
+                clip.text(Pos2::new(rx, by), Align2::RIGHT_BOTTOM, txt, small.clone(), rgb(0x00e5ff));
+                ui.ctx().request_repaint_after(Duration::from_millis(500));
             }
 
             // ═════════ last price ═════════
