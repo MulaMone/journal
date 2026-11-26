@@ -9222,9 +9222,9 @@ function expiryEvents(sym){
                 if(cm&&j.flat===true){var cac=decodeURIComponent(cm[2]);closing[cac]=Date.now();liveArr=liveArr.filter(function(o){return o.acct!==cac;});clearLines();applyView();}
                 if(rm){
                   if(j.rev===true){var rac=decodeURIComponent(rm[1]);liveArr=liveArr.filter(function(o){return o.acct!==rac;});clearLines();applyView();showToast("Reversed to "+String(j.side||"").toLowerCase()+" "+(j.qty||"")+(j.br?" with stop and target":""),true);}
-                  else showToast("Reverse sent, not filled yet",false);
+                  else showToast("Reverse not confirmed: check NinjaTrader (the old stop and target were cancelled)",false);
                 }
-                [120,350,700,1300].forEach(function(ms){setTimeout(tick,ms);}); // NinjaTrader just acted: re-read now instead of waiting for the 2 s poll
+                (rm?[0,60,150,350,700,1300]:[120,350,700,1300]).forEach(function(ms){setTimeout(tick,ms);}); // NinjaTrader just acted: re-read now instead of waiting for the 2 s poll
               }).catch(function(){showToast("Can't reach EdgeFeed in NinjaTrader",false);pend=null;applyView();});
             }
             // ── hotkeys: Alt+C close this trade, Alt+R reverse it, Alt+E stop to break even, Alt+F flatten the account(s) ──
@@ -9269,9 +9269,10 @@ function expiryEvents(sym){
               lastClose=Date.now();showToast("Closing trade…",true);
               send("/close?acct="+encodeURIComponent(acct)+"&sym="+encodeURIComponent(sym));
             }
+            var lastRev=0;
             function doReverse(acct){
-              if(Date.now()-lastClose<3000) return;
-              lastClose=Date.now();showToast("Reversing…",true);
+              if(Date.now()-lastRev<3000) return;
+              lastRev=Date.now();showToast("Reversing…",true);
               send("/reverse?acct="+encodeURIComponent(acct)+"&sym="+encodeURIComponent(sym));
             }
             function doCancel(id){showToast("Cancelling order…",true);send("/cancel?id="+encodeURIComponent(id));}
@@ -9321,7 +9322,7 @@ function expiryEvents(sym){
             window.addEventListener("touchmove",wtm,{passive:false});window.addEventListener("touchend",wte);window.addEventListener("touchcancel",wte);
             chartDiv.addEventListener("touchstart",function(e){var t=e.touches[0];if(e.touches.length===1&&t){lt=t;down(t.clientX,t.clientY,e);}},{capture:true,passive:false});
             function tick(){
-              if(!chartDiv.isConnected){clearInterval(iv);try{if(es) es.close();}catch(e){}clearL();cleanup();return;}
+              if(!chartDiv.isConnected){clearInterval(iv);relStream();clearL();cleanup();return;}
               if(busy||document.hidden||!candles.length) return;
               busy=true;
               var now=Math.floor(Date.now()/1000),ac=new AbortController(),tmo=setTimeout(function(){ac.abort();},2500);
@@ -9382,7 +9383,17 @@ function expiryEvents(sym){
               }).catch(function(){clearTimeout(tmo);if(++fails>=3) clearL();}).then(function(){busy=false;if(want){want=false;setTimeout(tick,0);}});
             }
             // NinjaTrader pushes a tiny message on every order / fill (EdgeFeed /stream): re-read right away instead of waiting for the 2 s poll, which stays as a safety net
-            try{es=new EventSource("http://127.0.0.1:7881/stream");es.onmessage=function(){if(!chartDiv.isConnected){try{es.close();}catch(e){}return;}if(busy){want=true;}else tick();};}catch(e){}
+            // one stream per page (browsers allow only ~6 connections to this address); retries every 5 s, so nothing spams while NinjaTrader is off
+            var onMsg=function(){if(!chartDiv.isConnected){relStream();return;}if(busy){want=true;}else tick();};
+            function relStream(){if(window._edgeOnMsg===onMsg){window._edgeOnMsg=null;if(window._edgeEs){try{window._edgeEs.close();}catch(e){}window._edgeEs=null;}}}
+            try{
+              window._edgeOnMsg=onMsg;
+              if(!window._edgeEs) (function open(){
+                var e2=new EventSource("http://127.0.0.1:7881/stream");window._edgeEs=e2;
+                e2.onmessage=function(){var f=window._edgeOnMsg;if(f) f();};
+                e2.onerror=function(){try{e2.close();}catch(x){}if(window._edgeEs===e2) window._edgeEs=null;setTimeout(function(){if(window._edgeOnMsg&&!window._edgeEs) open();},5000);};
+              })();
+            }catch(e){}
             iv=setInterval(tick,2000);tick();
           })();
           layers.forEach(function(l){l.s.setData(l.data);});
