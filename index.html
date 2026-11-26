@@ -9166,6 +9166,7 @@ function expiryEvents(sym){
                   function spread(arr){arr.sort(function(a,b){return a.y-b.y;});for(var si=0;si<arr.length;si++){var v=arr[si].y;if(!drag&&si>0&&v<arr[si-1].ly+28) v=arr[si-1].ly+28;arr[si].ly=v;}}
                   spread(it.filter(function(r){return r.o.k!=="E";}));spread(it.filter(function(r){return r.o.k==="E";}));
                   function xbtn(xx,y,hot){cx.fillStyle=hot?"#4a1c24":"#0a1424";cx.fillRect(xx,y,26,24);cx.lineWidth=1.5;cx.strokeStyle="#ff8a8a";cx.strokeRect(xx+0.75,y+0.75,24.5,22.5);cx.strokeStyle="#ffffff";cx.lineWidth=2;cx.lineCap="round";cx.beginPath();cx.moveTo(xx+8,y+7);cx.lineTo(xx+18,y+17);cx.moveTo(xx+18,y+7);cx.lineTo(xx+8,y+17);cx.stroke();cx.lineCap="butt";}
+                  function rbtn(xx,y,hot){cx.fillStyle=hot?"#4a3410":"#0a1424";cx.fillRect(xx,y,26,24);cx.lineWidth=1.5;cx.strokeStyle="#ffb15c";cx.strokeRect(xx+0.75,y+0.75,24.5,22.5);cx.strokeStyle="#ffffff";cx.lineWidth=2;cx.lineCap="round";cx.lineJoin="round";cx.beginPath();cx.moveTo(xx+9,y+17);cx.lineTo(xx+9,y+7);cx.moveTo(xx+6,y+10);cx.lineTo(xx+9,y+7);cx.lineTo(xx+12,y+10);cx.moveTo(xx+17,y+7);cx.lineTo(xx+17,y+17);cx.moveTo(xx+14,y+14);cx.lineTo(xx+17,y+17);cx.lineTo(xx+20,y+14);cx.stroke();cx.lineCap="butt";cx.lineJoin="miter";}
                   rects=[];
                   it.forEach(function(r){
                     var o=r.o,ly=r.ly,acc=o.k==="S"?"#ff4d4d":o.k==="E"?"#4da3ff":o.k==="P"?"#c9985a":"#2ee67a",usd=o.usd,txt2=usd==null?"":"   "+(usd>=0?"+":"−")+"$"+Math.abs(Math.round(usd*100)/100).toFixed(2);
@@ -9175,8 +9176,12 @@ function expiryEvents(sym){
                     if(txt2){cx.fillStyle=usd>=0?"#5cf59a":"#ff8a8a";cx.fillText(txt2,x+14+w1,ly);}
                     if(o.k==="E"){
                       // X: close this account's trade in one click
-                      var xx=x+bw+4;xbtn(xx,y,hoverId==="X|"+o.acct);
-                      if(vis) rects.push({t:"x",x:xx,y:y,w:26,h:24,acct:o.acct});
+                      var rx=x+bw+4,xx=rx+30;rbtn(rx,y,hoverId==="R|"+o.acct);xbtn(xx,y,hoverId==="X|"+o.acct);
+                      if(vis){rects.push({t:"r",x:rx,y:y,w:26,h:24,acct:o.acct});rects.push({t:"x",x:xx,y:y,w:26,h:24,acct:o.acct});}
+                      if(vis&&hoverId==="R|"+o.acct){
+                        var pm=/^(LONG|SHORT) (\d+)/.exec(o.name),tip=pm?"Reverse: close "+pm[1].toLowerCase()+", go "+(pm[1]==="LONG"?"short":"long")+" "+pm[2]:"Reverse position";
+                        var tw2=cx.measureText(tip).width+20;plate(rx,y-30,tw2,"#ff8c00");cx.fillStyle="#ffb15c";cx.textAlign="left";cx.fillText(tip,rx+10,y-18);
+                      }
                     }else if(o.k==="P"){
                       // a waiting entry order: label drags to move it, its own X cancels just this order
                       cx.fillStyle="#ebcb9c";cx.fillText("   waiting to fill",x+14+w1,ly);
@@ -9203,28 +9208,33 @@ function expiryEvents(sym){
             })();
             // ── pointer handling: hit-test the label boxes; only while the pointer is over one does the canvas take the mouse (so the chart still pans everywhere else) ──
             function hit(px,py){var b=chartDiv.getBoundingClientRect(),x=px-b.left,y=py-b.top;for(var i=rects.length-1;i>=0;i--){var r=rects[i];if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h) return r;}return null;}
-            function setHover(r){var id=r?(r.t==="x"?"X|"+r.acct:r.t==="c"?"C|"+r.id:r.id):"";if(id!==hoverId){hoverId=id;sigD="";}cvL.style.pointerEvents=r?"auto":"none";cvL.style.cursor=r?(r.t==="x"||r.t==="c"?"pointer":"ns-resize"):"";}
+            function setHover(r){var id=r?(r.t==="x"?"X|"+r.acct:r.t==="r"?"R|"+r.acct:r.t==="c"?"C|"+r.id:r.id):"";if(id!==hoverId){hoverId=id;sigD="";}cvL.style.pointerEvents=r?"auto":"none";cvL.style.cursor=r?(r.t==="x"||r.t==="r"||r.t==="c"?"pointer":"ns-resize"):"";}
             function send(path){
-              var cm=/^\/(close|flat)\?acct=([^&]*)/.exec(path);
+              var cm=/^\/(close|flat)\?acct=([^&]*)/.exec(path),rm=/^\/reverse\?acct=([^&]*)/.exec(path);
               var k="";try{k=localStorage.getItem("edgeKey")||"";}catch(e){}
               fetch("http://127.0.0.1:7881"+path+(k?"&k="+encodeURIComponent(k):""),{method:"POST"}).then(function(r){return r.json().catch(function(){return {ok:false,err:"bad answer from the NinjaTrader link"};});}).then(function(j){
                 if(!j||!j.ok){var m=(j&&j.err)||"NinjaTrader link refused";showToast(/blocked/.test(m)?"Needs your key (see the box)":(m.length>70?m.slice(0,70)+"…":m),false);if(/blocked/.test(m)) askKey();pend=null;applyView();return;}
                 // EdgeFeed waits for the fill: only when it says the account is flat do the stop, target and position come off the chart (instantly); otherwise they stay
                 if(cm&&j.flat===true){var cac=decodeURIComponent(cm[2]);closing[cac]=Date.now();liveArr=liveArr.filter(function(o){return o.acct!==cac;});clearLines();applyView();}
+                if(rm){
+                  if(j.rev===true){var rac=decodeURIComponent(rm[1]);liveArr=liveArr.filter(function(o){return o.acct!==rac;});clearLines();applyView();showToast("Reversed to "+String(j.side||"").toLowerCase()+" "+(j.qty||"")+(j.br?" with stop and target":""),true);}
+                  else showToast("Reverse sent, not filled yet",false);
+                }
                 [120,350,700,1300].forEach(function(ms){setTimeout(tick,ms);}); // NinjaTrader just acted: re-read now instead of waiting for the 2 s poll
               }).catch(function(){showToast("Can't reach EdgeFeed in NinjaTrader",false);pend=null;applyView();});
             }
-            // ── hotkeys: Alt+C close this trade, Alt+E stop to break even, Alt+F flatten the account(s) ──
+            // ── hotkeys: Alt+C close this trade, Alt+R reverse it, Alt+E stop to break even, Alt+F flatten the account(s) ──
             function accts(){var a={};liveArr.forEach(function(o){if(o.k==="E"&&o.acct) a[o.acct]=1;});return Object.keys(a);}
             window.addEventListener("keydown",function(e){
               if(!e.altKey||e.ctrlKey||e.metaKey||e.repeat) return;
               var c=e.code,tg=e.target,tn=tg&&tg.tagName;if(tn==="INPUT"||tn==="TEXTAREA"||(tg&&tg.isContentEditable)) return;
-              if(c!=="KeyC"&&c!=="KeyE"&&c!=="KeyF") return;
+              if(c!=="KeyC"&&c!=="KeyE"&&c!=="KeyF"&&c!=="KeyR") return;
               if(!liveArr.length) return;
               e.preventDefault();
               var now=Date.now();if(now-lastHk<1500) return;lastHk=now;
               var as=accts();
               if(c==="KeyC"){if(!as.length){showToast("No open trade here",false);return;}showToast("Closing trade…",true);as.forEach(function(a){send("/close?acct="+encodeURIComponent(a)+"&sym="+encodeURIComponent(sym));});}
+              else if(c==="KeyR"){if(!as.length){showToast("No open trade here",false);return;}showToast("Reversing…",true);as.forEach(function(a){send("/reverse?acct="+encodeURIComponent(a)+"&sym="+encodeURIComponent(sym));});}
               else if(c==="KeyF"){var seen={};liveArr.forEach(function(o){if(o.acct) seen[o.acct]=1;});var al=Object.keys(seen);showToast("Flat…",true);al.forEach(function(a){send("/flat?acct="+encodeURIComponent(a));});}
               else{
                 var n=0,bad=0;
@@ -9255,11 +9265,16 @@ function expiryEvents(sym){
               lastClose=Date.now();showToast("Closing trade…",true);
               send("/close?acct="+encodeURIComponent(acct)+"&sym="+encodeURIComponent(sym));
             }
+            function doReverse(acct){
+              if(Date.now()-lastClose<3000) return;
+              lastClose=Date.now();showToast("Reversing…",true);
+              send("/reverse?acct="+encodeURIComponent(acct)+"&sym="+encodeURIComponent(sym));
+            }
             function doCancel(id){showToast("Cancelling order…",true);send("/cancel?id="+encodeURIComponent(id));}
             function down(px,py,ev){
               var r=hit(px,py);if(!r) return false;
               ev.preventDefault();ev.stopPropagation();
-              if(r.t==="x"||r.t==="c"){pressX=r;return true;}
+              if(r.t==="x"||r.t==="r"||r.t==="c"){pressX=r;return true;}
               var lo=null;liveArr.forEach(function(o){if(o.id===r.id) lo=o;});
               if(!lo) return true;
               dropGhost();
@@ -9274,7 +9289,7 @@ function expiryEvents(sym){
               drag.px=+fp.toFixed(6);drag.moved=true;applyView();
             }
             function up(px,py){
-              if(pressX){var r=hit(px,py),pr=pressX;pressX=null;if(r&&r.t===pr.t){if(r.t==="x"&&r.acct===pr.acct) doClose(r.acct);else if(r.t==="c"&&r.id===pr.id) doCancel(r.id);}return;}
+              if(pressX){var r=hit(px,py),pr=pressX;pressX=null;if(r&&r.t===pr.t){if(r.t==="x"&&r.acct===pr.acct) doClose(r.acct);else if(r.t==="r"&&r.acct===pr.acct) doReverse(r.acct);else if(r.t==="c"&&r.id===pr.id) doCancel(r.id);}return;}
               if(!drag) return;
               var d=drag;drag=null;dropGhost();
               if(d.moved&&Math.abs(d.px-d.orig)>=TK/2){
