@@ -330,6 +330,12 @@ fn nt_ready(shared: &Arc<Mutex<Shared>>, sym: &str) -> bool {
     s.nt_conns.get(sym).copied().unwrap_or(0) > 0 && s.nt.get(sym).map_or(0, |v| v.len()) >= 2
 }
 
+/// Which NinjaTrader series exist for `sym`: (own 400-range bars, own daily bars). The main series is built from them, so when one arrives the bar count changes.
+fn nt_sig(shared: &Arc<Mutex<Shared>>, sym: &str) -> (bool, bool) {
+    let s = shared.lock().unwrap();
+    (s.nt_r.get(sym).map_or(0, |v| v.len()) >= 2, s.nt_d.get(sym).map_or(0, |v| v.len()) >= 2)
+}
+
 fn htf_secs(gran: &str) -> i64 {
     match gran { "H1" => 3600, "H4" => 14400, _ => 86400 }
 }
@@ -936,6 +942,7 @@ fn prefetch(base: &str, tok: &str, sym: &str, skip: &str, cache: &Cache, pgen: &
 
 fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex<Shared>>, ctx: egui::Context, base: String, tok: String) {
     let mut cur_tf = String::new();
+    let mut src_sig = (false, false); // nt_sig() the main series was last built from
     let mut nt_active = false;
     let mut cur: Option<(String, String)> = None; // (sym, main gran)
     let mut htf_cur: Option<(String, String)> = None; // (sym, htf gran)
@@ -975,6 +982,7 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 let hg: Option<&'static str> = HTFS.iter().find(|h| h.0 == htf).map(|h| h.1);
                 if nt_apply(&shared, &sym, &tf, hg) {
                     nt_active = true;
+                    src_sig = nt_sig(&shared, &sym);
                     data_sym = sym.clone();
                     htf_cur = hg.map(|g| (sym.clone(), g.to_string()));
                     cur = Some((sym.clone(), gran.to_string()));
@@ -1107,12 +1115,19 @@ fn worker(rx: mpsc::Receiver<Req>, tx_self: mpsc::Sender<Req>, shared: Arc<Mutex
                 if let Some((cs, _)) = cur.clone() {
                     if cs == sym {
                         let hg = htf_cur.as_ref().filter(|h| h.0 == sym).map(|h| h.1.clone());
+                        let sig = nt_sig(&shared, &sym);
                         if nt_apply(&shared, &sym, &cur_tf, hg.as_deref()) {
+                            // NinjaTrader's own 400R / daily bars arrived after the first 1-minute data: the main series is replaced by one with a
+                            // different bar count, so the old scroll position would point at bars from a day ago. Re-apply the default view.
+                            let swapped = (cur_tf == "400R" && sig.0 != src_sig.0) || ((cur_tf == "D" || cur_tf == "W") && sig.1 != src_sig.1);
+                            src_sig = sig;
                             if !nt_active {
                                 nt_active = true;
                                 let mut s = shared.lock().unwrap();
                                 s.version += 1;
                                 s.status.clear();
+                            } else if swapped {
+                                shared.lock().unwrap().version += 1;
                             }
                             ctx.request_repaint();
                         }
