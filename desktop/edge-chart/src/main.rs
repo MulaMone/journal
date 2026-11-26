@@ -153,6 +153,7 @@ struct Shared {
     entries: Vec<(f64, f64, f64, f64, String)>, // open positions on this symbol: (average price, +1 long / -1 short, contracts, dollars per point, account)
     orders: Vec<LiveOrd>, // NinjaTrader orders working right now - futures prices, same as the NT candles
     toast: Option<(String, bool, std::time::Instant)>, // short message on the chart (text, ok, when)
+    link_state: u8,                   // 2nd+ window: 1 = receiving NinjaTrader from the first window, 2 = first window is not sharing it
     force_cfd: bool,                  // the FUT | CFD switch is on CFD: ignore NinjaTrader and use the OANDA feed
 }
 
@@ -373,43 +374,38 @@ fn relay_send(line: &str) {
     RELAY.lock().unwrap().retain_mut(|c| c.write_all(msg.as_bytes()).is_ok());
 }
 
-/// A new window joining the relay first gets everything the owner already holds (history), then the live lines.
-fn relay_server(shared: Arc<Mutex<Shared>>, port: u16) {
+/// A window that joined as a relay client gets a "relay ok" answer, then everything the owner already holds (history), then the live lines.
+fn relay_attach(shared: &Arc<Mutex<Shared>>, mut st: std::net::TcpStream) {
     use std::io::Write;
-    let Ok(l) = TcpListener::bind(("127.0.0.1", port)) else { return };
-    for st in l.incoming().flatten() {
-        let _ = st.set_nodelay(true);
-        let _ = st.set_write_timeout(Some(Duration::from_secs(5)));
-        let mut st = st;
-        let mut clients = RELAY.lock().unwrap(); // held until the snapshot is out, so no live line slips between snapshot and stream
-        let mut lines: Vec<String> = vec![];
-        {
-            let s = shared.lock().unwrap();
-            for (sym, n) in &s.nt_conns {
-                if *n == 0 {
-                    continue;
-                }
-                let raw = s.nt_owner.get(sym).cloned().unwrap_or_else(|| sym.clone());
-                for (is_d, src) in [(false, s.nt.get(sym)), (true, s.nt_d.get(sym))] {
-                    let Some(v) = src else { continue };
-                    for (k, chunk) in v.chunks(20000).enumerate() {
-                        let bars: Vec<serde_json::Value> = chunk.iter().map(|c| serde_json::json!([c.t, c.o, c.h, c.l, c.c])).collect();
-                        let mut o = serde_json::json!({ "sym": raw, "bars": bars });
-                        if k == 0 {
-                            o["reset"] = serde_json::json!(true);
-                        }
-                        if is_d {
-                            o["tf"] = serde_json::json!("D");
-                        }
-                        lines.push(o.to_string());
+    let _ = st.set_nodelay(true);
+    let _ = st.set_write_timeout(Some(Duration::from_secs(5)));
+    let mut clients = RELAY.lock().unwrap(); // held until the snapshot is out, so no live line slips between snapshot and stream
+    let mut lines: Vec<String> = vec!["{\"relay\":\"ok\"}".to_string()];
+    {
+        let s = shared.lock().unwrap();
+        for (sym, n) in &s.nt_conns {
+            if *n == 0 {
+                continue;
+            }
+            let raw = s.nt_owner.get(sym).cloned().unwrap_or_else(|| sym.clone());
+            for (is_d, src) in [(false, s.nt.get(sym)), (true, s.nt_d.get(sym))] {
+                let Some(v) = src else { continue };
+                for (k, chunk) in v.chunks(20000).enumerate() {
+                    let bars: Vec<serde_json::Value> = chunk.iter().map(|c| serde_json::json!([c.t, c.o, c.h, c.l, c.c])).collect();
+                    let mut o = serde_json::json!({ "sym": raw, "bars": bars });
+                    if k == 0 {
+                        o["reset"] = serde_json::json!(true);
                     }
+                    if is_d {
+                        o["tf"] = serde_json::json!("D");
+                    }
+                    lines.push(o.to_string());
                 }
             }
         }
-        let ok = lines.iter().all(|l| st.write_all(format!("{l}\n").as_bytes()).is_ok());
-        if ok {
-            clients.push(st);
-        }
+    }
+    if lines.iter().all(|l| st.write_all(format!("{l}\n").as_bytes()).is_ok()) {
+        clients.push(st);
     }
 }
 
@@ -489,10 +485,8 @@ fn nt_drop(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context,
 }
 
 fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Context) {
-    let env_port = |k: &str, d: u16| -> u16 { std::env::var(k).ok().and_then(|p| p.parse().ok()).unwrap_or(d) };
-    let (port, rport) = (env_port("EDGE_NT_PORT", 7878), env_port("EDGE_NT_RELAY_PORT", 7880));
+    let port: u16 = std::env::var("EDGE_NT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7878);
     let mut first = true;
-    let mut fails = 0u32;
     loop {
         let bound = TcpListener::bind(("127.0.0.1", port));
         if first && bound.is_err() {
@@ -500,16 +494,22 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
         }
         first = false;
         if let Ok(l) = bound {
-            // owner window: takes NinjaTrader's connections and relays them
-            let sh0 = shared.clone();
-            std::thread::spawn(move || relay_server(sh0, rport));
+            // owner window: takes NinjaTrader's connections, and relays them to the other chart windows that join on the same port
+            shared.lock().unwrap().link_state = 0;
             for st in l.incoming() {
                 let Ok(st) = st else { continue };
                 let (sh, tx, ctx) = (shared.clone(), tx.clone(), ctx.clone());
                 std::thread::spawn(move || {
                     let mut mine: Vec<String> = vec![];
+                    let Ok(wr) = st.try_clone() else { return };
+                    let mut n = 0;
                     for line in BufReader::new(st).lines() {
                         let Ok(line) = line else { break };
+                        n += 1;
+                        if n == 1 && line.len() < 64 && line.contains("\"relay\"") {
+                            relay_attach(&sh, wr); // another chart window, not NinjaTrader
+                            return;
+                        }
                         nt_line(&sh, &tx, &ctx, &line, &mut mine, false);
                     }
                     for sym in mine {
@@ -519,27 +519,35 @@ fn nt_listener(shared: Arc<Mutex<Shared>>, tx: mpsc::Sender<Req>, ctx: egui::Con
             }
             return;
         }
-        // another window owns the port: read the same feed from it
-        let link = std::net::TcpStream::connect(("127.0.0.1", rport));
-        if link.is_err() {
-            fails += 1;
-            if fails == 3 {
-                // the owner is an older chart build (or something else holds the port) and isn't sharing NinjaTrader with this window
-                shared.lock().unwrap().toast = Some(("Another chart owns NinjaTrader and is not sharing it - close it and reopen".to_string(), false, std::time::Instant::now()));
-                ctx.request_repaint();
+        // another window owns the port: join it and read the same feed
+        let mut ok = false;
+        if let Ok(mut st) = std::net::TcpStream::connect_timeout(&std::net::SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_secs(2)) {
+            use std::io::Write;
+            let _ = st.set_nodelay(true);
+            let _ = st.set_read_timeout(Some(Duration::from_secs(3)));
+            let Ok(rs) = st.try_clone() else { continue };
+            let mut rd = BufReader::new(rs);
+            if st.write_all(b"{\"relay\":true}\n").is_ok() {
+                let mut hello = String::new();
+                // an older chart build never answers: that shows as "not shared"
+                if rd.read_line(&mut hello).is_ok() && hello.contains("ok") {
+                    ok = true;
+                    shared.lock().unwrap().link_state = 1;
+                    ctx.request_repaint();
+                    let _ = st.set_read_timeout(None);
+                    let mut mine: Vec<String> = vec![];
+                    for line in rd.lines() {
+                        let Ok(line) = line else { break };
+                        nt_line(&shared, &tx, &ctx, &line, &mut mine, true);
+                    }
+                    for sym in mine {
+                        nt_drop(&shared, &tx, &ctx, &sym, false);
+                    }
+                }
             }
         }
-        if let Ok(st) = link {
-            fails = 0;
-            let mut mine: Vec<String> = vec![];
-            for line in BufReader::new(st).lines() {
-                let Ok(line) = line else { break };
-                nt_line(&shared, &tx, &ctx, &line, &mut mine, true);
-            }
-            for sym in mine {
-                nt_drop(&shared, &tx, &ctx, &sym, false);
-            }
-        }
+        shared.lock().unwrap().link_state = if ok { 0 } else { 2 };
+        ctx.request_repaint();
         std::thread::sleep(Duration::from_millis(800)); // owner gone or not ready yet: try to take over / reconnect
     }
 }
@@ -1832,6 +1840,10 @@ impl eframe::App for App {
                 }
                 if changed {
                     self.note.clear();
+                }
+                if self.shared.lock().unwrap().link_state == 2 {
+                    ui.separator();
+                    ui.colored_label(Color32::from_rgb(255, 191, 0), "futures: first chart isn't sharing NinjaTrader");
                 }
                 let st = self.shared.lock().unwrap().status.clone();
                 let st = if st.is_empty() { self.note.clone() } else { st };
