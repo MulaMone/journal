@@ -7544,9 +7544,9 @@ function rangeChartTab(){
   }
   function ovInit(){
     fvgAttach();sessAttach();
-    OV={e14:chart.addLineSeries({color:"#ffb020",lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
+    OV={e14:chart.addLineSeries({color:"#ffb020",lineWidth:2,lineType:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
         e50:chart.addLineSeries({color:"#00ff55",lineWidth:2,lineType:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
-        e8:chart.addLineSeries({color:"#2f80ff",lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
+        e8:chart.addLineSeries({color:"#2f80ff",lineWidth:2,lineType:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
         hi:[],lo:[],lv:[],tg:{},last:{}};
     [["e50","\uD83D\uDCB8\uD83D\uDCB2\uD83D\uDCB0\uD83D\uDEEB"]].forEach(function(t){var d=document.createElement("div");d.textContent=t[1];d.style.cssText="position:absolute;z-index:5;pointer-events:none;padding:0;background:none;font:10px 'Courier New',monospace;line-height:12px;white-space:nowrap;display:none;";chartDiv.appendChild(d);OV.tg[t[0]]=d;});
     try{chart.timeScale().subscribeVisibleLogicalRangeChange(ovTags);}catch(e){}
@@ -7640,7 +7640,7 @@ function rangeChartTab(){
     for(i=0;i<n;i++){
       if(e14[i]!=null)d14.push({time:RB[i].time,value:e14[i]});
       if(e50[i]!=null)d50.push({time:RB[i].time,value:e50[i]});
-      if(e8[i]!=null&&e14[i]!=null)d8.push({time:RB[i].time,value:e8[i],color:e8[i]>=e14[i]?"#2f80ff":"#c42222"});
+      if(e8[i]!=null)d8.push({time:RB[i].time,value:e8[i],color:cl[i]>=e8[i]?"#2f80ff":"#c42222"}); // blue while the candle closes above the 8, red below
     }
     OV.e14.setData(d14);OV.e50.setData(d50);OV.e8.setData(d8);
     OV.last={e14:d14.length?{v:d14[d14.length-1].value,c:"#ffb020"}:null,e50:d50.length?{v:d50[d50.length-1].value,c:"#00ff55"}:null,e8:d8.length?{v:d8[d8.length-1].value,c:d8[d8.length-1].color}:null};
