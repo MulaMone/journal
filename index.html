@@ -7225,7 +7225,7 @@ function rangeChartTab(){
   el.appendChild(chartDiv);
 
   var HDR={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY},Q=SUPA_URL+"/rest/v1/range_bars?sym=eq.NQ&rng=eq.400&select=id,t,o,h,l,c,done";
-  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true,showFvg=State.range_fvg!==false,fvgZ=[],fvgD=[],fvgRepaint=null,sessRepaint=null,sessMarks=[],dayLbl=[],numLines=[],hideNums=State.range_hide_nums===true,lvS={d:[],w:[],sig:""};
+  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true,showFvg=State.range_fvg===true,fvgZ=[],fvgD=[],fvgRepaint=null,sessRepaint=null,sessMarks=[],dayLbl=[],numLines=[],hideNums=State.range_hide_nums===true,lvS={d:[],w:[],sig:""};
   function etSec(u){return u-etOffsetHoursAt(u*1000)*3600;} // Edge shows ET wall-clock on the lightweight-charts UTC axis
   function barOf(r){
     var tm=tmap[r.id];
