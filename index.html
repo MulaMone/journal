@@ -7744,7 +7744,7 @@ function rangeChartTab(){
     chart=LightweightCharts.createChart(chartDiv,{
       width:chartDiv.clientWidth,height:chartDiv.clientHeight,
       layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
-      grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260",visible:false}},
+      grid:{vertLines:{visible:false},horzLines:{visible:false}},
       watermark:{visible:true,text:"NQ 400R",fontSize:isMobile()?60:110,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
       crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
       rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
