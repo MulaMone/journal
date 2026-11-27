@@ -482,8 +482,19 @@ fn nt_line(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context,
     {
         let mut s = sh.lock().unwrap();
         // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
-        if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
-            return;
+        let owner = s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()).clone();
+        if owner != raw {
+            if raw != sym {
+                return; // MNQ / NNQ etc: the exact contract (NQ) owns the chart symbol
+            }
+            // the exact contract connected after a micro: it takes over and the micro's bars are dropped
+            s.nt_owner.insert(sym.clone(), raw.clone());
+            s.nt.remove(&sym);
+            s.nt_r.remove(&sym);
+            s.nt_d.remove(&sym);
+            drop(s);
+            ilog(&format!("{sym}: feed {raw} took over from {owner}"));
+            s = sh.lock().unwrap();
         }
         if !mine.contains(&sym) {
             *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
@@ -3581,7 +3592,7 @@ impl eframe::App for App {
             painter.text(
                 Pos2::new(plot.left() + 10.0, plot.top() + 28.0),
                 Align2::LEFT_TOP,
-                if is_range { let nrc = self.shared.lock().unwrap().nt_r.get(&self.sym).map_or(0, |v| v.len()); format!("{} · {}-tick range ({} pts) · {}", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym), if nrc >= 2 { format!("NT bars {}", nrc) } else { "BUILT FROM 1m - NOT NT".to_string() }) } else { format!("{} · {}", self.sym, self.tf) },
+                if is_range { let nrc = self.shared.lock().unwrap().nt_r.get(&self.sym).map_or(0, |v| v.len()); format!("{} · {}-tick range ({} pts) · {}", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym), if nrc >= 2 { format!("NT bars {} (feed {})", nrc, self.shared.lock().unwrap().nt_owner.get(&self.sym).cloned().unwrap_or_default()) } else { format!("BUILT FROM 1m - NOT NT (feed {})", self.shared.lock().unwrap().nt_owner.get(&self.sym).cloned().unwrap_or_default()) }) } else { format!("{} · {}", self.sym, self.tf) },
                 FontId::proportional(13.0),
                 Color32::from_rgb(120, 140, 175),
             );
