@@ -359,7 +359,7 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
             }
             v
         } else {
-            range_bars(&m1, RANGE_TICKS * tick_size(sym))
+            Vec::new() // never build futures 400R bars from 1-minute data: wait for NinjaTrader's own bars (the chart shows a notice)
         }
     } else if tf == "D" || tf == "W" {
         agg_m1(daily_src, if tf == "W" { 604800 } else { 86400 }, al, tf == "W")
@@ -482,8 +482,19 @@ fn nt_line(sh: &Arc<Mutex<Shared>>, tx: &mpsc::Sender<Req>, ctx: &egui::Context,
     {
         let mut s = sh.lock().unwrap();
         // one raw symbol per chart symbol: a second feed (e.g. MNQ next to NQ) would overwrite the forming bar with slightly different prices
-        if s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()) != &raw {
-            return;
+        let owner = s.nt_owner.entry(sym.clone()).or_insert_with(|| raw.clone()).clone();
+        if owner != raw {
+            if raw != sym {
+                return; // MNQ / NNQ etc: the exact contract (NQ) owns the chart symbol
+            }
+            // the exact contract connected after a micro: it takes over and the micro's bars are dropped
+            s.nt_owner.insert(sym.clone(), raw.clone());
+            s.nt.remove(&sym);
+            s.nt_r.remove(&sym);
+            s.nt_d.remove(&sym);
+            drop(s);
+            ilog(&format!("{sym}: feed {raw} took over from {owner}"));
+            s = sh.lock().unwrap();
         }
         if !mine.contains(&sym) {
             *s.nt_conns.entry(sym.clone()).or_insert(0) += 1;
@@ -1794,7 +1805,7 @@ struct App {
     manual: Option<(f64, f64)>, // manual price range (after dragging the price axis / panning vertically); None = auto-fit
     drag_mode: u8,              // 1 = plot drag, 2 = price-axis drag, 3 = measure (shift + drag)
     ord_drag: Option<(String, bool, f64)>, // a stop / target being dragged: (order id, is stop, price under the pointer)
-    ord_pend: Option<(String, f64, std::time::Instant, f64)>, // (id, wanted futures price, when, futures price before the move) // a move sent to NinjaTrader, held on screen until NinjaTrader shows it
+    ord_pend: Option<(String, f64, std::time::Instant)>, // a move sent to NinjaTrader, held on screen until NinjaTrader shows it
     close_sent: Option<std::time::Instant>, // last X click (ignores a double click)
     rev_sent: Option<std::time::Instant>, // last reverse click (own timer, so Close right after a reverse still works)
     meas_p0: Option<Pos2>,      // where the measure drag started (screen)
@@ -2107,7 +2118,8 @@ impl eframe::App for App {
                 (s.main.clone(), s.daily.clone(), s.m5.clone(), s.htf.clone(), s.version)
             };
             if cs.is_empty() {
-                painter.text(plot.center(), Align2::CENTER_CENTER, "loading…", FontId::proportional(16.0), AXIS_TXT);
+                let wait_nt = self.tf == "400R" && self.shared.lock().unwrap().src == "NT";
+                painter.text(plot.center(), Align2::CENTER_CENTER, if wait_nt { "waiting for NinjaTrader 400R bars…" } else { "loading…" }, FontId::proportional(16.0), AXIS_TXT);
                 return;
             }
             let n = cs.len();
@@ -3035,7 +3047,7 @@ impl eframe::App for App {
                     if let Some(Some(v)) = em.last() {
                         let (lx, ly) = (x_of((n - 1) as f32), y_of(*v));
                         if ly >= plot.top() + 8.0 && ly <= plot.bottom() - 8.0 {
-                            let tag = format!("EMA {len}");
+                            let tag = if len == EMA_SLOW { "💸💲💰🛫".to_string() } else { format!("EMA {len}") };
                             let tw = text_w(&painter, &tag, &small);
                             let tx = (lx + 6.0).min(plot.right() - tw - 2.0).max(plot.left() + 2.0);
                             clip.rect_filled(Rect::from_min_max(Pos2::new(tx - 2.0, ly - 7.0), Pos2::new(tx + tw + 2.0, ly + 7.0)), 0.0, hexc(0x040d1a, 0.75));
@@ -3043,11 +3055,11 @@ impl eframe::App for App {
                         }
                     }
                 }
-                // EMA 8: colour follows its position vs the EMA 14 (dark green above, dark red below)
+                // EMA 8: colour follows its position vs the EMA 14 (blue above, dark red below)
                 {
                     let e8 = ema_of(&closes, 8);
                     let e14 = ema_of(&closes, EMA_FAST);
-                    let (g8, r8) = (0x14a040u32, 0xc42222u32);
+                    let (g8, r8) = (0x2f80ffu32, 0xc42222u32);
                     let lo = first_vis.saturating_sub(1).max(1);
                     let hi = (last_vis + 1).min(n - 1);
                     for i in lo..=hi {
@@ -3073,10 +3085,11 @@ impl eframe::App for App {
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 let d = (now - cs[cs.len() - 1].t).max(0);
                 let txt = format!("{:02}:{:02}:{:02}", d / 3600, (d % 3600) / 60, d % 60);
-                let tw = text_w(&painter, &txt, &small);
+                let big = FontId::monospace(14.0);
+                let tw = text_w(&painter, &txt, &big);
                 let (rx, by) = (plot.right() - 8.0, plot.bottom() - 8.0);
-                clip.rect_filled(Rect::from_min_max(Pos2::new(rx - tw - 4.0, by - 14.0), Pos2::new(rx + 3.0, by + 2.0)), 0.0, hexc(0x040d1a, 0.75));
-                clip.text(Pos2::new(rx, by), Align2::RIGHT_BOTTOM, txt, small.clone(), rgb(0x00e5ff));
+                clip.rect_filled(Rect::from_min_max(Pos2::new(rx - tw - 5.0, by - 19.0), Pos2::new(rx + 4.0, by + 3.0)), 0.0, hexc(0x040d1a, 0.75));
+                clip.text(Pos2::new(rx, by), Align2::RIGHT_BOTTOM, txt, big, rgb(0x00e5ff));
                 ui.ctx().request_repaint_after(Duration::from_millis(500));
             }
 
@@ -3147,10 +3160,9 @@ impl eframe::App for App {
                 let fpx = |p: f64| ((p - bas) / tk).round() * tk;
                 let now_i = std::time::Instant::now();
                 // a move waiting for NinjaTrader: keep the line where you dropped it until NinjaTrader shows it there (or says no)
-                if let Some((pid, ppx, t0, porig)) = self.ord_pend.clone() {
-                    let cur = orders.iter().find(|o| o.id == pid).map(|o| o.px - bas); // back to futures price
-                    // taken = at the wanted price, or at ANY new price (NinjaTrader rounds to the contract's own tick, e.g. NNQ / NES 0.5)
-                    if cur.map_or(false, |c| (c - ppx).abs() < tk * 0.5 || (c - porig).abs() >= tk * 0.5) {
+                if let Some((pid, ppx, t0)) = self.ord_pend.clone() {
+                    let cur = orders.iter().find(|o| o.id == pid).map(|o| o.px);
+                    if cur.map_or(false, |c| (c - ppx).abs() < tk * 0.5) {
                         self.ord_pend = None;
                     } else if t0.elapsed() > Duration::from_secs(4) {
                         self.ord_pend = None;
@@ -3210,7 +3222,7 @@ impl eframe::App for App {
                                     continue;
                                 }
                                 n += 1;
-                                self.ord_pend = Some((o.id.clone(), fpx(bp), now_i, o.px - bas));
+                                self.ord_pend = Some((o.id.clone(), bp, now_i));
                                 send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&o.id), fpx(bp)));
                             }
                             let msg = if n > 0 { "Stop to entry +10 pts" } else if bad > 0 { "Break even: price isn't 10 pts past your entry yet" } else { "No stop to move" };
@@ -3227,7 +3239,7 @@ impl eframe::App for App {
                     if let Some(d) = self.ord_drag.as_ref().filter(|d| d.0 == o.id) {
                         px = d.2;
                     } else if let Some(p) = self.ord_pend.as_ref().filter(|p| p.0 == o.id) {
-                        px = p.1 + bas; // pending is stored as a futures price
+                        px = p.1;
                     }
                     views.push((i, px));
                 }
@@ -3401,7 +3413,7 @@ impl eframe::App for App {
                                     if bad {
                                         self.shared.lock().unwrap().toast = Some((format!("{} can't go there - it is on the wrong side of the market", if o.entry { "Entry order" } else if o.is_stop { "Stop" } else { "Target" }), false, now_i));
                                     } else {
-                                        self.ord_pend = Some((d.0.clone(), fpx(d.2), now_i, o.px - bas));
+                                        self.ord_pend = Some((d.0.clone(), d.2, now_i));
                                         send_cmd(self.shared.clone(), ctx.clone(), format!("/move?id={}&px={}", urlenc(&d.0), fpx(d.2)));
                                     }
                                 }
@@ -3582,7 +3594,7 @@ impl eframe::App for App {
             painter.text(
                 Pos2::new(plot.left() + 10.0, plot.top() + 28.0),
                 Align2::LEFT_TOP,
-                if is_range { format!("{} · {}-tick range ({} pts)", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym)) } else { format!("{} · {}", self.sym, self.tf) },
+                if is_range { let nrc = self.shared.lock().unwrap().nt_r.get(&self.sym).map_or(0, |v| v.len()); if nrc >= 2 { format!("{} · {}-tick range ({} pts)", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym)) } else { format!("{} · {}-tick range ({} pts){}", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym), if self.shared.lock().unwrap().src == "NT" { " · waiting for NinjaTrader 400R bars" } else { "" }) } } else { format!("{} · {}", self.sym, self.tf) },
                 FontId::proportional(13.0),
                 Color32::from_rgb(120, 140, 175),
             );
