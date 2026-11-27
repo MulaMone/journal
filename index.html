@@ -4050,8 +4050,8 @@ function prepTab(){
       if(up){ // event today or later this week: tick once per event date
         var m=key+"@"+up;
         if(State.newsAutoChecked.indexOf(m)===-1){State.newsAutoChecked.push(m);State.newsChecks[key]=true;wkChanged=true;}
-      }else{ // all of its events are past: untick what we auto-ticked (after market close on event day)
-        if(State.newsChecks[key]&&State.newsAutoChecked.indexOf(key+"@"+ds[ds.length-1])>-1){State.newsChecks[key]=false;wkChanged=true;}
+      }else{ // all of its events are past (after market close on event day): untick, whether auto-ticked or ticked by hand
+        if(State.newsChecks[key]){State.newsChecks[key]=false;wkChanged=true;}
       }
     });
     if(wkChanged){ss("newsChecks",State.newsChecks);ss("newsAutoChecked",State.newsAutoChecked);changed=true;}
