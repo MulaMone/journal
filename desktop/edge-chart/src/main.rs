@@ -1809,6 +1809,8 @@ struct App {
     show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
     swing_ext: bool,            // 400R: big swing lines run on until price hits them (off by default = NinjaTrader's own Swing plot)
     title_green: bool,          // window title bar currently painted green (futures feed live)
+    touched: bool,              // you zoomed / scrolled this chart: a data swap (NinjaTrader's own bars arriving, a feed reconnect) keeps your view instead of snapping to live
+    view_t: Option<f64>,        // time at the right edge of your view, used to put it back after such a swap
 }
 
 impl App {
@@ -1886,6 +1888,8 @@ impl App {
             show_mo_w: false,
             swing_ext: false,
             title_green: false,
+            touched: false,
+            view_t: None,
         };
         app.reload();
         app
@@ -2041,6 +2045,7 @@ impl eframe::App for App {
                     ui.colored_label(Color32::from_rgb(0, 230, 118), "NT live");
                 }
                 if changed {
+                    self.touched = false; // new symbol / timeframe: open at the live edge
                     self.reload();
                 }
                 if changed {
@@ -2153,13 +2158,20 @@ impl eframe::App for App {
                 }
             };
             if ver != self.seen_version {
+                // keep your own zoom / scroll through a data swap on the same symbol and timeframe (matched by time); everything else opens at the live edge
+                let keep = self.touched && self.seen_version != u64::MAX && self.view_t.is_some();
                 self.seen_version = ver;
                 self.manual = None;
                 self.zoom_t = None;
                 self.fling = 0.0;
-                let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
-                self.spacing = sp0;
-                self.right_idx = (n - 1) as f32 + gap0;
+                if keep {
+                    self.right_idx = t_to_l(self.view_t.unwrap_or(0.0)) as f32;
+                } else {
+                    self.touched = false;
+                    let (sp0, gap0) = default_view(&self.tf, self.intraday, &self.sym);
+                    self.spacing = sp0;
+                    self.right_idx = (n - 1) as f32 + gap0;
+                }
                 if let (Some(_), Some((f, t))) = (self.link_g, self.link_last) {
                     apply_range(self, f, t); // reload / timeframe switch keeps the shared view
                 }
@@ -2221,6 +2233,7 @@ impl eframe::App for App {
                 self.vdrag = 0.0;
                 self.fling = 0.0;
                 self.zoom_t = None;
+                self.touched = true;
             }
             // the measure stays on screen after you let go; a click or Esc clears it
             if resp.drag_stopped() {
@@ -2255,6 +2268,7 @@ impl eframe::App for App {
             if resp.double_clicked() {
                 let on_axis = ctx.input(|i| i.pointer.hover_pos()).map_or(false, |p| p.x > plot.right());
                 self.manual = None; // back to auto-fit
+                self.touched = false;
                 self.zoom_t = None;
                 self.fling = 0.0;
                 if !on_axis {
@@ -2268,9 +2282,11 @@ impl eframe::App for App {
                 let k = if sh { 5.0 } else { 1.0 };
                 if l {
                     self.right_idx -= k;
+                    self.touched = true;
                 }
                 if r {
                     self.right_idx += k;
+                    self.touched = true;
                 }
             }
             if self.fling != 0.0 && !resp.dragged() {
@@ -2292,6 +2308,7 @@ impl eframe::App for App {
                 } else if scroll != 0.0 {
                     let anchor = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.x).unwrap_or(plot.right());
                     self.fling = 0.0;
+                    self.touched = true;
                     let cur = self.zoom_t.map_or(self.spacing, |t| t.0);
                     self.zoom_t = Some(((cur * (scroll * 0.0025).exp()).clamp(3.0, 140.0), anchor));
                 }
@@ -2310,6 +2327,7 @@ impl eframe::App for App {
                 }
             }
             self.right_idx = self.right_idx.clamp(2.0f32.min((n - 1) as f32), (n - 1) as f32 + (plot.width() / self.spacing - 2.0).max(RIGHT_GAP_BARS)); // keep at least ~2 bars on screen, like the web chart
+            self.view_t = Some(l_to_t(self.right_idx as f64));
             // a view change made HERE (drag, wheel, arrows, double-click) goes out to linked windows
             if let Some(g) = self.link_g {
                 if (self.spacing - pre_sp).abs() > 1e-4 || (self.right_idx - pre_ri).abs() > 1e-4 {
