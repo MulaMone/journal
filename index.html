@@ -7201,28 +7201,247 @@ function rangeChartTab(){
   var shT=span(),ic=chartSymHTML("NQ");
   if(ic){shT.innerHTML=ic;shT.appendChild(document.createTextNode(" — 400R"));}else shT.textContent="NQ — 400R";
   sh.appendChild(shT);
-  var tag=span("xs");tag.style.cssText="color:#ffbf00;letter-spacing:1px;";tag.textContent="CME · DELAYED ~10 MIN";sh.appendChild(tag);
+  var tag=span("xs");tag.style.cssText="color:#ffbf00;letter-spacing:1px;";tag.textContent="DELAYED ~10 MIN";sh.appendChild(tag);
   hrow.appendChild(sh);
   var ctrl=div("row gap8");ctrl.style.flexWrap="wrap";ctrl.style.rowGap="8px";ctrl.style.marginLeft="auto";ctrl.style.justifyContent="flex-end";
   var SY=[["ES","#C8202F"],["NQ","#0996C7"],["DXY","#22c55e"],["CL","#3b82f6"],["GC","#fbbf24"],["NG","#3b82f6"],["BTC","#f7931a"]];
-  SY.forEach(function(s){
+  var useWheels=isMobile();
+  (useWheels?[]:SY).forEach(function(s){
     var b=h("button",{className:"btn"});b.textContent=s[0];
     b.style.cssText=s[0]==="NQ"?"--caglow:#ffffff25;border-color:#ffffff;color:#ffffff;font-weight:700;":"--ca:"+s[1]+";--caglow:"+s[1]+"25;";
     b.addEventListener("click",function(){_chartKeepView=null;State.chart_symbol=s[0];if(s[0]!=="NQ"&&State.chart_interval==="400R")State.chart_interval="1h";render();});
     ctrl.appendChild(b);
   });
-  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrl.appendChild(sp);
-  ["2m","5m","30m","1h","4h","8h","1d","1w","400R"].forEach(function(t){
+  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrl.appendChild(sp);
+  (useWheels?[]:["2m","5m","30m","1h","4h","8h","1d","1w","400R"]).forEach(function(t){
     var b=h("button",{className:"btn"});b.textContent=t==="1d"?"D":t==="1w"?"W":t;
     b.style.cssText=t==="400R"?"border-color:#00e676;color:#00e676;padding:6px 10px;":"border-color:var(--red);color:var(--red);padding:6px 10px;";
     b.addEventListener("click",function(){_chartKeepView=null;if(["2m","5m","30m","1h"].indexOf(t)<0)setIntraday(false);State.chart_interval=t;render();});
     ctrl.appendChild(b);
   });
-  hrow.appendChild(ctrl);el.appendChild(hrow);
+  if(!useWheels)hrow.appendChild(ctrl);el.appendChild(hrow);
   var info=div("xs m");info.style.cssText="margin-bottom:8px;color:var(--text3);font-family:'Courier New',monospace;";info.textContent="Loading 400R bars…";el.appendChild(info);
   var chartDiv=div();chartDiv.id="chart-canvas-anchor";
   chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:"+(window.innerHeight<800?260:500)+"px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;";
   el.appendChild(chartDiv);
+  var sym="NQ",tf="400R",eodOnly=false,INTRA_TFS=["2m","5m","30m","1h"],TF_LBL=function(t){return t==="1d"?"D":t==="1w"?"W":t==="1m"?"M":t==="1y"?"Y":t;};
+  var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"},{l:"BTC",n:"Bitcoin"}];
+  var TFS=["2m","5m","30m","1h","4h","8h","1d","1w","400R"];
+  if(useWheels){ // phone: chart fills the screen down to the wheels, like the other charts
+    var fitH=function(tries){
+      if(!chartDiv.isConnected){if((tries||0)<30)requestAnimationFrame(function(){fitH((tries||0)+1);});return;}
+      var tb=document.getElementById("topbar"),tbH=tb?tb.getBoundingClientRect().height:52,ct=chartDiv.getBoundingClientRect().top+window.scrollY;
+      chartDiv.style.minHeight="260px";chartDiv.style.height=Math.max(260,Math.floor(window.innerHeight-tbH-ct-(19*3+4+2)-6))+"px";
+    };
+    fitH();window.addEventListener("resize",function(){if(chartDiv.isConnected)fitH();});
+  }
+  if(useWheels){
+    // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
+    var WH=19,GREEN="#00e676",RED="#ff5252",wrap=div();
+    wrap.className="wheel-wrap";wrap.addEventListener("contextmenu",function(e){e.preventDefault();});wrap.addEventListener("selectstart",function(e){e.preventDefault();});wrap.style.cssText="position:relative;height:"+(WH*3)+"px;margin-top:4px;background:linear-gradient(#050f1d,#030a14);border:1px solid #14233a;border-radius:6px;overflow:hidden;";
+    function mkPill(side,col){
+      var d=div();
+      d.style.cssText="position:absolute;"+side+":8px;width:calc(50% - 12px);top:"+WH+"px;height:"+WH+"px;border-radius:"+(WH/2)+"px;border:1px solid "+col+"88;background:"+col+"0d;box-shadow:0 0 10px "+col+"22,inset 0 0 8px "+col+"14;pointer-events:none;";
+      return d;
+    }
+    function mkTag(side,txt,col){
+      var d=div();d.textContent=txt;
+      d.style.cssText="position:absolute;"+side+":20px;top:"+(WH+6)+"px;font-family:'Courier New',monospace;font-size:8px;letter-spacing:1px;color:"+col+"99;pointer-events:none;";
+      return d;
+    }
+    wrap.appendChild(mkPill("left",GREEN));wrap.appendChild(mkPill("right",RED));
+    wrap.appendChild(mkTag("left","SYM",GREEN));wrap.appendChild(mkTag("right","TF",RED));
+    // Haptic tick per row. Android: Vibration API. iOS Safari/PWA has no vibrate(), so
+    // toggle a hidden <input type=checkbox switch> via its label (iOS 17.4+ fires a native tick).
+    var _hp=window._edgeHaptic||(window._edgeHaptic={});
+    function ensureHL(){
+      if(_hp.label&&document.body.contains(_hp.label))return;
+      try{
+        var hl=document.createElement("label"),hi=document.createElement("input");
+        hi.type="checkbox";hi.setAttribute("switch","");
+        hl.style.cssText="position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;";
+        hl.setAttribute("aria-hidden","true");hi.tabIndex=-1;
+        hl.appendChild(hi);document.body.appendChild(hl);_hp.label=hl;
+      }catch(e){_dbg(e);}
+    }
+    ensureHL();
+    function haptic(){
+      try{
+        if(navigator.vibrate){navigator.vibrate(6);return;}
+        ensureHL();
+        if(_hp.label)_hp.label.click();
+      }catch(e){_dbg(e);}
+    }
+    var cols=div();cols.style.cssText="position:absolute;inset:0;display:flex;";
+    // finger on a drum: don't commit a pick or hide the popup until the finger lifts ANYWHERE on screen
+    // (listen on document, so dragging off the drum before lifting still counts as a release)
+    var WD=window._edgeWD||(window._edgeWD={down:false,arms:[]});WD.arms=[];
+    if(!WD.bound){
+      WD.bound=true;
+      var relAll=function(e){
+        if(e.touches&&e.touches.length) return; // another finger still down
+        if(!WD.down) return;
+        WD.down=false;
+        WD.arms.slice().forEach(function(f){f();});
+      };
+      ["touchend","touchcancel","mouseup","pointerup"].forEach(function(n){document.addEventListener(n,relAll,{passive:true,capture:true});});
+    }
+    function makeWheel(list,cur,col,onPick,onMove){
+      var w=div(),items=[],ready=false,timer=null,lastI=-1;
+      w.style.cssText="flex:1;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:none;overscroll-behavior:contain;";
+      w.className="wheel-col";
+      var pad=div();pad.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad);
+      list.forEach(function(t,i){
+        var d=div();d.textContent=TF_LBL(t);
+        d.style.cssText="height:"+WH+"px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-family:'Courier New',monospace;font-size:12px;letter-spacing:1px;color:#8da0ba;cursor:pointer;";
+        d.addEventListener("click",function(){w.scrollTo({top:i*WH,behavior:"smooth"});});
+        w.appendChild(d);items.push(d);
+      });
+      var pad2=div();pad2.style.cssText="height:"+WH+"px;flex:none;";w.appendChild(pad2);
+      function idx(){return Math.max(0,Math.min(list.length-1,Math.round(w.scrollTop/WH)));}
+      function tick(){if(!ready)return;var ci=idx();if(ci!==lastI){lastI=ci;haptic();}}
+      function fade(){
+        var p=w.scrollTop/WH;
+        items.forEach(function(d,i){
+          var diff=i-p,dist=Math.abs(diff),on=dist<0.5;
+          d.style.opacity=Math.max(0.12,1-dist*0.55);
+          d.style.transform="perspective(260px) rotateX("+(-diff*38)+"deg) scale("+Math.max(0.7,1-dist*0.14)+")";
+          d.style.color=on?col:"#8da0ba";
+          d.style.fontWeight=on?"700":"400";
+          d.style.textShadow=on?"0 0 8px "+col+"88":"none";
+        });
+      }
+      w.addEventListener("scroll",function(){
+        fade();
+        if(!ready) return;
+        tick();
+        if(onMove)onMove(w.scrollTop/WH);
+        arm();
+      });
+      function arm(){
+        clearTimeout(timer);
+        timer=setTimeout(function(){if(WD.down) return;var v=list[idx()];if(v!==cur){cur=v;onPick(v);}},160);
+      }
+      function dn(){WD.down=true;}
+      WD.arms.push(function(){if(ready)arm();});
+      w.addEventListener("touchstart",dn,{passive:true});
+      w.addEventListener("mousedown",dn);
+      // Speed-based fling: own touch tracking + momentum so a hard flick travels the whole drum,
+      // a gentle one moves a few rows. Tune FLING_GAIN (more reach) / FLING_FRICTION (higher = stops sooner).
+      var FLING_GAIN=2.4,FLING_FRICTION=0.0055,maxTop=(list.length-1)*WH;
+      var tY=0,tS=0,smp=[],raf=0,touching=false;
+      function clampTop(v){return Math.max(0,Math.min(maxTop,v));}
+      function stopAnim(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+      function settle(){
+        var from=w.scrollTop,to=clampTop(Math.round(from/WH)*WH),t0=0;
+        if(Math.abs(to-from)<0.5){w.scrollTop=to;w.style.scrollSnapType="y mandatory";return;}
+        (function step(ts){
+          if(!t0)t0=ts;var k=Math.min(1,(ts-t0)/110);
+          w.scrollTop=from+(to-from)*(1-Math.pow(1-k,3));tick();
+          if(k<1)raf=requestAnimationFrame(step);else{raf=0;w.style.scrollSnapType="y mandatory";}
+        })(performance.now());
+      }
+      function fling(v){
+        var last=0;
+        (function step(ts){
+          if(!last){last=ts;raf=requestAnimationFrame(step);return;}
+          var dt=Math.min(32,ts-last);last=ts;
+          var next=w.scrollTop+v*dt;
+          if(next<=0||next>=maxTop){w.scrollTop=clampTop(next);tick();raf=0;settle();return;}
+          w.scrollTop=next;tick();
+          v*=Math.exp(-FLING_FRICTION*dt);
+          if(Math.abs(v)<0.04){raf=0;settle();return;}
+          raf=requestAnimationFrame(step);
+        })(performance.now());
+      }
+      w.addEventListener("touchstart",function(e){
+        stopAnim();w.style.scrollSnapType="none";touching=true;
+        tY=e.touches[0].clientY;tS=w.scrollTop;smp=[{t:e.timeStamp,y:tY}];
+      },{passive:true});
+      w.addEventListener("touchmove",function(e){
+        if(!touching)return;
+        if(e.cancelable)e.preventDefault();
+        var y=e.touches[0].clientY;
+        w.scrollTop=clampTop(tS+(tY-y));tick();
+        smp.push({t:e.timeStamp,y:y});if(smp.length>8)smp.shift();
+      },{passive:false});
+      function endTouch(useVel,tEnd){
+        if(!touching)return;touching=false;
+        var v=0;
+        if(useVel&&smp.length>1){
+          var b=smp[smp.length-1],a=smp[0];
+          for(var i=smp.length-2;i>=0;i--){if(b.t-smp[i].t>100)break;a=smp[i];}
+          var dtm=b.t-a.t;
+          // finger rested before lifting (>90ms since last move) = no fling
+          if(dtm>0&&(tEnd-b.t)<90) v=(a.y-b.y)/dtm; // px/ms, finger up = scroll down
+        }
+        v*=FLING_GAIN;
+        if(Math.abs(v)<0.08)settle();else fling(v);
+      }
+      w.addEventListener("touchend",function(e){endTouch(true,e.timeStamp);},{passive:true});
+      w.addEventListener("touchcancel",function(e){endTouch(false,e.timeStamp);},{passive:true});
+      setTimeout(function(){w.scrollTop=Math.max(0,list.indexOf(cur))*WH;fade();lastI=idx();setTimeout(function(){ready=true;},120);},30);
+      return w;
+    }
+    cols.appendChild(makeWheel(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),sym,GREEN,function(v){_chartKeepView=null;State.chart_symbol=v;render();},function(pos){symMirror(pos);}));
+    cols.appendChild(makeWheel(TFS,tf,RED,function(v){_chartKeepView=null;if(INTRA_TFS.indexOf(v)<0) setIntraday(false);State.chart_interval=v;render();},function(pos){tfMirror(pos);}));
+    wrap.appendChild(cols);
+    var fTop=div();fTop.style.cssText="position:absolute;left:0;right:0;top:0;height:"+WH+"px;background:linear-gradient(#050f1d,#050f1d00);pointer-events:none;";
+    var fBot=div();fBot.style.cssText="position:absolute;left:0;right:0;bottom:0;height:"+WH+"px;background:linear-gradient(#030a1400,#030a14);pointer-events:none;";
+    wrap.appendChild(fTop);wrap.appendChild(fBot);
+    el.appendChild(wrap);
+    // ── TradingView-style timeframe popup ─────────────────────
+    // Appears over the chart while the timeframe drum is being spun, mirrors its position,
+    // fades out shortly after it stops (the pick re-renders the chart anyway).
+    var TF_LONG={"2m":"2 minutes","5m":"5 minutes","15m":"15 minutes","30m":"30 minutes","1h":"1 hour","4h":"4 hours","8h":"8 hours","1d":"1 day","1w":"1 week","1m":"1 month","1y":"1 year"};
+    var SYSF="-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif";
+    function mkMirror(list,labelOf,col){
+    var mir=null,mirHide=null;
+    return function(pos){
+      var RH=46,ROWS=5;
+      if(!mir){
+        var back=div();
+        back.className="wheel-mirror";back.style.cssText="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .15s;";
+        var card=div();
+        card.style.cssText="position:relative;width:min(290px,74%);height:"+(RH*ROWS)+"px;border-radius:34px;background:rgba(44,48,58,.5);-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden;";
+        var pill=div();
+        pill.style.cssText="position:absolute;left:10px;right:10px;top:"+(RH*2)+"px;height:"+RH+"px;border-radius:"+(RH/2)+"px;border:1px solid "+col+"88;background:"+col+"1f;box-shadow:0 0 12px "+col+"33,inset 0 0 10px "+col+"1a;box-sizing:border-box;";
+        var sc=div();
+        sc.style.cssText="position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);mask-image:linear-gradient(transparent 0,#000 25%,#000 75%,transparent 100%);";
+        var sp=div();sp.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp);
+        var rows=[];
+        list.forEach(function(t){
+          var d=div();d.textContent=labelOf(t);
+          d.style.cssText="height:"+RH+"px;display:flex;align-items:center;padding-left:30px;font-family:"+SYSF+";font-size:22px;";
+          sc.appendChild(d);rows.push(d);
+        });
+        var sp2=div();sp2.style.cssText="height:"+(RH*2)+"px;";sc.appendChild(sp2);
+        card.appendChild(pill);card.appendChild(sc);back.appendChild(card);
+        chartDiv.appendChild(back);
+        mir={back:back,sc:sc,rows:rows,RH:RH};
+      }
+      mir.sc.scrollTop=pos*mir.RH;
+      mir.rows.forEach(function(d,i){
+        var dist=Math.abs(i-pos),on=dist<0.5;
+        d.style.opacity=Math.max(0.15,1-dist*0.5);
+        d.style.color=on?col:"rgba(235,240,250,.5)";
+        d.style.fontWeight=on?"600":"400";
+        d.style.textShadow=on?"0 0 8px "+col+"88":"none";
+      });
+      mir.back.style.opacity="1";
+      clearTimeout(mirHide);
+      mirHide=setTimeout(function hideIt(){
+        if(!mir) return;
+        if(WD.down){mirHide=setTimeout(hideIt,200);return;} // stay up while the finger is on the drum
+        var m=mir;m.back.style.opacity="0";
+        setTimeout(function(){if(m.back.parentNode)m.back.parentNode.removeChild(m.back);if(mir===m)mir=null;},180);
+      },700);
+    };
+    }
+    var tfMirror=mkMirror(TFS,function(t){return TF_LONG[t]||TF_LBL(t);},RED);
+    var symMirror=mkMirror(SYMS.map(function(x){return x.l;}).concat(eodOnly?["US10Y"]:[]),function(t){return t;},GREEN);
+  }
+
 
   var HDR={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY},Q=SUPA_URL+"/rest/v1/range_bars?sym=eq.NQ&rng=eq.400&select=id,t,o,h,l,c,done";
   var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true,showFvg=State.range_fvg===true,fvgZ=[],fvgD=[],fvgRepaint=null,sessRepaint=null,sessMarks=[],dayLbl=[],numLines=[],hideNums=State.range_hide_nums===true,lvS={d:[],w:[],sig:""};
