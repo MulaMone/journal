@@ -7194,7 +7194,7 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
 // and stored in public.range_bars, so every device sees the same bars and history keeps building with Edge closed.
 // True range bars: every closed bar is exactly 400 ticks (100 pts) high-low; the next bar opens one tick beyond the close.
 function rangeChartTab(){
-  var el=div();el.style.padding="16px";
+  var el=div();el.style.padding="16px 16px 8px";
   var myTok=++_chartLoadToken;
   var hrow=div("rjb mb12");hrow.style.flexWrap="wrap";
   var sh=div("sh nobar");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
@@ -7232,7 +7232,7 @@ function rangeChartTab(){
       if(!chartDiv.isConnected){if((tries||0)<30)requestAnimationFrame(function(){fitH((tries||0)+1);});return;}
       var ct=chartDiv.getBoundingClientRect().top+window.scrollY,minH=window.innerHeight<800?260:500;
       if(useWheels){var tb=document.getElementById("topbar"),tbH=tb?tb.getBoundingClientRect().height:52;chartDiv.style.minHeight="260px";chartDiv.style.height=Math.max(260,Math.floor(window.innerHeight-tbH-ct-(19*3+4+2)-6))+"px";}
-      else{chartDiv.style.minHeight=minH+"px";chartDiv.style.height=Math.max(minH,Math.floor(window.innerHeight-ct-12))+"px";}
+      else{chartDiv.style.minHeight=minH+"px";chartDiv.style.height=Math.max(minH,Math.floor(window.innerHeight-ct-8))+"px";}
     };
     fitH();var fitR=function(){if(chartDiv.isConnected)fitH();else window.removeEventListener("resize",fitR);};window.addEventListener("resize",fitR);
   }
@@ -7455,7 +7455,7 @@ function rangeChartTab(){
     return bar;
   }
   function status(r,n){
-    if(r){info.style.display="none";return;}
+    if(r){info.style.display="none";if(typeof fitH==="function")fitH();return;}
     if(!r){info.style.display="";info.textContent=n?"":"No 400R bars yet — deploy the range-collector function and run supabase/range_bars.sql (see the notes), bars build from the moment it runs.";return;}
     var rg=Math.round((parseFloat(r.h)-parseFloat(r.l))*100)/100;
     info.textContent=(r.done?"CLOSED ":"FORMING ")+parseFloat(r.c).toFixed(2)+"  ·  "+rg.toFixed(2)+" / 100 pts  ·  bar opened "+new Date(etSec(+r.t)*1000).toISOString().slice(11,19)+" ET  ·  "+n+" bars";
