@@ -3055,26 +3055,25 @@ impl eframe::App for App {
                         }
                     }
                 }
-                // EMA 8: colour follows its position vs the EMA 14 (blue above, dark red below)
+                // EMA 8: colour follows the candles crossing it (blue while the bar closes above the EMA 8, dark red below)
                 {
                     let e8 = ema_of(&closes, 8);
-                    let e14 = ema_of(&closes, EMA_FAST);
                     let (g8, r8) = (0x2f80ffu32, 0xc42222u32);
                     let lo = first_vis.saturating_sub(1).max(1);
                     let hi = (last_vis + 1).min(n - 1);
                     for i in lo..=hi {
-                        if let (Some(a), Some(b), Some(f)) = (e8[i - 1], e8[i], e14[i]) {
-                            let col = if b >= f { g8 } else { r8 };
+                        if let (Some(a), Some(b)) = (e8[i - 1], e8[i]) {
+                            let col = if cs[i].c >= b { g8 } else { r8 };
                             clip.line_segment([Pos2::new(x_of((i - 1) as f32), y_of(a)), Pos2::new(x_of(i as f32), y_of(b))], Stroke::new(2.0, rgb(col)));
                         }
                     }
-                    if let (Some(Some(v)), Some(Some(f))) = (e8.last(), e14.last()) {
+                    if let Some(Some(v)) = e8.last() {
                         let (lx, ly) = (x_of((n - 1) as f32), y_of(*v));
                         if ly >= plot.top() + 8.0 && ly <= plot.bottom() - 8.0 {
                             let tw = text_w(&painter, "EMA 8", &small);
                             let tx = (lx + 6.0).min(plot.right() - tw - 2.0).max(plot.left() + 2.0);
                             clip.rect_filled(Rect::from_min_max(Pos2::new(tx - 2.0, ly - 7.0), Pos2::new(tx + tw + 2.0, ly + 7.0)), 0.0, hexc(0x040d1a, 0.75));
-                            clip.text(Pos2::new(tx, ly), Align2::LEFT_CENTER, "EMA 8", small.clone(), rgb(if *v >= *f { g8 } else { r8 }));
+                            clip.text(Pos2::new(tx, ly), Align2::LEFT_CENTER, "EMA 8", small.clone(), rgb(if cs[n - 1].c >= *v { g8 } else { r8 }));
                         }
                     }
                 }
