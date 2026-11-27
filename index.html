@@ -6301,7 +6301,7 @@ function ntCommission(inst){
 }
 function ntIngest(o){
   if(!o||!o.inst||!o.et||!o.xt) return;
-  if(!ntAutoOn()||ntPaused()) return; // off / paused: ignore
+  if(!ntAutoOn()||ntPaused()){ if(o.id) ntSeenAdd(o.id); return; } // off / paused: skip it for good (mark seen so a re-send later is not imported)
   if(o.id&&ntSeenHas(o.id)) return; // already imported once (even if you since deleted / undid it)
   var hdr="Instrument,Market pos.,Quantity,Entry price,Exit price,Entry time,Exit time";
   var row=[o.inst,o.dir,o.qty,o.ep,o.xp,o.et,o.xt].join(",");
