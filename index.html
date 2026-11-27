@@ -7445,13 +7445,13 @@ function rangeChartTab(){
 
 
   var HDR={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY},Q=SUPA_URL+"/rest/v1/range_bars?sym=eq.NQ&rng=eq.400&select=id,t,o,h,l,c,done";
-  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true,showFvg=State.range_fvg===true,fvgZ=[],fvgD=[],fvgRepaint=null,sessRepaint=null,sessMarks=[],dayLbl=[],numLines=[],hideNums=State.range_hide_nums===true,lvS={d:[],w:[],sig:""};
+  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,chgAt=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true,showFvg=State.range_fvg===true,fvgZ=[],fvgD=[],fvgRepaint=null,sessRepaint=null,sessMarks=[],dayLbl=[],numLines=[],hideNums=State.range_hide_nums===true,lvS={d:[],w:[],sig:""};
   function etSec(u){return u-etOffsetHoursAt(u*1000)*3600;} // Edge shows ET wall-clock on the lightweight-charts UTC axis
   function barOf(r){
     var tm=tmap[r.id];
     if(tm===undefined){tm=etSec(+r.t);if(tm<=lastTime)tm=lastTime+1;tmap[r.id]=tm;lastTime=tm;}
     var bar={time:tm,open:parseFloat(r.o),high:parseFloat(r.h),low:parseFloat(r.l),close:parseFloat(r.c),done:!!r.done};
-    var k=idIdx[r.id];if(k===undefined){idIdx[r.id]=RB.length;RB.push(bar);}else RB[k]=bar;lastRawT=+r.t;
+    var k=idIdx[r.id];if(k===undefined){idIdx[r.id]=RB.length;RB.push(bar);}else{var ob=RB[k];if(ob.close!==bar.close||ob.high!==bar.high||ob.low!==bar.low)chgAt=Date.now();RB[k]=bar;}lastRawT=+r.t;
     return bar;
   }
   function status(r,n){
@@ -7739,7 +7739,7 @@ function rangeChartTab(){
     chartDiv.addEventListener("pointerup",function(e){if(!dnOk||e.pointerType==="mouse")return;dnOk=false;var t=performance.now();if(Math.hypot(e.clientX-dnX,e.clientY-dnY)>10||t-dnT>350){tapT=0;return;}
       if(t-tapT<400&&Math.hypot(e.clientX-tapX,e.clientY-tapY)<30){tapT=0;if(!(e.target&&e.target.closest&&e.target.closest(".zoom-bar"))){var t2=performance.now();if(t2-dtL>=600){dtL=t2;recenter();}}}else{tapT=t;tapX=e.clientX;tapY=e.clientY;}},{capture:true,passive:true});
     clk=div();clk.style.cssText="position:absolute;right:86px;bottom:30px;z-index:6;padding:2px 6px;background:#040d1abf;color:#00e5ff;font:700 14px 'Courier New',monospace;pointer-events:none;";chartDiv.appendChild(clk);
-    clkT=setInterval(function(){if(gone()){clearInterval(clkT);return;}try{ovTags();}catch(e){}var d=Math.max(0,Math.floor(Date.now()/1000)-lastRawT);clk.textContent=("0"+Math.floor(d/3600)).slice(-2)+":"+("0"+Math.floor(d%3600/60)).slice(-2)+":"+("0"+d%60).slice(-2);},500);
+    clkT=setInterval(function(){if(gone()){clearInterval(clkT);return;}try{ovTags();}catch(e){}var d=Math.max(0,Math.floor(Date.now()/1000)-lastRawT);clk.style.display=(Date.now()-chgAt>600000)?"none":"";clk.textContent=("0"+Math.floor(d/3600)).slice(-2)+":"+("0"+Math.floor(d%3600/60)).slice(-2)+":"+("0"+d%60).slice(-2);},500);
   }
   function build(rows){
     var bars=rows.map(barOf);
@@ -11292,11 +11292,14 @@ function expiryEvents(sym){
       cdBadge.className="cd-price-badge";
       cdBadge.style.cssText="position:absolute;right:0;text-align:center;border-radius:2px;padding:2px 4px;font-size:12px;font-weight:700;color:#fff;font-family:'Courier New',monospace;z-index:5;transform:translateY(-50%);white-space:nowrap;line-height:1.3;box-sizing:border-box;overflow:hidden;";
       chartDiv.appendChild(cdBadge);
+      var cdPrev=null,cdChg=0; // time of the last price change: no change for 10 min = market closed, so no countdown
       function renderCountdown(){
         if(currentPrice==null){cdBadge.style.display="none";return;}
+        if(cdPrev!==null&&currentPrice!==cdPrev)cdChg=Date.now();
+        cdPrev=currentPrice;
         cdBadge.style.background=currentIsUp?"#00b862":"#ff4444";
         var timeLine="";
-        if(barEndTrue!=null){
+        if(barEndTrue!=null&&Date.now()-cdChg<600000){
           var remain=Math.max(0,Math.floor(barEndTrue-Date.now()/1000));
           var p2=function(n){return (n<10?"0":"")+n;};
           var cdTxt;
