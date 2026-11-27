@@ -1820,6 +1820,7 @@ struct App {
     show_mo_w: bool,            // W: a vertical line at the start of each month (off by default)
     swing_ext: bool,            // 400R: big swing lines run on until price hits them (off by default = NinjaTrader's own Swing plot)
     title_green: bool,          // window title bar currently painted green (futures feed live)
+    px_seen: (String, String, usize, f64, f64, f64, std::time::Instant), // (sym, tf, bars, last close / high / low, when they last changed): no change for 10 min = market closed
 }
 
 impl App {
@@ -1897,6 +1898,7 @@ impl App {
             show_mo_w: false,
             swing_ext: false,
             title_green: false,
+            px_seen: (String::new(), String::new(), 0, 0.0, 0.0, 0.0, std::time::Instant::now()),
         };
         app.reload();
         app
@@ -3082,7 +3084,15 @@ impl eframe::App for App {
             // market closed (holiday / weekend / maintenance): no 5m bar has started for 10+ minutes, so the bar timers stop
             let mkt_closed = {
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-                m5.last().map_or(false, |b| now - b.t > 600)
+                let l = &cs[n - 1];
+                if self.px_seen.0 != self.sym || self.px_seen.1 != self.tf {
+                    // just switched: stale until the price actually moves
+                    let old = std::time::Instant::now().checked_sub(Duration::from_secs(660)).unwrap_or_else(std::time::Instant::now);
+                    self.px_seen = (self.sym.clone(), self.tf.clone(), n, l.c, l.h, l.l, old);
+                } else if (self.px_seen.3, self.px_seen.4, self.px_seen.5) != (l.c, l.h, l.l) || (self.px_seen.2 != n) {
+                    self.px_seen = (self.sym.clone(), self.tf.clone(), n, l.c, l.h, l.l, std::time::Instant::now());
+                }
+                m5.last().map_or(false, |b| now - b.t > 600) || self.px_seen.6.elapsed() > Duration::from_secs(600)
             };
             // ═════════ 400R: how long the forming bar has been open (hh:mm:ss), bottom right ═════════
             if is_range && !mkt_closed && !cs.is_empty() {
