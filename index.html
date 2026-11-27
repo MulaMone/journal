@@ -7227,13 +7227,14 @@ function rangeChartTab(){
   var sym="NQ",tf="400R",eodOnly=false,INTRA_TFS=["2m","5m","30m","1h"],TF_LBL=function(t){return t==="1d"?"D":t==="1w"?"W":t==="1m"?"M":t==="1y"?"Y":t;};
   var SYMS=[{l:"ES",n:"E-mini S&P 500"},{l:"NQ",n:"E-mini Nasdaq"},{l:"DXY",n:"US Dollar Index"},{l:"CL",n:"Crude Oil"},{l:"GC",n:"Gold"},{l:"NG",n:"Natural Gas"},{l:"BTC",n:"Bitcoin"}];
   var TFS=["2m","5m","30m","1h","4h","8h","1d","1w","400R"];
-  if(useWheels){ // phone: chart fills the screen down to the wheels, like the other charts
+  { // chart fills the screen below the header (no trades list on 400R): phone = down to the wheels, desktop = to the bottom edge
     var fitH=function(tries){
       if(!chartDiv.isConnected){if((tries||0)<30)requestAnimationFrame(function(){fitH((tries||0)+1);});return;}
-      var tb=document.getElementById("topbar"),tbH=tb?tb.getBoundingClientRect().height:52,ct=chartDiv.getBoundingClientRect().top+window.scrollY;
-      chartDiv.style.minHeight="260px";chartDiv.style.height=Math.max(260,Math.floor(window.innerHeight-tbH-ct-(19*3+4+2)-6))+"px";
+      var ct=chartDiv.getBoundingClientRect().top+window.scrollY,minH=window.innerHeight<800?260:500;
+      if(useWheels){var tb=document.getElementById("topbar"),tbH=tb?tb.getBoundingClientRect().height:52;chartDiv.style.minHeight="260px";chartDiv.style.height=Math.max(260,Math.floor(window.innerHeight-tbH-ct-(19*3+4+2)-6))+"px";}
+      else{chartDiv.style.minHeight=minH+"px";chartDiv.style.height=Math.max(minH,Math.floor(window.innerHeight-ct-12))+"px";}
     };
-    fitH();window.addEventListener("resize",function(){if(chartDiv.isConnected)fitH();});
+    fitH();var fitR=function(){if(chartDiv.isConnected)fitH();else window.removeEventListener("resize",fitR);};window.addEventListener("resize",fitR);
   }
   if(useWheels){
     // Compact symbol/timeframe drums under the chart (symbol = green, timeframe = red).
