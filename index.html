@@ -7189,6 +7189,92 @@ function edgeChartLink(chart,chartDiv,per,getC,sym,getS){
     }
   }catch(e){_dbg(e);}
 }
+// ─── NQ 400R range bars ───────────────────────────────────────────────
+// Bars are built server-side (supabase/functions/range-collector) from CME's free delayed NQ quote (Yahoo NQ=F as fallback)
+// and stored in public.range_bars, so every device sees the same bars and history keeps building with Edge closed.
+// True range bars: every closed bar is exactly 400 ticks (100 pts) high-low; the next bar opens one tick beyond the close.
+function rangeChartTab(){
+  var el=div();el.style.padding="16px";
+  var myTok=++_chartLoadToken;
+  var hrow=div("rjb mb12");hrow.style.flexWrap="wrap";
+  var sh=div("sh nobar");sh.style.marginBottom="0";sh.style.display="flex";sh.style.alignItems="center";sh.style.gap="10px";
+  var shT=span(),ic=chartSymHTML("NQ");
+  if(ic){shT.innerHTML=ic;shT.appendChild(document.createTextNode(" — 400R"));}else shT.textContent="NQ — 400R";
+  sh.appendChild(shT);
+  var tag=span("xs");tag.style.cssText="color:#ffbf00;letter-spacing:1px;";tag.textContent="CME · DELAYED ~10 MIN";sh.appendChild(tag);
+  hrow.appendChild(sh);
+  var ctrl=div("row gap8");ctrl.style.flexWrap="wrap";ctrl.style.rowGap="8px";ctrl.style.marginLeft="auto";ctrl.style.justifyContent="flex-end";
+  var SY=[["ES","#C8202F"],["NQ","#0996C7"],["DXY","#22c55e"],["CL","#3b82f6"],["GC","#fbbf24"],["NG","#3b82f6"],["BTC","#f7931a"]];
+  SY.forEach(function(s){
+    var b=h("button",{className:"btn"});b.textContent=s[0];
+    b.style.cssText=s[0]==="NQ"?"--caglow:#ffffff25;border-color:#ffffff;color:#ffffff;font-weight:700;":"--ca:"+s[1]+";--caglow:"+s[1]+"25;";
+    b.addEventListener("click",function(){_chartKeepView=null;State.chart_symbol=s[0];if(s[0]!=="NQ"&&State.chart_interval==="400R")State.chart_interval="1h";render();});
+    ctrl.appendChild(b);
+  });
+  var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";ctrl.appendChild(sp);
+  ["2m","5m","30m","1h","4h","8h","1d","1w","400R"].forEach(function(t){
+    var b=h("button",{className:"btn"});b.textContent=t==="1d"?"D":t==="1w"?"W":t;
+    b.style.cssText=t==="400R"?"border-color:#00e676;color:#00e676;padding:6px 10px;":"border-color:var(--red);color:var(--red);padding:6px 10px;";
+    b.addEventListener("click",function(){_chartKeepView=null;if(["2m","5m","30m","1h"].indexOf(t)<0)setIntraday(false);State.chart_interval=t;render();});
+    ctrl.appendChild(b);
+  });
+  hrow.appendChild(ctrl);el.appendChild(hrow);
+  var info=div("xs m");info.style.cssText="margin-bottom:8px;color:var(--text3);font-family:'Courier New',monospace;";info.textContent="Loading 400R bars…";el.appendChild(info);
+  var chartDiv=div();chartDiv.id="chart-canvas-anchor";
+  chartDiv.style.cssText="width:100%;height:calc(100vh - 260px);min-height:"+(window.innerHeight<800?260:500)+"px;border:1px solid var(--border2);border-radius:4px;background:#040d1a;position:relative;box-shadow:0 0 0 1px #00000080,0 4px 16px #00000040;";
+  el.appendChild(chartDiv);
+
+  var HDR={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY},Q=SUPA_URL+"/rest/v1/range_bars?sym=eq.NQ&rng=eq.400&select=id,t,o,h,l,c,done";
+  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0;
+  function etSec(u){return u-etOffsetHoursAt(u*1000)*3600;} // Edge shows ET wall-clock on the lightweight-charts UTC axis
+  function barOf(r){
+    var tm=tmap[r.id];
+    if(tm===undefined){tm=etSec(+r.t);if(tm<=lastTime)tm=lastTime+1;tmap[r.id]=tm;lastTime=tm;}
+    return {time:tm,open:parseFloat(r.o),high:parseFloat(r.h),low:parseFloat(r.l),close:parseFloat(r.c)};
+  }
+  function status(r,n){
+    if(!r){info.textContent=n?"":"No 400R bars yet — deploy the range-collector function and run supabase/range_bars.sql (see the notes), bars build from the moment it runs.";return;}
+    var rg=Math.round((parseFloat(r.h)-parseFloat(r.l))*100)/100;
+    info.textContent=(r.done?"CLOSED ":"FORMING ")+parseFloat(r.c).toFixed(2)+"  ·  "+rg.toFixed(2)+" / 100 pts  ·  bar opened "+new Date(etSec(+r.t)*1000).toISOString().slice(11,19)+" ET  ·  "+n+" bars";
+  }
+  function gone(){return myTok!==_chartLoadToken||State.tab!=="chart"||!chartDiv.isConnected;}
+  function build(rows){
+    var bars=rows.map(barOf);
+    chart=LightweightCharts.createChart(chartDiv,{
+      width:chartDiv.clientWidth,height:chartDiv.clientHeight,
+      layout:{background:{color:"#040d1a"},textColor:"#e8f0ff"},
+      grid:{vertLines:{color:"#1a3260"},horzLines:{color:"#1a3260",visible:false}},
+      watermark:{visible:true,text:"NQ 400R",fontSize:isMobile()?60:110,fontFamily:"Courier New,monospace",color:"rgba(255,255,255,0.07)",horzAlign:"center",vertAlign:"center"},
+      crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+      rightPriceScale:{borderColor:"#1a3260",minimumWidth:76},
+      timeScale:{borderColor:"#1a3260",rightOffset:8,timeVisible:true,secondsVisible:false},
+    });
+    series=chart.addCandlestickSeries({upColor:"#00e676",downColor:"#ff4444",borderUpColor:"#00e676",borderDownColor:"#ff4444",wickUpColor:"#00e676",wickDownColor:"#ff4444",priceFormat:{type:"price",precision:2,minMove:0.25}});
+    series.setData(bars);
+    var n=bars.length;try{chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-150),to:n+8});}catch(e){_dbg(e);}
+    try{new ResizeObserver(function(){chart.applyOptions({width:chartDiv.clientWidth,height:chartDiv.clientHeight});}).observe(chartDiv);}catch(e){_dbg(e);}
+    lastId=rows.length?rows[rows.length-1].id:0;
+    status(rows[rows.length-1],n);
+  }
+  function poll(){
+    if(gone()){clearInterval(timer);return;}
+    if(document.hidden||!series) return;
+    fetch(Q+"&id=gte."+Math.max(0,lastId)+"&order=id.asc&limit=200",{headers:HDR,cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject(r.status);}).then(function(rows){
+      if(gone()||!rows.length) return;
+      rows.forEach(function(r){try{series.update(barOf(r));}catch(e){_dbg(e);}if(r.id>lastId)lastId=r.id;});
+      status(rows[rows.length-1],Object.keys(tmap).length);failN=0;
+    }).catch(function(e){_dbg(e);});
+  }
+  fetch(Q+"&order=id.desc&limit=2000",{headers:HDR,cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject(r.status);}).then(function(rows){
+    if(gone()) return;
+    rows.reverse();
+    if(!rows.length){status(null,0);return;}
+    build(rows);
+    timer=setInterval(poll,3000);
+  }).catch(function(e){_dbg(e);if(!gone())info.textContent="Could not load 400R bars ("+e+"). Run supabase/range_bars.sql and deploy the range-collector function.";});
+  return el;
+}
+
 function chartTab(){
   var el=div();
   el.style.padding="16px";
@@ -7196,6 +7282,8 @@ function chartTab(){
 
   var sym=State.chart_symbol||"ES";
   var tf=State.chart_interval||"1h";
+  if(tf==="400R"&&sym!=="NQ") tf="1h"; // 400R exists on NQ only
+  if(sym==="NQ"&&tf==="400R")return rangeChartTab();
   var eodOnly=(sym==="US10Y"); // EOD yield chart (opened from Analyst 10Y card): daily only
   if(eodOnly&&["1d","1w","1m","1y"].indexOf(tf)<0) tf="1d";
   var monthlyOk=eodOnly||sym==="CL"||sym==="DXY"||sym==="BTC"||sym==="NG"; // 1M / 1Y exist on US10Y, Oil, NG, DXY and BTC only
@@ -7246,7 +7334,8 @@ function chartTab(){
 
   var sp=h("span");sp.style.cssText="width:1px;background:var(--border);margin:0 6px;align-self:stretch;";if(!useWheels)ctrlRow.appendChild(sp);
 
-  var TFS=eodOnly?["1d","1w","1m","1y"]:(monthlyOk?(sym==="BTC"?["2m","5m","30m","1h","4h","8h","1d","1w","1m"]:["2m","5m","30m","1h","4h","8h","1d","1w","1m","1y"]):["2m","5m","30m","1h","4h","8h","1d","1w"]);
+  var TFS0=eodOnly?["1d","1w","1m","1y"]:(monthlyOk?(sym==="BTC"?["2m","5m","30m","1h","4h","8h","1d","1w","1m"]:["2m","5m","30m","1h","4h","8h","1d","1w","1m","1y"]):["2m","5m","30m","1h","4h","8h","1d","1w"]);
+  var TFS=(sym==="NQ"&&!eodOnly)?TFS0.concat(["400R"]):TFS0; // NQ only: 400R range bars (rangeChartTab)
   (useWheels?[]:TFS).forEach(function(t){
     var b=h("button",{className:"btn"});
     var tfBase=((sym==="DXY"||sym==="CL"||sym==="NG"||sym==="BTC")&&(t==="1m"||t==="1y"))?"#a855f7":"var(--red)"; // DXY / Oil: monthly + yearly base color purple
