@@ -3079,8 +3079,13 @@ impl eframe::App for App {
                 }
             }
 
+            // market closed (holiday / weekend / maintenance): no 5m bar has started for 10+ minutes, so the bar timers stop
+            let mkt_closed = {
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                m5.last().map_or(false, |b| now - b.t > 600)
+            };
             // ═════════ 400R: how long the forming bar has been open (hh:mm:ss), bottom right ═════════
-            if is_range && !cs.is_empty() {
+            if is_range && !mkt_closed && !cs.is_empty() {
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 let d = (now - cs[cs.len() - 1].t).max(0);
                 let txt = format!("{:02}:{:02}:{:02}", d / 3600, (d % 3600) / 60, d % 60);
@@ -3108,14 +3113,14 @@ impl eframe::App for App {
             } else {
                 format!("{}:{:02}", remain / 60, remain % 60)
             };
-            let tag_h = if is_range { 24.0 } else { 40.0 };
+            let tag_h = if is_range || mkt_closed { 24.0 } else { 40.0 };
             let ly_c = ly.clamp(plot.top() + tag_h / 2.0, plot.bottom() - tag_h / 2.0);
             let tcol = if last.c >= last.o { rgb(0x00b862) } else { rgb(0xff4444) };
             let r = Rect::from_min_size(Pos2::new(plot.right() + 2.0, ly_c - tag_h / 2.0), Vec2::new(AXIS_W - 4.0, tag_h));
             tag_box(&painter, r, tcol);
             grad_rect(&painter, r.shrink(1.5), Color32::from_white_alpha(46), Color32::from_white_alpha(46), Color32::from_white_alpha(0), Color32::from_white_alpha(0));
-            painter.text(Pos2::new(r.center().x, if is_range { r.center().y } else { r.top() + 11.0 }), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
-            if !is_range {
+            painter.text(Pos2::new(r.center().x, if is_range || mkt_closed { r.center().y } else { r.top() + 11.0 }), Align2::CENTER_CENTER, fmt_price(last.c, step), FontId::monospace(13.0), Color32::WHITE);
+            if !is_range && !mkt_closed {
                 let cr = Rect::from_center_size(Pos2::new(r.center().x, r.bottom() - 11.0), Vec2::new(text_w(&painter, &cd, &FontId::monospace(13.0)) + 8.0, 16.0));
                 tag_box(&painter, cr, hexc(0x040d1a, 0.9));
                 painter.text(cr.center(), Align2::CENTER_CENTER, cd, FontId::monospace(13.0), rgb(0x2ec4b6));
