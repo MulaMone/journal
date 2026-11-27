@@ -7631,7 +7631,7 @@ function rangeChartTab(){
       d.style.display="block";d.style.color=L.c;it.push({d:d,y:y});
     });
     it.sort(function(a,b){return a.y-b.y;});var prev=-1e9;
-    it.forEach(function(o){var y=Math.max(o.y,prev+14);prev=y;var w=o.d.offsetWidth,tx=Math.min(x+6,pw-w-2);o.d.style.left=Math.max(2,tx)+"px";o.d.style.top=(y-7)+"px";});
+    it.forEach(function(o){var y=Math.max(o.y,prev+14);prev=y;var w=o.d.offsetWidth,tx=Math.min(x+6,pw-w-2);var L2=Math.max(2,tx)+"px",T2=(y-7)+"px";if(o.d.style.left!==L2)o.d.style.left=L2;if(o.d.style.top!==T2)o.d.style.top=T2;});
   }
   function ovRefresh(){
     if(!chart||!RB.length)return;
@@ -7731,6 +7731,7 @@ function rangeChartTab(){
     ["pointerdown","touchstart","dblclick"].forEach(function(ev){zb.addEventListener(ev,function(e){e.stopPropagation();});});
     chartDiv.appendChild(zb);
     function recenter(){try{chart.priceScale("right").applyOptions({autoScale:true});var n=RB.length;chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-(isMobile()?35:60)),to:n+8});}catch(e){_dbg(e);}}
+    (function tagLoop(){if(gone())return;try{ovTags();}catch(e){}requestAnimationFrame(tagLoop);})(); // keep the EMA tag glued to its line while the price scale rescales / the view moves
     var dtL=0;
     chartDiv.addEventListener("dblclick",function(e){if(e.target&&e.target.closest&&e.target.closest(".zoom-bar"))return;var t=performance.now();if(t-dtL<600)return;dtL=t;recenter();});
     var tapT=0,tapX=0,tapY=0,dnOk=false,dnX=0,dnY=0,dnT=0;
