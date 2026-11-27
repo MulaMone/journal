@@ -7332,10 +7332,64 @@ function rangeChartTab(){
     try{chart.timeScale().subscribeVisibleLogicalRangeChange(ovTags);}catch(e){}
     var lo=Infinity,hi=-Infinity;RB.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
     lo-=1500;hi+=1500;
-    for(var p=Math.ceil(lo/250)*250;p<=hi;p+=250){ // NQ round numbers, same look as the regular chart
-      var m=((p%1000)+1000)%1000,big=m===0,half=m===500;
-      numLines.push(series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:half?LightweightCharts.LineStyle.LargeDashed:LightweightCharts.LineStyle.Dotted,axisLabelVisible:!hideNums,lineVisible:!hideNums,title:("00"+m).slice(-3)}));
+    var bigOutline=[];
+    for(var p=Math.ceil(lo/250)*250;p<=hi;p+=250){ // NQ round numbers, same look as the intraday chart (20000 / 22500 / 25000...: price box AND tag inverted + outlined)
+      var m=((p%1000)+1000)%1000,big=(m===0),half=(m===500),bigLvl=(p%2500===0),lc=big?"#ffd24a":half?"#ff9f1a":"#22e5ff";
+      if(bigLvl)bigOutline.push({price:p,color:lc,title:(m<100?"0":"")+m});
+      var pl=series.createPriceLine({price:p,color:lc,lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:half?LightweightCharts.LineStyle.LargeDashed:LightweightCharts.LineStyle.Dotted,axisLabelVisible:!bigLvl&&!hideNums,lineVisible:!hideNums,title:bigLvl?"":(m<100?"0":"")+m});
+      pl._big=bigLvl;numLines.push(pl);
     }
+        // The library has no label border option, so the big levels' price box and tag are drawn here (inverted: dark fill, coloured text + outline).
+        // Sizes/positions mirror the library's own label geometry; edge handling: pinned if < half a label off screen, hidden beyond.
+        try{series.attachPrimitive({
+          _lbl:function(sc,b){
+            var vr=sc.verticalPixelRatio,H=sc.bitmapSize.height/vr,fs=12,h=fs+2*(2.5/12*fs),hh=Math.floor(h/2);
+            var y=series.priceToCoordinate(b.price);if(y==null||y<=-hh||y>=H+hh)return null;
+            if(y<hh)y=hh;else if(y>H-hh)y=H-hh;
+            var tick=Math.max(1,Math.floor(vr)),tot=Math.round(h*vr);if(tot%2!==tick%2)tot+=1;
+            var mid=Math.round(y*vr)-Math.floor(vr*0.5);
+            return {y0:Math.floor(mid+tick/2-tot/2),hh:tot};
+          },
+          _av:null,_pv:null,
+          priceAxisPaneViews:function(){var me=this;return this._av||(this._av=[{zOrder:function(){return "normal";},renderer:function(){return {draw:function(target){
+            if(hideNums) return;
+            target.useBitmapCoordinateSpace(function(sc){
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,W=sc.bitmapSize.width;
+              ctx.font=Math.round(12*hr)+"px "+chart.options().layout.fontFamily;
+              bigOutline.forEach(function(b){
+                var L=me._lbl(sc,b);if(!L)return;
+                var txt;try{txt=series.priceFormatter().format(b.price);}catch(e){txt=b.price.toFixed(2);}
+                var xr=Math.min(W,Math.round((Math.ceil(ctx.measureText(txt).width/hr)+16)*hr)); // price box is left-aligned: text + 1 border + 5 + 5 padding + 5 tick
+                var xs=0,t=Math.max(1,Math.round(hr)),y0=Math.round(L.y0),hh=Math.round(L.hh); // outline starts right at the seam, same box as the regular labels
+                ctx.fillStyle="#040d1a";ctx.fillRect(xs,y0,xr-xs,hh); // inverted: dark fill, coloured text
+                ctx.fillStyle=b.color;ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(txt,Math.round(11*hr),y0+hh/2+Math.round(0.5*hr)); // text x = 1 border + 5 tick + 5 padding, same as the library
+                ctx.fillStyle=b.color; // four whole-pixel edges (no half-pixel strokes) so every side is equally crisp
+                ctx.fillRect(xs,y0,xr-xs,t);ctx.fillRect(xs,y0+hh-t,xr-xs,t);ctx.fillRect(xs,y0,t,hh);ctx.fillRect(xr-t,y0,t,hh);
+                // On fractional screen scaling (e.g. 125%) the browser smears the top, bottom and right lines by a faint extra pixel on the inside;
+                // the left line sits on the canvas edge and isn't smeared. Add the same faint pixel to the left line so the inside corners match.
+                var fr=hr-Math.floor(hr);
+                if(fr>0.1&&fr<0.45&&hh>2*t+2){ctx.globalAlpha=fr;ctx.fillRect(xs+t,y0+t+1,1,hh-2*t-2);ctx.globalAlpha=1;}
+              });
+            });
+          }};}}]);},
+          paneViews:function(){var me=this;return this._pv||(this._pv=[{zOrder:function(){return "top";},renderer:function(){return {draw:function(target){
+            if(hideNums) return;
+            target.useBitmapCoordinateSpace(function(sc){
+              var ctx=sc.context,hr=sc.horizontalPixelRatio,W=sc.bitmapSize.width;
+              ctx.font=Math.round(12*hr)+"px "+chart.options().layout.fontFamily;
+              bigOutline.forEach(function(b){
+                var L=me._lbl(sc,b);if(!L)return;
+                var wc=Math.ceil(ctx.measureText(b.title).width/hr)+11,xr=W-Math.round(hr),x0=xr-Math.round(wc*hr),rr=Math.round(2*hr),t=Math.max(1,Math.round(hr)); // tag = text + 1 + 5 + 5, 1px seam at its right (gap between tag and price box)
+                ctx.fillStyle="#040d1a";ctx.fillRect(xr,L.y0,W-xr,L.hh); // blank the seam so the level line doesn't run through the gap between tag and price box
+                // inverted + outlined: coloured outer shape, dark inner shape one border-width in on every side
+                ctx.fillStyle=b.color;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0,L.y0,xr-x0,L.hh,[rr,0,0,rr]);else ctx.rect(x0,L.y0,xr-x0,L.hh);ctx.fill();
+                ctx.fillStyle="#040d1a";ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x0+t,L.y0+t,xr-x0-2*t,L.hh-2*t,[Math.max(0,rr-t),0,0,Math.max(0,rr-t)]);else ctx.rect(x0+t,L.y0+t,xr-x0-2*t,L.hh-2*t);ctx.fill();
+                ctx.fillStyle=b.color;ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(b.title,W-Math.round(7*hr),L.y0+L.hh/2+Math.round(0.5*hr));
+              });
+            });
+          }};}}]);},
+          updateAllViews:function(){}
+        });}catch(e){_dbg(e);}
   }
   function ovLanes(segs,color,pool){ // one 2-point line series per swing segment (whitespace gaps didn't break the line), pooled and reused
     segs.sort(function(x,y){return x.a-y.a;});
@@ -7445,7 +7499,7 @@ function rangeChartTab(){
     sty2();fb.addEventListener("click",function(){showFvg=!showFvg;State.range_fvg=showFvg;sty2();if(fvgRepaint)fvgRepaint();});
     var nb=h("button",{className:"btn"});nb.textContent="#";nb.title=hideNums?"Show round numbers":"Hide round numbers";
     function sty3(){nb.style.cssText=bs+(hideNums?"border-color:var(--border2);color:var(--text3);background:#040d1acc;":"border-color:var(--accent);color:var(--accent);background:#040d1acc;");}
-    sty3();nb.addEventListener("click",function(){hideNums=!hideNums;State.range_hide_nums=hideNums;sty3();nb.title=hideNums?"Show round numbers":"Hide round numbers";numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums});});});
+    sty3();nb.addEventListener("click",function(){hideNums=!hideNums;State.range_hide_nums=hideNums;sty3();nb.title=hideNums?"Show round numbers":"Hide round numbers";numLines.forEach(function(l){l.applyOptions({lineVisible:!hideNums,axisLabelVisible:!hideNums&&!l._big});});});
     box.appendChild(nb);box.appendChild(fb);box.appendChild(xb);
     ["click","pointerdown","touchstart","dblclick"].forEach(function(ev){box.addEventListener(ev,function(e){e.stopPropagation();});});
     chartDiv.appendChild(box);
