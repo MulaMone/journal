@@ -359,7 +359,7 @@ fn nt_apply(shared: &Arc<Mutex<Shared>>, sym: &str, tf: &str, htf_gran: Option<&
             }
             v
         } else {
-            range_bars(&m1, RANGE_TICKS * tick_size(sym))
+            Vec::new() // never build futures 400R bars from 1-minute data: wait for NinjaTrader's own bars (the chart shows a notice)
         }
     } else if tf == "D" || tf == "W" {
         agg_m1(daily_src, if tf == "W" { 604800 } else { 86400 }, al, tf == "W")
@@ -2118,7 +2118,8 @@ impl eframe::App for App {
                 (s.main.clone(), s.daily.clone(), s.m5.clone(), s.htf.clone(), s.version)
             };
             if cs.is_empty() {
-                painter.text(plot.center(), Align2::CENTER_CENTER, "loading…", FontId::proportional(16.0), AXIS_TXT);
+                let wait_nt = self.tf == "400R" && self.shared.lock().unwrap().src == "NT";
+                painter.text(plot.center(), Align2::CENTER_CENTER, if wait_nt { "waiting for NinjaTrader 400R bars…" } else { "loading…" }, FontId::proportional(16.0), AXIS_TXT);
                 return;
             }
             let n = cs.len();
@@ -3046,7 +3047,7 @@ impl eframe::App for App {
                     if let Some(Some(v)) = em.last() {
                         let (lx, ly) = (x_of((n - 1) as f32), y_of(*v));
                         if ly >= plot.top() + 8.0 && ly <= plot.bottom() - 8.0 {
-                            let tag = format!("EMA {len}");
+                            let tag = if len == EMA_SLOW { "💸💲💰🛫".to_string() } else { format!("EMA {len}") };
                             let tw = text_w(&painter, &tag, &small);
                             let tx = (lx + 6.0).min(plot.right() - tw - 2.0).max(plot.left() + 2.0);
                             clip.rect_filled(Rect::from_min_max(Pos2::new(tx - 2.0, ly - 7.0), Pos2::new(tx + tw + 2.0, ly + 7.0)), 0.0, hexc(0x040d1a, 0.75));
@@ -3054,11 +3055,11 @@ impl eframe::App for App {
                         }
                     }
                 }
-                // EMA 8: colour follows its position vs the EMA 14 (dark green above, dark red below)
+                // EMA 8: colour follows its position vs the EMA 14 (blue above, dark red below)
                 {
                     let e8 = ema_of(&closes, 8);
                     let e14 = ema_of(&closes, EMA_FAST);
-                    let (g8, r8) = (0x14a040u32, 0xc42222u32);
+                    let (g8, r8) = (0x2f80ffu32, 0xc42222u32);
                     let lo = first_vis.saturating_sub(1).max(1);
                     let hi = (last_vis + 1).min(n - 1);
                     for i in lo..=hi {
@@ -3084,10 +3085,11 @@ impl eframe::App for App {
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 let d = (now - cs[cs.len() - 1].t).max(0);
                 let txt = format!("{:02}:{:02}:{:02}", d / 3600, (d % 3600) / 60, d % 60);
-                let tw = text_w(&painter, &txt, &small);
+                let big = FontId::monospace(14.0);
+                let tw = text_w(&painter, &txt, &big);
                 let (rx, by) = (plot.right() - 8.0, plot.bottom() - 8.0);
-                clip.rect_filled(Rect::from_min_max(Pos2::new(rx - tw - 4.0, by - 14.0), Pos2::new(rx + 3.0, by + 2.0)), 0.0, hexc(0x040d1a, 0.75));
-                clip.text(Pos2::new(rx, by), Align2::RIGHT_BOTTOM, txt, small.clone(), rgb(0x00e5ff));
+                clip.rect_filled(Rect::from_min_max(Pos2::new(rx - tw - 5.0, by - 19.0), Pos2::new(rx + 4.0, by + 3.0)), 0.0, hexc(0x040d1a, 0.75));
+                clip.text(Pos2::new(rx, by), Align2::RIGHT_BOTTOM, txt, big, rgb(0x00e5ff));
                 ui.ctx().request_repaint_after(Duration::from_millis(500));
             }
 
@@ -3592,7 +3594,7 @@ impl eframe::App for App {
             painter.text(
                 Pos2::new(plot.left() + 10.0, plot.top() + 28.0),
                 Align2::LEFT_TOP,
-                if is_range { let nrc = self.shared.lock().unwrap().nt_r.get(&self.sym).map_or(0, |v| v.len()); format!("{} · {}-tick range ({} pts) · {}", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym), if nrc >= 2 { format!("NT bars {} (feed {})", nrc, self.shared.lock().unwrap().nt_owner.get(&self.sym).cloned().unwrap_or_default()) } else { format!("BUILT FROM 1m - NOT NT (feed {})", self.shared.lock().unwrap().nt_owner.get(&self.sym).cloned().unwrap_or_default()) }) } else { format!("{} · {}", self.sym, self.tf) },
+                if is_range { let nrc = self.shared.lock().unwrap().nt_r.get(&self.sym).map_or(0, |v| v.len()); if nrc >= 2 { format!("{} · {}-tick range ({} pts)", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym)) } else { format!("{} · {}-tick range ({} pts){}", self.sym, RANGE_TICKS, RANGE_TICKS * tick_size(&self.sym), if self.shared.lock().unwrap().src == "NT" { " · waiting for NinjaTrader 400R bars" } else { "" }) } } else { format!("{} · {}", self.sym, self.tf) },
                 FontId::proportional(13.0),
                 Color32::from_rgb(120, 140, 175),
             );
