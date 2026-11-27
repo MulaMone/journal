@@ -7225,12 +7225,14 @@ function rangeChartTab(){
   el.appendChild(chartDiv);
 
   var HDR={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY},Q=SUPA_URL+"/rest/v1/range_bars?sym=eq.NQ&rng=eq.400&select=id,t,o,h,l,c,done";
-  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0;
+  var tmap={},lastTime=0,series=null,chart=null,lastId=0,timer=null,failN=0,RB=[],idIdx={},OV=null,lastRawT=0,clk=null,clkT=null,swingExt=State.range_swing_ext===true;
   function etSec(u){return u-etOffsetHoursAt(u*1000)*3600;} // Edge shows ET wall-clock on the lightweight-charts UTC axis
   function barOf(r){
     var tm=tmap[r.id];
     if(tm===undefined){tm=etSec(+r.t);if(tm<=lastTime)tm=lastTime+1;tmap[r.id]=tm;lastTime=tm;}
-    return {time:tm,open:parseFloat(r.o),high:parseFloat(r.h),low:parseFloat(r.l),close:parseFloat(r.c)};
+    var bar={time:tm,open:parseFloat(r.o),high:parseFloat(r.h),low:parseFloat(r.l),close:parseFloat(r.c),done:!!r.done};
+    var k=idIdx[r.id];if(k===undefined){idIdx[r.id]=RB.length;RB.push(bar);}else RB[k]=bar;lastRawT=+r.t;
+    return bar;
   }
   function status(r,n){
     if(!r){info.textContent=n?"":"No 400R bars yet — deploy the range-collector function and run supabase/range_bars.sql (see the notes), bars build from the moment it runs.";return;}
@@ -7238,6 +7240,108 @@ function rangeChartTab(){
     info.textContent=(r.done?"CLOSED ":"FORMING ")+parseFloat(r.c).toFixed(2)+"  ·  "+rg.toFixed(2)+" / 100 pts  ·  bar opened "+new Date(etSec(+r.t)*1000).toISOString().slice(11,19)+" ET  ·  "+n+" bars";
   }
   function gone(){return myTok!==_chartLoadToken||State.tab!=="chart"||!chartDiv.isConnected;}
+
+  // ── Matrix indicators on the 400R chart: EMA 8/14/50, swing lines + stars, round numbers, previous day/week levels, bar timer ──
+  function emaOf(src,L){var k=2/(L+1),out=new Array(src.length),sum=0,v=0;for(var i=0;i<src.length;i++){if(i+1<L){sum+=src[i];out[i]=null;}else if(i+1===L){sum+=src[i];v=sum/L;out[i]=v;}else{v=src[i]*k+v*(1-k);out[i]=v;}}return out;}
+  function ntSwing(cs,s,eps){
+    var n=cs.length;while(n>0&&!cs[n-1].done)n--;
+    var K=2*s+1,hp=new Array(cs.length),lp=new Array(cs.length),ph=[],pl=[],ch=0,cl=0,i,j;
+    for(i=0;i<cs.length;i++){hp[i]=null;lp[i]=null;}
+    for(i=0;i<n;i++){
+      if(i+1<K)continue;
+      var w=cs.slice(i+1-K,i+1),cand=w[s].high,ok=true;
+      for(j=0;j<s;j++)if(!(w[j].high<cand-eps))ok=false;for(j=s+1;j<K;j++)if(!(w[j].high<=cand+eps))ok=false;
+      if(ok){ch=cand;ph.push(i-s);for(j=0;j<=s;j++)hp[i-j]=ch;}else if(cs[i].high>ch+eps||ch===0){ch=0;hp[i]=null;}else hp[i]=ch;
+      cand=w[s].low;ok=true;
+      for(j=0;j<s;j++)if(!(w[j].low>cand+eps))ok=false;for(j=s+1;j<K;j++)if(!(w[j].low>=cand-eps))ok=false;
+      if(ok){cl=cand;pl.push(i-s);for(j=0;j<=s;j++)lp[i-j]=cl;}else if(cs[i].low<cl-eps||cl===0){cl=1e18;lp[i]=null;}else lp[i]=cl;
+    }
+    return {hp:hp,lp:lp,ph:ph,pl:pl};
+  }
+  function runsOf(pl){var out=[];for(var i=0;i<pl.length;i++){var v=pl[i];if(v==null)continue;var r=out[out.length-1];if(r&&r.b+1===i&&Math.abs(r.v-v)<1e-9)r.b=i;else out.push({a:i,b:i,v:v});}return out;}
+  function ovInit(){
+    OV={e14:chart.addLineSeries({color:"#ffb020",lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
+        e50:chart.addLineSeries({color:"#00ff55",lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
+        e8:chart.addLineSeries({color:"#2f80ff",lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}}),
+        hi:[],lo:[],lv:[],lvKey:"",tg:{},last:{}};
+    [["e14","EMA 14"],["e50","\uD83D\uDCB8\uD83D\uDCB2\uD83D\uDCB0\uD83D\uDEEB"],["e8","EMA 8"]].forEach(function(t){var d=document.createElement("div");d.textContent=t[1];d.style.cssText="position:absolute;z-index:5;pointer-events:none;padding:0 3px;background:#040d1abf;font:11px 'Courier New',monospace;line-height:14px;white-space:nowrap;display:none;";chartDiv.appendChild(d);OV.tg[t[0]]=d;});
+    try{chart.timeScale().subscribeVisibleLogicalRangeChange(ovTags);}catch(e){}
+    var lo=Infinity,hi=-Infinity;RB.forEach(function(c){if(c.low<lo)lo=c.low;if(c.high>hi)hi=c.high;});
+    lo-=1500;hi+=1500;
+    for(var p=Math.ceil(lo/250)*250;p<=hi;p+=250){ // NQ round numbers, same look as the regular chart
+      var m=((p%1000)+1000)%1000,big=m===0,half=m===500;
+      series.createPriceLine({price:p,color:big?"#ffd24a":half?"#ff9f1a":"#22e5ff",lineWidth:big?2:1,lineStyle:big?LightweightCharts.LineStyle.Solid:half?LightweightCharts.LineStyle.LargeDashed:LightweightCharts.LineStyle.Dotted,axisLabelVisible:true,title:("00"+m).slice(-3)});
+    }
+  }
+  function ovLanes(segs,color,pool){ // one 2-point line series per swing segment (whitespace gaps didn't break the line), pooled and reused
+    segs.sort(function(x,y){return x.a-y.a;});
+    segs.forEach(function(sg,k){
+      if(!pool[k])pool[k]=chart.addLineSeries({color:color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:function(){return null;}});
+      var d=[{time:RB[sg.a].time,value:sg.v}];if(sg.b>sg.a)d.push({time:RB[sg.b].time,value:sg.v});
+      pool[k].setData(d);
+    });
+    for(var k=segs.length;k<pool.length;k++)pool[k].setData([]);
+  }
+  function ovTags(){ // EMA names sit on the line at the last bar (like the 5m 20 / 5m 50 tags), not on the price axis
+    if(!OV||!RB.length)return;
+    var lt=RB[RB.length-1].time,x=chart.timeScale().timeToCoordinate(lt),pw=chartDiv.clientWidth-(chart.priceScale("right").width()||76),H=chartDiv.clientHeight-28;
+    var it=[];
+    ["e14","e50","e8"].forEach(function(k){
+      var d=OV.tg[k],L=OV.last[k];if(!d)return;
+      var y=L?OV[k].priceToCoordinate(L.v):null;
+      if(x==null||y==null||y<8||y>H-8){d.style.display="none";return;}
+      d.style.display="block";d.style.color=L.c;it.push({d:d,y:y});
+    });
+    it.sort(function(a,b){return a.y-b.y;});var prev=-1e9;
+    it.forEach(function(o){var y=Math.max(o.y,prev+14);prev=y;var w=o.d.offsetWidth,tx=Math.min(x+6,pw-w-2);o.d.style.left=Math.max(2,tx)+"px";o.d.style.top=(y-7)+"px";});
+  }
+  function ovRefresh(){
+    if(!chart||!RB.length)return;
+    if(!OV)ovInit();
+    var n=RB.length,cl=RB.map(function(c){return c.close;}),e14=emaOf(cl,14),e50=emaOf(cl,50),e8=emaOf(cl,8),d14=[],d50=[],d8=[],i;
+    for(i=0;i<n;i++){
+      if(e14[i]!=null)d14.push({time:RB[i].time,value:e14[i]});
+      if(e50[i]!=null)d50.push({time:RB[i].time,value:e50[i]});
+      if(e8[i]!=null&&e14[i]!=null)d8.push({time:RB[i].time,value:e8[i],color:e8[i]>=e14[i]?"#2f80ff":"#c42222"});
+    }
+    OV.e14.setData(d14);OV.e50.setData(d50);OV.e8.setData(d8);
+    OV.last={e14:d14.length?{v:d14[d14.length-1].value,c:"#ffb020"}:null,e50:d50.length?{v:d50[d50.length-1].value,c:"#00ff55"}:null,e8:d8.length?{v:d8[d8.length-1].value,c:d8[d8.length-1].color}:null};
+    var big=ntSwing(RB,5,0.125),sm=ntSwing(RB,2,0.125),hs=[],ls=[];
+    if(swingExt){
+      big.ph.forEach(function(k){var v=RB[k].high,e=n-1;for(var j=k+1;j<n;j++)if(RB[j].high>=v){e=j;break;}hs.push({a:k,b:e,v:v});});
+      big.pl.forEach(function(k){var v=RB[k].low,e=n-1;for(var j=k+1;j<n;j++)if(RB[j].low<=v){e=j;break;}ls.push({a:k,b:e,v:v});});
+    }else{
+      runsOf(big.hp).forEach(function(r){hs.push({a:r.a,b:(r.b+1>=n-1)?n-1:r.b,v:r.v});});
+      runsOf(big.lp).forEach(function(r){ls.push({a:r.a,b:(r.b+1>=n-1)?n-1:r.b,v:r.v});});
+    }
+    ovLanes(hs,"#ff4444",OV.hi);ovLanes(ls,"#00e676",OV.lo);
+    var mk=[];
+    sm.ph.forEach(function(k){mk.push({time:RB[k].time,position:"aboveBar",color:"#ff2a2a",shape:"circle",size:0,text:"★"});});
+    sm.pl.forEach(function(k){mk.push({time:RB[k].time,position:"belowBar",color:"#1fe05a",shape:"circle",size:0,text:"★"});});
+    mk.sort(function(x,y){return x.time-y.time;});
+    try{series.setMarkers(mk);}catch(e){_dbg(e);}
+    // previous day / week (18:00 ET trading-day anchor): highs green, lows red, closes silver
+    function grp(keyOf){var gs=[],cur=null,ck=null;RB.forEach(function(c){var k=keyOf(Math.floor((c.time+21600)/86400));if(k!==ck){ck=k;cur={h:-Infinity,l:Infinity,c:0};gs.push(cur);}if(c.high>cur.h)cur.h=c.high;if(c.low<cur.l)cur.l=c.low;cur.c=c.close;});return gs;}
+    var days=grp(function(d){return d;}),weeks=grp(function(d){return Math.floor((d+3)/7);}),lv=[];
+    function addG(pre,g){if(!g)return;lv.push([pre+"H",g.h,"#00b862"],[pre+"L",g.l,"#ff4444"],[pre+"C",g.c,"#b8c4d9"]);}
+    if(weeks.length>1)addG("PW",weeks[weeks.length-2]);
+    if(days.length>1)addG("PD",days[days.length-2]);
+    var key=lv.map(function(x){return x[0]+x[1];}).join("|");
+    if(key!==OV.lvKey){
+      OV.lv.forEach(function(pl){try{series.removePriceLine(pl);}catch(e){}});OV.lv=[];
+      lv.forEach(function(x){OV.lv.push(series.createPriceLine({price:x[1],color:x[2],lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed,axisLabelVisible:true,title:x[0]}));});
+      OV.lvKey=key;
+    }
+    ovTags();
+  }
+  function ovUi(){
+    var xb=h("button",{className:"btn"});xb.textContent="EXTEND";xb.title="Big swing lines keep running until price hits them (off: only the latest swing line, like NinjaTrader)";
+    function sty(){xb.style.cssText="position:absolute;left:8px;top:8px;z-index:6;padding:6px 12px;font-size:11px;font-weight:700;"+(swingExt?"background:#ffb020;border-color:#ffb020;color:#1a1200;":"border-color:var(--border2);color:var(--text3);background:#040d1acc;");}
+    sty();xb.addEventListener("click",function(e){e.stopPropagation();swingExt=!swingExt;State.range_swing_ext=swingExt;sty();ovRefresh();});
+    chartDiv.appendChild(xb);
+    clk=div();clk.style.cssText="position:absolute;right:86px;bottom:30px;z-index:6;padding:2px 6px;background:#040d1abf;color:#00e5ff;font:700 14px 'Courier New',monospace;pointer-events:none;";chartDiv.appendChild(clk);
+    clkT=setInterval(function(){if(gone()){clearInterval(clkT);return;}try{ovTags();}catch(e){}var d=Math.max(0,Math.floor(Date.now()/1000)-lastRawT);clk.textContent=("0"+Math.floor(d/3600)).slice(-2)+":"+("0"+Math.floor(d%3600/60)).slice(-2)+":"+("0"+d%60).slice(-2);},500);
+  }
   function build(rows){
     var bars=rows.map(barOf);
     chart=LightweightCharts.createChart(chartDiv,{
@@ -7251,6 +7355,7 @@ function rangeChartTab(){
     });
     series=chart.addCandlestickSeries({upColor:"#00e676",downColor:"#ff4444",borderUpColor:"#00e676",borderDownColor:"#ff4444",wickUpColor:"#00e676",wickDownColor:"#ff4444",priceFormat:{type:"price",precision:2,minMove:0.25}});
     series.setData(bars);
+    ovRefresh();ovUi();
     var n=bars.length;try{chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-150),to:n+8});}catch(e){_dbg(e);}
     try{new ResizeObserver(function(){chart.applyOptions({width:chartDiv.clientWidth,height:chartDiv.clientHeight});}).observe(chartDiv);}catch(e){_dbg(e);}
     lastId=rows.length?rows[rows.length-1].id:0;
@@ -7262,10 +7367,16 @@ function rangeChartTab(){
     fetch(Q+"&id=gte."+Math.max(0,lastId)+"&order=id.asc&limit=200",{headers:HDR,cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject(r.status);}).then(function(rows){
       if(gone()||!rows.length) return;
       rows.forEach(function(r){try{series.update(barOf(r));}catch(e){_dbg(e);}if(r.id>lastId)lastId=r.id;});
+      try{ovRefresh();}catch(e){_dbg(e);}
       status(rows[rows.length-1],Object.keys(tmap).length);failN=0;
     }).catch(function(e){_dbg(e);});
   }
-  fetch(Q+"&order=id.desc&limit=2000",{headers:HDR,cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject(r.status);}).then(function(rows){
+  function loadAll(off,acc){ // Supabase returns at most 1000 rows per request, so page through newest-first
+    return fetch(Q+"&order=id.desc&limit=1000&offset="+off,{headers:HDR,cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject(r.status);}).then(function(p){
+      acc=acc.concat(p);return (p.length===1000&&acc.length<6000)?loadAll(off+1000,acc):acc;
+    });
+  }
+  loadAll(0,[]).then(function(rows){
     if(gone()) return;
     rows.reverse();
     if(!rows.length){status(null,0);return;}
